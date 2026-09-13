@@ -30,3 +30,15 @@ if(TARGET ccl_kernel)
         ${CMAKE_CURRENT_SOURCE_DIR}
     )
 endif()
+
+if(TARGET hccl_v2)
+    target_include_directories(hccl_v2 PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+endif()
+
+if(TARGET hcomm_base_obj)
+    target_include_directories(hcomm_base_obj PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+endif()

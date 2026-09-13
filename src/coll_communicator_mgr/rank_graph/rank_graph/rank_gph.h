@@ -18,7 +18,6 @@
 #include <vector>
 #include "log.h"
 #include "net_instance.h"
-#include "rank_gph.h"
 #include "rank_table_info.h"
 #include "types.h"
 #include "hccl_res.h"

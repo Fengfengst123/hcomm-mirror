@@ -18,7 +18,6 @@ set(v2_rank_graph_include_dirs
     ${CMAKE_CURRENT_SOURCE_DIR}/common
     ${CMAKE_CURRENT_SOURCE_DIR}/phy_topo
     ${CMAKE_CURRENT_SOURCE_DIR}/phy_topo_builder
-    ${CMAKE_CURRENT_SOURCE_DIR}/rank_graph
     ${CMAKE_CURRENT_SOURCE_DIR}/rank_graph_builder
     ${CMAKE_CURRENT_SOURCE_DIR}/rank_table_info
     ${CMAKE_CURRENT_SOURCE_DIR}/topo_info

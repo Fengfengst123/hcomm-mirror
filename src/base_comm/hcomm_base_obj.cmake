@@ -141,7 +141,6 @@ target_include_directories(hcomm_base_obj PRIVATE
     ${HCOMM_DIR}/src/legacy/ascend950/framework/resource_manager/stream
     ${HCOMM_DIR}/src/legacy/ascend950/framework/topo
     ${HCOMM_DIR}/src/legacy/ascend950/framework/topo/new_topo_builder/common
-    ${HCOMM_DIR}/src/legacy/ascend950/framework/topo/new_topo_builder/rank_graph
     ${HCOMM_DIR}/src/legacy/ascend950/interface
     ${HCOMM_DIR}/src/legacy/ascend950/service/collective
     ${HCOMM_DIR}/src/legacy/ascend950/service/collective/primitive

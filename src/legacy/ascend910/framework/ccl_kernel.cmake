@@ -183,7 +183,6 @@ target_include_directories(ccl_kernel PRIVATE
     ${HCOMM_DIR}/src/legacy/ascend950/framework/topo/new_topo_builder/common
     ${HCOMM_DIR}/src/legacy/ascend950/framework/topo/new_topo_builder/phy_topo
     ${HCOMM_DIR}/src/legacy/ascend950/framework/topo/new_topo_builder/phy_topo_builder
-    ${HCOMM_DIR}/src/legacy/ascend950/framework/topo/new_topo_builder/rank_graph
     ${HCOMM_DIR}/src/legacy/ascend950/framework/topo/new_topo_builder/rank_table_info
     ${HCOMM_DIR}/src/legacy/ascend950/framework/topo/new_topo_builder/topo_info
     ${HCOMM_DIR}/src/legacy/ascend950/framework/topo/rank_info_detect
