@@ -113,7 +113,7 @@ HcclResult CollReduceScatterDeterExecutor::CalcLevel0CommInfo(
 u64 CollReduceScatterDeterExecutor::CalcLoopMaxCount(const u32 unitSize)
 {
     u64 maxCountPerLoop;
-    bool isLocalReduce91073 = ((((topoAttr_.userRankSize & (topoAttr_.userRankSize - 1)) != 0) || aicpuUnfoldMode_
+    bool isLocalReduce91073 = ((((topoAttr_.userRankSize & (topoAttr_.userRankSize - 1)) != 0)
                                 || (workflowMode_ == HcclWorkflowMode::HCCL_WORKFLOW_MODE_OPS_KERNEL_INFO_LIB))
                                && (topoAttr_.deviceType == DevType::DEV_TYPE_910_93))
                               && (topoAttr_.serverNum == 1);
@@ -179,7 +179,7 @@ HcclResult CollReduceScatterDeterExecutor::KernelRun(const OpParam& param, ExecM
                              param.reduceType,
                              0};
 
-    bool isLocalReduce91073 = ((((topoAttr_.userRankSize & (topoAttr_.userRankSize - 1)) != 0) || aicpuUnfoldMode_
+    bool isLocalReduce91073 = ((((topoAttr_.userRankSize & (topoAttr_.userRankSize - 1)) != 0)
                                 || (workflowMode_ == HcclWorkflowMode::HCCL_WORKFLOW_MODE_OPS_KERNEL_INFO_LIB))
                                && (topoAttr_.deviceType == DevType::DEV_TYPE_910_93))
                               && (topoAttr_.serverNum == 1);
