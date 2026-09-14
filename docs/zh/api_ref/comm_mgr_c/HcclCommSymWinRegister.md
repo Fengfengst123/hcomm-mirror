@@ -100,7 +100,7 @@ HcclResult HcclCommSymWinRegister(HcclComm comm, void *addr, uint64_t size, Hccl
 <!-- npu="950" id11 -->
 - 针对Ascend 950PR/Ascend 950DT：
   - 支持URMA和UB Memory场景。
-  - URMA场景仅支持集合通信算子AllGather，依赖集合通信算子内部创建UB/URMA通信通道完成对称内存资源注册和交换，且不要求对称组网。
+  - URMA场景当前支持以下集合通信算子：ReduceScatter、AllReduce、AllGather、Broadcast、AlltoAll、AlltoAllVC，依赖集合通信算子内部创建UB/URMA通信通道完成对称内存资源注册和交换，且不要求对称组网。
   - UB Memory场景底层以addr所属的完整allocation建立共享映射，对外窗口范围为[addr, addr+size)。同一通信域内所有LSA WorldTeam成员调用本接口时，各成员的注册调用次序及每次注册对应的allocation大小必须保持一致（例如所有成员的第1次调用注册相同大小的allocation、第2次调用同样注册相同大小的allocation，依此类推），否则注册失败。
   - UB Memory场景的注册包含LSA WorldTeam成员间的集合操作，若集合操作完成后成员本地执行失败（如本地映射失败、资源不足），本通信域的UB Memory对称内存将进入不可用状态，后续注册直接返回错误；此时需解注册已注册的窗口并销毁重建通信域。
 <!-- end id11 -->
@@ -109,7 +109,7 @@ HcclResult HcclCommSymWinRegister(HcclComm comm, void *addr, uint64_t size, Hccl
   - 仅支持HCCS链路通信场景。
   - 仅支持对称组网，即每个Server内卡数相同的场景。
   - 仅支持超节点内AI Server间使用HCCS链路进行SDMA通信的场景，不支持使用RoCE进行RDMA通信的场景（即不支持设置环境变量HCCL_INTER_HCCS_DISABLE为"TRUE"，单机场景该环境变量无效）。
-  - 仅支持集合通信算子AllGather、ReduceScatter、AllReduce、AllToAll。
+  - 仅支持集合通信算子AllGather、ReduceScatter、AllReduce、AlltoAll。
   - 所有rank的输入地址映射的物理内存大小一致（对称内存注册按物理内存的大小对齐）。
 <!-- end id12 -->
 - 该接口仅支持通信算子展开模式为AI CPU的场景。
