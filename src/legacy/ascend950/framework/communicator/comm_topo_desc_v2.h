@@ -12,9 +12,7 @@
 #define COMM_TOPO_DESC_H
 
 #include <functional>
-#include <securec.h>
 #include <mutex>
-#include <dlfcn.h>
 #include <unordered_map>
 #include "hccl/base.h"
 #include "hccl_rank_graph.h"

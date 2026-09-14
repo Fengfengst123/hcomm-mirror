@@ -21,10 +21,11 @@
 #include "hccl/base.h"
 #include "orion_adapter_hccp.h"
 #include "env_func.h"
-#include "socket.h"
 #include "referenced.h"
 
 namespace Hccl {
+
+class Socket;
 
 struct EnumClassHash {
     template <typename T>

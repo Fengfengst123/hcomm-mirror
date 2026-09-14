@@ -13,6 +13,7 @@
 #include "orion_adapter_hccp.h"
 #include "hccl_common_v2.h"
 #include "adapter_error_manager_pub.h"
+#include "socket.h"
 
 namespace Hccl {
 

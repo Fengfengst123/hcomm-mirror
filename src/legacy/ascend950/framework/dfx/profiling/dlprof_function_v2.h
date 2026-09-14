@@ -13,7 +13,6 @@
 
 #include <functional>
 #include <mutex>
-#include <dlfcn.h>
 #include <hccl/hccl_types.h>
 #include "orion_adapter_rts.h"
 
