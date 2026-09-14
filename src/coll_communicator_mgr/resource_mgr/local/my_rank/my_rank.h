@@ -138,7 +138,7 @@ public:
      * @param[in] channelNum 数量
      * @param[in] newChannels 新建 channel 的 (idx, reuseIdx) 列表；空表示全部按新建处理
      * @param[in] engine 通信引擎
-     * @note 仅 DEV_TYPE_950 实际执行交换，其它设备类型直接返回 SUCCESS，与非共享路径保持一致。
+     * @note DEV_TYPE_950 和 DEV_TYPE_960 实际执行交换，其它设备类型直接返回 SUCCESS，与非共享路径保持一致。
      */
     HcclResult BatchExchangeAndCheckConsistency(
         const HcclChannelDesc* channelDescs, const std::vector<HcommChannelDesc>& hcommDescs, uint32_t channelNum,

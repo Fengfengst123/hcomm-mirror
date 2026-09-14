@@ -586,10 +586,10 @@ HcclResult MyRank::BatchExchangeAndCheckConsistency(
     CHK_PTR_NULL(channelDescs);
     CHK_PRT_RET(channelNum == 0, HCCL_ERROR("[%s] invalid param: channelNum is zero", __func__), HCCL_E_PARA);
 
-    // 与非共享路径 MyRank::CreateChannels 一致：仅 DEV_TYPE_950 需要执行通信域一致性校验交换。
+    // 与非共享路径 MyRank::CreateChannels 一致：DEV_TYPE_950 和 DEV_TYPE_960 需要执行通信域一致性校验交换。
     DevType devType;
     CHK_RET(hrtGetDeviceType(devType));
-    if (devType != DevType::DEV_TYPE_950) {
+    if (devType != DevType::DEV_TYPE_950 && devType != DevType::DEV_TYPE_960) {
         return HCCL_SUCCESS;
     }
 
