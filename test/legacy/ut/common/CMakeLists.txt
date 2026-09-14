@@ -22,6 +22,7 @@ target_sources(hccl_v2_utest
     ut_checkcrc.cc
     ut_stream_utils.cc
     ut_ip_address.cc
+    ut_buffer_key.cc
     ${HCCL_V2_CODE_ROOT}/common/log.cc
     ${HCCL_V2_CODE_ROOT}/common/sal.cc
     ${HCCL_V2_CODE_ROOT}/common/checkcrc.cc

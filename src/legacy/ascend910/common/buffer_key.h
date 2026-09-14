@@ -43,28 +43,41 @@ public:
     // 不含等于情况
     inline bool IsSubset(const BufferKey& other) const
     {
-        // 子集判断：当前 key 的起始地址 >= 其他 key 的起始地址，且结束地址 <= 其他 key 的结束地址
-        return *this != other && addr_ >= other.addr_ && (addr_ + size_) <= (other.addr_ + other.size_);
+        // 子集判断：当前 key 的起始地址 >= 其他 key 的起始地址，且结束地址 <= 其他 key 的结束地址。
+        // 先校验 size 与起始地址，再用 size 差值与地址差值的相减结果比较，避免 addr + size 溢出回绕。
+        if (size_ > other.size_ || addr_ < other.addr_) {
+            return false;
+        }
+        return *this != other && (other.size_ - size_) >= (addr_ - other.addr_);
     }
 
     // 不含等于情况
     inline bool IsSuperset(const BufferKey& other) const
     {
-        // 超集判断：当前 key 的起始地址 < 其他 key 的起始地址，且结束地址 > 其他 key 的结束地址
-        return *this != other && addr_ <= other.addr_ && (addr_ + size_) >= (other.addr_ + other.size_);
+        // 超集判断：当前 key 的起始地址 <= 其他 key 的起始地址，且结束地址 >= 其他 key 的结束地址。
+        // 先校验 size 与起始地址，再用 size 差值与地址差值的相减结果比较，避免 addr + size 溢出回绕。
+        if (other.size_ > size_ || addr_ > other.addr_) {
+            return false;
+        }
+        return *this != other && (size_ - other.size_) >= (other.addr_ - addr_);
     }
 
     inline bool IsIntersect(const BufferKey& other) const
     {
-        // 检查是否有交集：两个区域重叠。
-        return (addr_ < other.addr_ + other.size_ && addr_ + size_ > other.addr_)
-               || (other.addr_ < addr_ + size_ && other.addr_ + other.size_ > addr_);
+        // 检查是否有交集：两个区域重叠，即本端起始地址在对方结束地址之前，且对方起始地址在本端结束地址之前。
+        // 结束地址（addr + size）比较改用地址差值与 size 的相减结果比较，避免 addr + size 溢出回绕。
+        bool selfStartBeforeOtherEnd = (addr_ < other.addr_) || (other.size_ > addr_ - other.addr_);
+        bool otherStartBeforeSelfEnd = (other.addr_ < addr_) || (size_ > other.addr_ - addr_);
+        return selfStartBeforeOtherEnd && otherStartBeforeSelfEnd;
     }
 
     inline bool IsDisjoint(const BufferKey& other) const
     {
         // 检查是否没有交集：一方完全在另一方之前或之后。
-        return (addr_ + size_ <= other.addr_) || (addr_ >= other.addr_ + other.size_);
+        // 结束地址（addr + size）比较改用地址差值与 size 的相减结果比较，避免 addr + size 溢出回绕。
+        bool selfEndBeforeOtherStart = (addr_ <= other.addr_) && (size_ <= other.addr_ - addr_);
+        bool otherEndBeforeSelfStart = (other.addr_ <= addr_) && (other.size_ <= addr_ - other.addr_);
+        return selfEndBeforeOtherStart || otherEndBeforeSelfStart;
     }
 
     inline std::string ToString() const
