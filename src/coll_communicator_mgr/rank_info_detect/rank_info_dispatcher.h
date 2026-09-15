@@ -33,16 +33,16 @@ public:
         u32 rankId;
         u64 header;
         size_t headerLen = sizeof(u64); // the header need to send
-        size_t headerSended = 0;        // the header have sent length
+        size_t headerSent = 0;          // the header have sent length
         size_t bodyLen = 0;             // the whole data length
-        size_t bodySended = 0;          // the data have sent
+        size_t bodySent = 0;            // the data have sent
         void* data;                     // data pointer
 
         bool Send(std::shared_ptr<Socket> socket);
         bool SendHeader(std::shared_ptr<Socket> socket);
         bool SendBody(std::shared_ptr<Socket> socket);
-        bool SendHelper(std::shared_ptr<Socket> socket, void* buf, size_t dataLen, size_t& sendedLen);
-        bool IsOk() { return bodyLen != 0 && headerSended == headerLen && bodySended == bodyLen; }
+        bool SendHelper(std::shared_ptr<Socket> socket, void* buf, size_t dataLen, size_t& sentLen) const;
+        bool IsOk() const { return bodyLen != 0 && headerSent == headerLen && bodySent == bodyLen; }
     };
 
     struct FdContext {
@@ -80,7 +80,7 @@ private:
         const std::unordered_map<std::string, std::shared_ptr<Socket>> connectSockets, const RankTableInfo& clusterInfo,
         const std::string& failedAgentIdList, u32 step);
     void SendOnce();
-    void ProcessOneSendEvent(int epollFd, FdHandle& fdHandle);
+    void ProcessOneSendEvent([[maybe_unused]] s32 epollFd, FdHandle& fdHandle);
     void ProcessSend();
     void CleanResource();
     void CloseEpollFd();

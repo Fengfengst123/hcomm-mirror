@@ -157,15 +157,15 @@ void RankInfoDispatcher::CleanResource()
     workerThreads_.clear();
 }
 
-void RankInfoDispatcher::ProcessOneSendEvent([[maybe_unused]] s32 epollFd, FdHandle& fdHanlde)
+void RankInfoDispatcher::ProcessOneSendEvent([[maybe_unused]] s32 epollFd, FdHandle& fdHandle)
 {
     std::unique_lock<std::mutex> lckForMap(fdHandleMapMutex_);
-    bool noFdHandle = (fdHandleToFdContextMap_.find(fdHanlde) == fdHandleToFdContextMap_.end());
+    bool noFdHandle = (fdHandleToFdContextMap_.find(fdHandle) == fdHandleToFdContextMap_.end());
     if (noFdHandle) {
         stop_ = true;
     }
-    CHK_PRT_RET(noFdHandle, HCCL_ERROR("[RankInfoDispatcher::%s]no fdhandle[%p]", __func__, fdHanlde), );
-    auto ctx = &(fdHandleToFdContextMap_.at(fdHanlde));
+    CHK_PRT_RET(noFdHandle, HCCL_ERROR("[RankInfoDispatcher::%s]no fdhandle[%p]", __func__, fdHandle), );
+    auto ctx = &(fdHandleToFdContextMap_.at(fdHandle));
     bool sendFailed = !ctx->txState.Send(ctx->socket);
     if (sendFailed) {
         stop_ = true;
@@ -181,7 +181,7 @@ void RankInfoDispatcher::ProcessOneSendEvent([[maybe_unused]] s32 epollFd, FdHan
         ctlType = EPOLL_CTL_MOD;
     }
     // EPOLLOUT_LET_ONESHOT -> EPOLLOUT | EPOLLET | EPOLLONESHOT, 防止多个线程同时操作同一个fd（fd重复触发）
-    s32 ret = RaCtlEventHandle(epollFds_, fdHanlde, ctlType, RaEpollEvent::RA_EPOLLOUT_LET_ONESHOT);
+    s32 ret = RaCtlEventHandle(epollFds_, fdHandle, ctlType, RaEpollEvent::RA_EPOLLOUT_LET_ONESHOT);
     bool ctlFailed = (ret != 0);
     if (ctlFailed) {
         stop_ = true;
@@ -299,12 +299,12 @@ void RankInfoDispatcher::CloseEpollFd()
 
 bool RankInfoDispatcher::SendState::Send(std::shared_ptr<Socket> socket)
 {
-    if (headerSended != headerLen) {
+    if (headerSent != headerLen) {
         header = bodyLen;
         CHK_PRT_RET(!SendHeader(socket), HCCL_ERROR("SendHeader error"), false);
     }
 
-    if ((headerSended == headerLen) && (bodyLen != bodySended)) {
+    if ((headerSent == headerLen) && (bodyLen != bodySent)) {
         CHK_PRT_RET(!SendBody(socket), HCCL_ERROR("SendBody error"), false);
     }
 
@@ -313,22 +313,22 @@ bool RankInfoDispatcher::SendState::Send(std::shared_ptr<Socket> socket)
 
 bool RankInfoDispatcher::SendState::SendHeader(std::shared_ptr<Socket> socket)
 {
-    return SendHelper(socket, &header, headerLen, headerSended);
+    return SendHelper(socket, &header, headerLen, headerSent);
 }
 
 bool RankInfoDispatcher::SendState::SendBody(std::shared_ptr<Socket> socket)
 {
-    return SendHelper(socket, data, bodyLen, bodySended);
+    return SendHelper(socket, data, bodyLen, bodySent);
 }
 
 bool RankInfoDispatcher::SendState::SendHelper(
-    std::shared_ptr<Socket> socket, void* buf, size_t dataLen, size_t& sendedLen)
+    std::shared_ptr<Socket> socket, void* buf, size_t dataLen, size_t& sentLen) const
 {
-    u64 needSend = dataLen - sendedLen;
+    u64 needSend = dataLen - sentLen;
     u64 sentSize = 0;
-    u8* sendData = static_cast<u8*>(buf) + sendedLen;
+    u8* sendData = static_cast<u8*>(buf) + sentLen;
     CHK_PRT_RET(!socket->ISend(sendData, needSend, sentSize), HCCL_ERROR("ISend fail"), false);
-    sendedLen += sentSize;
+    sentLen += sentSize;
     return true;
 }
 

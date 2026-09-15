@@ -202,10 +202,10 @@ TEST_F(RankInfoDispatcherTest, St_SendState_Send_When_ISend_Ok_Expect_SendBody)
 
     // check
     RankInfoDispatcher::SendState txS;
-    txS.headerSended = 1;
+    txS.headerSent = 1;
     txS.headerLen = 1;
     txS.bodyLen = 1;
-    txS.bodySended = 0;
+    txS.bodySent = 0;
     EXPECT_EQ(txS.Send(socket), true);
 }
 
