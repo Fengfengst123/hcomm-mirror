@@ -64,12 +64,14 @@ HcclResult HcclChannelAcquire(HcclComm comm, CommEngine engine, const HcclChanne
    - COMM_ENGINE_AICPU_TS
      - COMM_PROTOCOL_UBOE
      - COMM_PROTOCOL_UB_CTP
+     - COMM_PROTOCOL_UB_RTP
      - COMM_PROTOCOL_ROCE
    - COMM_ENGINE_AIV
      - COMM_PROTOCOL_UB_CTP
+     - COMM_PROTOCOL_UB_RTP
      - COMM_PROTOCOL_UB_MEM
      - COMM_PROTOCOL_ROCE
-   - COMM_ENGINE_CCU
+   - COMM_ENGINE_CCU（不支持COMM_PROTOCOL_UB_RTP）
      - COMM_PROTOCOL_UB_CTP
    <!-- end id6 -->
 

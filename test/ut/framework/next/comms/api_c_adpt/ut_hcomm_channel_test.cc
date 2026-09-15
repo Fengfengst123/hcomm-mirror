@@ -23,6 +23,7 @@ namespace {
 class ChannelStubEndpoint final : public hcomm::Endpoint {
 public:
     explicit ChannelStubEndpoint(const EndpointDesc& desc) : Endpoint(desc) {}
+
     HcclResult Init() override { return HCCL_SUCCESS; }
     hcomm::RegedMemMgr* GetRegedMemMgr() override { return nullptr; }
     void* GetRdmaHandle() override { return nullptr; }
@@ -104,6 +105,17 @@ TEST_F(TestHcommChannel, Ut_TestHcommChannelCreate_When_NumZero_Return_HCCL_E_PA
     ChannelHandle channels[1];
     HcommResult ret = HcommChannelCreate(nullptr, COMM_ENGINE_AICPU, &desc, 0, channels);
     EXPECT_EQ(ret, HCCL_E_PTR);
+}
+
+TEST_F(TestHcommChannel, Ut_TestHcommChannelCreate_When_CcuUbRtp_Return_NotSupport)
+{
+    ScopedChannelStubEndpoint stubEndpoint;
+    HcommChannelDesc desc = MakeSharedQueueChannelDesc(COMM_PROTOCOL_UB_RTP);
+
+    ChannelHandle channels[1] = {0};
+    HcommResult ret = HcommChannelCreate(stubEndpoint.Get(), COMM_ENGINE_CCU, &desc, 1, channels);
+    EXPECT_EQ(ret, HCCL_E_NOT_SUPPORT);
+    EXPECT_EQ(channels[0], static_cast<ChannelHandle>(0));
 }
 
 TEST_F(TestHcommChannel, Ut_TestHcommCollectiveChannelCreate_When_ParamsNull_Return_HCCL_E_PTR)

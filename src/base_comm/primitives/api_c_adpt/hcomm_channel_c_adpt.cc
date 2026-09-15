@@ -295,6 +295,21 @@ HcommResult CheckRoceAttr(HcommChannelDesc& channelDesc, EndpointLocType localLo
     return ApplyRoceQosCompatToSlTc(channelDesc, localLocType);
 }
 
+// CCU引擎不支持UB_RTP链路，建链前拦截
+static HcommResult CheckCcuChannelProtocol(const CommEngine engine, const std::vector<HcommChannelDesc>& channelDescs)
+{
+    if (engine != CommEngine::COMM_ENGINE_CCU) {
+        return HCOMM_SUCCESS;
+    }
+    for (uint32_t i = 0; i < channelDescs.size(); ++i) {
+        if (channelDescs[i].remoteEndpoint.protocol == COMM_PROTOCOL_UB_RTP) {
+            HCCL_ERROR("[%s] CCU engine not support protocol[UB_RTP], channelDesc[%u].", __func__, i);
+            return HCOMM_E_NOT_SUPPORT;
+        }
+    }
+    return HCOMM_SUCCESS;
+}
+
 namespace {
 void ApplyHcommChannelDescV1Fields(const HcommChannelDesc& channelDesc, HcommChannelDesc& channelDescFinal)
 {
@@ -453,6 +468,7 @@ HcommResult HcommCollectiveChannelCreate(
     std::vector<HcommChannelDesc> channelDescFinals;
     CHK_RET(static_cast<HcclResult>(
         NormalizeHcommChannelDescs(endpointHandle, channelDescs, channelNum, channelDescFinals, engine)));
+    CHK_RET(static_cast<HcclResult>(CheckCcuChannelProtocol(engine, channelDescFinals)));
     auto startut = std::chrono::steady_clock::now();
     HCCL_INFO(
         "[%s] START. endpointHandle[0x%llx], engine[%s], channelNum[%u].", __func__, endpointHandle,
@@ -505,6 +521,7 @@ HcommResult HcommChannelCreate(
     std::vector<HcommChannelDesc> channelDescFinals;
     CHK_RET(static_cast<HcclResult>(
         NormalizeHcommChannelDescs(endpointHandle, channelDescs, channelNum, channelDescFinals, engine)));
+    CHK_RET(static_cast<HcclResult>(CheckCcuChannelProtocol(engine, channelDescFinals)));
     auto endpoint = HcommResMgr::GetInstance().GetEndpointMgr().Get(endpointHandle);
     auto startut = std::chrono::steady_clock::now();
     HCCL_INFO(
@@ -746,6 +763,8 @@ HcommResult HcommChannelCreateWithConfig(
         NormalizeHcommChannelDescs(endpointHandle, channelDescs, channelNum, channelDescFinals, engine)));
     // NormalizeHcommChannelDescs 内部已调 CheckUbAttr，此处仅补共享模式专有校验
     CHK_RET(ValidateSharedQueueConfig(channelDescFinals));
+    // 防御性校验：共享路径engine已被上游AIV-only门禁约束，此检查正常不触发，仅防止未来放开引擎限制时遗漏
+    CHK_RET(static_cast<HcclResult>(CheckCcuChannelProtocol(engine, channelDescFinals)));
 
     HcclResult ret = CreateAndRegisterSharedQueueBuiltinChannels(
         endpointHandle, engine, channelDescFinals.data(), channelNum, channels);

@@ -45,6 +45,8 @@ HcclResult ProcessUbChannelDesc(
     const HcclChannelDesc& channelDesc, const HcclChannelDesc& channelDescFinal, const hcclComm* hcclComm);
 HcclResult
 ProcessHcclResPackReq(const HcclChannelDesc& channelDesc, HcclChannelDesc& channelDescFinal, hcclComm* hcclComm);
+HcclResult CheckCcuChannelProtocol(
+    const CommEngine engine, const std::vector<HcclChannelDesc>& channelDescs, const std::string& commTag);
 
 static int StubRaGetHccnCfgRoceQosDscp(struct RaInfo* info, enum HccnCfgKey key, char* value, unsigned int* valueLen)
 {
@@ -739,6 +741,70 @@ TEST_F(ProcessHcclChannelDescTest, Ut_ProcessHcclChannelDesc_When_Hccs_DoesNotCo
     EXPECT_EQ(ret, HCCL_SUCCESS);
     EXPECT_EQ(out.channelProtocol, COMM_PROTOCOL_HCCS);
     EXPECT_EQ(out.ubMemAttr.pathMode, 0xFFu);
+}
+
+// CheckCcuChannelProtocol 不依赖 hcclComm/设备，使用轻量 fixture 独立运行
+class CheckCcuChannelProtocolTest : public testing::Test {
+protected:
+    HcclResult ret{HCCL_SUCCESS};
+};
+
+TEST_F(CheckCcuChannelProtocolTest, Ut_CheckCcuChannelProtocol_When_CcuUbRtp_Expect_NotSupport)
+{
+    HcclChannelDesc desc{};
+    ASSERT_EQ(HcclChannelDescInit(&desc, 1), HCCL_SUCCESS);
+    desc.channelProtocol = COMM_PROTOCOL_UB_RTP;
+
+    ret = CheckCcuChannelProtocol(CommEngine::COMM_ENGINE_CCU, {desc}, "ut_group");
+    EXPECT_EQ(ret, HCCL_E_NOT_SUPPORT);
+}
+
+TEST_F(CheckCcuChannelProtocolTest, Ut_CheckCcuChannelProtocol_When_CcuUbCtp_Expect_Success)
+{
+    HcclChannelDesc desc{};
+    ASSERT_EQ(HcclChannelDescInit(&desc, 1), HCCL_SUCCESS);
+    desc.channelProtocol = COMM_PROTOCOL_UB_CTP;
+
+    ret = CheckCcuChannelProtocol(CommEngine::COMM_ENGINE_CCU, {desc}, "ut_group");
+    EXPECT_EQ(ret, HCCL_SUCCESS);
+}
+
+TEST_F(CheckCcuChannelProtocolTest, Ut_CheckCcuChannelProtocol_When_NonCcuUbRtp_Expect_Success)
+{
+    HcclChannelDesc desc{};
+    ASSERT_EQ(HcclChannelDescInit(&desc, 1), HCCL_SUCCESS);
+    desc.channelProtocol = COMM_PROTOCOL_UB_RTP;
+
+    ret = CheckCcuChannelProtocol(CommEngine::COMM_ENGINE_AIV, {desc}, "ut_group");
+    EXPECT_EQ(ret, HCCL_SUCCESS);
+}
+
+TEST_F(CheckCcuChannelProtocolTest, Ut_CheckCcuChannelProtocol_When_MixedDescs_Expect_NotSupport)
+{
+    HcclChannelDesc ubCtpDesc{};
+    HcclChannelDesc ubRtpDesc{};
+    ASSERT_EQ(HcclChannelDescInit(&ubCtpDesc, 1), HCCL_SUCCESS);
+    ASSERT_EQ(HcclChannelDescInit(&ubRtpDesc, 1), HCCL_SUCCESS);
+    ubCtpDesc.channelProtocol = COMM_PROTOCOL_UB_CTP;
+    ubRtpDesc.channelProtocol = COMM_PROTOCOL_UB_RTP;
+
+    ret = CheckCcuChannelProtocol(CommEngine::COMM_ENGINE_CCU, {ubCtpDesc, ubRtpDesc}, "ut_group");
+    EXPECT_EQ(ret, HCCL_E_NOT_SUPPORT);
+}
+
+TEST_F(HcclChannelDescTest, Ut_HcclChannelAcquire_When_CcuUbRtp_Expect_NotSupport)
+{
+    HcclChannelDesc channelDesc{};
+    ASSERT_EQ(HcclChannelDescInit(&channelDesc, 1), HCCL_SUCCESS);
+    channelDesc.remoteRank = 2;
+    channelDesc.channelProtocol = COMM_PROTOCOL_UB_RTP;
+
+    // CCU+UB_RTP 在入口即被拦截，不应触达建链
+    MOCKER_CPP(&MyRank::CreateChannels).expects(never());
+
+    ChannelHandle outputChannel = 0;
+    ret = HcclChannelAcquire(comm, CommEngine::COMM_ENGINE_CCU, &channelDesc, 1, &outputChannel);
+    EXPECT_EQ(ret, HCCL_E_NOT_SUPPORT);
 }
 
 TEST_F(HcclChannelDescTest, Ut_HcclChannelAcquire_When_PendingConsumed_AppendHistoricalSymmetricMemHandle)

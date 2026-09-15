@@ -752,6 +752,22 @@ static HcclResult CheckChannelResParams(
     return HCCL_SUCCESS;
 }
 
+// CCU引擎不支持UB_RTP链路，建链前拦截，返回HCCL_E_NOT_SUPPORT
+HcclResult CheckCcuChannelProtocol(
+    const CommEngine engine, const std::vector<HcclChannelDesc>& channelDescs, const std::string& commTag)
+{
+    if (engine != CommEngine::COMM_ENGINE_CCU) {
+        return HCCL_SUCCESS;
+    }
+    for (const auto& channelDesc : channelDescs) {
+        if (channelDesc.channelProtocol == COMM_PROTOCOL_UB_RTP) {
+            HCCL_ERROR("[%s] CCU engine not support channelProtocol[UB_RTP], group[%s]", __func__, commTag.c_str());
+            return HCCL_E_NOT_SUPPORT;
+        }
+    }
+    return HCCL_SUCCESS;
+}
+
 HcclResult HcclChannelAcquire(
     HcclComm comm, CommEngine engine, const HcclChannelDesc* channelDescs, uint32_t channelNum, ChannelHandle* channels)
 {
@@ -781,6 +797,8 @@ HcclResult HcclChannelAcquire(
             ret);
         channelDescFinals.push_back(channelDescFinal);
     }
+
+    CHK_RET(CheckCcuChannelProtocol(engine, channelDescFinals, hcclComm->GetIdentifier()));
 
     if (hcclComm->IsCommunicatorV2()) { // A5
         const std::string& commTag = hcclComm->GetIdentifier();
@@ -1476,6 +1494,8 @@ HcclResult HcclChannelAcquireWithConfig(
     std::vector<HcclChannelDesc> channelDescFinals;
     CHK_RET(PackChannelDescs(channelDescs, channelNum, hcclComm, engine, channelDescFinals));
     CHK_RET(ValidateSharedQueueDescs(channelDescFinals));
+    // 防御性校验：共享路径engine已被ParseSharedQueueConfig的AIV-only门禁约束，此检查正常不触发，仅防止未来放开引擎限制时遗漏
+    CHK_RET(CheckCcuChannelProtocol(engine, channelDescFinals, hcclComm->GetIdentifier()));
 
     std::vector<std::vector<HcclMemHandle>> mergedMemHandles;
     std::vector<bool> channelSymMemAppended;
