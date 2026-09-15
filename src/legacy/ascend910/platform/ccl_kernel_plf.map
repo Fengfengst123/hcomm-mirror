@@ -23,6 +23,9 @@ global:
     HcclDispatcherInit;
     HcclDispatcherWaitValue;
     HcclDispatcherWriteValue;
+    HcclDlclose;
+    HcclDlopen;
+    HcclDlsym;
     HcclGetCallbackResult;
     HcclGetNotifyWaitMode;
     HcclLocalBareNotifyRecord;

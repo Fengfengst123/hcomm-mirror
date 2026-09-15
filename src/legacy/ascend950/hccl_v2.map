@@ -48,6 +48,9 @@ global:
     HcclDeregisterMemV2;
     HcclDevMemAcquireV2;
     HcclDisableMemAccessV2;
+    HcclDlclose;
+    HcclDlopen;
+    HcclDlsym;
     HcclEnableMemAccessV2;
     HcclExchangeMemDescV2;
     HcclFreeOpArgsV2;
