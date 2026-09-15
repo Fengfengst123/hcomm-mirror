@@ -47,6 +47,8 @@ target_compile_options(hccp_service.bin PRIVATE
     -fno-common
     -fno-strict-aliasing
     -std=gnu11
+    -Wextra
+    -Wfloat-equal
     $<$<CONFIG:Debug>:-Og -g>
 )
 
