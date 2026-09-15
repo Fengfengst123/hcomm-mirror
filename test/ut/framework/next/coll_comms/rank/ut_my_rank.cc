@@ -292,7 +292,10 @@ protected:
     aclrtBinHandle binHandle;
     CommConfig config{"my_rank_ut"};
     ManagerCallbacks callbacks;
-    void* rankGraphPtr = (void*)0x114514;
+    // 真实Hccl::RankGraph对象：RankGraphV2经void*持有其裸指针（IsLevel0PcieFallback直读），
+    // 传伪造指针会在标志查询时解引用崩溃；其余查询仍走IRankGraph mock，不受影响
+    Hccl::RankGraph realRankGraph{0};
+    void* rankGraphPtr = (void*)&realRankGraph;
     std::shared_ptr<RankGraph> rankGraph;
     std::unique_ptr<MyRank> myRank;
     std::unique_ptr<RoceChannelDescConfigurator> roceDescConfigurator;
@@ -564,6 +567,40 @@ TEST_F(MyRankTest, Ut_Init_When_Ccu_Driver_Unexpected_Fail_Expect_Fail)
     uint32_t opExpansionModeMs = CCU_MS_MODE;
     EXPECT_EQ(myRank->Init(cclBuffer, opExpansionModeMs, 2), HCCL_E_PARA);
     unsetenv("HCCL_CCU_CUSTOM_OP_MODE");
+}
+
+// 无UB兜底场景：level0为pcie fallback时CCU拦截，直接回退AICPU，不向设备侧拉起CCU驱动
+TEST_F(MyRankTest, Ut_TryInitCcuInstanceOnDemand_When_Level0PcieFallback_Expect_FallbackAicpuWithoutDriver)
+{
+    myRank->opExpansionMode_ = CCU_MS_MODE;
+    myRank->mainBoardType_ = Hccl::HcclMainboardId::MAINBOARD_POD; // 跳过主板类型查询，聚焦兜底拦截
+    realRankGraph.SetLevel0PcieFallback(true);
+    // 不mock CcuInitFeature：若未在标志处拦截而走到驱动拉起，用例将失败
+
+    EXPECT_EQ(myRank->TryInitCcuInstanceOnDemand(), HCCL_SUCCESS);
+    EXPECT_EQ(myRank->opExpansionMode_, AICPU_TS_MODE);
+    EXPECT_EQ(myRank->ccuInsHandle_, static_cast<CcuInsHandle>(0));
+}
+
+// 非兜底场景：标志为false时不拦截，正常走向CCU驱动拉起（模拟驱动忙回退，与兜底拦截路径区分）
+TEST_F(MyRankTest, Ut_TryInitCcuInstanceOnDemand_When_NotPcieFallback_Expect_CcuDriverCalled)
+{
+    myRank->opExpansionMode_ = CCU_MS_MODE;
+    myRank->mainBoardType_ = Hccl::HcclMainboardId::MAINBOARD_POD;
+    realRankGraph.SetLevel0PcieFallback(false);
+    MOCKER(hcomm::CcuInitFeature).stubs().will(returnValue(CcuResult::CCU_E_DRV_BUSY));
+
+    EXPECT_EQ(myRank->TryInitCcuInstanceOnDemand(), HCCL_SUCCESS);
+    EXPECT_EQ(myRank->opExpansionMode_, AICPU_TS_MODE);
+}
+
+// RankGraphV2标志转发：经void*包装Hccl::RankGraph裸指针，IsLevel0PcieFallback直读被包装对象
+TEST_F(MyRankTest, Ut_RankGraphV2_IsLevel0PcieFallback_When_WrappedGraphFlagToggled_Expect_ForwardValue)
+{
+    realRankGraph.SetLevel0PcieFallback(true);
+    EXPECT_EQ(true, rankGraph->IsLevel0PcieFallback());
+    realRankGraph.SetLevel0PcieFallback(false);
+    EXPECT_EQ(false, rankGraph->IsLevel0PcieFallback());
 }
 
 // 测试BatchCreateChannels在资源不足时销毁新申请的channel

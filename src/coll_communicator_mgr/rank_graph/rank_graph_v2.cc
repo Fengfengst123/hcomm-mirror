@@ -16,7 +16,12 @@ RankGraphV2::RankGraphV2() {}
 
 RankGraphV2::~RankGraphV2() {}
 
-RankGraphV2::RankGraphV2(void* rankGraphPtr) { pImpl = std::make_unique<Hccl::IRankGraph>(rankGraphPtr); }
+RankGraphV2::RankGraphV2(void* rankGraphPtr) : rankGraph_(static_cast<Hccl::RankGraph*>(rankGraphPtr))
+{
+    pImpl = std::make_unique<Hccl::IRankGraph>(rankGraphPtr);
+}
+
+bool RankGraphV2::IsLevel0PcieFallback() const { return rankGraph_ != nullptr && rankGraph_->IsLevel0PcieFallback(); }
 
 HcclResult RankGraphV2::GetRankSize(uint32_t* rankSize) { return pImpl->GetRankSize(rankSize); }
 

@@ -51,6 +51,8 @@ public:
         = 0;
     virtual HcclResult GetNetLayers(uint32_t** netLayers, uint32_t* netLayerNum) = 0;
     virtual HcclResult GetHeterogMode([[maybe_unused]] HcclHeterogMode* mode) const { return HCCL_SUCCESS; }
+    // 无UB盖板兜底场景：本rank的level0为pcie fallback层；默认非兜底，仅RankGraphV2(A5)按rank table显式标记置位
+    virtual bool IsLevel0PcieFallback() const { return false; }
     virtual HcclResult GetInstTopoTypeByNetLayer(uint32_t netLayer, CommTopo* topoType) = 0;
     virtual HcclResult GetInstSizeByNetLayer(uint32_t netLayer, uint32_t* rankNum) = 0;
     virtual HcclResult GetInstRanksByNetLayer(uint32_t netLayer, uint32_t** rankList, uint32_t* rankNum) = 0;

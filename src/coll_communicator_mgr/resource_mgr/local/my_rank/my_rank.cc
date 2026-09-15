@@ -312,6 +312,16 @@ HcclResult MyRank::TryInitCcuInstanceOnDemand()
         return HcclResult::HCCL_E_NOT_SUPPORT;
     }
 
+    // 无UB盖板兜底场景：CCU依赖UB硬件，直接回退AICPU_TS，
+    // 避免向设备侧发起必然失败的CCU驱动拉起（会产生ERROR日志且初始化失败）；
+    // 依据RankGraph持久化的pcie_fallback显式标记判断，不影响有UB场景下CCU驱动真实故障的显式报错
+    if (rankGraph_ != nullptr && rankGraph_->IsLevel0PcieFallback()) {
+        opExpansionMode_ = AICPU_TS_MODE;
+        ccuInsHandle_ = 0;
+        HCCL_RUN_WARNING(
+            "[MyRank][%s] level0 is pcie fallback (UB unavailable), fallback to aicpu, rankId[%u].", __func__, rankId_);
+        return HcclResult::HCCL_SUCCESS;
+    }
     // 拉起ccu驱动
     if (!ccuDrvHandle_) {
         auto ccuInitRet = CcuInitFeature(devLogicId_, ccuDrvHandle_);

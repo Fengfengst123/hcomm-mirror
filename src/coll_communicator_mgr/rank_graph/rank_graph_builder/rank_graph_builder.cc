@@ -373,6 +373,9 @@ void RankGraphBuilder::BuildFromRankTable()
     // 初始化innerRanks
     rankGraph_->InitInnerRanks();
 
+    // 将本rank level0 pcie兜底标记持久化进RankGraph，供MyRank经hccl::RankGraph接口读取（CCU无UB拦截等）
+    rankGraph_->SetLevel0PcieFallback(level0PcieFallback_);
+
     HCCL_DEBUG("[RankGraphBuilder][BuildFromRankTable] Build VirtualTopo from RankTable success!");
 }
 

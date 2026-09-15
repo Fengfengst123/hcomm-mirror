@@ -459,6 +459,29 @@ TEST_F(RankGraphTest, ut_IsSymmetric_When_Normal_Expect_SUCCESS)
     EXPECT_THROW(rankGraph->IsSymmetric(3), NullPtrException);
 }
 
+TEST_F(RankGraphTest, ut_IsLevel0PcieFallback_When_Default_Expect_False)
+{
+    RankGraph rankGraph(myRank);
+    EXPECT_EQ(false, rankGraph.IsLevel0PcieFallback());
+}
+
+TEST_F(RankGraphTest, ut_SetLevel0PcieFallback_When_SetTrue_Expect_GetterReturnTrue)
+{
+    RankGraph rankGraph(myRank);
+    rankGraph.SetLevel0PcieFallback(true);
+    EXPECT_EQ(true, rankGraph.IsLevel0PcieFallback());
+}
+
+TEST_F(RankGraphTest, ut_CreateSubRankGraph_When_ParentLevel0PcieFallback_Expect_SubGraphInheritFlag)
+{
+    auto rankGraph = create4pclosRankGraph(myRank);
+    rankGraph->SetLevel0PcieFallback(true);
+    vector<u32> subRankIds = {0, 1, 2, 3};
+    std::unique_ptr<RankGraph> subRankGraph = rankGraph->CreateSubRankGraph(subRankIds);
+    EXPECT_EQ(4, subRankGraph->GetLocalInstSize(0));
+    EXPECT_EQ(true, subRankGraph->IsLevel0PcieFallback());
+}
+
 TEST_F(RankGraphTest, ut_CreateSubRankGraph_When_Normal_Expect_SUCCESS)
 {
     auto rankGraph = create4pclosRankGraph(myRank);

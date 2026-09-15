@@ -42,9 +42,11 @@ public:
         uint32_t rankId, const EndpointDesc* endPointDesc, EndpointAttr endpointAttr, uint32_t infoLen,
         void* info) override;
     HcclResult GetDeviceId(uint32_t rankId, uint32_t* deviceId) override;
+    bool IsLevel0PcieFallback() const override; // 无UB盖板兜底场景：本rank的level0为pcie fallback层
 
 private:
     std::unique_ptr<Hccl::IRankGraph> pImpl;
+    Hccl::RankGraph* rankGraph_{nullptr}; // 由void*构造时转换而来，供标志类查询直读，绕开IRankGraph
 };
 } // namespace hccl
 #endif

@@ -62,6 +62,9 @@ public:
     HcclResult GetNetInstanceList(const u32 netLayer, vector<u32>& instSizeList, u32& listSize)
         const; // 给定netLayer，查询RankGraph在该netLayer分为多少NetInstance，以及每个NetInstance的size
     bool IsSymmetric(const u32 netLayer) const; // 给定netLayer，查询RankGraph在该netLayer是否是对称的
+    // 无UB盖板兜底场景：本rank的level0为pcie fallback层（由RankGraphBuilder按rank table显式标记写入）
+    bool IsLevel0PcieFallback() const { return level0PcieFallback_; }
+    void SetLevel0PcieFallback(bool flag) { level0PcieFallback_ = flag; }
 
     void GetTopoInstsByLayer(const u32 netLayer, std::vector<u32>& topoInsts, u32& topoInstNum) const;
     HcclResult GetTopoType(const u32 netLayer, const u32 topoInstId, TopoType& topoType) const;
@@ -87,6 +90,7 @@ private:
     std::set<RankId> innerRanks_;
     RankId myRank_;
     bool initFlag_{false};
+    bool level0PcieFallback_{false}; // 本rank的level0是否为无UB兜底层
 
     void CreateSubNetInstances(
         const std::vector<RankId> rankIds, Level2Id2NetInst& subNetInsts, RankId2PeerMap& peers,

@@ -66,6 +66,30 @@ TEST_F(RankGraphBuilderTest, Ut_Build_When_Normal_Expect_Success)
     EXPECT_NE(1, path2.size());
 }
 
+// 无UB兜底场景：rank table中本rank level0带pcie_fallback显式标记时，Build将标志持久化进RankGraph
+TEST_F(RankGraphBuilderTest, Ut_Build_When_Level0PcieFallback_Expect_FlagPersistedInRankGraph)
+{
+    PhyTopo::GetInstance()->Clear();
+    RankGraphBuilder rankGraphBuilder;
+    RankTableInfo rankTable = test::MakeRankTable2p();
+    // 模拟rank_info_detect_client插入兜底level0时写入的pcie_fallback显式标记（本rank即rank0）
+    rankTable.ranks[0].rankLevelInfos[0].pcieFallback = true;
+    std::unique_ptr<RankGraph> rankGraph = rankGraphBuilder.RecoverBuild(rankTable, test::MakeTwoPeerClosTopo(), 0);
+    EXPECT_NE(nullptr, rankGraph);
+    EXPECT_EQ(true, rankGraph->IsLevel0PcieFallback());
+}
+
+// 常规场景：rank table无pcie_fallback标记时，构建出的RankGraph标志保持false
+TEST_F(RankGraphBuilderTest, Ut_Build_When_Level0NotPcieFallback_Expect_FlagFalse)
+{
+    PhyTopo::GetInstance()->Clear();
+    RankGraphBuilder rankGraphBuilder;
+    std::unique_ptr<RankGraph> rankGraph
+        = rankGraphBuilder.RecoverBuild(test::MakeRankTable2p(), test::MakeTwoPeerClosTopo(), 0);
+    EXPECT_NE(nullptr, rankGraph);
+    EXPECT_EQ(false, rankGraph->IsLevel0PcieFallback());
+}
+
 TEST_F(RankGraphBuilderTest, Ut_BuildRankGraph_When_Normal_Expect_Success)
 {
     // when

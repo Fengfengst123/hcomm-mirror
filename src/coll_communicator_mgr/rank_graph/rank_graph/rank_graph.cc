@@ -809,6 +809,7 @@ unique_ptr<RankGraph> RankGraph::CreateSubRankGraph(const std::vector<u32>& rank
     // step1: 创建subRankGraph
     RankId subMyRankId = GetSubRankId(subRankIds, myRank_);
     unique_ptr<RankGraph> subRankGraph = make_unique<RankGraph>(subMyRankId);
+    subRankGraph->SetLevel0PcieFallback(level0PcieFallback_); // 无UB兜底标记随子图继承
 
     // step2: subRankGraph添加subPeers
     RankId2PeerMap peers; // 保存Peer指针以便后续执行Add操作
