@@ -1103,7 +1103,7 @@ static HcclResult CreateSharedJettyChannelsForGroup(
         hcommDescs[j].channelName = channelNameStr.c_str();
     }
     std::string socketTag = commTag + "_engine_" + std::to_string(static_cast<uint32_t>(engine));
-    HcclResult sockRet = myRank->BatchCreateSockets(hcclDescs.data(), needCreate, socketTag, hcommDescs);
+    HcclResult sockRet = myRank->BatchCreateSockets(hcclDescs.data(), needCreate, socketTag, hcommDescs, engine);
     CHK_PRT_RET(
         sockRet != HCCL_SUCCESS,
         HCCL_ERROR(
@@ -1404,8 +1404,8 @@ static HcclResult ExchangeConsistencyForSharedJetty(
     }
 
     std::string consistencySocketTag = identifier + "_engine_" + std::to_string(static_cast<uint32_t>(engine));
-    HcclResult sockRet
-        = myRank->BatchCreateSockets(channelDescFinals.data(), channelNum, consistencySocketTag, consistencyDescs);
+    HcclResult sockRet = myRank->BatchCreateSockets(
+        channelDescFinals.data(), channelNum, consistencySocketTag, consistencyDescs, engine);
     CHK_PRT_RET(
         sockRet != HCCL_SUCCESS,
         HCCL_ERROR("[%s] BatchCreateSockets for consistency failed, ret[%d].", __func__, sockRet), sockRet);

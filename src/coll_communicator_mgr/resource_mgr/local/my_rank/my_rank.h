@@ -121,12 +121,13 @@ public:
      * @param[in] channelDescs HCCL 层 channel desc 数组
      * @param[in] channelNum 数量
      * @param[in] socketTag socket 标签（commTag + "_engine_" + engine）
+     * @param[in] engine 通信引擎
      * @param[out] hcommDescs 输出的 HcommChannelDesc 数组（调用前需用 ChannelDescHccl2Hcomm 填充基础字段，
      *             本方法补上 socket/role/port 字段）
      */
     HcclResult BatchCreateSockets(
         const HcclChannelDesc* channelDescs, uint32_t channelNum, const std::string& socketTag,
-        std::vector<HcommChannelDesc>& hcommDescs);
+        std::vector<HcommChannelDesc>& hcommDescs, CommEngine engine);
 
     /**
      * @brief 在已建好的 socket 上执行通信域一致性校验交换（CheckFrameV2 + 用户信息）。
@@ -159,7 +160,7 @@ private:
         ReuseSocketIdxMap& reuseSocketIdxMap);
     HcclResult BatchGetSocketsForChannels(
         const HcclChannelDesc* channelDescs, uint32_t channelNum, const std::string& socketTag,
-        std::vector<HcommChannelDesc>& hcommDescs, ReuseSocketIdxMap& reuseSocketIdxMap);
+        std::vector<HcommChannelDesc>& hcommDescs, ReuseSocketIdxMap& reuseSocketIdxMap, CommEngine engine);
     HcclResult BatchCreateChannels(
         CommEngine engine, const HcclChannelDesc* channelDescs, uint32_t channelNum,
         std::vector<HcommChannelDesc>& hcommDescs, ChannelHandle* channelHandles,
@@ -175,7 +176,7 @@ private:
     HcclResult CheckChannelParam(CommEngine engine, const HcclChannelDesc* channelDesc, uint32_t channelNum) const;
     HcclResult QueryListenPort(
         uint32_t localRank, uint32_t remoteRank, const EndpointDesc& localEndpointDesc,
-        const EndpointDesc& remoteEndpointDesc, uint32_t& listenPort, HcommChannelDesc& hcommDesc);
+        const EndpointDesc& remoteEndpointDesc, uint32_t& listenPort, HcommChannelDesc& hcommDesc, CommEngine engine);
     HcclResult GetLocalTlsStatus(EndpointLocType localType, Hccl::TlsStatus& tlsStatus) const;
     HcclResult RegisterCommMemsToEndpoint(EndpointHandle epHandle);
     HcclResult TryInitCcuInstance();
@@ -225,6 +226,9 @@ private:
     std::unique_ptr<NsRecoveryProcessor> nsRecoveryProcessor_{nullptr};
     // 内部获取 port 的方法，根据 mode_ 区分 v1/v2
     HcclResult GetDevicePortInternal(uint32_t rank, uint32_t* devPort, EndpointLocType locType);
+    // 查 device 侧监听端口：host 侧或 CPU 引擎走原有查询，device 侧查 (rank, IP) 两级端口表
+    HcclResult GetListenPortByAddr(
+        uint32_t rank, const Hccl::IpAddress& addr, EndpointLocType locType, CommEngine engine, uint32_t* port);
 
     Hccl::RankIpPortMapPtr rankIpPortMap_;
 

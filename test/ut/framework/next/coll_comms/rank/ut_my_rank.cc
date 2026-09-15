@@ -196,8 +196,11 @@ protected:
         std::cout << "A Test case in MyRankTest SetUP" << std::endl;
         rankIpPortMap = std::make_shared<std::unordered_map<u32, std::unordered_map<Hccl::IpAddress, u32>>>();
         (*rankIpPortMap)[0][Hccl::IpAddress("1.0.0.0")] = 16666;
+        (*rankIpPortMap)[0][Hccl::IpAddress("2.0.0.0")] = 16666;
         (*rankIpPortMap)[1][Hccl::IpAddress("2.0.0.0")] = 16666;
+        (*rankIpPortMap)[1][Hccl::IpAddress("3.0.0.0")] = 16666;
         (*rankIpPortMap)[2][Hccl::IpAddress("0.0.0.0")] = 16666;
+        (*rankIpPortMap)[2][Hccl::IpAddress("3.0.0.0")] = 16666;
         rankGraph = std::make_shared<RankGraphV2>(rankGraphPtr);
         myRank = std::make_unique<MyRank>(binHandle, 0, config, callbacks, rankGraph.get(), rankIpPortMap);
         roceDescConfigurator = std::make_unique<RoceChannelDescConfigurator>(1);
@@ -297,12 +300,7 @@ protected:
 
 TEST_F(MyRankTest, Ut_When_QueryListenPort_Listen_Port_Expect_SUCCESS)
 {
-    uint32_t devPort = 60001;
-    MOCKER_CPP(&Hccl::IRankGraph::GetDevicePort)
-        .stubs()
-        .with(mockcpp::any(), outBoundP(&devPort))
-        .will(returnValue(HCCL_SUCCESS));
-
+    // 非CPU引擎走两级端口表：端口取表值16666（SetUp已按 rank+IP 填表），不再依赖 rankGraph 查询
     EndpointDesc localEp;
     CreateEndpointDesc(localEp, COMM_PROTOCOL_ROCE, "1.0.0.0");
     EndpointDesc rmtEp;
@@ -310,26 +308,25 @@ TEST_F(MyRankTest, Ut_When_QueryListenPort_Listen_Port_Expect_SUCCESS)
 
     uint32_t listenPort;
     HcommChannelDesc desc;
-    HcclResult ret = myRank->QueryListenPort(0, 1, localEp, rmtEp, listenPort, desc);
+    HcclResult ret = myRank->QueryListenPort(0, 1, localEp, rmtEp, listenPort, desc, COMM_ENGINE_AICPU_TS);
     EXPECT_EQ(ret, HCCL_SUCCESS);
-    EXPECT_EQ(listenPort, devPort);
+    EXPECT_EQ(listenPort, 16666);
     EXPECT_EQ(desc.role, HCOMM_SOCKET_ROLE_SERVER);
+    EXPECT_EQ(desc.port, 16666);
 
     EndpointDesc rmtEp2;
     CreateEndpointDesc(rmtEp2, COMM_PROTOCOL_ROCE, "0.0.0.0");
-    ret = myRank->QueryListenPort(0, 2, localEp, rmtEp2, listenPort, desc);
+    ret = myRank->QueryListenPort(0, 2, localEp, rmtEp2, listenPort, desc, COMM_ENGINE_AICPU_TS);
     EXPECT_EQ(ret, HCCL_SUCCESS);
-    EXPECT_EQ(listenPort, devPort);
+    EXPECT_EQ(listenPort, 16666);
     EXPECT_EQ(desc.role, HCOMM_SOCKET_ROLE_CLIENT);
+    EXPECT_EQ(desc.port, 16666);
 }
 
 TEST_F(MyRankTest, Ut_When_QueryListenPort_InValid_Port_Expect_E_PARA)
 {
-    uint32_t devPort = 1919000;
-    MOCKER_CPP(&Hccl::IRankGraph::GetDevicePort)
-        .stubs()
-        .with(mockcpp::any(), outBoundP(&devPort))
-        .will(returnValue(HCCL_SUCCESS));
+    // 表中出现超过端口上限的非法值，QueryListenPort 应返回 E_PARA
+    (*rankIpPortMap)[1][Hccl::IpAddress("2.0.0.0")] = 1919000;
 
     EndpointDesc localEp;
     CreateEndpointDesc(localEp, COMM_PROTOCOL_ROCE, "1.0.0.0");
@@ -338,8 +335,24 @@ TEST_F(MyRankTest, Ut_When_QueryListenPort_InValid_Port_Expect_E_PARA)
 
     uint32_t listenPort;
     HcommChannelDesc desc;
-    HcclResult ret = myRank->QueryListenPort(0, 1, localEp, rmtEp, listenPort, desc);
+    HcclResult ret = myRank->QueryListenPort(0, 1, localEp, rmtEp, listenPort, desc, COMM_ENGINE_AICPU_TS);
     EXPECT_EQ(ret, HCCL_E_PARA);
+}
+
+TEST_F(MyRankTest, Ut_When_QueryListenPort_PortMiss_Expect_FallbackPort)
+{
+    // 表查不到 (rank, IP)：未配置端口段时用默认端口兜底，继续建链
+    EndpointDesc localEp;
+    CreateEndpointDesc(localEp, COMM_PROTOCOL_ROCE, "5.5.5.5");
+    EndpointDesc rmtEp;
+    CreateEndpointDesc(rmtEp, COMM_PROTOCOL_ROCE, "1.1.1.1");
+
+    uint32_t listenPort;
+    HcommChannelDesc desc;
+    HcclResult ret = myRank->QueryListenPort(0, 1, localEp, rmtEp, listenPort, desc, COMM_ENGINE_AICPU_TS);
+    EXPECT_EQ(ret, HCCL_SUCCESS);
+    EXPECT_EQ(listenPort, Hccl::DEFAULT_VALUE_TCPPORT);
+    EXPECT_EQ(desc.role, HCOMM_SOCKET_ROLE_CLIENT);
 }
 
 TEST_F(MyRankTest, Ut_When_BatchCreateChannels_Expect_SUCCESS)
@@ -399,7 +412,7 @@ TEST_F(MyRankTest, Ut_When_BatchCreateChannels_Expect_SUCCESS)
     for (u32 i = 0; i < 3; ++i) {
         hcommDesc[i] = MyRankUtils::ChannelDescHccl2Hcomm(channelDesc[i], myRank->config_);
     }
-    EXPECT_EQ(myRank->BatchCreateSockets(channelDesc, 1, "test", hcommDesc), HCCL_SUCCESS);
+    EXPECT_EQ(myRank->BatchCreateSockets(channelDesc, 1, "test", hcommDesc, COMM_ENGINE_AICPU_TS), HCCL_SUCCESS);
     std::vector<ChannelHandle> hostChannelHandles(3);
     ChannelHandle* hostChannelHandleList = hostChannelHandles.data();
     std::vector<std::vector<MemHandle>> allHandles1(1);
@@ -410,7 +423,7 @@ TEST_F(MyRankTest, Ut_When_BatchCreateChannels_Expect_SUCCESS)
     EXPECT_EQ(myRank->newChannels_.size(), 1);
     EXPECT_EQ(myRank->newChannels_[0], std::make_pair(channelIdx0, RmtEp1reuseIdx0));
 
-    EXPECT_EQ(myRank->BatchCreateSockets(channelDesc, 2, "test", hcommDesc), HCCL_SUCCESS);
+    EXPECT_EQ(myRank->BatchCreateSockets(channelDesc, 2, "test", hcommDesc, COMM_ENGINE_AICPU_TS), HCCL_SUCCESS);
     std::vector<std::vector<MemHandle>> allHandles2(2);
     EXPECT_EQ(
         myRank->BatchCreateChannels(
@@ -419,7 +432,7 @@ TEST_F(MyRankTest, Ut_When_BatchCreateChannels_Expect_SUCCESS)
     EXPECT_EQ(myRank->newChannels_.size(), 1);
     EXPECT_EQ(myRank->newChannels_[0], std::make_pair(channelIdx1, RmtEp1reuseIdx1));
 
-    EXPECT_EQ(myRank->BatchCreateSockets(channelDesc, 3, "test", hcommDesc), HCCL_SUCCESS);
+    EXPECT_EQ(myRank->BatchCreateSockets(channelDesc, 3, "test", hcommDesc, COMM_ENGINE_AICPU_TS), HCCL_SUCCESS);
     std::vector<std::vector<MemHandle>> allHandles3(3);
     EXPECT_EQ(
         myRank->BatchCreateChannels(
@@ -1282,7 +1295,7 @@ TEST_F(MyRankTest, Ut_BatchCreateChannels_HcommDescsEquivalence)
     for (u32 i = 0; i < 4; ++i) {
         hcommDesc[i] = MyRankUtils::ChannelDescHccl2Hcomm(channelDesc[i], myRank->config_);
     }
-    EXPECT_EQ(myRank->BatchCreateSockets(channelDesc, 4, "test", hcommDesc), HCCL_SUCCESS);
+    EXPECT_EQ(myRank->BatchCreateSockets(channelDesc, 4, "test", hcommDesc, COMM_ENGINE_AICPU_TS), HCCL_SUCCESS);
 
     std::vector<ChannelHandle> hostChannelHandles(4);
     ChannelHandle* hostChannelHandleList = hostChannelHandles.data();
@@ -1397,7 +1410,7 @@ TEST_F(MyRankTest, Ut_BatchCreateChannels_RegisterMemoryPerEndpoint)
     for (u32 i = 0; i < 4; ++i) {
         hcommDesc[i] = MyRankUtils::ChannelDescHccl2Hcomm(channelDesc[i], myRank->config_);
     }
-    EXPECT_EQ(myRank->BatchCreateSockets(channelDesc, 4, "test", hcommDesc), HCCL_SUCCESS);
+    EXPECT_EQ(myRank->BatchCreateSockets(channelDesc, 4, "test", hcommDesc, COMM_ENGINE_AICPU_TS), HCCL_SUCCESS);
 
     std::vector<ChannelHandle> hostChannelHandles(4);
     std::vector<std::vector<MemHandle>> allHandles(4);
@@ -1504,7 +1517,7 @@ TEST_F(MyRankTest, Ut_MemRegAndAcquireLifecycle)
     for (u32 i = 0; i < 2; ++i) {
         hcommDesc[i] = MyRankUtils::ChannelDescHccl2Hcomm(channelDesc[i], myRank->config_);
     }
-    EXPECT_EQ(myRank->BatchCreateSockets(channelDesc, 2, "test", hcommDesc), HCCL_SUCCESS);
+    EXPECT_EQ(myRank->BatchCreateSockets(channelDesc, 2, "test", hcommDesc, COMM_ENGINE_AICPU_TS), HCCL_SUCCESS);
 
     // ---- Round 1: CreateChannels ----
     std::vector<ChannelHandle> hostChannelHandles1(2);
@@ -1523,7 +1536,7 @@ TEST_F(MyRankTest, Ut_MemRegAndAcquireLifecycle)
     for (u32 i = 0; i < 2; ++i) {
         hcommDesc1b[i] = MyRankUtils::ChannelDescHccl2Hcomm(channelDesc[i], myRank->config_);
     }
-    EXPECT_EQ(myRank->BatchCreateSockets(channelDesc, 2, "test", hcommDesc1b), HCCL_SUCCESS);
+    EXPECT_EQ(myRank->BatchCreateSockets(channelDesc, 2, "test", hcommDesc1b, COMM_ENGINE_AIV), HCCL_SUCCESS);
     std::vector<ChannelHandle> hostChannelHandles1b(2);
     std::vector<std::vector<MemHandle>> allHandles1b(2);
     EXPECT_EQ(
@@ -1543,7 +1556,7 @@ TEST_F(MyRankTest, Ut_MemRegAndAcquireLifecycle)
     for (u32 i = 0; i < 2; ++i) {
         hcommDesc2[i] = MyRankUtils::ChannelDescHccl2Hcomm(channelDesc[i], myRank->config_);
     }
-    EXPECT_EQ(myRank->BatchCreateSockets(channelDesc, 2, "test", hcommDesc2), HCCL_SUCCESS);
+    EXPECT_EQ(myRank->BatchCreateSockets(channelDesc, 2, "test", hcommDesc2, COMM_ENGINE_AIV), HCCL_SUCCESS);
     std::vector<ChannelHandle> hostChannelHandles2(2);
     std::vector<std::vector<MemHandle>> allHandles2(2);
     EXPECT_EQ(

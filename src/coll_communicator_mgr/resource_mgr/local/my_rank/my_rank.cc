@@ -367,6 +367,37 @@ HcclResult MyRank::GetDevicePortInternal(uint32_t rank, uint32_t* devPort, Endpo
     return HCCL_SUCCESS;
 }
 
+HcclResult MyRank::GetListenPortByAddr(
+    uint32_t rank, const Hccl::IpAddress& addr, EndpointLocType locType, CommEngine engine, uint32_t* port)
+{
+    CHK_PTR_NULL(port);
+    // 两个查表方法二选一：host 侧或 CPU 引擎走原有 rank 级查询，device 侧查两级 IP 端口表
+    if (locType != EndpointLocType::ENDPOINT_LOC_TYPE_DEVICE || engine == COMM_ENGINE_CPU) {
+        return GetDevicePortInternal(rank, port, locType);
+    } else {
+        CHK_PTR_NULL(rankIpPortMap_);
+        auto iterRank = rankIpPortMap_->find(rank);
+        if (iterRank != rankIpPortMap_->end()) {
+            auto iterAddr = iterRank->second.find(addr);
+            if (iterAddr != iterRank->second.end()) {
+                *port = iterAddr->second;
+                return HCCL_SUCCESS;
+            }
+        }
+
+        u32 fallbackPort = Hccl::DEFAULT_VALUE_TCPPORT;
+        auto portRanges = Hccl::EnvConfig::GetInstance().GetHostNicConfig().GetDeviceSocketPortRange();
+        if (!portRanges.empty()) {
+            fallbackPort = portRanges[0].min;
+        }
+        HCCL_INFO(
+            "[MyRank][%s] no port entry for rank[%u] addr[%s], use fallback port[%u].", __func__, rank,
+            addr.GetIpStr().c_str(), fallbackPort);
+        *port = fallbackPort;
+        return HCCL_SUCCESS;
+    }
+}
+
 HcclResult MyRank::Init(HcclMem cclBuffer, const uint32_t opExpansionMode, uint32_t rankNum)
 {
     // EXCEPTION_HANDLE_BEGIN
@@ -416,25 +447,25 @@ HcclResult MyRank::Init(HcclMem cclBuffer, const uint32_t opExpansionMode, uint3
 
 HcclResult MyRank::QueryListenPort(
     uint32_t localRank, uint32_t remoteRank, const EndpointDesc& localEndpointDesc,
-    const EndpointDesc& remoteEndpointDesc, uint32_t& listenPort, HcommChannelDesc& hcommDesc)
+    const EndpointDesc& remoteEndpointDesc, uint32_t& listenPort, HcommChannelDesc& hcommDesc, CommEngine engine)
 {
-    // 查询rmtRankId对应的devPort
+    // 查询该socket链接的server端监听的端口（监听方的选择策略需要跟SocketConfig中保持一致）
+    Hccl::IpAddress localIpAddr{};
+    Hccl::IpAddress remoteIpAddr{};
+    CHK_RET(CommAddrToIpAddress(localEndpointDesc.commAddr, localIpAddr));
+    CHK_RET(CommAddrToIpAddress(remoteEndpointDesc.commAddr, remoteIpAddr));
+    // 查询rmtRankId对应的devPort（按 rank + IP 查两级端口表，与监听方使用同一数据源）
     uint32_t rmtPort = 0;
-    CHK_RET(GetDevicePortInternal(remoteRank, &rmtPort, remoteEndpointDesc.loc.locType));
+    CHK_RET(GetListenPortByAddr(remoteRank, remoteIpAddr, remoteEndpointDesc.loc.locType, engine, &rmtPort));
     if (rmtPort > Hccl::MAX_VALUE_TCPPORT) {
         HCCL_ERROR(
             "[%s] Invalid port[%u] of Rank[%u], max valid port is %u", __func__, rmtPort, remoteRank,
             Hccl::MAX_VALUE_TCPPORT);
         return HCCL_E_PARA;
     }
-    // 查询该socket链接的server端监听的端口（监听方的选择策略需要跟SocketConfig中保持一致）
-    Hccl::IpAddress localIpAddr{};
-    Hccl::IpAddress remoteIpAddr{};
-    CHK_RET(CommAddrToIpAddress(localEndpointDesc.commAddr, localIpAddr));
-    CHK_RET(CommAddrToIpAddress(remoteEndpointDesc.commAddr, remoteIpAddr));
     if (localIpAddr < remoteIpAddr) {
         // 查询localRankId对应的devPort
-        CHK_RET(GetDevicePortInternal(localRank, &listenPort, localEndpointDesc.loc.locType));
+        CHK_RET(GetListenPortByAddr(localRank, localIpAddr, localEndpointDesc.loc.locType, engine, &listenPort));
         hcommDesc.role = HcommSocketRole::HCOMM_SOCKET_ROLE_SERVER;
         if (listenPort > Hccl::MAX_VALUE_TCPPORT) {
             HCCL_ERROR("[%s] Invalid port[%u] of Rank[%u]", __func__, listenPort, localRank);
@@ -520,7 +551,7 @@ HcclResult MyRank::BatchServerInitForChannels(
 
 HcclResult MyRank::BatchGetSocketsForChannels(
     const HcclChannelDesc* channelDescs, uint32_t channelNum, const std::string& socketTag,
-    std::vector<HcommChannelDesc>& hcommDescs, ReuseSocketIdxMap& reuseSocketIdxMap)
+    std::vector<HcommChannelDesc>& hcommDescs, ReuseSocketIdxMap& reuseSocketIdxMap, CommEngine engine)
 {
     for (uint32_t i = 0; i < channelNum; ++i) {
         hcomm::EndpointPair* endpointPair = nullptr;
@@ -532,7 +563,7 @@ HcclResult MyRank::BatchGetSocketsForChannels(
         uint32_t listenPort = 0;
         CHK_RET(QueryListenPort(
             rankId_, remoteRank, channelDescs[i].localEndpoint, channelDescs[i].remoteEndpoint, listenPort,
-            hcommDescs[i]));
+            hcommDescs[i], engine));
 
         u32& reuseIdx = reuseSocketIdxMap[rankPair][endpointPair];
         uint32_t devicePhyId;
@@ -566,7 +597,7 @@ HcclResult MyRank::BatchGetSocketsForChannels(
 
 HcclResult MyRank::BatchCreateSockets(
     const HcclChannelDesc* channelDescs, uint32_t channelNum, const std::string& socketTag,
-    std::vector<HcommChannelDesc>& hcommDescs)
+    std::vector<HcommChannelDesc>& hcommDescs, CommEngine engine)
 {
     CHK_PTR_NULL(channelDescs);
     CHK_PRT_RET(channelNum == 0, HCCL_ERROR("[%s] invalid param: channelNum is zero", __func__), HCCL_E_PARA);
@@ -575,7 +606,7 @@ HcclResult MyRank::BatchCreateSockets(
     // socket服务器首先监听
     CHK_RET(BatchServerInitForChannels(channelDescs, channelNum, socketTag, reuseSocketIdxMap));
     // socket添加白名单以及进行连接，获取最后的socket
-    CHK_RET(BatchGetSocketsForChannels(channelDescs, channelNum, socketTag, hcommDescs, reuseSocketIdxMap));
+    CHK_RET(BatchGetSocketsForChannels(channelDescs, channelNum, socketTag, hcommDescs, reuseSocketIdxMap, engine));
     return HCCL_SUCCESS;
 }
 
@@ -714,18 +745,11 @@ HcclResult MyRank::BatchCreateChannels(
             ret);
         CHK_PTR_NULL(epHandle);
 
-        // 启动监听
+        // 启动监听（按 rank + IP 查两级端口表，与连接方 QueryListenPort 使用同一数据源）
         uint32_t listenPort = 0;
-        CHK_RET(GetDevicePortInternal(localRank, &listenPort, localEndpointDesc.loc.locType));
-        if (listenPort == Hccl::DEFAULT_VALUE_TCPPORT) {
-            auto portRanges = Hccl::EnvConfig::GetInstance().GetHostNicConfig().GetDeviceSocketPortRange();
-            if (!portRanges.empty()) {
-                listenPort = portRanges[0].min;
-                HCCL_INFO(
-                    "[%s] listenPort is default[%u], use port[%u] from HCCL_NPU_SOCKET_PORT_RANGE", __func__,
-                    Hccl::DEFAULT_VALUE_TCPPORT, listenPort);
-            }
-        }
+        Hccl::IpAddress localIpAddr{};
+        CHK_RET(CommAddrToIpAddress(localEndpointDesc.commAddr, localIpAddr));
+        CHK_RET(GetListenPortByAddr(localRank, localIpAddr, localEndpointDesc.loc.locType, engine, &listenPort));
         CHK_RET(static_cast<HcclResult>(HcommEndpointStartListen(epHandle, listenPort, nullptr)));
 
         HCCL_INFO(
@@ -1256,7 +1280,7 @@ HcclResult MyRank::CreateChannels(
 
     auto start = std::chrono::steady_clock::now();
     std::string socketTag = commTag + "_engine_" + std::to_string(engine);
-    CHK_RET(BatchCreateSockets(channelDescs, channelNum, socketTag, hcommDescs));
+    CHK_RET(BatchCreateSockets(channelDescs, channelNum, socketTag, hcommDescs, engine));
     CHK_RET_UNAVAIL(
         BatchCreateChannels(engine, channelDescs, channelNum, hcommDescs, hostChannelHandleList, allHandles));
 
