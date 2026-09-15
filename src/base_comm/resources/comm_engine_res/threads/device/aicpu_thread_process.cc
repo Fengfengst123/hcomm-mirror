@@ -12,6 +12,7 @@
 #include <iomanip>
 #include "exception_handle.h"
 #include "stream_lite.h"
+#include "aicpu_rtsq_poll_daemon.h"
 
 using namespace hccl;
 
@@ -138,6 +139,7 @@ void AicpuThreadProcess::InitBackGroundThread()
     }
     // 注册守护进程函数
     Hccl::AicpuDaemonService::GetInstance().Register(&hcomm::ExceptionHandle::GetInstance());
+    Hccl::AicpuDaemonService::GetInstance().Register(&hcomm::RtsqPollCompletionDaemon::GetInstance());
     daemonFuncRegistered_ = true;
 
     static auto daemonServiceRun = [](void* info) {
@@ -164,6 +166,7 @@ void AicpuThreadProcess::StopBackGroundThread()
     std::lock_guard<std::mutex> lock(bgThreadMutex_);
     // 背景线程是同集合通信共用，这里不停止背景线程，只是将守护函数注销
     Hccl::AicpuDaemonService::GetInstance().Unregister(&hcomm::ExceptionHandle::GetInstance());
+    Hccl::AicpuDaemonService::GetInstance().Unregister(&hcomm::RtsqPollCompletionDaemon::GetInstance());
     daemonFuncRegistered_ = false;
     HCCL_INFO("[AicpuThreadProcess][%s] success", __func__);
 }

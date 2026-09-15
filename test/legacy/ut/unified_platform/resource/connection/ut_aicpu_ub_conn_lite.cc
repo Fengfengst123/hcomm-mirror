@@ -693,3 +693,204 @@ TEST_F(AicpuUbConnLiteTest, test_UBConnLite_BatchOneSidedWrite)
     MOCKER_CPP(&RtsqBase::QuerySqTail).stubs().with(mockcpp::any()).will(returnValue(1));
     ubConn.BatchOneSidedWrite({loc}, {rmt}, cfg, stream, out);
 }
+
+/* ---------- GetInflight / UpdateCi / CheckOverflow (反压新增接口) ---------- */
+
+TEST_F(AicpuUbConnLiteTest, GetInflight_NoWrap_ExpectDiff)
+{
+    UbJettyLiteId id(1, 1, 1);
+    UbJettyLiteAttr attr(1, 1, 8, 1, false);
+    Eid rmtEid;
+    UbConnLite ubConn(id, attr, rmtEid);
+
+    ubConn.pi = 20;
+    ubConn.ci = 5;
+    EXPECT_EQ(15u, ubConn.GetInflight());
+}
+
+TEST_F(AicpuUbConnLiteTest, GetInflight_Wrap_ExpectDiff)
+{
+    UbJettyLiteId id(1, 1, 1);
+    UbJettyLiteAttr attr(1, 1, 8, 1, false);
+    Eid rmtEid;
+    UbConnLite ubConn(id, attr, rmtEid);
+
+    ubConn.pi = 5;
+    ubConn.ci = 65530;
+    EXPECT_EQ(11u, ubConn.GetInflight());
+}
+
+TEST_F(AicpuUbConnLiteTest, GetInflight_Equal_ExpectZero)
+{
+    UbJettyLiteId id(1, 1, 1);
+    UbJettyLiteAttr attr(1, 1, 8, 1, false);
+    Eid rmtEid;
+    UbConnLite ubConn(id, attr, rmtEid);
+
+    ubConn.pi = 100;
+    ubConn.ci = 100;
+    EXPECT_EQ(0u, ubConn.GetInflight());
+}
+
+/* ---------- UpdateCi ---------- */
+
+TEST_F(AicpuUbConnLiteTest, UpdateCi_Sequential_ExpectCiAdvanced)
+{
+    UbJettyLiteId id(1, 1, 1);
+    UbJettyLiteAttr attr(1, 1, 8, 1, false);
+    Eid rmtEid;
+    UbConnLite ubConn(id, attr, rmtEid);
+
+    std::vector<std::pair<u16, u16>> slots = {{0, 10}, {1, 20}};
+    ubConn.UpdateCi(slots.data(), slots.size());
+    EXPECT_EQ(20u, ubConn.ci);
+}
+
+TEST_F(AicpuUbConnLiteTest, UpdateCi_PartialSequence_ExpectLastConsumedCi)
+{
+    UbJettyLiteId id(1, 1, 1);
+    UbJettyLiteAttr attr(1, 1, 8, 1, false);
+    Eid rmtEid;
+    UbConnLite ubConn(id, attr, rmtEid);
+
+    std::vector<std::pair<u16, u16>> slots = {{1, 20}, {3, 40}};
+    ubConn.UpdateCi(slots.data(), slots.size());
+    EXPECT_EQ(0u, ubConn.ci);
+
+    std::vector<std::pair<u16, u16>> slots2 = {{0, 10}};
+    ubConn.UpdateCi(slots2.data(), slots2.size());
+    EXPECT_EQ(20u, ubConn.ci);
+}
+
+TEST_F(AicpuUbConnLiteTest, UpdateCi_Wraparound_ExpectCorrectCi)
+{
+    UbJettyLiteId id(1, 1, 1);
+    UbJettyLiteAttr attr(1, 1, 8, 1, false);
+    Eid rmtEid;
+    UbConnLite ubConn(id, attr, rmtEid);
+
+    std::vector<std::pair<u16, u16>> slots = {{0, 65530}, {1, 65535}};
+    ubConn.UpdateCi(slots.data(), slots.size());
+    EXPECT_EQ(65535u, ubConn.ci);
+}
+
+TEST_F(AicpuUbConnLiteTest, UpdateCi_EmptyInput_ExpectNoChange)
+{
+    UbJettyLiteId id(1, 1, 1);
+    UbJettyLiteAttr attr(1, 1, 8, 1, false);
+    Eid rmtEid;
+    UbConnLite ubConn(id, attr, rmtEid);
+
+    ubConn.UpdateCi(nullptr, 0);
+    EXPECT_EQ(0u, ubConn.ci);
+}
+
+TEST_F(AicpuUbConnLiteTest, UpdateCi_DuplicateSeqIdx_ExpectLastValue)
+{
+    UbJettyLiteId id(1, 1, 1);
+    UbJettyLiteAttr attr(1, 1, 8, 1, false);
+    Eid rmtEid;
+    UbConnLite ubConn(id, attr, rmtEid);
+
+    std::vector<std::pair<u16, u16>> slots = {{0, 10}, {0, 99}};
+    ubConn.UpdateCi(slots.data(), slots.size());
+    EXPECT_EQ(10u, ubConn.ci);
+}
+
+/* ---------- CheckOverflow (cache version: u32) ---------- */
+
+TEST_F(AicpuUbConnLiteTest, CheckOverflow_Cache_NoOverflow_ExpectFalse)
+{
+    UbJettyLiteId id(1, 1, 1);
+    UbJettyLiteAttr attr(1, 1, 8, 1, false);
+    Eid rmtEid;
+    UbConnLite ubConn(id, attr, rmtEid);
+
+    ubConn.sqDepth_ = 8;
+    ubConn.pi = 5;
+    ubConn.ci = 2;
+    EXPECT_FALSE(ubConn.CheckOverflow(static_cast<u32>(3)));
+}
+
+TEST_F(AicpuUbConnLiteTest, CheckOverflow_Cache_Overflow_ExpectTrue)
+{
+    UbJettyLiteId id(1, 1, 1);
+    UbJettyLiteAttr attr(1, 1, 8, 1, false);
+    Eid rmtEid;
+    UbConnLite ubConn(id, attr, rmtEid);
+
+    ubConn.sqDepth_ = 8;
+    ubConn.pi = 5;
+    ubConn.ci = 2;
+    EXPECT_TRUE(ubConn.CheckOverflow(static_cast<u32>(6)));
+}
+
+/* ---------- CheckOverflow (transport version: u64, bool, bool) ---------- */
+
+TEST_F(AicpuUbConnLiteTest, CheckOverflow_Transport_Read_NoOverflow_ExpectFalse)
+{
+    UbJettyLiteId id(1, 1, 1);
+    UbJettyLiteAttr attr(1, 1, 8, 1, false);
+    Eid rmtEid;
+    UbConnLite ubConn(id, attr, rmtEid);
+
+    ubConn.sqDepth_ = 8;
+    ubConn.pi = 5;
+    ubConn.ci = 2;
+    ubConn.maxReadSize = 1024;
+    ubConn.maxWriteSize = 1024;
+    EXPECT_FALSE(ubConn.CheckOverflow(static_cast<u64>(2048), true, false));
+}
+
+TEST_F(AicpuUbConnLiteTest, CheckOverflow_Transport_WriteWithNotify_Overflow_ExpectTrue)
+{
+    UbJettyLiteId id(1, 1, 1);
+    UbJettyLiteAttr attr(1, 1, 8, 1, false);
+    Eid rmtEid;
+    UbConnLite ubConn(id, attr, rmtEid);
+
+    ubConn.sqDepth_ = 8;
+    ubConn.pi = 5;
+    ubConn.ci = 2;
+    ubConn.maxReadSize = 1024;
+    ubConn.maxWriteSize = 1024;
+    EXPECT_TRUE(ubConn.CheckOverflow(static_cast<u64>(8192), false, true));
+}
+
+/* ---------- CalcWqeCount ---------- */
+
+TEST_F(AicpuUbConnLiteTest, CalcWqeCount_Read_ExactMultiple_ExpectNoRounding)
+{
+    UbJettyLiteId id(1, 1, 1);
+    UbJettyLiteAttr attr(1, 1, 8, 1, false);
+    Eid rmtEid;
+    UbConnLite ubConn(id, attr, rmtEid);
+
+    ubConn.maxReadSize = 1024;
+    ubConn.maxWriteSize = 1024;
+    EXPECT_EQ(2u, ubConn.CalcWqeCount(2048, true, false));
+}
+
+TEST_F(AicpuUbConnLiteTest, CalcWqeCount_Read_PartialSlice_ExpectCeil)
+{
+    UbJettyLiteId id(1, 1, 1);
+    UbJettyLiteAttr attr(1, 1, 8, 1, false);
+    Eid rmtEid;
+    UbConnLite ubConn(id, attr, rmtEid);
+
+    ubConn.maxReadSize = 1024;
+    ubConn.maxWriteSize = 1024;
+    EXPECT_EQ(3u, ubConn.CalcWqeCount(2049, true, false));
+}
+
+TEST_F(AicpuUbConnLiteTest, CalcWqeCount_WriteWithNotify_ExpectExtraOne)
+{
+    UbJettyLiteId id(1, 1, 1);
+    UbJettyLiteAttr attr(1, 1, 8, 1, false);
+    Eid rmtEid;
+    UbConnLite ubConn(id, attr, rmtEid);
+
+    ubConn.maxReadSize = 1024;
+    ubConn.maxWriteSize = 1024;
+    EXPECT_EQ(3u, ubConn.CalcWqeCount(2048, false, true));
+}

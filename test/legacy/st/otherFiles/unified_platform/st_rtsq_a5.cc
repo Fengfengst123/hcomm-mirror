@@ -234,7 +234,7 @@ TEST_F(RtsqA5Test, ub_db_send)
     u32 funcId = 0;
     UbJettyLiteId jettyId(18, 18, 18);
     u32 piVal = 0;
-    rtsq.UbDbSend(jettyId, piVal);
+    rtsq.UbDbSend(jettyId, piVal, 0, nullptr);
 }
 
 TEST_F(RtsqA5Test, ub_direct_send)

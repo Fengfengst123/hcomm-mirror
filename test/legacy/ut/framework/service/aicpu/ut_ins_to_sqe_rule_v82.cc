@@ -221,8 +221,8 @@ TEST_F(InsToSqeRuleV82Test, Interpret_local_copy)
 
     std::vector<char> notifyLite1{fakeStreamId, fakeSqId};
     StreamLite stream(notifyLite1);
-    RtsqA5 rtsq(fakedevPhyId, fakeStreamId, fakeSqId);
-    stream.rtsq = std::make_unique<RtsqA5>(rtsq);
+    stream.rtsq = std::make_unique<RtsqA5>(fakedevPhyId, fakeStreamId, fakeSqId);
+    RtsqA5& rtsq = *static_cast<RtsqA5*>(stream.rtsq.get());
     MOCKER_CPP_VIRTUAL(rtsq, &RtsqA5::SdmaCopy)
         .stubs()
         .with(mockcpp::any(), mockcpp::any(), mockcpp::any(), mockcpp::any());
@@ -242,8 +242,8 @@ TEST_F(InsToSqeRuleV82Test, Interpret_local_copy_extend)
 
     std::vector<char> notifyLite1{fakeStreamId, fakeSqId};
     StreamLite stream(notifyLite1);
-    RtsqA5 rtsq(fakedevPhyId, fakeStreamId, fakeSqId);
-    stream.rtsq = std::make_unique<RtsqA5>(rtsq);
+    stream.rtsq = std::make_unique<RtsqA5>(fakedevPhyId, fakeStreamId, fakeSqId);
+    RtsqA5& rtsq = *static_cast<RtsqA5*>(stream.rtsq.get());
     MOCKER_CPP_VIRTUAL(rtsq, &RtsqA5::SdmaCopy)
         .stubs()
         .with(mockcpp::any(), mockcpp::any(), mockcpp::any(), mockcpp::any());
@@ -262,8 +262,8 @@ TEST_F(InsToSqeRuleV82Test, Interpret_LocalReduce)
 
     std::vector<char> notifyLite1{1, 2};
     StreamLite stream(notifyLite1);
-    RtsqA5 rtsq(0, 1, 2);
-    stream.rtsq = std::make_unique<RtsqA5>(rtsq);
+    stream.rtsq = std::make_unique<RtsqA5>(0, 1, 2);
+    RtsqA5& rtsq = *static_cast<RtsqA5*>(stream.rtsq.get());
     MOCKER_CPP_VIRTUAL(rtsq, &RtsqA5::SdmaCopy)
         .stubs()
         .with(mockcpp::any(), mockcpp::any(), mockcpp::any(), mockcpp::any());
@@ -294,8 +294,8 @@ TEST_F(InsToSqeRuleV82Test, Interpret_AicpuReduce)
 
     std::vector<char> notifyLite1{1, 2};
     StreamLite stream(notifyLite1);
-    RtsqA5 rtsq(0, 1, 2);
-    stream.rtsq = std::make_unique<RtsqA5>(rtsq);
+    stream.rtsq = std::make_unique<RtsqA5>(0, 1, 2);
+    RtsqA5& rtsq = *static_cast<RtsqA5*>(stream.rtsq.get());
     MOCKER(&InsAicpuReduce::RunAicpuReduce).stubs();
 
     StubResMgrFetcher mockResMgrFetcher;
@@ -308,8 +308,8 @@ TEST_F(InsToSqeRuleV82Test, Interpret_StreamSync)
 
     std::vector<char> notifyLite1{1, 2};
     StreamLite stream(notifyLite1);
-    RtsqA5 rtsq(0, 1, 2);
-    stream.rtsq = std::make_unique<RtsqA5>(rtsq);
+    stream.rtsq = std::make_unique<RtsqA5>(0, 1, 2);
+    RtsqA5& rtsq = *static_cast<RtsqA5*>(stream.rtsq.get());
 
     StubResMgrFetcher mockResMgrFetcher;
     Interpret(insStreamSync, stream, &mockResMgrFetcher);
@@ -324,8 +324,8 @@ TEST_F(InsToSqeRuleV82Test, Interpret_local_copy_extend_err)
 
     std::vector<char> notifyLite1{fakeStreamId, fakeSqId};
     StreamLite stream(notifyLite1);
-    RtsqA5 rtsq(fakedevPhyId, fakeStreamId, fakeSqId);
-    stream.rtsq = std::make_unique<RtsqA5>(rtsq);
+    stream.rtsq = std::make_unique<RtsqA5>(fakedevPhyId, fakeStreamId, fakeSqId);
+    RtsqA5& rtsq = *static_cast<RtsqA5*>(stream.rtsq.get());
     MOCKER_CPP_VIRTUAL(rtsq, &RtsqA5::SdmaCopy)
         .stubs()
         .with(mockcpp::any(), mockcpp::any(), mockcpp::any(), mockcpp::any());
@@ -353,8 +353,8 @@ TEST_F(InsToSqeRuleV82Test, Interpret_local_post_to)
 
     std::vector<char> streamLite1{fakeStreamId, fakeSqId};
     StreamLite stream(streamLite1);
-    RtsqA5 rtsq(fakedevPhyId, fakeStreamId, fakeSqId);
-    stream.rtsq = std::make_unique<RtsqA5>(rtsq);
+    stream.rtsq = std::make_unique<RtsqA5>(fakedevPhyId, fakeStreamId, fakeSqId);
+    RtsqA5& rtsq = *static_cast<RtsqA5*>(stream.rtsq.get());
     MOCKER_CPP_VIRTUAL(rtsq, &RtsqA5::NotifyRecordLoc).stubs().with(mockcpp::any());
 
     StubResMgrFetcher mockResMgrFetcher;
@@ -400,8 +400,8 @@ TEST_F(InsToSqeRuleV82Test, Interpret_local_wait_from)
 
     std::vector<char> streamLite1{fakeStreamId, fakeSqId};
     StreamLite stream(streamLite1);
-    RtsqA5 rtsq(fakedevPhyId, fakeStreamId, fakeSqId);
-    stream.rtsq = std::make_unique<RtsqA5>(rtsq);
+    stream.rtsq = std::make_unique<RtsqA5>(fakedevPhyId, fakeStreamId, fakeSqId);
+    RtsqA5& rtsq = *static_cast<RtsqA5*>(stream.rtsq.get());
     MOCKER_CPP_VIRTUAL(rtsq, static_cast<void (RtsqA5::*)(u32)>(&RtsqA5::NotifyWait)).stubs().with(mockcpp::any());
     MOCKER_CPP_VIRTUAL(rtsq, static_cast<void (RtsqA5::*)(u32, u32)>(&RtsqA5::NotifyWait)).stubs().with(mockcpp::any());
 
@@ -448,8 +448,8 @@ TEST_F(InsToSqeRuleV82Test, Interpret_local_bcast_post)
 
     std::vector<char> streamLite1{fakeStreamId, fakeSqId};
     StreamLite stream(streamLite1);
-    RtsqA5 rtsq(fakedevPhyId, fakeStreamId, fakeSqId);
-    stream.rtsq = std::make_unique<RtsqA5>(rtsq);
+    stream.rtsq = std::make_unique<RtsqA5>(fakedevPhyId, fakeStreamId, fakeSqId);
+    RtsqA5& rtsq = *static_cast<RtsqA5*>(stream.rtsq.get());
     MOCKER_CPP_VIRTUAL(rtsq, &RtsqA5::Cnt1toNNotifyRecord).stubs().with(mockcpp::any(), mockcpp::any());
 
     StubResMgrFetcher mockResMgrFetcher;
@@ -476,8 +476,8 @@ TEST_F(InsToSqeRuleV82Test, Interpret_local_wait_group)
 
     std::vector<char> streamLite1{fakeStreamId, fakeSqId};
     StreamLite stream(streamLite1);
-    RtsqA5 rtsq(fakedevPhyId, fakeStreamId, fakeSqId);
-    stream.rtsq = std::make_unique<RtsqA5>(rtsq);
+    stream.rtsq = std::make_unique<RtsqA5>(fakedevPhyId, fakeStreamId, fakeSqId);
+    RtsqA5& rtsq = *static_cast<RtsqA5*>(stream.rtsq.get());
     MOCKER_CPP_VIRTUAL(rtsq, &RtsqA5::CntNto1NotifyWait).stubs().with(mockcpp::any(), mockcpp::any());
 
     StubResMgrFetcher mockResMgrFetcher;

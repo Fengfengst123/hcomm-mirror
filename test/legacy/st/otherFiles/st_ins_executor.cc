@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
  * CANN Open Software License Agreement Version 2.0 (the "License").
@@ -131,9 +131,9 @@ TEST_F(InsExecutorTest, test_ins_executor)
     liteBinaryStream << fakedevPhyId;
     std::vector<char> uniqueId{};
     liteBinaryStream.Dump(uniqueId);
-    RtsqA5 rtsq(fakedevPhyId, fakeStreamId, fakeSqId);
     auto streamPtr = std::make_unique<StreamLite>(uniqueId);
-    streamPtr->rtsq = std::make_unique<RtsqA5>(rtsq);
+    streamPtr->rtsq = std::make_unique<RtsqA5>(fakedevPhyId, fakeStreamId, fakeSqId);
+    RtsqA5& rtsq = *static_cast<RtsqA5*>(streamPtr->rtsq.get());
     MOCKER_CPP_VIRTUAL(rtsq, &RtsqA5::SdmaCopy)
         .stubs()
         .with(mockcpp::any(), mockcpp::any(), mockcpp::any(), mockcpp::any());

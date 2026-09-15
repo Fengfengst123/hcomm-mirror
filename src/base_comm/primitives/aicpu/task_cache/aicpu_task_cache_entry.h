@@ -166,6 +166,13 @@ public:
 private:
     using UbTransportLiteImplHandle = void*; // UbTransportLiteImpl*
 
+    // 预计算的WQE溢出检查信息: SubmitCacheEntry时按UbConnLite分组累加wqeCount, CheckWqeOverflow_直接遍历
+    struct ConnOverflowInfo {
+        Hccl::UbConnLite* ubConnLitePtr = nullptr;
+        Hccl::UbTransportLiteImpl* ubTransportLiteImplPtr = nullptr;
+        uint32_t wqeCount = 0;
+    };
+
     inline static void CombineUint32ToUint64(uint64_t& addr, const uint32_t high, const uint32_t low)
     {
         constexpr uint64_t uintBitWidth = 32;
@@ -245,8 +252,10 @@ private:
     inline HcclResult SubmitWqeAddrRefreshInfoAndTokenInfo_();
     inline HcclResult SubmitDbSqeProfRefreshInfo_();
     inline HcclResult ValidateLaunchOrder_();
+    inline HcclResult BuildConnOverflowInfos_();
 
     // RefreshAndLaunch子方法
+    inline HcclResult CheckWqeOverflow_();
     inline HcclResult RefreshTokenInfos_(const uint64_t* baseAddrs, const uint64_t* memSizes, const uint32_t count);
     inline HcclResult
     LaunchTasksByOrder_(const uint64_t* baseAddrs, const uint64_t* memSizes, const uint32_t count, bool needTaskParam);
@@ -315,6 +324,10 @@ private:
 
     // 下发顺序
     std::vector<TaskArrayType> launchOrder_; // 大小一定为SQE+WQE数组之和
+
+    // 预计算的WQE溢出检查信息 (SubmitCacheEntry时构建, CheckWqeOverflow_使用)
+    // 注意: 由wqeTaskArrayInfos_派生, 不计入entryBytes_, 避免重复统计
+    std::vector<ConnOverflowInfo> connOverflowInfos_;
 
     // Cached memory ranges: InitCacheEntry时初始化, SubmitCacheEntry时用于计算AddrRefreshInfo,
     // RefreshAndLaunch时无需更新

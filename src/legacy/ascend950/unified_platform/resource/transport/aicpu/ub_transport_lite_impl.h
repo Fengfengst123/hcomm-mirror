@@ -202,6 +202,8 @@ private:
     std::vector<RmaConnLite*> connVec;
 
     std::function<void(u32 streamId, u32 taskId, const TaskParam& taskParam)> callback_{nullptr};
+    u16 dbSendSeqIdx_{0};              // 已发DbSend顺序索引，每次调用自增
+    RmaConnLite* cachedConn_{nullptr}; // 缓存connVec[0]，避免每次CheckOverflow做vector索引
 
     void ProfilingProcess(void* src, void* dst, u64 size, const StreamLite& stream, DmaOp dmaOp, u32 taskId);
 
@@ -555,6 +557,28 @@ private:
         const StreamLite& stream, u32 taskId, TaskParamTypeVal taskType, u64 srcAddr, u64 dstAddr, u64 size,
         u32 notifyId, u8 reduceOp) const;
     void FillSlotWaitInfo(const StreamLite& stream, u32 taskId) const;
+    inline HcclResult CheckOverflow(u64 totalSize, bool isRead, bool isNotify = false) override
+    {
+        if (UNLIKELY(!ciTrackerEnabled_)) {
+            return HCCL_SUCCESS;
+        }
+        if (cachedConn_->CheckOverflow(totalSize, isRead, isNotify)) {
+            return HCCL_E_AGAIN;
+        }
+        return HCCL_SUCCESS;
+    }
+
+    inline HcclResult CheckBatchOverflow(u32 wqeCount) override
+    {
+        if (UNLIKELY(!ciTrackerEnabled_)) {
+            return HCCL_SUCCESS;
+        }
+        if (cachedConn_->CheckOverflow(wqeCount)) {
+            return HCCL_E_AGAIN;
+        }
+        return HCCL_SUCCESS;
+    }
+    u64 GetDrainSize() const override;
 };
 
 } // namespace Hccl

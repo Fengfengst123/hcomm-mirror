@@ -10,6 +10,7 @@
 
 #include "coll_comm_aicpu_mgr.h"
 #include "ns_recovery/aicpu/ns_recovery_func_lite.h"
+#include "rtsq_poll/aicpu/coll_rtsq_poll_completion_daemon.h"
 #include "aicpu_daemon_service.h"
 #include "hcclCommTaskExceptionLite.h"
 #include "coll_comm_aicpu_destroy_func.h"
@@ -237,6 +238,7 @@ void CollCommAicpuMgr::InitBackGroundThread(u32 devId)
     Hccl::AicpuDaemonService::GetInstance().Register(&hcomm::HcclCommTaskExceptionLite::GetInstance());
     Hccl::AicpuDaemonService::GetInstance().Register(&hccl::CollCommAicpuDestroyFunc::GetInstance());
     Hccl::AicpuDaemonService::GetInstance().Register(&hccl::NsRecoveryFuncLite::GetInstance());
+    Hccl::AicpuDaemonService::GetInstance().Register(&hcomm::CollRtsqPollCompletionDaemon::GetInstance());
 
     if (Hccl::StartMC2MaintenanceThread != nullptr) {
         Hccl::StartMC2MaintenanceThread(daemonServiceRun, &commandToBackGroud, daemonServiceStop, &commandToBackGroud);

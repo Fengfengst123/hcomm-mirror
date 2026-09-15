@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
  * CANN Open Software License Agreement Version 2.0 (the "License").
@@ -11,7 +11,6 @@
 #ifndef HCCLV2_UB_CONN_LITE_H_
 #define HCCLV2_UB_CONN_LITE_H_
 
-#include <queue>
 #include "data_type.h"
 #include "reduce_op.h"
 #include "rma_buf_slice_lite.h"
@@ -20,6 +19,8 @@
 #include "udma_data_struct.h"
 #include "kernel_param_lite.h"
 #include "stream_lite.h"
+#include <algorithm>
+#include <utility>
 
 namespace Hccl {
 
@@ -136,6 +137,68 @@ public:
     // 用于aicpu task cache更新DbSqe
     uint16_t GetPi() const { return pi; }
 
+    // 背景线程调用：批量存入完成的(seqIdx, piValue)，按seqIdx顺序推进ci
+    inline void UpdateCi(const std::pair<u16, u16>* slots, size_t count) override
+    {
+        u16 seqIdx = consumedSeqIdx_;
+        u16 lastCi = ci;
+
+        // Phase 1: slots头部大概率从consumedSeqIdx_开始连续，直接消费
+        size_t i = 0;
+        for (; i < count; i++) {
+            if (slots[i].first != seqIdx) {
+                break;
+            }
+            lastCi = slots[i].second;
+            seqIdx++;
+        }
+
+        // Phase 2: 剩余乱序slot暂存到outOfOrderCis_
+        for (; i < count; i++) {
+            outOfOrderCis_.emplace_back(slots[i].first, slots[i].second);
+        }
+
+        // Phase 3: 从outOfOrderCis_中找连续的seqIdx消费出队
+        while (!outOfOrderCis_.empty()) {
+            auto it
+                = std::find_if(outOfOrderCis_.begin(), outOfOrderCis_.end(), [seqIdx](const std::pair<u16, u16>& p) {
+                      return p.first == seqIdx;
+                  });
+            if (it == outOfOrderCis_.end()) {
+                break;
+            }
+            lastCi = it->second;
+            seqIdx++;
+            *it = std::move(outOfOrderCis_.back());
+            outOfOrderCis_.pop_back();
+        }
+
+        consumedSeqIdx_ = seqIdx;
+        ci = lastCi;
+    }
+
+    inline bool CheckOverflow(u64 totalSize, bool isRead, bool isNotify) override
+    {
+        u32 maxSliceSize = isRead ? maxReadSize : maxWriteSize;
+        u32 n = static_cast<u32>((totalSize + maxSliceSize - 1) / maxSliceSize);
+        if (isNotify) {
+            n += 1;
+        }
+        return (static_cast<u32>(GetInflight()) + n) > sqDepth_;
+    }
+
+    inline bool CheckOverflow(u32 wqeCount) override { return (static_cast<u32>(GetInflight()) + wqeCount) > sqDepth_; }
+
+    inline u32 CalcWqeCount(u64 totalSize, bool isRead, bool isNotify) const override
+    {
+        u32 maxSliceSize = isRead ? maxReadSize : maxWriteSize;
+        u32 n = static_cast<u32>((totalSize + maxSliceSize - 1) / maxSliceSize);
+        if (isNotify) {
+            n += 1;
+        }
+        return n;
+    }
+
 private:
     u16 pi{0};
     u16 ci{0};
@@ -143,6 +206,9 @@ private:
     u32 ciDetourCount{0};
     u32 maxReadSize{0};
     u32 maxWriteSize{0};
+    // outOfOrderCis_/consumedSeqIdx_仅背景线程访问
+    std::vector<std::pair<u16, u16>> outOfOrderCis_; // (seqIdx, piValue)
+    u16 consumedSeqIdx_{0};
     void ProcessSlices(
         const RmaBufSliceLite& loc, const RmtRmaBufSliceLite& rmt, u32 maxSliceSize,
         std::function<void(const RmaBufSliceLite&, const RmtRmaBufSliceLite&, SlicePosition)> processOneSlice,
@@ -187,6 +253,8 @@ private:
             wqeTasks_.emplace_back(sqe);
         }
     }
+
+    inline u16 GetInflight() const { return pi - ci; }
 };
 } // namespace Hccl
 

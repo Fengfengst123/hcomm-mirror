@@ -167,7 +167,25 @@ public:
 
     virtual HcclResult Fence() { return HCCL_SUCCESS; }
 
+    virtual HcclResult CheckOverflow(u64 totalSize, bool isRead, bool isNotify = false)
+    {
+        (void)totalSize;
+        (void)isRead;
+        (void)isNotify;
+        return HCCL_SUCCESS;
+    }
+
+    virtual HcclResult CheckBatchOverflow(u32 wqeCount)
+    {
+        (void)wqeCount;
+        return HCCL_SUCCESS;
+    }
+    void SetCiTrackerEnabled(bool enabled) { ciTrackerEnabled_ = enabled; }
+    virtual u64 GetDrainSize() const { return 0; }
+
 protected:
+    bool ciTrackerEnabled_{false};
+
 private:
 };
 

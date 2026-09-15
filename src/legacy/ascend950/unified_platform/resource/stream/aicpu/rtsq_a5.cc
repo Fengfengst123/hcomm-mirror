@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
  * CANN Open Software License Agreement Version 2.0 (the "License").
@@ -17,6 +17,7 @@
 #include "internal_exception.h"
 #include "sqe_build_a5.h"
 #include "sqe.h"
+#include "ub_conn_lite_mgr.h"
 #ifdef CCL_KERNEL_AICPU
 #include "aicpu_ts_primitives_c_adpt.h"
 #endif
@@ -26,11 +27,23 @@ namespace Hccl {
 using namespace std;
 constexpr u32 RTSQ_A5_PART_ID = 0;
 constexpr u32 PRINT_INTERVAL = 30;
+constexpr u32 POLL_SNAPSHOT_RESERVE = 256;
 
-RtsqA5::RtsqA5(u32 devPhyId, u32 streamId, u32 sqId) : RtsqBase(devPhyId, streamId, sqId) { SetTaskIdBySqeId(); }
+RtsqA5::RtsqA5(u32 devPhyId, u32 streamId, u32 sqId) : RtsqBase(devPhyId, streamId, sqId)
+{
+    dbSendDepth_ = sqDepth_ << 1;
+    dbSendSlots_.resize(dbSendDepth_);
+    pollSnapshot_.reserve(POLL_SNAPSHOT_RESERVE);
+    lastHead_ = sqHead_;
+    SetTaskIdBySqeId();
+}
 
 RtsqA5::RtsqA5(u32 devPhyId, u32 streamId, u32 sqId, bool launchFlag) : RtsqBase(devPhyId, streamId, sqId)
 {
+    dbSendDepth_ = sqDepth_ << 1;
+    dbSendSlots_.resize(dbSendDepth_);
+    pollSnapshot_.reserve(POLL_SNAPSHOT_RESERVE);
+    lastHead_ = sqHead_;
     SetTaskIdBySqeId();
     launchFlag_ = launchFlag;
 }
@@ -38,6 +51,12 @@ RtsqA5::RtsqA5(u32 devPhyId, u32 streamId, u32 sqId, bool launchFlag) : RtsqBase
 void RtsqA5::Reset(bool reset)
 {
     RtsqBase::Reset(reset);
+    dbSendDepth_ = sqDepth_ << 1;
+    dbSendSlots_.assign(dbSendDepth_, DbSendSlotMeta{});
+    pollSnapshot_.reserve(POLL_SNAPSHOT_RESERVE);
+    dbSendHead_ = 0;
+    dbSendTail_ = 0;
+    lastHead_ = sqHead_;
     pendingSqeCnt = 0;
     s32 sRet = memset_s(locBuf, RTSQ_SQE_SIZE * PER_LAUNCH_SQE_CNT, 0, RTSQ_SQE_SIZE * PER_LAUNCH_SQE_CNT);
     if (UNLIKELY(sRet != EOK)) {
@@ -471,13 +490,26 @@ HcclResult RtsqA5::SetPreStreamSyncFin()
 
 bool RtsqA5::GetPreStreamSyncStatus() { return isPreStreamSync; }
 
-void RtsqA5::UbDbSend(const UbJettyLiteId& jettyLiteId, u16 piValue)
+void RtsqA5::UbDbSend(const UbJettyLiteId& jettyLiteId, u16 piValue, u16 seqIdx, UbTransportLiteImpl* transport)
 {
+    // ciTrackerEnabled_为false传进来transport将会是nullptr
+    if (transport) {
+        // 消耗pi调用UbDbDSend，不消耗pi的也会占用rtsq的槽位但是不会调用UbDbDSend
+        // SQ背压用QuerySqHead()保证不覆盖硬件未完成的SQE；dbSendSlots_深度2倍sqDepth_保证不被消费端追赶
+        u32 absSlotIdx = (sqTail_ + pendingSqeCnt) % sqDepth_;
+        DbSendSlotMeta& slot = dbSendSlots_[dbSendTail_];
+        slot.transport = transport;
+        slot.absSlotIdx = absSlotIdx;
+        slot.seqIdx = seqIdx;
+        slot.piValue = piValue;
+        dbSendTail_ = (dbSendTail_ + 1) % dbSendDepth_;
+    }
+
     // piValue需要使用u16数据类型，保证自然增长，用于判断是否翻转
     BuildA5SqeUbDbSend(streamId_, taskId_, jettyLiteId, piValue, GetCurrSqeBuffer());
     HCCL_INFO(
-        "RtsqA5::UbDbSend: streamId %u, taskId %u, piValue(UbPi):%u, SqTail(Rtsq Pi):%u", streamId_, taskId_, piValue,
-        sqTail_);
+        "RtsqA5::UbDbSend: seqId %u, streamId %u, taskId %u, piValue(UbPi) %u, SqTail(Rtsq Pi) %u", seqIdx, streamId_,
+        taskId_, piValue, sqTail_);
     RefreshInfo();
 }
 
@@ -536,5 +568,53 @@ HcclResult RtsqA5::GetLastStreamIdAndTaskId(uint16_t& streamId, uint16_t& taskId
     HCCL_INFO(
         "[%s] from rtsq, sqId[%u], sqTail[%u], sqDepth[%u], lastIdx[%u].", __func__, sqId_, sqTail_, sqDepth_, lastIdx);
     return GetStreamIdAndTaskIdBySqIdx(lastIdx, streamId, taskId);
+}
+
+// 背景线程轮询SQ完成情况，将已完成的DbSend slot取出并上报给CiTracker
+// 由RtsqPollCompletionDaemon周期性调用（约10ms）
+void RtsqA5::PollCompletion()
+{
+    u32 newHead = QuerySqHead();
+    UbTransportLiteImpl* lastTransport{nullptr};
+    UbTransportLiteImpl* tempTransport{nullptr};
+    pollSnapshot_.clear();
+    /* lastHead_==newHead时while不执行可能存在bug：
+     * 1. head无变化：SQ无新完成，跳过这是正确的
+     * 2. head绕一整圈绕回，前进一圈的情况，会造成完成的ci无法出队
+     * 2的情况实际不会发生，队列深度2048，队满的时候，SQ不会完成那么快，一轮poll内不会发生。
+     */
+    while (lastHead_ != newHead) {
+        if (dbSendHead_ == dbSendTail_) // dbSendHead_ == dbSendTail_也会是队列满，极小会出现
+        {
+            lastHead_ = newHead;
+            break;
+        }
+
+        if (dbSendSlots_[dbSendHead_].absSlotIdx != lastHead_) {
+            lastHead_ = (lastHead_ + 1) % sqDepth_;
+            continue;
+        }
+
+        DbSendSlotMeta& slot = dbSendSlots_[dbSendHead_];
+        dbSendHead_ = (dbSendHead_ + 1) % dbSendDepth_;
+        tempTransport = slot.transport;
+        if (tempTransport != nullptr) {
+            if (tempTransport != lastTransport) {
+                if (!pollSnapshot_.empty()) {
+                    UbConnLiteMgr::GetInstance().AppendCompletedCis(
+                        lastTransport, pollSnapshot_.data(), pollSnapshot_.size());
+                    pollSnapshot_.clear();
+                }
+                lastTransport = tempTransport;
+            }
+            pollSnapshot_.emplace_back(slot.seqIdx, slot.piValue);
+        }
+        lastHead_ = (lastHead_ + 1) % sqDepth_;
+    }
+
+    if (!pollSnapshot_.empty()) {
+        UbConnLiteMgr::GetInstance().AppendCompletedCis(lastTransport, pollSnapshot_.data(), pollSnapshot_.size());
+        pollSnapshot_.clear();
+    }
 }
 } // namespace Hccl

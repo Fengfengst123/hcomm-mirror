@@ -14,12 +14,21 @@
 #include "sqe_v82.h"
 #include "log.h"
 #include <chrono>
+#include <vector>
 
 namespace hccl {
 class AicpuTsThread;
 }
 
 namespace Hccl {
+
+// RTSQ SQE 槽位元数据:记录每条DbSend SQE在SQ中的absSlotIdx、所属transport、携带的piValue。
+struct DbSendSlotMeta {
+    UbTransportLiteImpl* transport{nullptr};
+    u32 absSlotIdx{0};
+    u16 seqIdx{0};
+    u16 piValue{0};
+};
 
 class RtsqA5 : public RtsqBase {
 public:
@@ -53,7 +62,7 @@ public:
 
     void P2PWriteValue(u64 remoteAddr, u32 writeValue) override;
 
-    void UbDbSend(const UbJettyLiteId& jettyLiteId, u16 piValue) override;
+    void UbDbSend(const UbJettyLiteId& jettyLiteId, u16 piValue, u16 seqIdx, UbTransportLiteImpl* transport) override;
 
     void RdmaDbSend(const uint64_t& dbAddr, const uint64_t& dbValue) override;
 
@@ -114,7 +123,23 @@ public:
     void RefreshSqeHeaderTaskField(Rt91095StarsSqeHeader* sqeHeaderPtr);
 
     void LaunchNewTask(uint8_t* sqeArray, uint32_t sqeCount);
+
+    // aicpu task cache命中时, 替代UbDbSend中的dbSendSlots_记录逻辑, 用于ciTracker的CI同步
+    // 注意: cache命中时pendingSqeCnt为0, DbSqe在SQE数组中的偏移即为dbSqeIdx
+    // 参考UbDbSend: absSlotIdx = (sqTail_ + pendingSqeCnt) % sqDepth_, 此处pendingSqeCnt等价为dbSqeIdx
+    void RecordDbSendSlot(UbTransportLiteImpl* transport, u32 dbSqeIdx, u16 seqIdx, u16 piValue)
+    {
+        u32 absSlotIdx = (sqTail_ + dbSqeIdx) % sqDepth_;
+        DbSendSlotMeta& slot = dbSendSlots_[dbSendTail_];
+        slot.transport = transport;
+        slot.absSlotIdx = absSlotIdx;
+        slot.seqIdx = seqIdx;
+        slot.piValue = piValue;
+        dbSendTail_ = (dbSendTail_ + 1) % dbSendDepth_;
+    }
     u64 GetSqeAddr() const override;
+
+    void PollCompletion() override;
 
 private:
     u32 pendingSqeCnt{0};
@@ -150,6 +175,13 @@ private:
     void PreLaunchSqeForCache(bool& needCacheTask);
 
     void PostLaunchSqeForCache();
+
+    u32 dbSendDepth_{0};
+    u32 dbSendHead_{0};
+    u32 dbSendTail_{0};
+    u32 lastHead_{0};
+    std::vector<DbSendSlotMeta> dbSendSlots_;
+    std::vector<std::pair<u16, u16>> pollSnapshot_; // (seqIdx, piValue)，复用避免每次PollCompletion栈上分配
 };
 
 } // namespace Hccl

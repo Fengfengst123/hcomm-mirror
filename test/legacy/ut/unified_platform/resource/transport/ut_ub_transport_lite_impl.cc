@@ -25,6 +25,7 @@
 #include "ascend_hal.h"
 #include "drv_api_exception.h"
 #include "ub_conn_lite_mgr.h"
+#include "ub_conn_lite.h"
 #include "ins_to_sqe_rule.h"
 #include "stream_lite.h"
 #include "mem_transport_callback.h"
@@ -213,8 +214,8 @@ TEST_F(UbTransportLiteImplTest, construct_test)
     liteBinaryStream.Dump(uniqueId);
 
     StreamLite stream(uniqueId);
-    RtsqA5 rtsq(fakedevPhyId, fakeStreamId, fakeSqId);
-    stream.rtsq = std::make_unique<RtsqA5>(rtsq);
+    stream.rtsq = std::make_unique<RtsqA5>(fakedevPhyId, fakeStreamId, fakeSqId);
+    RtsqA5& rtsq = *static_cast<RtsqA5*>(stream.rtsq.get());
     MOCKER_CPP_VIRTUAL(rtsq, &RtsqA5::SdmaCopy)
         .stubs()
         .with(mockcpp::any(), mockcpp::any(), mockcpp::any(), mockcpp::any());
@@ -254,4 +255,155 @@ TEST_F(UbTransportLiteImplTest, construct_test)
     RmtRmaBufSliceLite rmtRmaBufferLite(100, 200, 300, 400, 500, UINT32_MAX);
     transportLite.BatchOneSidedRead({locRmaBufferLite}, {rmtRmaBufferLite}, stream);
     transportLite.BatchOneSidedWrite({locRmaBufferLite}, {rmtRmaBufferLite}, stream);
+}
+
+/* ---------- CheckOverflow ---------- */
+
+TEST_F(UbTransportLiteImplTest, CheckOverflow_CiTrackerNull_ExpectSuccess)
+{
+    std::vector<char> liteData = BuildUbTransportLiteUniqueId();
+    RmaConnLite rmaConnLite;
+    RmaConnLite* connLite = &rmaConnLite;
+    MOCKER_CPP(&UbConnLiteMgr::Get).stubs().will(returnValue(connLite));
+    MOCKER_CPP(static_cast<void (MirrorTaskManager::*)(std::unique_ptr<TaskInfo>&&)>(&MirrorTaskManager::AddTaskInfo))
+        .stubs()
+        .with(mockcpp::any());
+    LinkData linkData(BasePortType(PortDeploymentType::DEV_NET, ConnectProtoType::UB), 0, 1, 0, 1);
+    MirrorTaskManager mirrorTaskMgr(0, &GlobalMirrorTasks::Instance(), true);
+    auto transportCallback = MemTransportCallback(linkData, mirrorTaskMgr);
+    MemTransportLite transportLite(liteData, transportCallback);
+    auto& ubTransportLite = *(dynamic_cast<UbTransportLiteImpl*>(transportLite.impl.get()));
+    EXPECT_EQ(HCCL_SUCCESS, ubTransportLite.CheckOverflow(100, false));
+}
+
+TEST_F(UbTransportLiteImplTest, CheckOverflow_CiTrackerDisabled_ExpectSuccess)
+{
+    std::vector<char> liteData = BuildUbTransportLiteUniqueId();
+    RmaConnLite rmaConnLite;
+    RmaConnLite* connLite = &rmaConnLite;
+    MOCKER_CPP(&UbConnLiteMgr::Get).stubs().will(returnValue(connLite));
+    MOCKER_CPP(static_cast<void (MirrorTaskManager::*)(std::unique_ptr<TaskInfo>&&)>(&MirrorTaskManager::AddTaskInfo))
+        .stubs()
+        .with(mockcpp::any());
+    LinkData linkData(BasePortType(PortDeploymentType::DEV_NET, ConnectProtoType::UB), 0, 1, 0, 1);
+    MirrorTaskManager mirrorTaskMgr(0, &GlobalMirrorTasks::Instance(), true);
+    auto transportCallback = MemTransportCallback(linkData, mirrorTaskMgr);
+    MemTransportLite transportLite(liteData, transportCallback);
+    auto& ubTransportLite = *(dynamic_cast<UbTransportLiteImpl*>(transportLite.impl.get()));
+    ubTransportLite.SetCiTrackerEnabled(false);
+    EXPECT_EQ(HCCL_SUCCESS, ubTransportLite.CheckOverflow(100, false));
+}
+
+/* ---------- CheckBatchOverflow ---------- */
+
+TEST_F(UbTransportLiteImplTest, CheckBatchOverflow_CiTrackerDisabled_ExpectSuccess)
+{
+    std::vector<char> liteData = BuildUbTransportLiteUniqueId();
+    RmaConnLite rmaConnLite;
+    RmaConnLite* connLite = &rmaConnLite;
+    MOCKER_CPP(&UbConnLiteMgr::Get).stubs().will(returnValue(connLite));
+    MOCKER_CPP(static_cast<void (MirrorTaskManager::*)(std::unique_ptr<TaskInfo>&&)>(&MirrorTaskManager::AddTaskInfo))
+        .stubs()
+        .with(mockcpp::any());
+    LinkData linkData(BasePortType(PortDeploymentType::DEV_NET, ConnectProtoType::UB), 0, 1, 0, 1);
+    MirrorTaskManager mirrorTaskMgr(0, &GlobalMirrorTasks::Instance(), true);
+    auto transportCallback = MemTransportCallback(linkData, mirrorTaskMgr);
+    MemTransportLite transportLite(liteData, transportCallback);
+    auto& ubTransportLite = *(dynamic_cast<UbTransportLiteImpl*>(transportLite.impl.get()));
+    ubTransportLite.SetCiTrackerEnabled(false);
+    EXPECT_EQ(HCCL_SUCCESS, ubTransportLite.CheckBatchOverflow(100));
+}
+
+TEST_F(UbTransportLiteImplTest, CheckBatchOverflow_NoOverflow_ExpectSuccess)
+{
+    UbJettyLiteId id(1, 1, 1);
+    UbJettyLiteAttr attr(1, 1, 8, 1, false);
+    Eid rmtEid;
+    auto ubConn = std::make_unique<UbConnLite>(id, attr, rmtEid);
+    ubConn->sqDepth_ = 32;
+    ubConn->pi = 5;
+    ubConn->ci = 2;
+
+    std::vector<char> liteData = BuildUbTransportLiteUniqueId();
+    RmaConnLite rmaConnLite;
+    RmaConnLite* connLite = &rmaConnLite;
+    MOCKER_CPP(&UbConnLiteMgr::Get).stubs().will(returnValue(connLite));
+    MOCKER_CPP(static_cast<void (MirrorTaskManager::*)(std::unique_ptr<TaskInfo>&&)>(&MirrorTaskManager::AddTaskInfo))
+        .stubs()
+        .with(mockcpp::any());
+    LinkData linkData(BasePortType(PortDeploymentType::DEV_NET, ConnectProtoType::UB), 0, 1, 0, 1);
+    MirrorTaskManager mirrorTaskMgr(0, &GlobalMirrorTasks::Instance(), true);
+    auto transportCallback = MemTransportCallback(linkData, mirrorTaskMgr);
+    MemTransportLite transportLite(liteData, transportCallback);
+    auto& ubTransportLite = *(dynamic_cast<UbTransportLiteImpl*>(transportLite.impl.get()));
+    ubTransportLite.cachedConn_ = ubConn.get();
+    ubTransportLite.SetCiTrackerEnabled(true);
+
+    EXPECT_EQ(HCCL_SUCCESS, ubTransportLite.CheckBatchOverflow(3));
+}
+
+TEST_F(UbTransportLiteImplTest, CheckBatchOverflow_Overflow_ExpectAgain)
+{
+    UbJettyLiteId id(1, 1, 1);
+    UbJettyLiteAttr attr(1, 1, 8, 1, false);
+    Eid rmtEid;
+    auto ubConn = std::make_unique<UbConnLite>(id, attr, rmtEid);
+    ubConn->sqDepth_ = 8;
+    ubConn->pi = 5;
+    ubConn->ci = 2;
+
+    std::vector<char> liteData = BuildUbTransportLiteUniqueId();
+    RmaConnLite rmaConnLite;
+    RmaConnLite* connLite = &rmaConnLite;
+    MOCKER_CPP(&UbConnLiteMgr::Get).stubs().will(returnValue(connLite));
+    MOCKER_CPP(static_cast<void (MirrorTaskManager::*)(std::unique_ptr<TaskInfo>&&)>(&MirrorTaskManager::AddTaskInfo))
+        .stubs()
+        .with(mockcpp::any());
+    LinkData linkData(BasePortType(PortDeploymentType::DEV_NET, ConnectProtoType::UB), 0, 1, 0, 1);
+    MirrorTaskManager mirrorTaskMgr(0, &GlobalMirrorTasks::Instance(), true);
+    auto transportCallback = MemTransportCallback(linkData, mirrorTaskMgr);
+    MemTransportLite transportLite(liteData, transportCallback);
+    auto& ubTransportLite = *(dynamic_cast<UbTransportLiteImpl*>(transportLite.impl.get()));
+    ubTransportLite.cachedConn_ = ubConn.get();
+    ubTransportLite.SetCiTrackerEnabled(true);
+
+    EXPECT_EQ(HCCL_E_AGAIN, ubTransportLite.CheckBatchOverflow(6));
+}
+
+/* ---------- UbConnLiteMgr AppendCompletedCis ---------- */
+
+TEST_F(UbTransportLiteImplTest, UbConnLiteMgr_AppendCompletedCis_ExpectCiUpdated)
+{
+    UbJettyLiteId id(1, 1, 1);
+    UbJettyLiteAttr attr(1, 1, 8, 1, false);
+    Eid rmtEid;
+    auto ubConn = std::make_unique<UbConnLite>(id, attr, rmtEid);
+
+    UbTransportLiteImpl* fakeKey = reinterpret_cast<UbTransportLiteImpl*>(0x500);
+    {
+        std::unique_lock<std::shared_mutex> lock(UbConnLiteMgr::GetInstance().mtx_);
+        UbConnLiteMgr::GetInstance().ciTrackerMap_[fakeKey] = ubConn.get();
+    }
+
+    std::vector<std::pair<u16, u16>> slots = {{0, 10}, {1, 20}};
+    UbConnLiteMgr::GetInstance().AppendCompletedCis(fakeKey, slots.data(), slots.size());
+    EXPECT_EQ(20u, ubConn->ci);
+
+    {
+        std::unique_lock<std::shared_mutex> lock(UbConnLiteMgr::GetInstance().mtx_);
+        UbConnLiteMgr::GetInstance().ciTrackerMap_.erase(fakeKey);
+    }
+}
+
+TEST_F(UbTransportLiteImplTest, UbConnLiteMgr_AppendCompletedCis_DestroyedTransport_ExpectNoCrash)
+{
+    UbTransportLiteImpl* fakeKey = reinterpret_cast<UbTransportLiteImpl*>(0x900);
+    std::vector<std::pair<u16, u16>> slots = {{0, 10}};
+    EXPECT_NO_THROW(UbConnLiteMgr::GetInstance().AppendCompletedCis(fakeKey, slots.data(), slots.size()));
+}
+
+TEST_F(UbTransportLiteImplTest, UbConnLiteMgr_AppendCompletedCis_NullSlots_ExpectNoCrash)
+{
+    UbTransportLiteImpl* fakeKey = reinterpret_cast<UbTransportLiteImpl*>(0xA00);
+    EXPECT_NO_THROW(UbConnLiteMgr::GetInstance().AppendCompletedCis(fakeKey, nullptr, 0));
 }

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
  * CANN Open Software License Agreement Version 2.0 (the "License").
@@ -27,6 +27,8 @@ GetSqeId(const uint32_t num, uint32_t& start, uint32_t& end);
 }
 
 namespace Hccl {
+
+class UbTransportLiteImpl;
 
 constexpr u32 RTSQ_FULL_TIMEOUT_DEFAULT = 1836 + 20;
 constexpr u32 RTSQ_SQE_SIZE = 64;
@@ -142,10 +144,12 @@ public:
         MACRO_THROW(NotSupportException, StringFormat("not supported."));
     }
 
-    virtual void UbDbSend(const UbJettyLiteId& jettyLiteId, u16 piValue)
+    virtual void UbDbSend(const UbJettyLiteId& jettyLiteId, u16 piValue, u16 seqIdx, UbTransportLiteImpl* transport)
     {
         (void)jettyLiteId;
         (void)piValue;
+        (void)seqIdx;
+        (void)transport;
         MACRO_THROW(NotSupportException, StringFormat("not supported."));
     }
 
@@ -219,6 +223,7 @@ public:
         (void)taskId;
         return HCCL_E_NOT_SUPPORT;
     }
+    virtual void PollCompletion() {}
 
 protected:
     u32 devPhyId_{0};

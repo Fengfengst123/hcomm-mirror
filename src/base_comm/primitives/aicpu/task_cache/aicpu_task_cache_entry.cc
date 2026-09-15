@@ -291,6 +291,7 @@ HcclResult AicpuTaskCacheEntry::SubmitCacheEntry()
     CHK_RET(SubmitWqeAddrRefreshInfoAndTokenInfo_());
     CHK_RET(SubmitDbSqeProfRefreshInfo_());
     CHK_RET(ValidateLaunchOrder_());
+    CHK_RET(BuildConnOverflowInfos_());
 
     return HCCL_SUCCESS;
 }
@@ -446,6 +447,9 @@ AicpuTaskCacheEntry::RefreshAndLaunch(const uint64_t* baseAddrs, const uint64_t*
             HCCL_E_INTERNAL);
     }
 
+    // 下发前检查jetty SQ深度, 避免cache hit时WQE溢出
+    CHK_RET(CheckWqeOverflow_());
+
     CHK_RET(RefreshTokenInfos_(baseAddrs, memSizes, count));
 
     const bool enableTaskException = hcomm::GetTaskExceptionEnable();
@@ -506,6 +510,45 @@ AicpuTaskCacheEntry::RefreshTokenInfos_(const uint64_t* baseAddrs, const uint64_
                 tokenInfo.rmtTokenId = rmtRmaBufSlicelite.GetTokenId();
                 tokenInfo.rmtTokenValue = rmtRmaBufSlicelite.GetTokenValue();
             }
+        }
+    }
+    return HCCL_SUCCESS;
+}
+
+inline HcclResult AicpuTaskCacheEntry::BuildConnOverflowInfos_()
+{
+    // 按UbConnLite分组, 统计每个connection的WQE总数, 预计算后供CheckWqeOverflow_使用
+    // 注意: 同一个UbConnLite可能被多个WQE数组引用, 需要累加WQE数量
+    connOverflowInfos_.clear();
+    connOverflowInfos_.reserve(wqeTaskArrayInfos_.size());
+    for (size_t i = 0; i < wqeTaskArrayInfos_.size(); i++) {
+        if (!wqeTaskArrayInfos_[i].ubTransportLiteImplPtr->ciTrackerEnabled_) {
+            continue;
+        }
+        UbConnLite* ubConnLitePtr = wqeTaskArrayInfos_[i].ubConnLitePtr;
+        const uint32_t wqeCount = static_cast<uint32_t>(wqeTaskArrayInfos_[i].wqeTaskArray.size());
+        bool found = false;
+        for (auto& info : connOverflowInfos_) {
+            if (info.ubConnLitePtr == ubConnLitePtr) {
+                info.wqeCount += wqeCount;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            connOverflowInfos_.push_back({ubConnLitePtr, wqeTaskArrayInfos_[i].ubTransportLiteImplPtr, wqeCount});
+        }
+    }
+    return HCCL_SUCCESS;
+}
+
+inline HcclResult AicpuTaskCacheEntry::CheckWqeOverflow_()
+{
+    for (const auto& info : connOverflowInfos_) {
+        // 同步CI并检查jetty SQ深度
+        if (info.ubConnLitePtr->CheckOverflow(info.wqeCount) != HCCL_SUCCESS) {
+            HCCL_INFO("[AicpuTaskCacheEntry][CheckWqeOverflow_] jetty SQ overflow, wqeCount[%u]", info.wqeCount);
+            return HCCL_E_AGAIN;
         }
     }
     return HCCL_SUCCESS;
@@ -1200,6 +1243,16 @@ inline HcclResult AicpuTaskCacheEntry::RefreshDbSqe_(WqeTaskArrayInfo& wqeTaskAr
     // 更新SQE pi value
     Rt91095StarsUbdmaDBmodeSqe* dbSqePtr = static_cast<Rt91095StarsUbdmaDBmodeSqe*>(static_cast<void*>(sqePtr));
     dbSqePtr->piValue1 = pi;
+
+    // 按需记录DbSendSlotMeta, 用于ciTracker的CI同步 (参考RtsqA5::UbDbSend中的dbSendSlots_记录逻辑)
+    // 注意: ciTrackerEnabled_为false时无需记录; dbSendSeqIdx_递增参考BuildUbDbSendTask
+    UbTransportLiteImpl* ubTransportLiteImplPtr = wqeTaskArrayInfo.ubTransportLiteImplPtr;
+    if (ubTransportLiteImplPtr->ciTrackerEnabled_) {
+        RtsqA5* rtsqA5Ptr = sqeArrayInfos_[dbSqeLocation.sqeArrayIdx].rtsqPtr;
+        rtsqA5Ptr->RecordDbSendSlot(
+            ubTransportLiteImplPtr, dbSqeLocation.dbSqeIdx, ubTransportLiteImplPtr->dbSendSeqIdx_, pi);
+        ubTransportLiteImplPtr->dbSendSeqIdx_++;
+    }
 
     // 注意: UbTransportLiteImpl只针对WQE按需填充DfxTaskInfo上报profiling, DB SQE无需上报profiling
 

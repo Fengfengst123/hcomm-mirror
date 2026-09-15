@@ -176,6 +176,10 @@ HcommResult HcommAicpuTsTaskCacheExecute(const char* tag, void** addrs, uint64_t
     // 刷新并下发task
     HcclResult ret
         = AicpuTaskCacheManager::cacheEntryPtr->RefreshAndLaunch(ReinterpretAs<const uint64_t*>(addrs), sizes, count);
+    if (ret == HCCL_E_AGAIN) {
+        HCCL_WARNING("[HcommAicpuTsTaskCacheExecute] jetty SQ overflow, need retry");
+        return ret;
+    }
     if (ret != HCCL_SUCCESS) {
         HCCL_ERROR("[HcommAicpuTsTaskCacheExecute] RefreshAndLaunch error, ret[%d]", ret);
     }

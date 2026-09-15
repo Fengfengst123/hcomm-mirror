@@ -11,6 +11,7 @@
 #ifndef HCCLV2_RMA_CONN_LITE_H
 #define HCCLV2_RMA_CONN_LITE_H
 #include <memory>
+#include <utility>
 #include "rma_buf_slice_lite.h"
 #include "rmt_rma_buf_slice_lite.h"
 #include "log.h"
@@ -149,6 +150,34 @@ public:
         HCCL_INFO(
             "RmaConnLite BatchOneSidedWrite start. loc.size = %llu, rmt.size = %llu, cfg.cqeEn = %u, out.pi = %u",
             loc.size(), rmt.size(), cfg.cqeEn, out.pi);
+    }
+
+    virtual void UpdateCi(const std::pair<u16, u16>* slots, size_t count)
+    {
+        (void)slots;
+        (void)count;
+    }
+
+    virtual bool CheckOverflow(u64 totalSize, bool isRead, bool isNotify)
+    {
+        (void)totalSize;
+        (void)isRead;
+        (void)isNotify;
+        return false;
+    }
+
+    virtual bool CheckOverflow(u32 wqeCount)
+    {
+        (void)wqeCount;
+        return false;
+    }
+
+    virtual u32 CalcWqeCount(u64 totalSize, bool isRead, bool isNotify) const
+    {
+        (void)totalSize;
+        (void)isRead;
+        (void)isNotify;
+        return 0;
     }
 
 protected:
