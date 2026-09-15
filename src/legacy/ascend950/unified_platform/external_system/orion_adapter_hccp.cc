@@ -1701,14 +1701,16 @@ const std::map<HrtUbJfcMode, JfcMode> HRT_UB_JFC_MODE_MAP
 constexpr u32 CQ_DEPTH = 2 * 1024 * 1024 / 64;
 constexpr u32 CCU_CQ_DEPTH = 64;
 
-JfcHandle HrtRaUbCreateJfc(RdmaHandle handle, CqCreateInfo& cqInfo, HrtUbJfcMode mode)
+JfcHandle HrtRaUbCreateJfc(RdmaHandle handle, CqCreateInfo& cqInfo, HrtUbJfcMode mode, u32 cqDepth)
 {
     CHECK_NULLPTR(handle, "[HrtRaUbCreateJfc] handle is nullptr!");
-    HCCL_INFO("[HrtRaUbCreateJfc] Input params: handle=%p, mode=%d", handle, mode);
+    HCCL_INFO("[HrtRaUbCreateJfc] Input params: handle=%p, mode=%d, cqDepth=%u", handle, mode, cqDepth);
     struct CqInfoT info {};
 
     info.in.chanHandle = nullptr;
-    if (mode == HrtUbJfcMode::CCU_POLL) {
+    if (cqDepth > 0) {
+        info.in.depth = cqDepth;
+    } else if (mode == HrtUbJfcMode::CCU_POLL) {
         info.in.depth = CCU_CQ_DEPTH;
     } else {
         info.in.depth = CQ_DEPTH;

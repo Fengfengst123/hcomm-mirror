@@ -236,18 +236,49 @@ HcclResult PrepareUbConnBuildContext(
         ctx.qosPre = static_cast<u8>(channelDesc.qos);
     }
     ctx.sqDepth = channelDesc.ubAttr.sqDepth;
+    ctx.scqDepth = channelDesc.ubAttr.scqDepth;
     return HCCL_SUCCESS;
 }
 
 HcclResult CheckUbSqDepth(const UbConnBuildContext& ctx, const DevBaseAttr& devBaseAttr)
 {
-    if (ctx.sqDepth == UB_SQ_DEPTH_NOT_SET) {
+    if (ctx.sqDepth == UB_SQ_DEPTH_NOT_SET || ctx.sqDepth == 0) {
         return HCCL_SUCCESS;
     }
     if (ctx.sqDepth < UB_SQ_DEPTH_MIN || ctx.sqDepth > devBaseAttr.sqMaxDepth) {
         HCCL_ERROR(
             "[%s] invalid ubAttr.sqDepth[%u], aligned range is [%u, %u] (aligned to power-of-two before compared).",
             __func__, ctx.sqDepth, UB_SQ_DEPTH_MIN, devBaseAttr.sqMaxDepth);
+        return HCCL_E_PARA;
+    }
+    return HCCL_SUCCESS;
+}
+
+HcclResult CheckUbScqDepth(const UbConnBuildContext& ctx, HrtUbJfcMode jfcMode)
+{
+    if (ctx.scqDepth == UB_SCQ_DEPTH_NOT_SET || ctx.scqDepth == 0) {
+        return HCCL_SUCCESS;
+    }
+    u32 scqMaxDepth = 0;
+    if (jfcMode == HrtUbJfcMode::NORMAL || jfcMode == HrtUbJfcMode::USER_CTL) {
+        scqMaxDepth = UB_SCQ_DEPTH_MAX_NORMAL;
+    } else if (jfcMode == HrtUbJfcMode::STARS_POLL) {
+        scqMaxDepth = UB_SCQ_DEPTH_MAX_STARS_POLL;
+    } else {
+        HCCL_ERROR("[%s] invalid jfcMode for scqDepth check.", __func__);
+        return HCCL_E_PARA;
+    }
+    if (ctx.scqDepth < UB_SCQ_DEPTH_MIN || ctx.scqDepth > scqMaxDepth) {
+        HCCL_ERROR(
+            "[%s] invalid ubAttr.scqDepth[%u], expect range is [%u, %u].", __func__, ctx.scqDepth, UB_SCQ_DEPTH_MIN,
+            scqMaxDepth);
+        return HCCL_E_PARA;
+    }
+    // 非硬件轮询模式（NORMAL/USER_CTL）校验 SQ 深度不大于 CQ 深度，避免 CQ overflow
+    if (jfcMode != HrtUbJfcMode::STARS_POLL && ctx.sqDepth != UB_SQ_DEPTH_NOT_SET && ctx.sqDepth != 0
+        && ctx.sqDepth > ctx.scqDepth) {
+        HCCL_ERROR(
+            "[%s] ubAttr.sqDepth[%u] > scqDepth[%u], may cause CQ overflow.", __func__, ctx.sqDepth, ctx.scqDepth);
         return HCCL_E_PARA;
     }
     return HCCL_SUCCESS;

@@ -151,7 +151,8 @@ TEST(ST_SocketListenStop, st_HrtRaUbRemoteMemUnimport_ok)
 
 TEST(ST_SocketListenStop, st_HrtRaUbCreateCq_ok)
 {
-    auto result = HrtRaUbCreateJfc(nullptr, HrtUbJfcMode::NORMAL);
+    CqCreateInfo cqInfo{};
+    auto result = HrtRaUbCreateJfc(nullptr, cqInfo, HrtUbJfcMode::NORMAL);
     EXPECT_EQ(0, result);
 }
 

@@ -20,6 +20,7 @@ extern "C" {
 #endif // __cplusplus
 
 const uint32_t HCOMM_RES_TAG_MAX_LEN = 255;
+constexpr uint32_t UB_SQ_DEPTH_NOT_SET = 0xFFFFFFFFU;
 
 typedef struct {
     int32_t devPhyId;
@@ -126,8 +127,6 @@ HcommResult HcommCollectiveChannelCreate(
     EndpointHandle endpointHandle, CommEngine engine, HcommChannelDesc* channelDescs, uint32_t channelNum,
     ChannelHandle* channels);
 HcommResult HcommChannelUpdateMemInfo(HcommMemHandle* memHandles, uint32_t memHandleNum, ChannelHandle channelHandle);
-
-constexpr uint32_t UB_SQ_DEPTH_NOT_SET = 0xFFFFFFFFU;
 
 HcommResult CheckUbAttr(HcommChannelDesc& channelDesc, CommEngine engine);
 

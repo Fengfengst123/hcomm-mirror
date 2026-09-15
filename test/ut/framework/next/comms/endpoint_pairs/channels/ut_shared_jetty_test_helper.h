@@ -23,7 +23,7 @@ MakeTestJettyConnection(Hccl::DevUbConnection::JettyMode jettyMode = Hccl::DevUb
     return std::make_unique<Hccl::DevUbConnection>(
         nullptr, locIp, rmtIp, Hccl::OpMode::OPBASE, false, Hccl::HrtUbJfcMode::STARS_POLL, Hccl::IpAddress(),
         Hccl::IpAddress(), static_cast<u8>(Hccl::UB_QOS_DEFAULT), Hccl::TpManager::TA_TIMEOUT_NOT_SET,
-        COMM_ENGINE_RESERVED, Hccl::UB_SQ_DEPTH_NOT_SET, jettyMode);
+        COMM_ENGINE_RESERVED, Hccl::UB_SQ_DEPTH_NOT_SET, Hccl::UB_SQ_DEPTH_NOT_SET, jettyMode);
 }
 
 #endif // UT_SHARED_JETTY_TEST_HELPER_H

@@ -126,6 +126,8 @@ HcclResult HostCpuUrmaChannel::BuildConnection()
 {
     UbConnBuildContext ctx;
     CHK_RET(PrepareUbConnBuildContext(localEp_, remoteEp_, channelDesc_, ctx));
+    CHK_RET(CheckUbSqDepth(ctx, devBaseAttr_));
+    CHK_RET(CheckUbScqDepth(ctx, HrtUbJfcMode::NORMAL));
 
     Hccl::OpMode opMode = Hccl::OpMode::OPBASE;
     std::unique_ptr<Hccl::HostUbConnection> ubConn = nullptr;
@@ -133,13 +135,15 @@ HcclResult HostCpuUrmaChannel::BuildConnection()
         case Hccl::LinkProtocol::UB_TP:
             EXCEPTION_CATCH(
                 ubConn = std::make_unique<Hccl::HostUbTpConnection>(
-                    rdmaHandle_, ctx.locAddr, ctx.rmtAddr, opMode, Hccl::HrtUbJfcMode::NORMAL, ctx.qosPre),
+                    rdmaHandle_, ctx.locAddr, ctx.rmtAddr, opMode, Hccl::HrtUbJfcMode::NORMAL, ctx.qosPre, ctx.sqDepth,
+                    ctx.scqDepth),
                 return HCCL_E_PTR);
             break;
         case Hccl::LinkProtocol::UB_CTP:
             EXCEPTION_CATCH(
                 ubConn = std::make_unique<Hccl::HostUbCtpConnection>(
-                    rdmaHandle_, ctx.locAddr, ctx.rmtAddr, opMode, Hccl::HrtUbJfcMode::NORMAL, ctx.qosPre),
+                    rdmaHandle_, ctx.locAddr, ctx.rmtAddr, opMode, Hccl::HrtUbJfcMode::NORMAL, ctx.qosPre, ctx.sqDepth,
+                    ctx.scqDepth),
                 return HCCL_E_PTR);
             break;
         default:
@@ -183,12 +187,12 @@ HcclResult HostCpuUrmaChannel::Init()
         CHK_RET(StartListen());
     }
     CHK_RET(BuildSocket());
-    CHK_RET(BuildConnection());
-    CHK_RET(BuildUbMemTransport());
     // urma函数初始化
     CHK_RET(DlUrmaFunction::GetInstance().DlUrmaFunctionInit());
     // 获取urma read/write 单个wr的最大传输数据大小
     CHK_RET(HccpRaGetDevBaseAttr(rdmaHandle_, &devBaseAttr_));
+    CHK_RET(BuildConnection());
+    CHK_RET(BuildUbMemTransport());
 
     return HCCL_SUCCESS;
 }

@@ -24,6 +24,7 @@ target_sources(hccl_v2_stest
         st_ub_ci_updater.cc
         st_ub_local_notify.cc
         st_ub_mem_transport.cc
+        st_ub_queue_depth_config.cc
         st_ub_transport_lite_impl.cc
 
         st_stream.cc

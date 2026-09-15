@@ -428,21 +428,21 @@ HcclResult AivUrmaChannel::CreateUbConnectionByProtocol(
             EXCEPTION_CATCH(
                 ubConn = std::make_unique<Hccl::DevUbTpConnection>(
                     rdmaHandle_, ctx.locAddr, ctx.rmtAddr, opMode, devUsed, jfcMode, Hccl::IpAddress(),
-                    Hccl::IpAddress(), ctx.qosPre, taTimeOut, COMM_ENGINE_AIV, ctx.sqDepth, jettyMode),
+                    Hccl::IpAddress(), ctx.qosPre, taTimeOut, COMM_ENGINE_AIV, ctx.sqDepth, ctx.scqDepth, jettyMode),
                 return HCCL_E_PTR);
             break;
         case Hccl::LinkProtocol::UB_CTP:
             EXCEPTION_CATCH(
                 ubConn = std::make_unique<Hccl::DevUbCtpConnection>(
                     rdmaHandle_, ctx.locAddr, ctx.rmtAddr, opMode, devUsed, jfcMode, Hccl::IpAddress(),
-                    Hccl::IpAddress(), ctx.qosPre, taTimeOut, COMM_ENGINE_AIV, ctx.sqDepth, jettyMode),
+                    Hccl::IpAddress(), ctx.qosPre, taTimeOut, COMM_ENGINE_AIV, ctx.sqDepth, ctx.scqDepth, jettyMode),
                 return HCCL_E_PTR);
             break;
         case Hccl::LinkProtocol::UB_RTP:
             EXCEPTION_CATCH(
                 ubConn = std::make_unique<Hccl::DevUbRtpConnection>(
                     rdmaHandle_, ctx.locAddr, ctx.rmtAddr, opMode, devUsed, jfcMode, ctx.locAddr, ctx.rmtAddr,
-                    ctx.qosPre, taTimeOut, COMM_ENGINE_AIV, ctx.sqDepth, jettyMode),
+                    ctx.qosPre, taTimeOut, COMM_ENGINE_AIV, ctx.sqDepth, ctx.scqDepth, jettyMode),
                 return HCCL_E_PTR);
             break;
         default:
@@ -526,6 +526,19 @@ HcclResult AivUrmaChannel::BuildConnection()
     UbConnBuildContext ctx;
     CHK_RET(PrepareUbConnBuildContext(localEp_, remoteEp_, channelDesc_, ctx));
     CHK_RET(CheckUbSqDepth(ctx, devBaseAttr_));
+    CHK_RET(CheckUbScqDepth(ctx, HrtUbJfcMode::USER_CTL));
+
+    /* 需求边界：scqDepth 仅在独占 JFC 场景（CreateUbConnectionByProtocol 走 SELF_CREATE）生效；
+     * 共享 jetty 模式（EXTERNAL_INJECT）复用同 Endpoint 已创建的 jetty，不创建独占 JFC，
+     * scqDepth 的"独占创建"语义不适用，深度由 SetSharedJettyFields 的 sDepth 统一决定。
+     * 但 BuildConnection 统一从 ctx 取 scqDepth 并统一经 CheckUbScqDepth 校验（无效值一律拒绝），
+     * 有效值在共享 jetty 下被静默忽略，故此处显式告警提示用户，避免"校验通过却不生效"的困惑。 */
+    if (IsSharedJetty() && ctx.scqDepth != UB_SCQ_DEPTH_NOT_SET && ctx.scqDepth != 0) {
+        HCCL_WARNING(
+            "[AivUrmaChannel][BuildConnection] scqDepth[%u] is not effective in shared jetty mode, "
+            "depth is determined by SetSharedJettyFields.",
+            ctx.scqDepth);
+    }
 
     // 共享 jetty 模式：主 connection 构造时传 EXTERNAL_INJECT，跳过建 JFC/jetty，等 SetSharedJettyFields 填充
     auto jettyMode = IsSharedJetty() ? Hccl::DevUbConnection::JettyMode::EXTERNAL_INJECT :

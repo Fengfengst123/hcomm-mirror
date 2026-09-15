@@ -15,6 +15,7 @@
 #include "hcomm_res_defs.h"
 #include "hccl_net_dev_defs.h"
 #include "hccp_ctx.h"
+#include "hcomm_adapter_hccp.h"
 
 // Orion
 #include "ip_address.h"
@@ -23,6 +24,10 @@
 namespace hcomm {
 
 constexpr u32 UB_SQ_DEPTH_MIN = 16U;
+constexpr u32 UB_SCQ_DEPTH_MIN = 64U;
+constexpr u32 UB_SCQ_DEPTH_MAX_NORMAL = 32768U;     // Host UB (normal 模式)
+constexpr u32 UB_SCQ_DEPTH_MAX_STARS_POLL = 16384U; // AICPU UB (stars poll 模式)
+constexpr u32 UB_SCQ_DEPTH_NOT_SET = 0xFFFFFFFFU;   // scqDepth 哨兵值，表示使用默认值
 
 HcclResult CommAddrToIpAddress(const CommAddr& commAddr, Hccl::IpAddress& ipAddr);
 HcclResult IpAddressToCommAddr(const Hccl::IpAddress& ipAddr, CommAddr& commAddr);
@@ -42,12 +47,15 @@ struct UbConnBuildContext {
     s32 deviceLogicId{0};
     u8 qosPre{0};
     u32 sqDepth{0xFFFFFFFFU};
+    u32 scqDepth{0xFFFFFFFFU};
 };
 
 HcclResult PrepareUbConnBuildContext(
     const EndpointDesc& locEp, const EndpointDesc& rmtEp, const HcommChannelDesc& channelDesc, UbConnBuildContext& ctx);
 
 HcclResult CheckUbSqDepth(const UbConnBuildContext& ctx, const DevBaseAttr& devBaseAttr);
+
+HcclResult CheckUbScqDepth(const UbConnBuildContext& ctx, HrtUbJfcMode jfcMode);
 
 } // namespace hcomm
 

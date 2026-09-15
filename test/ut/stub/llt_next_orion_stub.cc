@@ -402,7 +402,7 @@ AicpuResPackageHelper::GetPackedData(std::vector<Hccl::ModuleData, std::allocato
 DevUbConnection::DevUbConnection(
     const RdmaHandle rdmaHandle, const IpAddress& locAddr, const IpAddress& rmtAddr, const OpMode opMode,
     const bool devUsed, const HrtUbJfcMode jfcMode, const IpAddress& locIpv4Addr, const IpAddress& rmtIpv4Addr,
-    const u8 qos, const u8 taTimeOut, CommEngine engine, u32 inSqDepth, JettyMode jettyMode)
+    const u8 qos, const u8 taTimeOut, CommEngine engine, u32 inSqDepth, u32 inScqDepth, JettyMode jettyMode)
     : RmaConnection(nullptr, RmaConnType::UB),
       rdmaHandle(rdmaHandle),
       locAddr(locAddr),
@@ -418,6 +418,7 @@ DevUbConnection::DevUbConnection(
       qos_(qos),
       taTimeOut_(taTimeOut),
       sqDepth(inSqDepth),
+      scqDepth(inScqDepth),
       jettyMode_(jettyMode)
 {
     if (sqDepth == UB_SQ_DEPTH_NOT_SET) {
@@ -431,10 +432,10 @@ DevUbConnection::DevUbConnection(
 DevUbTpConnection::DevUbTpConnection(
     const RdmaHandle rdmaHandle, const IpAddress& locAddr, const IpAddress& rmtAddr, const OpMode opMode,
     const bool devUsed, const HrtUbJfcMode jfcMode, const IpAddress& locIpv4Addr, const IpAddress& rmtIpv4Addr,
-    const u8 qos, const u8 taTimeOut, CommEngine engine, u32 sqDepth, JettyMode jettyMode)
+    const u8 qos, const u8 taTimeOut, CommEngine engine, u32 sqDepth, u32 scqDepth, JettyMode jettyMode)
     : DevUbConnection(
           rdmaHandle, locAddr, rmtAddr, opMode, devUsed, jfcMode, locIpv4Addr, rmtIpv4Addr, qos, taTimeOut, engine,
-          sqDepth, jettyMode)
+          sqDepth, scqDepth, jettyMode)
 {
     tpProtocol = TpProtocol::TP;
 }
@@ -442,10 +443,10 @@ DevUbTpConnection::DevUbTpConnection(
 DevUbCtpConnection::DevUbCtpConnection(
     const RdmaHandle rdmaHandle, const IpAddress& locAddr, const IpAddress& rmtAddr, const OpMode opMode,
     const bool devUsed, const HrtUbJfcMode jfcMode, const IpAddress& locIpv4Addr, const IpAddress& rmtIpv4Addr,
-    const u8 qos, const u8 taTimeOut, CommEngine engine, u32 sqDepth, JettyMode jettyMode)
+    const u8 qos, const u8 taTimeOut, CommEngine engine, u32 sqDepth, u32 scqDepth, JettyMode jettyMode)
     : DevUbConnection(
           rdmaHandle, locAddr, rmtAddr, opMode, devUsed, jfcMode, locIpv4Addr, rmtIpv4Addr, qos, taTimeOut, engine,
-          sqDepth, jettyMode)
+          sqDepth, scqDepth, jettyMode)
 {
     tpProtocol = TpProtocol::CTP;
 }
@@ -453,10 +454,10 @@ DevUbCtpConnection::DevUbCtpConnection(
 DevUbUboeConnection::DevUbUboeConnection(
     const RdmaHandle rdmaHandle, const IpAddress& locAddr, const IpAddress& rmtAddr, const OpMode opMode,
     const bool devUsed, const HrtUbJfcMode jfcMode, const IpAddress& locIpv4Addr, const IpAddress& rmtIpv4Addr,
-    const u8 qos, const u8 taTimeOut, CommEngine engine, u32 sqDepth, JettyMode jettyMode)
+    const u8 qos, const u8 taTimeOut, CommEngine engine, u32 sqDepth, u32 scqDepth, JettyMode jettyMode)
     : DevUbConnection(
           rdmaHandle, locAddr, rmtAddr, opMode, devUsed, jfcMode, locIpv4Addr, rmtIpv4Addr, qos, taTimeOut, engine,
-          sqDepth, jettyMode)
+          sqDepth, scqDepth, jettyMode)
 {
     tpProtocol = TpProtocol::UBOE;
 }
@@ -464,10 +465,10 @@ DevUbUboeConnection::DevUbUboeConnection(
 DevUbRtpConnection::DevUbRtpConnection(
     const RdmaHandle rdmaHandle, const IpAddress& locAddr, const IpAddress& rmtAddr, const OpMode opMode,
     const bool devUsed, const HrtUbJfcMode jfcMode, const IpAddress& locAddrEid, const IpAddress& rmtAddrEid,
-    const u8 qos, const u8 taTimeOut, CommEngine engine, u32 sqDepth, JettyMode jettyMode)
+    const u8 qos, const u8 taTimeOut, CommEngine engine, u32 sqDepth, u32 scqDepth, JettyMode jettyMode)
     : DevUbConnection(
           rdmaHandle, locAddr, rmtAddr, opMode, devUsed, jfcMode, locAddrEid, rmtAddrEid, qos, taTimeOut, engine,
-          sqDepth, jettyMode)
+          sqDepth, scqDepth, jettyMode)
 {
     tpProtocol = TpProtocol::UB_RTP;
 }
@@ -2042,7 +2043,7 @@ using namespace std;
 
 RdmaHandle HrtRaUbCtxInit(const HrtRaUbCtxInitParamDef& in) { return reinterpret_cast<RdmaHandle>(0x1); }
 
-u64 HrtRaUbCreateJfc(RdmaHandle handle, CqCreateInfo& cqInfo, HrtUbJfcMode jfcMode) { return 0x2; }
+u64 HrtRaUbCreateJfc(RdmaHandle handle, CqCreateInfo& cqInfo, HrtUbJfcMode jfcMode, u32 cqDepth) { return 0x2; }
 
 u64 HrtRaUbCreateJfcUserCtl(RdmaHandle handle, CqCreateInfo& cqInfo) { return 0x3; }
 

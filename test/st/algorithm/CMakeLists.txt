@@ -187,6 +187,7 @@ set(HCOMM_FRAMEWORK_INCLUDE_LIST
     ${HCOMM_CODE_ROOT}/src/base_comm/primitives/api_c_adpt/
     ${HCOMM_CODE_ROOT}/src/base_comm/primitives/api_c_adpt/nic_plugin/
     ${HCOMM_CODE_ROOT}/src/base_comm/common/
+    ${HCOMM_CODE_ROOT}/src/base_comm/resources/southbound_adpt/
     ${HCOMM_CODE_ROOT}/src/base_comm/common/device
     ${HCOMM_CODE_ROOT}/src/legacy/ascend910/common/stream
     ${HCOMM_CODE_ROOT}/src/base_comm/resources/hccp/inc

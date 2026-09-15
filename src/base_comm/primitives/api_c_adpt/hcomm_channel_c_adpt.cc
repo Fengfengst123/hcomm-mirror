@@ -373,7 +373,7 @@ HcommResult ProcessHcommChannelDescs(const HcommChannelDesc& channelDesc, HcommC
     }
 
     // v4：roceAttr.srcPortList，低版本时 union 内该位置为脏数据，置 NULL
-    if (channelDesc.header.version < HCOMM_CHANNEL_VERSION) {
+    if (channelDesc.header.version < HCOMM_CHANNEL_VERSION_FOUR) {
         channelDescFinal.roceAttr.srcPortList = nullptr;
     } else {
         channelDescFinal.roceAttr.srcPortList = channelDesc.roceAttr.srcPortList;
@@ -383,6 +383,13 @@ HcommResult ProcessHcommChannelDescs(const HcommChannelDesc& channelDesc, HcommC
     if (channelDesc.header.version < HCOMM_CHANNEL_VERSION) {
         channelDescFinal.roceAttr.sqDepth = INVALID_UINT;
         channelDescFinal.roceAttr.scqDepth = INVALID_UINT;
+    }
+
+    // v5：ubAttr.scqDepth，低版本时 union 内该位置为脏数据，置默认哨兵值。
+    if (channelDesc.header.version < HCOMM_CHANNEL_VERSION) {
+        channelDescFinal.ubAttr.scqDepth = UB_SCQ_DEPTH_NOT_SET;
+    } else {
+        channelDescFinal.ubAttr.scqDepth = channelDesc.ubAttr.scqDepth;
     }
 
     return HCOMM_SUCCESS;

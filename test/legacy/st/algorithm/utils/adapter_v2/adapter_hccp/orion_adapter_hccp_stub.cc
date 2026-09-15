@@ -72,7 +72,7 @@ HrtRaUbJettyCreatedOutParam HrtRaUbCreateJetty(RdmaHandle handle, const HrtRaUbC
     return out;
 }
 
-JfcHandle HrtRaUbCreateJfc(RdmaHandle handle, HrtUbJfcMode mode)
+JfcHandle HrtRaUbCreateJfc(RdmaHandle handle, CqCreateInfo& cqInfo, HrtUbJfcMode mode, u32 cqDepth)
 {
     void* jfcHandle = nullptr;
     return reinterpret_cast<JfcHandle>(jfcHandle);

@@ -20,6 +20,8 @@ namespace Hccl {
 constexpr u32 UB_QOS_DEFAULT = 4U;
 // UB SQ 深度的未配置哨兵，连接会按工作模式将其解析为实际深度。
 constexpr u32 UB_SQ_DEPTH_NOT_SET = 0xFFFFFFFFU;
+// UB SCQ 深度的未配置哨兵（与 SQ 哨兵值相同，语义独立）。
+constexpr u32 UB_SCQ_DEPTH_NOT_SET = 0xFFFFFFFFU;
 
 class EnvConfig {
 public:

@@ -32,7 +32,7 @@ constexpr uint32_t kTpAttrAtBit = 1U;
 DevUbConnection::DevUbConnection(
     const RdmaHandle rdmaHandle, const IpAddress& locAddr, const IpAddress& rmtAddr, const OpMode opMode,
     const bool devUsed, const HrtUbJfcMode jfcMode, const IpAddress& locIpv4Addr, const IpAddress& rmtIpv4Addr, u8 qos,
-    u8 taTimeOut, CommEngine engine, u32 inSqDepth, JettyMode jettyMode)
+    u8 taTimeOut, CommEngine engine, u32 inSqDepth, u32 inScqDepth, JettyMode jettyMode)
     : RmaConnection(nullptr, RmaConnType::UB),
       rdmaHandle(rdmaHandle),
       locAddr(locAddr),
@@ -49,6 +49,7 @@ DevUbConnection::DevUbConnection(
       devUsed_(devUsed),
       taTimeOut_(taTimeOut),
       sqDepth(inSqDepth),
+      scqDepth(inScqDepth),
       jettyMode_(jettyMode)
 {
     HCCL_INFO(
@@ -61,20 +62,34 @@ DevUbConnection::DevUbConnection(
     funcId = dieIdAndFuncId.second;
 
     // EXTERNAL_INJECT 模式：跳过建 JFC/jetty，等外部调 SetSharedJettyFields 填充
+    // 注意：构造传入的 sqDepth/scqDepth 在此模式下不生效（sqDepth 被覆盖为默认值，
+    // scqDepth 的独占 JFC 分支不会执行），共享 jetty 的深度由 SetSharedJettyFields 的 sDepth 统一决定。
     if (jettyMode_ == JettyMode::EXTERNAL_INJECT) {
         sqDepth = OPBASED_UB_SQ_DEPTH_MAX;
-        HCCL_INFO("[DevUbConnection][Constructor] EXTERNAL_INJECT mode, skip JFC/Jetty creation.");
+        HCCL_INFO(
+            "[DevUbConnection][Constructor] EXTERNAL_INJECT mode, skip JFC/Jetty creation, "
+            "sqDepth/scqDepth(%u/%u) not effective, shared jetty depth comes from SetSharedJettyFields.",
+            inSqDepth, inScqDepth);
         return;
     }
 
-    if (engine_ == COMM_ENGINE_AIV) {
+    if (scqDepth != UB_SCQ_DEPTH_NOT_SET && scqDepth != 0) {
+        // 独占 JFC 创建路径：指定 scqDepth 时创建独占 JFC，不与其他 Channel 共享
+        jfcHandle = HrtRaUbCreateJfc(rdmaHandle, cqInfo_, jfcMode, scqDepth);
+        if (jfcHandle == 0) {
+            THROW<InternalException>("[DevUbConnection][Constructor] HrtRaUbCreateJfc failed, scqDepth[%u].", scqDepth);
+        }
+        isExclusiveJfc = true;
+        HCCL_INFO(
+            "[DevUbConnection][Constructor] exclusive JFC created, scqDepth[%u], jfcHandle[%p].", scqDepth, jfcHandle);
+    } else if (engine_ == COMM_ENGINE_AIV) {
         CreateAivUrmaJfc();
     } else if (jfcMode == HrtUbJfcMode::USER_CTL) {
         jfcHandle = RdmaHandleManager::GetInstance().GetJfcHandleAndCqInfo(rdmaHandle, cqInfo_, jfcMode);
     } else {
         jfcHandle = RdmaHandleManager::GetInstance().GetJfcHandle(rdmaHandle, cqInfo_, jfcMode);
     }
-    if (sqDepth == UB_SQ_DEPTH_NOT_SET) {
+    if (sqDepth == UB_SQ_DEPTH_NOT_SET || sqDepth == 0) {
         sqDepth = OPBASED_UB_SQ_DEPTH_MAX;
         if (opMode == OpMode::OFFLOAD && !devUsed) {
             sqDepth = UB_SQ_OFFLOAD_DEPTH;
@@ -98,10 +113,10 @@ DevUbConnection::DevUbConnection(
 DevUbTpConnection::DevUbTpConnection(
     const RdmaHandle rdmaHandle, const IpAddress& locAddr, const IpAddress& rmtAddr, const OpMode opMode,
     const bool devUsed, const HrtUbJfcMode jfcMode, const IpAddress& locIpv4Addr, const IpAddress& rmtIpv4Addr, u8 qos,
-    u8 taTimeOut, CommEngine engine, u32 sqDepth, JettyMode jettyMode)
+    u8 taTimeOut, CommEngine engine, u32 sqDepth, u32 scqDepth, JettyMode jettyMode)
     : DevUbConnection(
           rdmaHandle, locAddr, rmtAddr, opMode, devUsed, jfcMode, locIpv4Addr, rmtIpv4Addr, qos, taTimeOut, engine,
-          sqDepth, jettyMode)
+          sqDepth, scqDepth, jettyMode)
 {
     tpProtocol = TpProtocol::TP;
 }
@@ -109,10 +124,10 @@ DevUbTpConnection::DevUbTpConnection(
 DevUbCtpConnection::DevUbCtpConnection(
     const RdmaHandle rdmaHandle, const IpAddress& locAddr, const IpAddress& rmtAddr, const OpMode opMode,
     const bool devUsed, const HrtUbJfcMode jfcMode, const IpAddress& locIpv4Addr, const IpAddress& rmtIpv4Addr, u8 qos,
-    u8 taTimeOut, CommEngine engine, u32 sqDepth, JettyMode jettyMode)
+    u8 taTimeOut, CommEngine engine, u32 sqDepth, u32 scqDepth, JettyMode jettyMode)
     : DevUbConnection(
           rdmaHandle, locAddr, rmtAddr, opMode, devUsed, jfcMode, locIpv4Addr, rmtIpv4Addr, qos, taTimeOut, engine,
-          sqDepth, jettyMode)
+          sqDepth, scqDepth, jettyMode)
 {
     tpProtocol = TpProtocol::CTP;
 }
@@ -120,10 +135,10 @@ DevUbCtpConnection::DevUbCtpConnection(
 DevUbUboeConnection::DevUbUboeConnection(
     const RdmaHandle rdmaHandle, const IpAddress& locAddr, const IpAddress& rmtAddr, const OpMode opMode,
     const bool devUsed, const HrtUbJfcMode jfcMode, const IpAddress& locIpv4Addr, const IpAddress& rmtIpv4Addr, u8 qos,
-    u8 taTimeOut, CommEngine engine, u32 sqDepth, JettyMode jettyMode)
+    u8 taTimeOut, CommEngine engine, u32 sqDepth, u32 scqDepth, JettyMode jettyMode)
     : DevUbConnection(
           rdmaHandle, locAddr, rmtAddr, opMode, devUsed, jfcMode, locIpv4Addr, rmtIpv4Addr, qos, taTimeOut, engine,
-          sqDepth, jettyMode)
+          sqDepth, scqDepth, jettyMode)
 {
     tpProtocol = TpProtocol::UBOE;
     jettyTimeOut = 16; // UBOE Jetty异步创建超时 hw_val=16 (对应8s)
@@ -132,10 +147,10 @@ DevUbUboeConnection::DevUbUboeConnection(
 DevUbRtpConnection::DevUbRtpConnection(
     const RdmaHandle rdmaHandle, const IpAddress& locAddr, const IpAddress& rmtAddr, const OpMode opMode,
     const bool devUsed, const HrtUbJfcMode jfcMode, const IpAddress& locAddrEid, const IpAddress& rmtAddrEid,
-    const u8 qos, u8 taTimeOut, CommEngine engine, u32 sqDepth, JettyMode jettyMode)
+    const u8 qos, u8 taTimeOut, CommEngine engine, u32 sqDepth, u32 scqDepth, JettyMode jettyMode)
     : DevUbConnection(
           rdmaHandle, locAddr, rmtAddr, opMode, devUsed, jfcMode, locAddrEid, rmtAddrEid, qos, taTimeOut, engine,
-          sqDepth, jettyMode)
+          sqDepth, scqDepth, jettyMode)
 {
     tpProtocol = TpProtocol::UB_RTP;
     // UB_RTP与UBOE同属UB传输，Jetty异步创建超时一致，均为16秒
@@ -827,7 +842,9 @@ void DevUbConnection::ReleaseOwnedJettyAndJfc(bool ctxValid)
         jettyHandle = 0;
     }
 
-    if (engine_ == COMM_ENGINE_AIV && jfcHandle != 0) {
+    // 释放独占 JFC：scqDepth 有效值时创建的独占 JFC，或 AIV 引擎创建的 JFC
+    // 共享 JFC（通过 RdmaHandleManager::GetJfcHandle 获取）由 RdmaHandleManager 统一管理，不在此释放
+    if ((isExclusiveJfc || engine_ == COMM_ENGINE_AIV) && jfcHandle != 0) {
         if (!ctxValid) {
             HCCL_WARNING(
                 "[DevUbConnection][%s] skip HrtRaUbDestroyJfc, "
@@ -837,6 +854,7 @@ void DevUbConnection::ReleaseOwnedJettyAndJfc(bool ctxValid)
             HrtRaUbDestroyJfc(rdmaHandle, jfcHandle);
         }
         jfcHandle = 0;
+        isExclusiveJfc = false;
     }
 }
 

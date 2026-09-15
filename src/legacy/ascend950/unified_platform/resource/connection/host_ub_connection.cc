@@ -27,7 +27,7 @@ constexpr u32 WQE_NUM_PER_SQE = 4;                   // URMA约束每个SQE包�
 
 HostUbConnection::HostUbConnection(
     const RdmaHandle rdmaHandle, const IpAddress& locAddr, const IpAddress& rmtAddr, const OpMode opMode,
-    const HrtUbJfcMode jfcMode, u8 qos)
+    const HrtUbJfcMode jfcMode, u8 qos, u32 inSqDepth, u32 inScqDepth)
     : RmaConnection(nullptr, RmaConnType::UB),
       rdmaHandle(rdmaHandle),
       locAddr(locAddr),
@@ -37,6 +37,7 @@ HostUbConnection::HostUbConnection(
       rmtEid(rmtAddr.GetEid()),
       locEid(locAddr.GetEid()),
       rmtReverseEid(rmtAddr.GetReverseEid()),
+      scqDepth(inScqDepth),
       qos_(qos)
 {
     HCCL_INFO("[HostUbConnection::HostUbConnection] rmtEid=%s", rmtEid.Describe().c_str());
@@ -45,17 +46,34 @@ HostUbConnection::HostUbConnection(
     dieId = dieIdAndFuncId.first;
     funcId = dieIdAndFuncId.second;
 
-    jfcHandle = RdmaHandleManager::GetInstance().GetJfcHandle(rdmaHandle, cqInfo_, jfcMode);
+    if (scqDepth != UB_SCQ_DEPTH_NOT_SET && scqDepth != 0) {
+        // 独占 JFC 创建路径：指定 scqDepth 时创建独占 JFC，不与其他 Channel 共享
+        jfcHandle = HrtRaUbCreateJfc(rdmaHandle, cqInfo_, jfcMode, scqDepth);
+        if (jfcHandle == 0) {
+            THROW<InternalException>(
+                "[HostUbConnection][Constructor] HrtRaUbCreateJfc failed, scqDepth[%u].", scqDepth);
+        }
+        isExclusiveJfc = true;
+        HCCL_INFO(
+            "[HostUbConnection][Constructor] exclusive JFC created, scqDepth[%u], jfcHandle[%llu].", scqDepth,
+            jfcHandle);
+    } else {
+        jfcHandle = RdmaHandleManager::GetInstance().GetJfcHandle(rdmaHandle, cqInfo_, jfcMode);
+    }
 
-    sqDepth = OPBASED_UB_SQ_DEPTH_MAX;
-    if (opMode == OpMode::OFFLOAD) {
-        sqDepth = UB_SQ_OFFLOAD_DEPTH;
+    if (inSqDepth != UB_SQ_DEPTH_NOT_SET && inSqDepth != 0) {
+        sqDepth = inSqDepth;
+    } else {
+        sqDepth = OPBASED_UB_SQ_DEPTH_MAX;
+        if (opMode == OpMode::OFFLOAD) {
+            sqDepth = UB_SQ_OFFLOAD_DEPTH;
+        }
     }
     HCCL_INFO(
         "rdmaHandle[%p] locAddr[%s] rmtAddr[%s] opMode[%u] jfcMode[%s] dieId[%u] funcId[%u] jfcHandle[%llu] "
-        "sqDepth[%u]",
+        "sqDepth[%u] scqDepth[%u] isExclusiveJfc[%d]",
         rdmaHandle, locAddr.Describe().c_str(), rmtAddr.Describe().c_str(), opMode, jfcMode.Describe().c_str(), dieId,
-        funcId, jfcHandle, sqDepth);
+        funcId, jfcHandle, sqDepth, scqDepth, isExclusiveJfc);
     if (sqDepth > (UINT32_MAX / UB_SQ_WQEBB_SIZE / WQE_NUM_PER_SQE)) {
         THROW<InternalException>("integer overflow occurs");
     }
@@ -63,16 +81,16 @@ HostUbConnection::HostUbConnection(
 
 HostUbTpConnection::HostUbTpConnection(
     const RdmaHandle rdmaHandle, const IpAddress& locAddr, const IpAddress& rmtAddr, const OpMode opMode,
-    const HrtUbJfcMode jfcMode, u8 qos)
-    : HostUbConnection(rdmaHandle, locAddr, rmtAddr, opMode, jfcMode, qos)
+    const HrtUbJfcMode jfcMode, u8 qos, u32 sqDepth, u32 scqDepth)
+    : HostUbConnection(rdmaHandle, locAddr, rmtAddr, opMode, jfcMode, qos, sqDepth, scqDepth)
 {
     tpProtocol = TpProtocol::TP;
 }
 
 HostUbCtpConnection::HostUbCtpConnection(
     const RdmaHandle rdmaHandle, const IpAddress& locAddr, const IpAddress& rmtAddr, const OpMode opMode,
-    const HrtUbJfcMode jfcMode, u8 qos)
-    : HostUbConnection(rdmaHandle, locAddr, rmtAddr, opMode, jfcMode, qos)
+    const HrtUbJfcMode jfcMode, u8 qos, u32 sqDepth, u32 scqDepth)
+    : HostUbConnection(rdmaHandle, locAddr, rmtAddr, opMode, jfcMode, qos, sqDepth, scqDepth)
 {
     tpProtocol = TpProtocol::CTP;
 }
@@ -416,6 +434,21 @@ void HostUbConnection::ReleaseResource()
             HrtRaUbDestroyJetty(jettyHandle_);
         }
         jettyHandle_ = 0;
+    }
+
+    // 释放独占 JFC：scqDepth 有效值时创建的独占 JFC
+    // 共享 JFC（通过 RdmaHandleManager::GetJfcHandle 获取）由 RdmaHandleManager 统一管理，不在此释放
+    if (isExclusiveJfc && jfcHandle != 0) {
+        if (!ctxValid) {
+            HCCL_WARNING(
+                "[HostUbConnection][%s] skip HrtRaUbDestroyJfc, "
+                "rdmaHandle=%p invalid, jfcHandle=0x%llx",
+                __func__, rdmaHandle, static_cast<unsigned long long>(jfcHandle));
+        } else {
+            HrtRaUbDestroyJfc(rdmaHandle, jfcHandle);
+        }
+        jfcHandle = 0;
+        isExclusiveJfc = false;
     }
 }
 

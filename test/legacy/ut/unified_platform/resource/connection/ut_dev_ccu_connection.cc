@@ -37,7 +37,10 @@ protected:
             .with(mockcpp::any(), mockcpp::any())
             .will(returnValue(HrtRaUbJettyCreatedOutParam()));
         MOCKER(HraGetDieAndFuncId).stubs().with(mockcpp::any()).will(returnValue(std::pair<uint32_t, uint32_t>(0, 0)));
-        MOCKER(HrtRaUbCreateJfc).stubs().with(mockcpp::any(), mockcpp::any()).will(returnValue(jfcHandle));
+        MOCKER(HrtRaUbCreateJfc)
+            .stubs()
+            .with(mockcpp::any(), mockcpp::any(), mockcpp::any(), mockcpp::any())
+            .will(returnValue(jfcHandle));
         MOCKER(RaUbImportJetty)
             .stubs()
             .with(mockcpp::any(), mockcpp::any(), mockcpp::any(), mockcpp::any())

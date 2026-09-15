@@ -19,9 +19,11 @@ extern "C" {
 
 static const uint32_t HCOMM_CHANNEL_MAGIC_WORD = 0x0fcf0f0fU;
 static const uint32_t HCOMM_CHANNEL_VERSION_ONE = 1U;
+static const uint32_t HCOMM_CHANNEL_VERSION_FOUR = 4U;
 /** ABI v3：相比 v1 增加 uint32_t qos 与 const char *channelName（channel 业务匹配标识） */
 /** ABI v4：相比 v3 增加 roceAttr.srcPortList（QP 源端口号，union 内字段，sizeof 不变） */
-static const uint32_t HCOMM_CHANNEL_VERSION = 4U;
+/** ABI v5：相比 v4 增加 ubAttr.scqDepth（UB SCQ 队列深度，union 内字段，sizeof 不变） */
+static const uint32_t HCOMM_CHANNEL_VERSION = 5U;
 
 // channelName标识最大长度（字节）
 static const uint32_t HCOMM_CHANNEL_NAME_MAX_LEN = 191U;
@@ -33,6 +35,7 @@ static const uint32_t HCOMM_CHANNEL_DESC_RAW_MAX_LEN = 128U; ///< HcommChannelDe
  *       ABI v1：HCOMM_CHANNEL_VERSION_ONE，无 union 之后的 qos 字段，见 HCOMM_CHANNEL_DESC_ABI_V1_SIZE。
  *       ABI v3：HCOMM_CHANNEL_VERSION，相比 v1 增加 uint32_t qos 与 const char *channelName（channel 业务匹配标识）。
  *       ABI v4：HCOMM_CHANNEL_VERSION，相比 v3 增加 roceAttr.srcPortList（QP 源端口号，union 内字段，sizeof 不变）。
+ *       ABI v5：HCOMM_CHANNEL_VERSION，相比 v4 增加 ubAttr.scqDepth（UB SCQ 队列深度，union 内字段，sizeof 不变）。
  */
 typedef struct {
     CommAbiHeader header;        ///< ABI头部，包含版本等信息
@@ -63,7 +66,10 @@ typedef struct {
             uint32_t qos; ///< HCCS QoS
         } hccsAttr;
         struct {
-            uint32_t sqDepth; ///< UB队列深度，0表示使用默认值, 0和0xffffffff表示使用默认值
+            uint32_t sqDepth; ///< UB SQ队列深度，0和0xffffffff表示使用默认值
+            // UB SCQ队列深度，0和0xffffffff表示使用默认值；有效值时JFC以独占模式创建，
+            // 仅支持HOST和AICPU场景，AIV不支持；HOST场景取值范围[64, 32768]，AICPU场景[64, 16384]
+            uint32_t scqDepth;
         } ubAttr;
         struct {
             uint8_t
