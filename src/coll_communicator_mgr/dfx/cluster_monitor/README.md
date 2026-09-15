@@ -13,7 +13,7 @@
 3. **异步建链**：每个远端UID启动独立线程 `CreateLinkWithRemotePonit` 进行 `SocketCreate` + 状态轮询，受 `HCCL_CONNECT_TIMEOUT` 控制超时。
 4. **周期心跳收发**：后台 `MonitorThread` 以 `BROADCAST_INTERVAL` 周期遍历所有socket，先 `SocketSendNb` 发心跳再 `SocketRecvNb` 收心跳；每 `HEARTBEAT_COUNT` 个周期累加 `lostNum`，达到 `HCCL_LOST_THRESHOLD`（30s）即判定 `LOST`。
 5. **异常状态传播**：节点 `LOST` 或 `CQE_ERR` 状态通过Ring链路向其他邻居广播（`SetStatus` → `errRankQueue_` → `ProcessExceptionEvent` → `SendFrame`）。
-6. **错误信息上抛**：通过 `__attribute__((constructor))` 注册的 `GetCqeErrInfoFromTaskException` 回调，将AICPU/CCU任务的CQE错误归集到 `cqeErrInfo_`，并以 `SetStatus(..., CLUSTER_MONITOR_CQE_ERR, true)` 触发广播；查询接口 `GetErrStatusVecFromCluserMonitor` 按优先级（CQE_ERR > LOST）格式化错误描述返回给上层。
+6. **错误信息上抛**：通过 `__attribute__((constructor))` 注册的 `GetCqeErrInfoFromTaskException` 回调，将AICPU/CCU任务的CQE错误信息记录为局部变量并格式化日志，并以 `SetStatus(..., CLUSTER_MONITOR_CQE_ERR, true)` 触发广播；查询接口 `GetErrStatusVecFromCluserMonitor` 按优先级（CQE_ERR > LOST）格式化错误描述返回给上层。
 
 模块整体属于DFX（Design For X）范畴，是HCCL在集群级提供"网络断连 / 对端CoreDump"可观测性的关键组件。
 
@@ -127,7 +127,7 @@ sequenceDiagram
     rect rgb(255, 245, 230)
     Note over Cb, CM: CQE 异常入口
     Cb->>CM: GetCqeErrInfoFromTaskException(remoteLocalId, status, eid, insId)
-    CM->>CM: cqeErrInfo_ 赋值
+    CM->>CM: 记录CQE错误信息(局部变量)
     CM->>CM: SetStatus(myUID, remoteUID, CQE_ERR, true)
     CM->>CM: errRankQueue_.push(myUID)<br/>errStatusQueue_.push(frame)
     end
@@ -269,7 +269,6 @@ classDiagram
         -linkThreadMap_ map~ClusterUIDType, thread~
         -errRankQueue_ queue~ClusterUIDType~
         -errStatusQueue_ queue~ClusterMonitorFrame~
-        -cqeErrInfo_ ErrorCqeInfo
     }
 
     %% ===== 关系 =====
@@ -285,7 +284,7 @@ classDiagram
     ClusterMonitor "1" o-- "*" MonitorLinkStatus : monitorLinkStatusMap_
     ClusterMonitor "1" o-- "*" HcclClusterMonitorUID : commIdMap_/clusterLinkContext_/linkThreadMap_
     ClusterMonitor "1" o-- "*" ClusterMonitorFrame : errStatusQueue_
-    ClusterMonitor "1" *-- "1" ErrorCqeInfo : cqeErrInfo_
+    ClusterMonitor ..> ErrorCqeInfo : 局部变量使用
     ClusterMonitor ..> MonitorLinkStatus : 嵌套枚举
     ClusterMonitor ..> FrameStatus : 嵌套结构
 ```

@@ -221,7 +221,7 @@ TEST_F(ClusterMonitorTest, Ut_RecvMonitorFrame_When_NormalInput_Expect_RecvFrame
     }
 }
 
-TEST_F(ClusterMonitorTest, Ut_GetCqeErrInfoFromTaskException_When_NormalInput_Expect_SetCqeErrInfo)
+TEST_F(ClusterMonitorTest, Ut_GetCqeErrInfoFromTaskException_When_NormalInput_Expect_SetCqeErrStatus)
 {
     std::string netInstId = "localInstance";
     u32 localId = 0;
@@ -230,6 +230,7 @@ TEST_F(ClusterMonitorTest, Ut_GetCqeErrInfoFromTaskException_When_NormalInput_Ex
     g_monitor.myRankUID_ = localUid;
     g_monitor.myRankNetInstId_ = netInstId;
     g_monitor.myRankLocalId_ = localId;
+    g_monitor.initialized_ = true;
 
     u32 remoteLocalId = 1;
     uint16_t status = 1;
@@ -239,11 +240,12 @@ TEST_F(ClusterMonitorTest, Ut_GetCqeErrInfoFromTaskException_When_NormalInput_Ex
 
     g_monitor.GetCqeErrInfoFromTaskException(remoteLocalId, status, localEid, remoteEid, remoteInsId);
 
-    EXPECT_EQ(g_monitor.cqeErrInfo_.cqeRemoteLocalId, remoteLocalId);
-    EXPECT_EQ(g_monitor.cqeErrInfo_.cqeStatus, status);
-    EXPECT_EQ(g_monitor.cqeErrInfo_.cqeLocalEid, localEid);
-    EXPECT_EQ(g_monitor.cqeErrInfo_.cqeRemoteEid, remoteEid);
-    EXPECT_EQ(g_monitor.cqeErrInfo_.cqeRemoteInsId, remoteInsId);
+    // 验证 SetStatus 将 localUid 的状态设为 CQE_ERR
+    ClusterUIDCxt remoteUidCxt(remoteInsId, remoteLocalId);
+    ClusterUIDType remoteUid = g_monitor.FormatUID(remoteUidCxt);
+    EXPECT_EQ(g_monitor.uid2FrameStatusMap_[localUid].status, ClusterMonitorStatus::CLUSTER_MONITOR_CQE_ERR);
+    EXPECT_EQ(g_monitor.uid2FrameStatusMap_[localUid].informer, remoteUid);
+    EXPECT_EQ(g_monitor.uid2FrameStatusMap_[localUid].needBroadcast, true);
 }
 
 TEST_F(ClusterMonitorTest, Ut_ProcessExceptionEvent_When_NormalQueue_Expect_SendFrames)

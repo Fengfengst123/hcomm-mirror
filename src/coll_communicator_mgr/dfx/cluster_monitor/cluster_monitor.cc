@@ -781,6 +781,10 @@ HcclResult ClusterMonitor::DeInit()
     }
     {
         std::unique_lock<std::mutex> lock(threadLock_);
+        if (commIdMap_.size() != 0) {
+            HCCL_WARNING("[%s] commIdMap_ is not empty, skip deinit", __func__);
+            return HCCL_SUCCESS;
+        }
         for (SocketHandle handler : pendingDestroySockets_) {
             if (handler == nullptr) {
                 continue;
@@ -871,10 +875,8 @@ HcclResult ClusterMonitor::UnRegisterToClusterMonitor(const hccl::CollComm* coll
     if (!UnregisterCommIdFromMaps(commId, remInQueue)) {
         return HCCL_SUCCESS;
     }
-    if (commIdMap_.size() == 0) {
-        HCCL_RUN_INFO("[%s]Entry HeartBeat DeInit.", __func__);
-        CHK_RET(DeInit());
-    }
+    HCCL_RUN_INFO("[%s]Entry HeartBeat DeInit.", __func__);
+    CHK_RET(DeInit());
     return HCCL_SUCCESS;
 }
 
@@ -915,15 +917,23 @@ void GetCqeErrInfoFromTaskException(
 void ClusterMonitor::GetCqeErrInfoFromTaskException(
     u32 remoteLocalId, uint16_t status, std::string localEid, std::string remoteEid, std::string remoteInsId)
 {
-    cqeErrInfo_.cqeRemoteLocalId = remoteLocalId;
-    cqeErrInfo_.cqeStatus = status;
-    cqeErrInfo_.cqeLocalEid = localEid;
-    cqeErrInfo_.cqeRemoteEid = remoteEid;
-    cqeErrInfo_.cqeRemoteInsId = remoteInsId;
+    if (initialized_ == false) {
+        HCCL_WARNING("[%s] Heartbeat has been destroyed, or not initialized", __func__);
+        return;
+    }
+    ErrorCqeInfo cqeErrInfo;
+    cqeErrInfo.cqeRemoteLocalId = remoteLocalId;
+    cqeErrInfo.cqeStatus = status;
+    cqeErrInfo.cqeLocalEid = localEid;
+    cqeErrInfo.cqeRemoteEid = remoteEid;
+    cqeErrInfo.cqeRemoteInsId = remoteInsId;
     ClusterUIDCxt remoteUIDcxt(remoteInsId, remoteLocalId);
     ClusterUIDType localUID = myRankUID_;
     ClusterUIDType remoteUID = FormatUID(remoteUIDcxt);
-    SetStatus(localUID, remoteUID, ClusterMonitorStatus::CLUSTER_MONITOR_CQE_ERR, true);
+    {
+        std::unique_lock<std::mutex> lock(threadLock_);
+        SetStatus(localUID, remoteUID, ClusterMonitorStatus::CLUSTER_MONITOR_CQE_ERR, true);
+    }
     time_t tmpt = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
     auto duration_us
         = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch());
@@ -931,15 +941,16 @@ void ClusterMonitor::GetCqeErrInfoFromTaskException(
     auto total_us = duration_us.count();
     // 分离秒和微秒部分
     auto microseconds = total_us % 1000000;
-    struct tm* now = localtime(&tmpt);
+    struct tm nowStruct = {};
+    struct tm* now = localtime_r(&tmpt, &nowStruct);
     char errorLinkLogBuffer[LOG_TMPBUF_SIZE];
 
     s32 stringRet = snprintf_s(
         errorLinkLogBuffer, LOG_TMPBUF_SIZE, LOG_TMPBUF_SIZE - 1U,
         "localInfo{local instanceId[%s], LocalId[%u], localEid[%s]}, remoteInfo{remote instanceId[%s], "
         "remoteLocalId[%u], remoteEid[%s]}",
-        myRankNetInstId_.c_str(), myRankLocalId_, cqeErrInfo_.cqeLocalEid.c_str(), cqeErrInfo_.cqeRemoteInsId.c_str(),
-        cqeErrInfo_.cqeRemoteLocalId, cqeErrInfo_.cqeRemoteEid.c_str());
+        myRankNetInstId_.c_str(), myRankLocalId_, cqeErrInfo.cqeLocalEid.c_str(), cqeErrInfo.cqeRemoteInsId.c_str(),
+        cqeErrInfo.cqeRemoteLocalId, cqeErrInfo.cqeRemoteEid.c_str());
     CHK_PRT_CONT(
         stringRet < 0,
         HCCL_ERROR("[ClusterMonitor][GetCqeErrInfoFromTaskException]snprintf error when log cqe error info"));
@@ -947,13 +958,13 @@ void ClusterMonitor::GetCqeErrInfoFromTaskException(
     if (now == nullptr) {
         HCCL_ERROR(
             "[%s][%s][%s]localtime fail, cqe error status[%u], %s", LOG_KEYWORDS_TASK_EXEC.c_str(),
-            LOG_KEYWORDS_HEARTBEAT_EVENT.c_str(), LOG_KEYWORDS_CQE_ERROR.c_str(), cqeErrInfo_.cqeStatus,
+            LOG_KEYWORDS_HEARTBEAT_EVENT.c_str(), LOG_KEYWORDS_CQE_ERROR.c_str(), cqeErrInfo.cqeStatus,
             errorLinkLogBuffer);
     } else {
         HCCL_ERROR(
             "[%s][%s][%s]cqe error status[%u], time:[%04d-%02d-%02d %02d:%02d:%02d.%06lld], %s",
             LOG_KEYWORDS_TASK_EXEC.c_str(), LOG_KEYWORDS_HEARTBEAT_EVENT.c_str(), LOG_KEYWORDS_CQE_ERROR.c_str(),
-            cqeErrInfo_.cqeStatus, now->tm_year + BASE_YEAR, now->tm_mon + 1, now->tm_mday, now->tm_hour, now->tm_min,
+            cqeErrInfo.cqeStatus, now->tm_year + BASE_YEAR, now->tm_mon + 1, now->tm_mday, now->tm_hour, now->tm_min,
             now->tm_sec, microseconds, errorLinkLogBuffer);
     }
     return;

@@ -236,7 +236,7 @@ private:
     bool clusterMonitorThreadFlag_ = false;
     std::unique_ptr<std::thread> clusterMonitorThread_;
     // 防止重复初始化
-    bool initialized_ = false;
+    std::atomic<bool> initialized_{false};
     uint32_t lostThreshold_ = 0;
     std::atomic<bool> isDeInit_{false};
     std::atomic<bool> linkThreadRunning_{false};
@@ -271,8 +271,6 @@ private:
 
     // 保存错误的节点
     std::queue<ClusterUIDType> errRankQueue_;
-
-    ErrorCqeInfo cqeErrInfo_;
 };
 } // namespace hcomm
 #endif // CLUSTER_MONITOR_H

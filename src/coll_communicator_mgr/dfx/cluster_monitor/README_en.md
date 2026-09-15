@@ -13,7 +13,7 @@ Core capabilities include:
 3. **Async link establishment**: Each remote UID starts an independent thread `CreateLinkWithRemotePonit` for `SocketCreate` + status polling, controlled by `HCCL_CONNECT_TIMEOUT`.
 4. **Periodic heartbeat send/receive**: The background `MonitorThread` traverses all sockets at `BROADCAST_INTERVAL` intervals, first `SocketSendNb` to send heartbeats then `SocketRecvNb` to receive heartbeats; `lostNum` accumulates every `HEARTBEAT_COUNT` cycles, and when `HCCL_LOST_THRESHOLD` (30s) is reached, the status is determined as `LOST`.
 5. **Abnormal status propagation**: Node `LOST` or `CQE_ERR` status is broadcast to other neighbors via the Ring link (`SetStatus` → `errRankQueue_` → `ProcessExceptionEvent` → `SendFrame`).
-6. **Error information reporting**: Through the `GetCqeErrInfoFromTaskException` callback registered via `__attribute__((constructor))`, CQE errors from AICPU/CCU tasks are collected into `cqeErrInfo_`, and triggered via `SetStatus(..., CLUSTER_MONITOR_CQE_ERR, true)` to broadcast; the query interface `GetErrStatusVecFromCluserMonitor` formats error descriptions by priority (CQE_ERR > LOST) and returns them to the upper layer.
+6. **Error information reporting**: Through the `GetCqeErrInfoFromTaskException` callback registered via `__attribute__((constructor))`, CQE errors from AICPU/CCU tasks are recorded as local variables and formatted for logging, and triggered via `SetStatus(..., CLUSTER_MONITOR_CQE_ERR, true)` to broadcast; the query interface `GetErrStatusVecFromCluserMonitor` formats error descriptions by priority (CQE_ERR > LOST) and returns them to the upper layer.
 
 The module belongs to the DFX (Design For X) category and is a key component of HCCL for providing "network disconnection / peer CoreDump" observability at the cluster level.
 
@@ -127,7 +127,7 @@ sequenceDiagram
     rect rgb(255, 245, 230)
     Note over Cb, CM: CQE Exception Entry
     Cb->>CM: GetCqeErrInfoFromTaskException(remoteLocalId, status, eid, insId)
-    CM->>CM: Assign cqeErrInfo_
+    CM->>CM: Record CQE error info (local variable)
     CM->>CM: SetStatus(myUID, remoteUID, CQE_ERR, true)
     CM->>CM: errRankQueue_.push(myUID)<br/>errStatusQueue_.push(frame)
     end
@@ -269,7 +269,6 @@ classDiagram
         -linkThreadMap_ map~ClusterUIDType, thread~
         -errRankQueue_ queue~ClusterUIDType~
         -errStatusQueue_ queue~ClusterMonitorFrame~
-        -cqeErrInfo_ ErrorCqeInfo
     }
 
     %% ===== Relationships =====
@@ -285,7 +284,7 @@ classDiagram
     ClusterMonitor "1" o-- "*" MonitorLinkStatus : monitorLinkStatusMap_
     ClusterMonitor "1" o-- "*" HcclClusterMonitorUID : commIdMap_/clusterLinkContext_/linkThreadMap_
     ClusterMonitor "1" o-- "*" ClusterMonitorFrame : errStatusQueue_
-    ClusterMonitor "1" *-- "1" ErrorCqeInfo : cqeErrInfo_
+    ClusterMonitor ..> ErrorCqeInfo : local variable usage
     ClusterMonitor ..> MonitorLinkStatus : nested enum
     ClusterMonitor ..> FrameStatus : nested struct
 ```
