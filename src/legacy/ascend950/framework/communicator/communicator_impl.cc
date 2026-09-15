@@ -50,7 +50,6 @@
 #include "comm_topo_desc_v2.h"
 #include "hostdpu/flush_manager.h"
 #include "hostdpu/dpu_kernel_entrance.h"
-#include "p2p_enable_manager.h"
 #include "adapter_error_manager_pub.h"
 #include "ccu_context_all_to_all_v_mesh1d.h"
 #include "topo_addr_info.h"
@@ -160,7 +159,6 @@ HcclResult CommunicatorImpl::InitCommResource(const CommParams& commParams)
     InitCcuSuperFastLoad();
     InitNotifyManager();
     InitStreamManager();
-    CHK_RET(InitPreResource());
     InitSocketManager();
     InitRmaConnManager();
     InitDataBufferManager();
@@ -1622,25 +1620,6 @@ void CommunicatorImpl::InitCcuSuperFastLoad()
         taskExceptionEnv, hostApiState, nodeState, l0State, l1State);
 }
 
-HcclResult CommunicatorImpl::InitPreResource()
-{
-    // PCIE链路的两端实现enableP2P
-    auto links = GetFullMeshLinks();
-    for (auto link : links) {
-        if (link.GetLinkProtocol() == LinkProtocol::PCIE) {
-            DeviceId remotePhyId = link.GetRemoteDeviceId();
-            enableP2PDevices_.push_back(remotePhyId);
-        }
-    }
-    CHK_RET(P2PEnableManager::GetInstance().EnableP2P(enableP2PDevices_));
-    return HcclResult::HCCL_SUCCESS;
-}
-
-void CommunicatorImpl::DeInitPreResource()
-{
-    (void)P2PEnableManager::GetInstance().DisableP2P(devLogicId, enableP2PDevices_);
-}
-
 void CommunicatorImpl::InitSocketManager()
 {
     socketManager = std::make_unique<SocketManager>(*this, myRank, devPhyId, devLogicId);
@@ -2531,8 +2510,6 @@ void CommunicatorImpl::DestroyImpl()
         HrtFree(notifyFixedValue);
         notifyFixedValue = nullptr;
     }
-
-    DeInitPreResource();
 }
 
 HcclResult CommunicatorImpl::DestroyDpuKernelResource()

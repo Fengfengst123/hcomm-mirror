@@ -11,6 +11,8 @@
 #ifndef P2P_TRANSPORT_H
 #define P2P_TRANSPORT_H
 
+#include <chrono>
+
 #include "base_mem_transport.h"
 #include "virtual_topo.h"
 #include "ipc_remote_notify.h"
@@ -25,7 +27,7 @@ public:
         CommonLocRes& commonLocRes, Attribution& attr, const LinkData& linkData, const Socket& socket,
         std::function<void(u32 streamId, u32 taskId, TaskParam taskParam)> callback);
 
-    ~P2PTransport() override = default;
+    ~P2PTransport() override;
 
     std::string Describe() const override;
 
@@ -56,8 +58,13 @@ private:
     MemoryBuffer GetRmtMemBuffer(const RmtRmaBufferSlice& rmtSlice) const;
 
     MAKE_ENUM(
-        P2PStatus, INIT, SOCKET_OK, SEND_PID, RECV_PID, GRANT, SEND_DATA, RECV_DATA, SEND_DATA_SIZE, RECV_DATA_SIZE)
+        P2PStatus, INIT, P2P_ENABLING, SOCKET_OK, SEND_PID, RECV_PID, GRANT, SEND_DATA, RECV_DATA, SEND_DATA_SIZE,
+        RECV_DATA_SIZE)
     P2PStatus p2pStatus{P2PStatus::INIT};
+
+    bool p2pEnableStarted_{false}; // enable p2p 是否已成功下发（与 manager 引用计数对应，失败不置位）
+    u32 localDeviceLogicId_{0}; // 触发 enable p2p 时的本地逻辑 device id，供析构对称 disable 使用
+    std::chrono::steady_clock::time_point p2pEnableStartTime_{}; // enable p2p 触发时刻，用于成功日志耗时统计
 
     u32 pidMsgSize{0};
     u32 myPid{0};
@@ -76,6 +83,8 @@ private:
     std::vector<char> recvData;
 
     bool IsRmtPidValid() const;
+    bool TriggerEnableP2P(); // 自环链路（对端即本设备）不支持 enable p2p，返回 false 跳过使能
+    bool IsP2PEnabled();
     void SendPid();
     void RecvPid();
     void Grant() const;

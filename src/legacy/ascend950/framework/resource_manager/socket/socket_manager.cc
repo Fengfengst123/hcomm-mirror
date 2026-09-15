@@ -18,8 +18,6 @@
 #include "exception_util.h"
 #include "stl_util.h"
 #include "preempt_port_manager_v2.h"
-#include "timeout_exception.h"
-#include "p2p_enable_manager.h"
 #include "phy_topo_builder.h"
 
 namespace Hccl {
@@ -30,15 +28,7 @@ void SocketManager::PrepareLinkAndServerInit(const SocketConfig& socketConfig)
     LinkData link = socketConfig.link;
 
     if (!Contain(availableLinks, link)) {
-        if (link.GetLinkProtocol() == LinkProtocol::PCIE) {
-            std::vector<uint32_t> remoteDevices;
-            remoteDevices.push_back(link.GetRemoteDeviceId());
-            auto ret = P2PEnableManager::GetInstance().WaitP2PEnabled(remoteDevices);
-            if (ret != HCCL_SUCCESS) {
-                THROW<TimeoutException>(
-                    StringFormat("WaitP2PEnabled failed, devicePhyId=%d", link.GetRemoteDeviceId()));
-            }
-        }
+        // p2p使能等待已下沉到 P2PTransport::GetStatus 状态机，socket建链不再阻塞等待p2p使能
         availableLinks.insert({link});
     }
 
@@ -75,17 +65,7 @@ void SocketManager::BatchCreateSockets(const vector<LinkData>& links)
         return;
     }
 
-    for (auto& link : pendingLinks) {
-        if (link.GetLinkProtocol() == LinkProtocol::PCIE) {
-            std::vector<uint32_t> remoteDevices;
-            remoteDevices.push_back(link.GetRemoteDeviceId());
-            auto ret = P2PEnableManager::GetInstance().WaitP2PEnabled(remoteDevices);
-            if (ret != HCCL_SUCCESS) {
-                THROW<TimeoutException>(
-                    StringFormat("WaitP2PEnabled failed, devicePhyId=%d", link.GetRemoteDeviceId()));
-            }
-        }
-    }
+    // p2p使能等待已下沉到 P2PTransport::GetStatus 状态机，socket建链不再阻塞等待p2p使能
     BatchServerInit(pendingLinks);
     BatchAddWhiteList(pendingLinks);
     BatchCreateConnectedSockets(pendingLinks);

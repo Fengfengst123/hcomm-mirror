@@ -13,6 +13,7 @@
 
 #include <set>
 #include <mutex>
+#include <atomic>
 #include <utility>
 #include <map>
 #include <functional>
@@ -26,11 +27,11 @@
 
 namespace Hccl {
 
-enum class P2PStatus { P2P_STATUS_DISABLED = 0, P2P_STATUS_ENABLING, P2P_STATUS_ENABLED };
+enum class P2PConnStatus { P2P_CONN_STATUS_DISABLED = 0, P2P_CONN_STATUS_ENABLING, P2P_CONN_STATUS_ENABLED };
 
 using P2PConnectionInfo = struct P2PConnectionInfoDef {
-    uint32_t reference = 0;
-    P2PStatus status = P2PStatus::P2P_STATUS_DISABLED;
+    std::atomic<uint32_t> reference{0}; // 引用计数，原子操作避免并发问题
+    P2PConnStatus status = P2PConnStatus::P2P_CONN_STATUS_DISABLED;
 };
 
 class P2PEnableManager {
@@ -41,8 +42,11 @@ public:
     std::set<std::pair<u32, u32>> GetSet() { return devicePairs; }
 
     HcclResult EnableP2P(std::vector<uint32_t> remoteDevices);
-    HcclResult WaitP2PEnabled(std::vector<uint32_t> remoteDevices);
     HcclResult DisableP2P(uint32_t localDeviceLogicID, std::vector<uint32_t> remoteDevices);
+
+    // 非阻塞单次查询 p2p 使能状态：缓存已使能或驱动侧已使能时返回 isEnabled=true，未使能时直接返回，
+    // 由调用方通过轮询驱动状态机推进
+    HcclResult WaitP2PEnabled(uint32_t localDeviceLogicID, uint32_t remoteDevicePhysicID, bool& isEnabled);
 
     ~P2PEnableManager();
 
@@ -56,8 +60,6 @@ private:
     P2PEnableManager& operator=(const P2PEnableManager& other) = delete;
 
     HcclResult EnableP2P(uint32_t localDeviceLogicID, uint32_t remoteDevicePhysicID);
-    HcclResult WaitP2PEnabled(uint32_t localDeviceLogicID, uint32_t remoteDevicePhysicID);
-    HcclResult WaitP2PConnected(uint32_t localDeviceLogicID, uint32_t remoteDevicePhysicID) const;
     HcclResult DisableP2P(uint32_t localDeviceLogicID, uint32_t remoteDevicePhysicID);
 
     std::array<std::map<uint32_t, P2PConnectionInfo>, MAX_MODULE_DEVICE_NUM> connectionsInfo_;

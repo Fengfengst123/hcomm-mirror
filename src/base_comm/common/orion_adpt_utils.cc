@@ -191,7 +191,11 @@ EndpointDescPairToLinkData(const EndpointDesc& locEp, const EndpointDesc& rmtEp,
 
     // 开源开放架构下comms层级不感知通信域层级的rank信息
     // 当前复用orion数据结构故使用devId替换
-    linkData = Hccl::LinkData(portDeploymentType, linkProtocol, locDevPhyId, rmtDevPhyId, locAddr, rmtAddr, reuseIdx);
+    // 注意：devicePhyId/remoteDevicePhyId 也需显式传入，否则 remoteDeviceId_ 取默认值 0，
+    // 会导致按需 enable p2p 时对端物理设备ID错误
+    linkData = Hccl::LinkData(
+        portDeploymentType, linkProtocol, locDevPhyId, rmtDevPhyId, locAddr, rmtAddr, locDevPhyId, rmtDevPhyId,
+        reuseIdx);
 
     return HCCL_SUCCESS;
 }

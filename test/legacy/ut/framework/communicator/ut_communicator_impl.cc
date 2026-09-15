@@ -4006,7 +4006,6 @@ TEST_F(CommunicatorImplTest, Ut_Destructor_When_TaskExpMemMapHasEntry_Expect_Era
     MOCKER_CPP(&CommunicatorImpl::DestroyDpuTaskexpShmemInDevice).stubs().will(returnValue(HCCL_SUCCESS));
     MOCKER_CPP(&CommunicatorImpl::DestroyKFCWorkSpaceVA).stubs().will(returnValue(HCCL_SUCCESS));
     MOCKER_CPP(&CommunicatorImpl::NotifyAicpuDestroyComm).stubs().will(returnValue(HCCL_SUCCESS));
-    MOCKER_CPP(&CommunicatorImpl::DeInitPreResource).stubs();
 
     delete comm;
 
@@ -4059,7 +4058,6 @@ TEST_F(CommunicatorImplTest, Ut_LaunchDpuKernel_When_DpuTaskexpShmemValid_Expect
     MOCKER_CPP(&CommunicatorImpl::DestroyDpuTaskexpShmemInDevice).stubs().will(returnValue(HCCL_SUCCESS));
     MOCKER_CPP(&CommunicatorImpl::DestroyKFCWorkSpaceVA).stubs().will(returnValue(HCCL_SUCCESS));
     MOCKER_CPP(&CommunicatorImpl::NotifyAicpuDestroyComm).stubs().will(returnValue(HCCL_SUCCESS));
-    MOCKER_CPP(&CommunicatorImpl::DeInitPreResource).stubs();
 
     free(comm.hostShareBuf);
     comm.hostShareBuf = nullptr;

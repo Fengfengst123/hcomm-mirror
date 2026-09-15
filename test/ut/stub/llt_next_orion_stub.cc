@@ -1810,6 +1810,9 @@ P2PTransport::P2PTransport(
     : BaseMemTransport(commonLocRes, attr, linkData, socket, TransportType::P2P)
 {}
 
+// vtable 的 key function（第一个非 inline 虚函数），必须在桩中定义，否则 libhccl_llt.so 链接时 vtable 未定义
+P2PTransport::~P2PTransport() {}
+
 HcclResult P2PTransport::GetRemoteMems(uint32_t* memNum, CommMem** remoteMem, char*** memInfos) { return HCCL_SUCCESS; }
 
 HcclResult P2PTransport::GetUniqueIdV2(std::vector<char>& result) { return HCCL_SUCCESS; }

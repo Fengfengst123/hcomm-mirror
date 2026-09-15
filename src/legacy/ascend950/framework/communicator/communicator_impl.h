@@ -417,7 +417,6 @@ private:
     std::vector<CommLink> linkListVec;
     std::vector<uint32_t> ranksVec;
     std::vector<uint32_t> topoInstsVec;
-    std::vector<u32> enableP2PDevices_;
 
     NotifyTimeoutCfg notifyTimeoutCfg;
 
@@ -505,8 +504,6 @@ private:
     void InitCollService();
     void InitHccpHdc() const;
     void InitCcuSuperFastLoad();
-    HcclResult InitPreResource();
-    void DeInitPreResource();
     void InitSocketManager();
     void InitRmaConnManager();
     void InitNotifyFixedValue();

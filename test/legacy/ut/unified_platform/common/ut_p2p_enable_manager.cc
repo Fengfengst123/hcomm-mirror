@@ -68,3 +68,107 @@ TEST_F(P2PEnableManagerTest, disable_p2p_success_when_not_enable)
     HcclResult ret = P2PEnableManager::GetInstance().DisableP2P(1U, enableP2PDevices_);
     EXPECT_EQ(ret, HCCL_SUCCESS);
 }
+
+TEST_F(P2PEnableManagerTest, enable_p2p_failed_when_hrt_enable_p2p_failed)
+{
+    constexpr u32 localDeviceLogicID = 5U;
+    constexpr u32 remoteDevicePhysicID = 50U;
+    MOCKER(HrtGetDevice).stubs().will(returnValue(localDeviceLogicID));
+    MOCKER(HrtEnableP2P).stubs().will(returnValue(HCCL_E_RUNTIME));
+
+    // 驱动下发失败：EnableP2P 返回失败，且未持有引用计数
+    std::vector<u32> remoteDevices{remoteDevicePhysicID};
+    HcclResult ret = P2PEnableManager::GetInstance().EnableP2P(remoteDevices);
+    EXPECT_EQ(ret, HCCL_E_RUNTIME);
+
+    // enable 未成功执行时 wait 直接报错，isEnabled 保持 false
+    bool isEnabled = true;
+    ret = P2PEnableManager::GetInstance().WaitP2PEnabled(localDeviceLogicID, remoteDevicePhysicID, isEnabled);
+    EXPECT_EQ(ret, HCCL_E_INTERNAL);
+    EXPECT_FALSE(isEnabled);
+}
+
+TEST_F(P2PEnableManagerTest, wait_p2p_enabled_success_when_driver_not_enabled)
+{
+    constexpr u32 localDeviceLogicID = 5U;
+    constexpr u32 remoteDevicePhysicID = 50U;
+    MOCKER(HrtGetDevice).stubs().will(returnValue(localDeviceLogicID));
+    MOCKER(HrtEnableP2P).stubs().will(returnValue(HCCL_SUCCESS));
+    MOCKER(HrtDisableP2P).stubs().will(returnValue(HCCL_SUCCESS));
+    uint32_t drvStatus = DRV_P2P_STATUS_DISABLE;
+    MOCKER(HrtGetP2PStatus)
+        .stubs()
+        .with(mockcpp::any(), mockcpp::any(), outBoundP(&drvStatus, sizeof(drvStatus)))
+        .will(returnValue(HCCL_SUCCESS));
+
+    std::vector<u32> remoteDevices{remoteDevicePhysicID};
+    EXPECT_EQ(P2PEnableManager::GetInstance().EnableP2P(remoteDevices), HCCL_SUCCESS);
+
+    // 驱动侧尚未使能：单次查询返回 SUCCESS 且 isEnabled=false，由调用方下次轮询
+    bool isEnabled = true;
+    HcclResult ret
+        = P2PEnableManager::GetInstance().WaitP2PEnabled(localDeviceLogicID, remoteDevicePhysicID, isEnabled);
+    EXPECT_EQ(ret, HCCL_SUCCESS);
+    EXPECT_FALSE(isEnabled);
+
+    // 清理单例状态，保证用例间独立
+    EXPECT_EQ(P2PEnableManager::GetInstance().DisableP2P(localDeviceLogicID, remoteDevices), HCCL_SUCCESS);
+}
+
+TEST_F(P2PEnableManagerTest, wait_p2p_enabled_success_when_driver_enabled_and_cache_hit)
+{
+    constexpr u32 localDeviceLogicID = 5U;
+    constexpr u32 remoteDevicePhysicID = 50U;
+    MOCKER(HrtGetDevice).stubs().will(returnValue(localDeviceLogicID));
+    MOCKER(HrtEnableP2P).stubs().will(returnValue(HCCL_SUCCESS));
+    MOCKER(HrtDisableP2P).stubs().will(returnValue(HCCL_SUCCESS));
+    uint32_t drvStatus = DRV_P2P_STATUS_ENABLE;
+    // 限定驱动查询恰好一次：首次查询确认使能并写入缓存后，再次 wait 应命中缓存不再查驱动
+    MOCKER(HrtGetP2PStatus)
+        .expects(once())
+        .with(mockcpp::any(), mockcpp::any(), outBoundP(&drvStatus, sizeof(drvStatus)))
+        .will(returnValue(HCCL_SUCCESS));
+
+    std::vector<u32> remoteDevices{remoteDevicePhysicID};
+    EXPECT_EQ(P2PEnableManager::GetInstance().EnableP2P(remoteDevices), HCCL_SUCCESS);
+
+    // 首次查询：驱动侧已使能，返回 SUCCESS 且 isEnabled=true
+    bool isEnabled = false;
+    HcclResult ret
+        = P2PEnableManager::GetInstance().WaitP2PEnabled(localDeviceLogicID, remoteDevicePhysicID, isEnabled);
+    EXPECT_EQ(ret, HCCL_SUCCESS);
+    EXPECT_TRUE(isEnabled);
+
+    // 第二次调用命中缓存直接返回（HrtGetP2PStatus 恰好调用一次由 TearDown 的 verify 校验）
+    isEnabled = false;
+    ret = P2PEnableManager::GetInstance().WaitP2PEnabled(localDeviceLogicID, remoteDevicePhysicID, isEnabled);
+    EXPECT_EQ(ret, HCCL_SUCCESS);
+    EXPECT_TRUE(isEnabled);
+
+    EXPECT_EQ(P2PEnableManager::GetInstance().DisableP2P(localDeviceLogicID, remoteDevices), HCCL_SUCCESS);
+}
+
+TEST_F(P2PEnableManagerTest, wait_p2p_enabled_failed_when_hrt_get_p2p_status_failed)
+{
+    constexpr u32 localDeviceLogicID = 5U;
+    constexpr u32 remoteDevicePhysicID = 50U;
+    MOCKER(HrtGetDevice).stubs().will(returnValue(localDeviceLogicID));
+    MOCKER(HrtEnableP2P).stubs().will(returnValue(HCCL_SUCCESS));
+    MOCKER(HrtDisableP2P).stubs().will(returnValue(HCCL_SUCCESS));
+    MOCKER(HrtGetP2PStatus)
+        .stubs()
+        .with(mockcpp::any(), mockcpp::any(), mockcpp::any())
+        .will(returnValue(HCCL_E_RUNTIME));
+
+    std::vector<u32> remoteDevices{remoteDevicePhysicID};
+    EXPECT_EQ(P2PEnableManager::GetInstance().EnableP2P(remoteDevices), HCCL_SUCCESS);
+
+    // 驱动状态查询失败：返回错误码且 isEnabled=false
+    bool isEnabled = true;
+    HcclResult ret
+        = P2PEnableManager::GetInstance().WaitP2PEnabled(localDeviceLogicID, remoteDevicePhysicID, isEnabled);
+    EXPECT_EQ(ret, HCCL_E_RUNTIME);
+    EXPECT_FALSE(isEnabled);
+
+    EXPECT_EQ(P2PEnableManager::GetInstance().DisableP2P(localDeviceLogicID, remoteDevices), HCCL_SUCCESS);
+}

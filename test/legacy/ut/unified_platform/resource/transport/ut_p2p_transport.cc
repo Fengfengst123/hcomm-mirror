@@ -14,9 +14,11 @@
 #include "virtual_topo.h"
 #include "p2p_connection.h"
 #include "task.h"
+#include "p2p_enable_manager.h" // HrtEnableP2P/HrtDisableP2P/HrtGetP2PStatus 及 DRV_P2P_STATUS 状态定义由此带入
 #define protected public
 #include "p2p_transport.h"
 #undef protected
+#include "runtime_api_exception.h"
 #include "data_type.h"
 #include "reduce_op.h"
 #include "stream.h"
@@ -29,15 +31,9 @@
 #include "rma_buffer.h"
 using namespace Hccl;
 
-static int memcpy_stub(void* dest, int dest_max, const void* src, int count)
-{
-    memcpy(dest, src, count);
-    return 0;
-}
-
 class StubP2PRmaConnection : public P2PConnection {
 public:
-    StubP2PRmaConnection(const LinkData& linkData) : link(linkData), P2PConnection(nullptr, linkData, "tag") {}
+    StubP2PRmaConnection() : P2PConnection(nullptr, "tag") {}
 
     unique_ptr<BaseTask>
     PrepareRead(const MemoryBuffer& remoteMemBuf, const MemoryBuffer& localMemBuf, const SqeConfig& config) override
@@ -68,44 +64,7 @@ public:
     string Describe() const override { return "StubP2PRmaConnection"; }
 
     void Connect() override {}
-
-private:
-    LinkData link;
 };
-
-class StubSocket : public Socket {
-public:
-    StubSocket()
-        : Socket(
-              nullptr, IpAddress("1.0.0.0"), 0, IpAddress("1.0.0.0"), "tag", SocketRole::SERVER,
-              NicType::DEVICE_NIC_TYPE)
-    {
-        MOCKER(HrtRaSocketBlockSend).stubs().will(invoke(Send));
-        MOCKER(HrtRaSocketBlockRecv).stubs().will(invoke(Recv));
-    }
-
-    static bool Send(Socket* This, const u8* sendBuf, u32 size)
-    {
-        buf.resize(size);
-        memcpy(buf.data(), sendBuf, size);
-        // buf = const_cast<u8 *>(sendBuf);
-        return true;
-    }
-
-    static bool Recv(Socket* This, u8* recvBuf, u32 size)
-    {
-        if (buf.size() < size) {
-            return false;
-        }
-        memcpy(recvBuf, buf.data(), size);
-        return true;
-    }
-
-private:
-    static std::vector<char> buf;
-};
-
-std::vector<char> StubSocket::buf;
 
 class P2PTransportTest : public testing::Test {
 protected:
@@ -118,7 +77,10 @@ protected:
         std::cout << "A Test case in P2PTransport SetUP" << std::endl;
         MOCKER(HrtMemAsyncCopy).stubs().with(mockcpp::any());
         MOCKER(HrtReduceAsync).stubs().with(mockcpp::any());
-        MOCKER(aclrtCreateStreamWithConfig).stubs().with(mockcpp::any(), mockcpp::any()).will(returnValue((void*)100));
+        // aclrtCreateStreamWithConfig 新签名将 stream 改为出参且返回 aclError，mock 出参繁琐；
+        // 直接 mock 上层 HrtStreamCreateWithFlags 返回非空 fake 指针，避免真实 HrtStreamSetMode 空指针检查抛异常
+        MOCKER(HrtStreamCreateWithFlags).stubs().will(returnValue((void*)100));
+        MOCKER(HrtStreamDestroy).stubs();
         MOCKER(HrtGetStreamId).stubs().with(mockcpp::any()).will(returnValue(0));
         MOCKER(HrtGetDeviceType).stubs().will(returnValue((DevType)DevType::DEV_TYPE_910A2));
         MOCKER(HrtIpcOpenNotify).stubs().with(mockcpp::any()).will(returnValue((void*)fakeNotifyHandleAddr));
@@ -139,8 +101,6 @@ protected:
         std::cout << "A Test case in P2PTransport TearDown" << std::endl;
         GlobalMockObject::verify();
     }
-
-    std::shared_ptr<DevBuffer> devBuf = DevBuffer::Create(0x100, 0x100);
 
     RmaBufferSlice locSlice;
     RmtRmaBufferSlice rmtSlice;
@@ -198,165 +158,133 @@ TEST_F(P2PTransportTest, P2PTransport_is_socket_ready)
         .then(returnValue(socketStatusTimeout))
         .then(returnValue(socketStatusOK));
 
-    EXPECT_FALSE(transport.IsSocketReady());
-    EXPECT_THROW(transport.IsSocketReady(), TimeoutException);
+    EXPECT_FALSE(transport.IsSocketReady()); // INIT 状态未就绪
+    EXPECT_FALSE(transport.IsSocketReady()); // TIMEOUT 状态置 baseStatus=SOCKET_TIMEOUT 后返回 false
     EXPECT_TRUE(transport.IsSocketReady());
     EXPECT_TRUE(transport.IsSocketReady()); // baseStatus 为 SOCKET_OK 时，直接返回 true
 
     transport.socket = nullptr;
-    EXPECT_THROW(transport.IsSocketReady(), InternalException);
+    EXPECT_FALSE(transport.IsSocketReady()); // socket 为空时返回 false
 }
 
-TEST_F(P2PTransportTest, P2PTransport_get_status)
+// PCIE 链路按需 enable p2p 全流程：socket 未就绪也先下发 enable（避免 socket 与 p2p 互等），
+// 轮询驱动侧状态直至使能；析构时仅对已持有的引用对称执行 disable p2p
+TEST_F(P2PTransportTest, P2PTransport_get_status_pcie_enable_and_symmetric_disable)
 {
     BaseMemTransport::CommonLocRes locRes;
     BaseMemTransport::Attribution attr;
-    LinkData link(BasePortType(PortDeploymentType::P2P), 0, 1, 0, 1);
     IpAddress ipAddress("1.0.0.0");
+    LinkData link(PortDeploymentType::P2P, LinkProtocol::PCIE, 0, 1, ipAddress, ipAddress, 10, 20, 0);
     Socket fakeSocket(nullptr, ipAddress, 100, ipAddress, "tag", SocketRole::SERVER, NicType::DEVICE_NIC_TYPE);
 
-    P2PTransport transport(locRes, attr, link, fakeSocket);
-
-    MOCKER_CPP(&P2PTransport::SendPid).stubs().will(ignoreReturnValue());
-    MOCKER_CPP(&P2PTransport::RecvPid).stubs().will(ignoreReturnValue());
-    MOCKER_CPP(&P2PTransport::Grant).stubs().will(ignoreReturnValue());
-    MOCKER_CPP(&P2PTransport::SendExchangeData).stubs().will(ignoreReturnValue());
-    MOCKER_CPP(&P2PTransport::RecvExchangeData).stubs().will(ignoreReturnValue());
-
+    MOCKER(HrtGetDevicePhyIdByUserDevId).stubs().will(returnValue((DevId)10));
+    MOCKER(HrtEnableP2P).expects(once()).will(returnValue(HCCL_SUCCESS)); // INIT 首轮触发一次，后续轮询不重复下发
+    MOCKER(HrtDisableP2P).expects(once()).will(returnValue(HCCL_SUCCESS)); // 析构对称 disable 恰好一次
+    uint32_t drvStatus = DRV_P2P_STATUS_DISABLE;
+    MOCKER(HrtGetP2PStatus)
+        .stubs()
+        .with(mockcpp::any(), mockcpp::any(), outBoundP(&drvStatus, sizeof(drvStatus)))
+        .will(returnValue(HCCL_SUCCESS));
     SocketStatus socketStatusInit = SocketStatus::INIT;
+    MOCKER_CPP(&Socket::GetAsyncStatus).stubs().will(returnValue(socketStatusInit)); // socket 全程未就绪
+
+    {
+        P2PTransport transport(locRes, attr, link, fakeSocket);
+        // 第 1 轮：INIT 触发 enable p2p；socket 未就绪返回 INIT，但 enable 已成功下发
+        EXPECT_EQ(transport.GetStatus(), TransportStatus::INIT);
+        // 第 2 轮：驱动侧尚未使能，停留等待下次轮询
+        EXPECT_EQ(transport.GetStatus(), TransportStatus::INIT);
+        // 第 3 轮：驱动侧已使能，p2p 阶段完成进入 socket 建链阶段；socket 仍未就绪，等待建链
+        drvStatus = DRV_P2P_STATUS_ENABLE;
+        EXPECT_EQ(transport.GetStatus(), TransportStatus::INIT);
+    } // 析构：对称 disable p2p，引用计数归零
+}
+
+// 非 PCIE（HCCS）链路：设备内互联天然互通，不触发 enable p2p，析构亦不执行 disable
+TEST_F(P2PTransportTest, P2PTransport_get_status_non_pcie_skip_enable)
+{
+    BaseMemTransport::CommonLocRes locRes;
+    BaseMemTransport::Attribution attr;
+    IpAddress ipAddress("1.0.0.0");
+    LinkData link(PortDeploymentType::P2P, LinkProtocol::HCCS, 0, 1, ipAddress, ipAddress, 10, 20, 0);
+    Socket fakeSocket(nullptr, ipAddress, 100, ipAddress, "tag", SocketRole::SERVER, NicType::DEVICE_NIC_TYPE);
+
+    MOCKER(HrtEnableP2P).expects(never());  // 协议过滤：非 PCIE 链路不触发 enable p2p
+    MOCKER(HrtDisableP2P).expects(never()); // 未持有引用，析构不执行对称 disable
+    SocketStatus socketStatusInit = SocketStatus::INIT;
+    MOCKER_CPP(&Socket::GetAsyncStatus).stubs().will(returnValue(socketStatusInit));
+
+    {
+        P2PTransport transport(locRes, attr, link, fakeSocket);
+        // 首轮轮询：跳过 p2p 使能阶段直接进入 socket 建链阶段，socket 未就绪保持 INIT
+        EXPECT_EQ(transport.GetStatus(), TransportStatus::INIT);
+        EXPECT_EQ(transport.GetStatus(), TransportStatus::INIT);
+    }
+}
+
+// 自环链路（对端物理设备即本设备）：enable p2p 不支持与自身执行，跳过使能
+TEST_F(P2PTransportTest, P2PTransport_get_status_self_loop_skip_enable)
+{
+    BaseMemTransport::CommonLocRes locRes;
+    BaseMemTransport::Attribution attr;
+    IpAddress ipAddress("1.0.0.0");
+    LinkData link(PortDeploymentType::P2P, LinkProtocol::PCIE, 0, 1, ipAddress, ipAddress, 10, 10, 0);
+    Socket fakeSocket(nullptr, ipAddress, 100, ipAddress, "tag", SocketRole::SERVER, NicType::DEVICE_NIC_TYPE);
+
+    MOCKER(HrtGetDevicePhyIdByUserDevId).stubs().will(returnValue((DevId)10)); // 与对端物理 id 相同，判定为自环
+    MOCKER(HrtEnableP2P).expects(never());                                     // 自环链路不触发 enable p2p
+    MOCKER(HrtDisableP2P).expects(never()); // 未持有引用，析构不执行对称 disable
+    SocketStatus socketStatusInit = SocketStatus::INIT;
+    MOCKER_CPP(&Socket::GetAsyncStatus).stubs().will(returnValue(socketStatusInit));
+
+    {
+        P2PTransport transport(locRes, attr, link, fakeSocket);
+        // 首轮轮询：自环跳过 p2p 使能阶段，socket 未就绪保持 INIT
+        EXPECT_EQ(transport.GetStatus(), TransportStatus::INIT);
+        EXPECT_EQ(transport.GetStatus(), TransportStatus::INIT);
+    }
+}
+
+// EnableP2P 下发失败：抛出 RuntimeApiException 且不持有引用，析构不执行对称 disable
+TEST_F(P2PTransportTest, P2PTransport_get_status_enable_failed_throw)
+{
+    BaseMemTransport::CommonLocRes locRes;
+    BaseMemTransport::Attribution attr;
+    IpAddress ipAddress("1.0.0.0");
+    LinkData link(PortDeploymentType::P2P, LinkProtocol::PCIE, 0, 1, ipAddress, ipAddress, 10, 20, 0);
+    Socket fakeSocket(nullptr, ipAddress, 100, ipAddress, "tag", SocketRole::SERVER, NicType::DEVICE_NIC_TYPE);
+
+    MOCKER(HrtGetDevicePhyIdByUserDevId).stubs().will(returnValue((DevId)10));
+    MOCKER(HrtEnableP2P).stubs().will(returnValue(HCCL_E_RUNTIME));
+    MOCKER(HrtDisableP2P).expects(never()); // enable 失败未增加引用计数，析构不执行 disable
+
+    {
+        P2PTransport transport(locRes, attr, link, fakeSocket);
+        EXPECT_THROW(transport.GetStatus(), RuntimeApiException);
+    }
+}
+
+// socket 就绪后推进握手：SOCKET_OK 发送数据长度（SendAsync），SEND_DATA_SIZE 接收对端数据长度（RecvAsync）
+TEST_F(P2PTransportTest, P2PTransport_get_status_handshake_advance_when_socket_ready)
+{
+    BaseMemTransport::CommonLocRes locRes;
+    BaseMemTransport::Attribution attr;
+    IpAddress ipAddress("1.0.0.0");
+    LinkData link(PortDeploymentType::P2P, LinkProtocol::HCCS, 0, 1, ipAddress, ipAddress, 10, 20, 0);
+    Socket fakeSocket(nullptr, ipAddress, 100, ipAddress, "tag", SocketRole::SERVER, NicType::DEVICE_NIC_TYPE);
+
+    MOCKER(HrtEnableP2P).expects(never());
+    MOCKER(HrtDisableP2P).expects(never());
     SocketStatus socketStatusOK = SocketStatus::OK;
-    MOCKER_CPP(&Socket::GetAsyncStatus).stubs().will(returnValue(socketStatusInit)).then(returnValue(socketStatusOK));
-
-    StubSocket stubSocket;
-    transport.socket = &stubSocket;
-
-    // 首次建链
-    TransportStatus transStatus = transport.GetStatus();
-    EXPECT_EQ(transStatus, TransportStatus::INIT);
-    EXPECT_EQ(transport.p2pStatus, P2PTransport::P2PStatus::INIT);
-
-    transStatus = transport.GetStatus();
-    EXPECT_EQ(transStatus, TransportStatus::SOCKET_OK);
-    EXPECT_EQ(transport.p2pStatus, P2PTransport::P2PStatus::SOCKET_OK);
-
-    transStatus = transport.GetStatus();
-    EXPECT_EQ(transStatus, TransportStatus::SOCKET_OK);
-    EXPECT_EQ(transport.p2pStatus, P2PTransport::P2PStatus::SEND_PID);
-
-    transStatus = transport.GetStatus();
-    EXPECT_EQ(transStatus, TransportStatus::SOCKET_OK);
-    EXPECT_EQ(transport.p2pStatus, P2PTransport::P2PStatus::RECV_PID);
-
-    transStatus = transport.GetStatus();
-    EXPECT_EQ(transStatus, TransportStatus::SOCKET_OK);
-    EXPECT_EQ(transport.p2pStatus, P2PTransport::P2PStatus::GRANT);
-
-    transStatus = transport.GetStatus();
-    EXPECT_EQ(transStatus, TransportStatus::SOCKET_OK);
-    EXPECT_EQ(transport.p2pStatus, P2PTransport::P2PStatus::SEND_DATA);
-
-    transStatus = transport.GetStatus();
-    EXPECT_EQ(transStatus, TransportStatus::READY);
-    EXPECT_EQ(transport.p2pStatus, P2PTransport::P2PStatus::RECV_DATA);
-
-    // 复位并重新打桩
-    transport.baseStatus = TransportStatus::INIT;
-    transport.p2pStatus = P2PTransport::P2PStatus::INIT;
-    transport.socket = &fakeSocket;
-    GlobalMockObject::verify();
-    MOCKER_CPP(&P2PTransport::SendPid).stubs().will(ignoreReturnValue());
-    MOCKER_CPP(&P2PTransport::RecvPid).stubs().will(ignoreReturnValue());
-    MOCKER_CPP(&P2PTransport::Grant).stubs().will(ignoreReturnValue());
-    MOCKER_CPP(&P2PTransport::SendExchangeData).stubs().will(ignoreReturnValue());
-    MOCKER_CPP(&P2PTransport::RecvExchangeData).stubs().will(ignoreReturnValue());
-    MOCKER_CPP(&Socket::GetStatus).stubs().will(returnValue(socketStatusInit)).then(returnValue(socketStatusOK));
-
-    // 增量建链
-    transStatus = transport.GetStatus();
-    EXPECT_EQ(transStatus, TransportStatus::INIT);
-    EXPECT_EQ(transport.p2pStatus, P2PTransport::P2PStatus::INIT);
-
-    transStatus = transport.GetStatus();
-    EXPECT_EQ(transStatus, TransportStatus::SOCKET_OK);
-    EXPECT_EQ(transport.p2pStatus, P2PTransport::P2PStatus::SOCKET_OK);
-
-    transStatus = transport.GetStatus();
-    EXPECT_EQ(transStatus, TransportStatus::SOCKET_OK);
-    EXPECT_EQ(transport.p2pStatus, P2PTransport::P2PStatus::GRANT);
-
-    transStatus = transport.GetStatus();
-    EXPECT_EQ(transStatus, TransportStatus::SOCKET_OK);
-    EXPECT_EQ(transport.p2pStatus, P2PTransport::P2PStatus::SEND_DATA);
-
-    transStatus = transport.GetStatus();
-    EXPECT_EQ(transStatus, TransportStatus::READY);
-    EXPECT_EQ(transport.p2pStatus, P2PTransport::P2PStatus::RECV_DATA);
-}
-
-TEST_F(P2PTransportTest, P2PTransport_send_recv_pid_and_grant)
-{
-    BaseMemTransport::CommonLocRes locRes;
-    BaseMemTransport::Attribution attr;
-    LinkData link(BasePortType(PortDeploymentType::P2P), 0, 1, 0, 1);
-    IpAddress ipAddress("1.0.0.0");
-    Socket fakeSocket(nullptr, ipAddress, 100, ipAddress, "tag", SocketRole::SERVER, NicType::DEVICE_NIC_TYPE);
-
-    StubP2PRmaConnection stubRmaConnection(link);
-    RmaConnection* rmaConnection = &stubRmaConnection;
-    locRes.connVec.push_back(rmaConnection);
-    IpcLocalNotify ipcLocalNotify;
-    BaseLocalNotify* validLocalNotify = &ipcLocalNotify;
-    locRes.notifyVec.push_back(validLocalNotify);
-    LocalIpcRmaBuffer ipcLocalRmaBuffer(devBuf);
-    LocalRmaBuffer* validLocalRmaBuffer = &ipcLocalRmaBuffer;
-    locRes.bufferVec.push_back(validLocalRmaBuffer);
+    MOCKER_CPP(&Socket::GetAsyncStatus).stubs().will(returnValue(socketStatusOK));
+    MOCKER_CPP(&Socket::SendAsync).expects(once()); // PrepareSendData 首拍发送交换数据
+    MOCKER_CPP(&Socket::RecvAsync).expects(once()); // RecvDataSize 接收对端数据长度
 
     P2PTransport transport(locRes, attr, link, fakeSocket);
-
-    StubSocket stubSocket;
-    transport.socket = &stubSocket;
-
-    // transport自己给自己发送
-    EXPECT_NO_THROW(transport.SendPid());
-    EXPECT_NO_THROW(transport.RecvPid());
-    EXPECT_EQ(transport.myPid, transport.rmtPid);
-
-    MOCKER_CPP(&IpcLocalNotify::Grant).stubs();
-    MOCKER_CPP(&LocalIpcRmaBuffer::Grant).stubs();
-
-    EXPECT_NO_THROW(transport.Grant());
-}
-
-TEST_F(P2PTransportTest, P2PTransport_send_recv_exchange_data)
-{
-    BaseMemTransport::CommonLocRes locRes;
-    BaseMemTransport::Attribution attr;
-    LinkData link(BasePortType(PortDeploymentType::P2P), 0, 1, 0, 1);
-    IpAddress ipAddress("1.0.0.0");
-    Socket fakeSocket(nullptr, ipAddress, 100, ipAddress, "tag", SocketRole::SERVER, NicType::DEVICE_NIC_TYPE);
-
-    StubP2PRmaConnection stubRmaConnection(link);
-    RmaConnection* rmaConnection = &stubRmaConnection;
-    locRes.connVec.push_back(rmaConnection);
-    IpcLocalNotify ipcLocalNotify;
-    BaseLocalNotify* validLocalNotify = &ipcLocalNotify;
-    locRes.notifyVec.push_back(validLocalNotify);
-    LocalIpcRmaBuffer ipcLocalRmaBuffer(devBuf);
-    LocalRmaBuffer* validLocalRmaBuffer = &ipcLocalRmaBuffer;
-    locRes.bufferVec.push_back(validLocalRmaBuffer);
-
-    P2PTransport transport(locRes, attr, link, fakeSocket);
-
-    MOCKER(memcpy_s).stubs().with().will(invoke(memcpy_stub));
-    MOCKER(HrtDeviceGetBareTgid).stubs().will(returnValue(100));
-
-    StubSocket stubSocket;
-    transport.socket = &stubSocket;
-
-    // transport自己给自己发送
-    EXPECT_NO_THROW(transport.SendExchangeData());
-    EXPECT_NO_THROW(transport.RecvExchangeData());
-    EXPECT_STREQ(transport.attr.handshakeMsg.data(), transport.rmtHandshakeMsg.data());
+    // 第 1 轮：非 PCIE 跳过使能，socket 就绪，PrepareSendData 推进到 SEND_DATA_SIZE
+    EXPECT_EQ(transport.GetStatus(), TransportStatus::SOCKET_OK);
+    // 第 2 轮：RecvDataSize 推进到 RECV_DATA_SIZE
+    EXPECT_EQ(transport.GetStatus(), TransportStatus::SOCKET_OK);
 }
 
 TEST_F(P2PTransportTest, P2PTransport_read_write_read_reduce_write_reduce)
@@ -367,7 +295,7 @@ TEST_F(P2PTransportTest, P2PTransport_read_write_read_reduce_write_reduce)
     IpAddress ipAddress("1.0.0.0");
     Socket fakeSocket(nullptr, ipAddress, 100, ipAddress, "tag", SocketRole::SERVER, NicType::DEVICE_NIC_TYPE);
 
-    StubP2PRmaConnection stubRmaConnection(link);
+    StubP2PRmaConnection stubRmaConnection;
     RmaConnection* rmaConnection = &stubRmaConnection;
     locRes.connVec.push_back(rmaConnection);
 
@@ -401,5 +329,4 @@ TEST_F(P2PTransportTest, P2PTransport_post_wait)
     transport.rmtNotifyVec.push_back(std::move(ipcRemoteNotify));
 
     transport.Post(0, stream);
-    transport.Wait(0, stream, 0);
 }

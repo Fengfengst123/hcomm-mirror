@@ -14,6 +14,8 @@
 #include "exchange_ipc_notify_dto.h"
 #include "exchange_ipc_buffer_dto.h"
 #include "user_remote_mem_getter.h"
+#include "p2p_enable_manager.h"
+#include "runtime_api_exception.h"
 
 namespace Hccl {
 
@@ -135,19 +137,41 @@ TransportStatus P2PTransport::GetStatus()
 {
     if (baseStatus == TransportStatus::READY) {
         return baseStatus;
-    } else if (baseStatus == TransportStatus::INIT) {
+    } else if (baseStatus == TransportStatus::INIT && !p2pEnableStarted_) {
         p2pStatus = P2PStatus::INIT;
     }
 
+    // 第一段状态机：按需触发 enable p2p 并轮询驱动侧状态（不依赖 socket）
+    switch (p2pStatus) {
+        case P2PStatus::INIT:
+            // 仅 PCIE 协议链路需要 enable p2p（HCCS 等设备内互联天然互通，无需使能）
+            if (linkData.GetLinkProtocol() == LinkProtocol::PCIE && TriggerEnableP2P()) {
+                p2pStatus = P2PStatus::P2P_ENABLING;
+            } else {
+                // 非 PCIE 协议或自环链路：无需 enable p2p，直接进入 socket 建链
+                p2pStatus = P2PStatus::SOCKET_OK;
+            }
+            break;
+        case P2PStatus::P2P_ENABLING:
+            if (!IsP2PEnabled()) {
+                return baseStatus;
+            }
+            p2pStatus = P2PStatus::SOCKET_OK;
+            break;
+        default:
+            break;
+    }
+
+    // socket 就绪检查。两点约束决定了它的位置必须在两段状态机之间：
+    // 1. 必须在 p2p 状态机之后：PCIE 链路 socket 连接走 vinc 通路依赖 p2p 使能，先查 socket 会互等死锁；
+    // 2. 必须每轮调用：GetAsyncStatus 内部推进 socket 异步状态机（SENDING/RECVING → OK），
+    //    若只在单个 case 内检查，握手各步之间 socket 状态无法推进，RecvAsync 会在 SENDING 状态下失败
     if (!IsSocketReady()) {
         return baseStatus;
     }
 
+    // 第二段状态机：socket 握手与数据交换
     switch (p2pStatus) {
-        case P2PStatus::INIT:
-            p2pStatus = P2PStatus::SOCKET_OK;
-            baseStatus = TransportStatus::SOCKET_OK;
-            break;
         case P2PStatus::SOCKET_OK:
             PrepareSendData();
             p2pStatus = P2PStatus::SEND_DATA_SIZE;
@@ -181,6 +205,66 @@ bool P2PTransport::IsRmtPidValid() const
 {
     // 优化方向：基于remoteAddr保存PID的单例，这样可以减少 PID交换
     return rmtPidValid;
+}
+
+P2PTransport::~P2PTransport()
+{
+    // 与 TriggerEnableP2P 对称：仅对已按需触发过 enable p2p 的链路，在析构时对称执行 disable p2p
+    if (!p2pEnableStarted_) {
+        return;
+    }
+    // 显式构造 vector 再传参：若直接传 {id} 花括号列表，重载解析会优先选中私有的单设备重载，导致访问错误
+    std::vector<uint32_t> remoteDevices{linkData.GetRemoteDeviceId()};
+    (void)P2PEnableManager::GetInstance().DisableP2P(localDeviceLogicId_, remoteDevices);
+}
+
+bool P2PTransport::TriggerEnableP2P()
+{
+    localDeviceLogicId_ = HrtGetDevice();
+    p2pEnableStartTime_ = TIME_NOW();
+
+    // enable p2p 不支持本设备与自身执行：与自己建立 transport 的自环链路无需使能，跳过 enable/wait 全流程
+    uint32_t localDevicePhysicId = HrtGetDevicePhyIdByUserDevId(localDeviceLogicId_);
+    if (linkData.GetRemoteDeviceId() == localDevicePhysicId) {
+        HCCL_INFO(
+            "self loop link, skip enable p2p. local physic id:%u, remote physic id:%u.", localDevicePhysicId,
+            linkData.GetRemoteDeviceId());
+        return false;
+    }
+
+    // 按需对当前链路的对端设备执行 enable p2p，不再于通信域初始化阶段全量下发
+    std::vector<uint32_t> remoteDevices{linkData.GetRemoteDeviceId()};
+    HcclResult ret = P2PEnableManager::GetInstance().EnableP2P(remoteDevices);
+    if (ret != HCCL_SUCCESS) {
+        MACRO_THROW(
+            RuntimeApiException, StringFormat("EnableP2P failed, remote physic id:%u.", linkData.GetRemoteDeviceId()));
+    }
+    // enable p2p 成功下发后才置位：EnableP2P 失败时 manager 引用计数未增加，此时不置位，
+    // 保证 p2pEnableStarted_ 与引用计数严格对应，析构时仅对已持有的引用执行对称 disable
+    p2pEnableStarted_ = true;
+    return true;
+}
+
+bool P2PTransport::IsP2PEnabled()
+{
+    // 通过 P2PEnableManager 提供的非阻塞接口单次查询驱动侧 p2p 状态，未使能时由状态机下次轮询，避免阻塞式等待
+    bool isEnabled = false;
+    HcclResult ret
+        = P2PEnableManager::GetInstance().WaitP2PEnabled(localDeviceLogicId_, linkData.GetRemoteDeviceId(), isEnabled);
+    if (ret != HCCL_SUCCESS) {
+        MACRO_THROW(
+            RuntimeApiException,
+            StringFormat(
+                "call WaitP2PEnabled failed, ret=%d, remote physic id:%u.", ret, linkData.GetRemoteDeviceId()));
+    }
+    if (isEnabled) {
+        HCCL_INFO(
+            "connected p2p success, take time [%lld]us. device info: local logic id:%u, remote physic id:%u.",
+            DURATION_US(TIME_NOW() - p2pEnableStartTime_).count(), localDeviceLogicId_, linkData.GetRemoteDeviceId());
+        return true;
+    }
+    // 超时判断由 GetStatus 的调用者（WaitTransportReady 等）统一进行，此处未使能时直接返回，待下次轮询
+    return false;
 }
 
 void P2PTransport::SendPid()
