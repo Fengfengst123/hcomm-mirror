@@ -282,7 +282,7 @@ HcclResult CollComm::CreatePrebuiltWorldTeam(
 }
 
 void CollComm::CollectLayerReachableRanks(
-    uint32_t netLayer, const uint32_t* ranks, uint32_t rankNum, ProtocolRankMap& reachableRanksByProtocol)
+    uint32_t netLayer, const uint32_t* ranks, uint32_t rankNum, ProtocolRankMap& reachableRanksByProtocol) const
 {
     for (uint32_t peerIndex = 0; peerIndex < rankNum; ++peerIndex) {
         if (ranks[peerIndex] == rankId_) {

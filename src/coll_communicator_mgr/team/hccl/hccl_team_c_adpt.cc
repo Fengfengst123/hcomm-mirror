@@ -34,7 +34,7 @@ using namespace hccl;
  */
 
 /* HcclTeamCreate入参校验 */
-static HcclResult CheckTeamCreateParam(HcclComm comm, const HcclTeamCreateDesc* desc, HcommTeamHandle* team)
+static HcclResult CheckTeamCreateParam(const HcclComm comm, const HcclTeamCreateDesc* desc, const HcommTeamHandle* team)
 {
     CHK_PTR_NULL(comm);
     CHK_PTR_NULL(desc);
@@ -174,7 +174,7 @@ static HcclResult CreateSubTeamWithSyncMem(
 
 /* 注册 team 的 syncMem 内存（team 粒度，仅首次注册一次）。
  * syncMemHandle 已存在则跳过注册；syncMemHandle 出参返回当前句柄（首次或已存在），供调用方日志使用。 */
-static HcclResult RegisterTeamSyncMem(HcommTeamHandle team, CollComm* collComm)
+static HcclResult RegisterTeamSyncMem(HcommTeamHandle team, const CollComm* collComm)
 {
     HcclMemHandle syncMemHandle = HcclTeamMgr::GetInstance().GetTeamSyncMemHandle(team);
     const std::string commId = collComm->GetCommId();
