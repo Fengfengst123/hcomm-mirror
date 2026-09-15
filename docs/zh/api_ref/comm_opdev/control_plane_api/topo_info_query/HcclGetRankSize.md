@@ -41,7 +41,7 @@ HcclResult HcclGetRankSize(HcclComm comm, uint32_t *rankSize)
 
 ## 约束说明
 
-无
+- HcclComm 需通过集合通信域创建接口获得，且保证在有效生命周期内。不允许传入无效指针作为通信域入参。
 
 ## 调用示例
 
