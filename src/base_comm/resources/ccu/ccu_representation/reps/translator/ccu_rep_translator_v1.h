@@ -35,7 +35,7 @@ namespace CcuRep {
 
         CcuRepTranslator(std::shared_ptr<CcuRepReferenceManager> refManager, const TransDep& transDep);
         static uint32_t GetInstrNum(const int32_t userDevId);
-        static CcuResReq GetResReq(const int32_t userDevId, uint8_t dieId);
+        static HcclResult GetResReq(const int32_t userDevId, uint8_t dieId, CcuResReq& resReq);
         void GetRes(CcuRepResource& res);
         CcuInstrInfo Translate(
             CcuKernel* ccuKernel, const std::vector<std::shared_ptr<CcuRepBase>>& repVec, uint16_t startInstrId,

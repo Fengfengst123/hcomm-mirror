@@ -414,7 +414,7 @@ public:
     RankId GetRemoteRank() const;
     const LinkData* GetLink() const override;
     Iterator Iter() const { return Iterator(readInsVec); };
-    void PushReadIns(unique_ptr<Instruction> readIns);
+    HcclResult PushReadIns(unique_ptr<Instruction> readIns);
 
 private:
     RankId remoteRank;
@@ -544,7 +544,7 @@ public:
     RankId GetRemoteRank() const;
     const LinkData* GetLink() const override;
     Iterator Iter() const { return Iterator(writeInsVec); };
-    void PushWriteIns(unique_ptr<Instruction> writeIns);
+    HcclResult PushWriteIns(unique_ptr<Instruction> writeIns);
 
 private:
     RankId remoteRank;

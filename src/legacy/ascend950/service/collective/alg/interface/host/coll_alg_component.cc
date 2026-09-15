@@ -383,7 +383,8 @@ HcclResult CollAlgComponent::Orchestrate(
 HcclResult CollAlgComponent::SetInsCollAlgExecutor(std::shared_ptr<InsCollAlgBase> insCollAlgExecutor) const
 {
     if (insCollAlgExecutor == nullptr) {
-        THROW<NullPtrException>(StringFormat("CollAlgComponent::SetInsCollAlgExecutor ptr is null"));
+        HCCL_ERROR("[CollAlgComponent::SetInsCollAlgExecutor] ptr is null");
+        return HcclResult::HCCL_E_PTR;
     }
     insCollAlgExecutor->SetMyRank(myRank_);
     insCollAlgExecutor->SetRankSize(rankSize_);

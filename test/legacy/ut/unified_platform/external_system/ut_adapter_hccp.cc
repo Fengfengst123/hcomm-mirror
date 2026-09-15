@@ -154,7 +154,7 @@ TEST_F(AdapterHccpTest, RaTlvRequest_nok)
     // when
 
     // then
-    EXPECT_THROW(HrtRaTlvRequest(tlv_handle, 1, 1), NetworkApiException);
+    EXPECT_EQ(HrtRaTlvRequest(tlv_handle, 1, 1), HcclResult::HCCL_E_NETWORK);
 }
 
 TEST_F(AdapterHccpTest, RaTlvRequestForCustomChannel_ok)
@@ -1342,7 +1342,7 @@ TEST_F(AdapterHccpTest, ut_HrtRaGetTpAttrAsync_When_RaGetTpAttrAsyncFails_Expect
     uint32_t attrBitmap = 0U;
     TpAttr attr{};
     RequestHandle reqHandle = 0;
-    EXPECT_THROW(HrtRaGetTpAttrAsync(0U, handle, 0x100ULL, attrBitmap, attr, reqHandle), NetworkApiException);
+    EXPECT_EQ(HrtRaGetTpAttrAsync(0U, handle, 0x100ULL, attrBitmap, attr, reqHandle), HcclResult::HCCL_E_NETWORK);
 }
 
 TEST_F(AdapterHccpTest, ut_RaUbGetTpInfoAsync_When_UboeProtocol_Expect_UboeFlagSet)

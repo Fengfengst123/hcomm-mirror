@@ -390,7 +390,7 @@ global:
         "Hccl::MirrorTaskManager::~MirrorTaskManager()";  # _ZN4Hccl17MirrorTaskManagerD1Ev
         "Hccl::P2PConnection::P2PConnection(Hccl::Socket*, std::string const&)";  # _ZN4Hccl13P2PConnectionC1EPNS_6SocketERKSs
         "Hccl::P2PTransport::GetRemoteMems(unsigned int*, CommMem**, char***)";  # _ZN4Hccl12P2PTransport13GetRemoteMemsEPjPP7CommMemPPPc
-        "Hccl::P2PTransport::GetUniqueIdV2()";  # _ZN4Hccl12P2PTransport13GetUniqueIdV2Ev
+        "Hccl::P2PTransport::GetUniqueIdV2(std::vector<char, std::allocator<char> >&)";  # _ZN4Hccl12P2PTransport13GetUniqueIdV2ERSt6vectorIcSaIcEE
         "Hccl::P2PTransport::P2PTransport(Hccl::BaseMemTransport::CommonLocRes&, Hccl::BaseMemTransport::Attribution&, Hccl::LinkData const&, Hccl::Socket const&)";  # _ZN4Hccl12P2PTransportC1ERNS_16BaseMemTransport12CommonLocResERNS1_11AttributionERKNS_8LinkDataERKNS_6SocketE
         "Hccl::PreemptPortManager::GetInstance(int)";  # _ZN4Hccl18PreemptPortManager11GetInstanceEi
         "Hccl::PreemptPortManager::ListenPreempt(std::shared_ptr<Hccl::Socket> const&, std::vector<Hccl::SocketPortRangeDef, std::allocator<Hccl::SocketPortRangeDef> > const&, unsigned int&)";  # _ZN4Hccl18PreemptPortManager13ListenPreemptERKSt10shared_ptrINS_6SocketEERKSt6vectorINS_18SocketPortRangeDefESaIS7_EERj
@@ -416,7 +416,7 @@ global:
         "Hccl::RdmaHandleManager::GetEidByIpv4Addr(Hccl::IpAddress const&, Hccl::IpAddress&)";  # _ZN4Hccl17RdmaHandleManager16GetEidByIpv4AddrERKNS_9IpAddressERS1_
         "Hccl::RdmaHandleManager::GetInstance()";  # _ZN4Hccl17RdmaHandleManager11GetInstanceEv
         "Hccl::RdmaHandleManager::GetJfcHandle(void*, Hccl::CqCreateInfo&, Hccl::HrtUbJfcMode)";  # _ZN4Hccl17RdmaHandleManager12GetJfcHandleEPvRNS_12CqCreateInfoENS_12HrtUbJfcModeE
-        "Hccl::RdmaHandleManager::GetRtpEnable(void*)";  # _ZN4Hccl17RdmaHandleManager12GetRtpEnableEPv
+        "Hccl::RdmaHandleManager::GetRtpEnable(void*, bool&)";  # _ZN4Hccl17RdmaHandleManager12GetRtpEnableEPvRb
         "Hccl::RdmaHandleManager::IsHandleValid(void*)";  # _ZN4Hccl17RdmaHandleManager13IsHandleValidEPv
         "Hccl::RdmaHandleManager::UboeIpv4ToEid(Hccl::IpAddress const&, Hccl::IpAddress&, unsigned int)";  # _ZN4Hccl17RdmaHandleManager13UboeIpv4ToEidERKNS_9IpAddressERS1_j
         "Hccl::RdmaLocalNotify::RdmaLocalNotify(void*, bool)";  # _ZN4Hccl15RdmaLocalNotifyC1EPvb
@@ -480,7 +480,7 @@ global:
         "Hccl::UbMemTransport::Describe(std::string&)";  # _ZN4Hccl14UbMemTransport8DescribeERSs
         "Hccl::UbMemTransport::GetRemoteMems(unsigned int*, CommMem**, char***)";  # _ZN4Hccl14UbMemTransport13GetRemoteMemsEPjPP7CommMemPPPc
         "Hccl::UbMemTransport::GetRemoteSeg(void const*, unsigned long long, unsigned long long*)";  # _ZN4Hccl14UbMemTransport12GetRemoteSegEPKvyPy
-        "Hccl::UbMemTransport::GetUniqueIdV2()";  # _ZN4Hccl14UbMemTransport13GetUniqueIdV2Ev
+        "Hccl::UbMemTransport::GetUniqueIdV2(std::vector<char, std::allocator<char> >&)";  # _ZN4Hccl14UbMemTransport13GetUniqueIdV2ERSt6vectorIcSaIcEE
         "Hccl::UbMemTransport::UbMemTransport(Hccl::BaseMemTransport::CommonLocRes&, Hccl::BaseMemTransport::Attribution&, Hccl::LinkData const&, Hccl::Socket const&, void*, Hccl::BaseMemTransport::LocCntNotifyRes&, bool)";  # _ZN4Hccl14UbMemTransportC1ERNS_16BaseMemTransport12CommonLocResERNS1_11AttributionERKNS_8LinkDataERKNS_6SocketEPvRNS1_15LocCntNotifyResEb
         "Hccl::UbMemTransport::UpdateMemInfo(std::vector<Hccl::LocalRmaBuffer*, std::allocator<Hccl::LocalRmaBuffer*> >&)";  # _ZN4Hccl14UbMemTransport13UpdateMemInfoERSt6vectorIPNS_14LocalRmaBufferESaIS3_EE
         "Hccl::UbTransportLiteImpl::GetRmtRmaBufSliceLite(Hccl::Buffer const&)";  # _ZN4Hccl19UbTransportLiteImpl21GetRmtRmaBufSliceLiteERKNS_6BufferE

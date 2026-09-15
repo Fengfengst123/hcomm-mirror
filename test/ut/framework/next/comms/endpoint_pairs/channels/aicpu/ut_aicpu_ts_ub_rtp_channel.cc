@@ -475,12 +475,13 @@ TEST_F(AicpuTsUbRtpChannelTest, Ut_PackingHelpers_EmptyVecs_NoCrash)
     SUCCEED();
 }
 
-TEST_F(AicpuTsUbRtpChannelTest, Ut_GetUniqueIdV2_NotReady_Throws)
+TEST_F(AicpuTsUbRtpChannelTest, Ut_GetUniqueIdV2_NotReady_Expect_E_INTERNAL)
 {
     HcommChannelDesc desc{};
     EndpointHandle ep = reinterpret_cast<EndpointHandle>(0x1);
     AicpuTsUbRtpChannel ch(ep, desc);
     ch.channelStatus = ChannelStatus::INIT;
 
-    EXPECT_ANY_THROW(ch.GetUniqueIdV2());
+    std::vector<char> uniqueIdV2;
+    EXPECT_EQ(ch.GetUniqueIdV2(uniqueIdV2), HcclResult::HCCL_E_INTERNAL);
 }

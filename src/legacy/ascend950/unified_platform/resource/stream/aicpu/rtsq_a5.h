@@ -73,9 +73,9 @@ public:
 
     bool IsRtsqQueueSpaceSufficient() override;
 
-    void CCoreNotifyWait(u64 waitAddr, u64 curTurnCntAddr, bool last) override;
+    HcclResult CCoreNotifyWait(u64 waitAddr, u64 curTurnCntAddr, bool last) override;
 
-    void CCoreNotifyRecord(u64 recordAddr, u64 curTurnCntAddr) override;
+    HcclResult CCoreNotifyRecord(u64 recordAddr, u64 curTurnCntAddr) override;
 
     HcclResult SetPreStreamSyncReady() override;
 

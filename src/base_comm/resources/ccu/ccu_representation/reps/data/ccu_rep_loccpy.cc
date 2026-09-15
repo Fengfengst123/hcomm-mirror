@@ -77,12 +77,14 @@ namespace CcuRep {
         }
     }
 
-    uint16_t CcuRepLocCpy::GetFirstBufId()
+    HcclResult CcuRepLocCpy::GetFirstBufId(uint16_t& result)
     {
         if (bufs.size() == 0) {
-            Hccl::THROW<Hccl::CcuApiException>("The length of CcuBuffer is 0!");
+            HCCL_ERROR("The length of CcuBuffer is 0!");
+            return HcclResult::HCCL_E_PARA;
         }
-        return bufs[0].Id();
+        result = bufs[0].Id();
+        return HcclResult::HCCL_SUCCESS;
     }
 
     uint16_t CcuRepLocCpy::GetUsedBufNum() { return bufs.size(); }

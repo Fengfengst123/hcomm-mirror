@@ -54,7 +54,7 @@ private:
     void BufferVecPack(BinaryStream& binaryStream);
 
     void RmtBufferVecUnpackProc(u32 locNum, BinaryStream& binaryStream, RemoteBufferVec& bufferVec);
-    bool ConnVecUnpackProc(BinaryStream& binaryStream);
+    HcclResult ConnVecUnpackProc(BinaryStream& binaryStream, bool& result);
 
     std::vector<char> GetBufferUniqueId(RemoteBufferVec& bufferVec);
 

@@ -121,8 +121,8 @@ HcclResult TransportUrmaMem::BatchBufferSlice(
     RmaOpMem localMem[MAX_DESC_NUM] = {};
 
     if (descNum > MAX_DESC_NUM) {
-        THROW<InternalException>(
-            StringFormat("[TransportUrmaMem][BatchBufferSlice] Desc item[%u] is out of range.", descNum));
+        HCCL_ERROR("[TransportUrmaMem][BatchBufferSlice] Desc item[%u] is out of range.", descNum);
+        return HcclResult::HCCL_E_INTERNAL;
     }
 
     for (u32 i = 0; i < descNum; i++) {
@@ -132,7 +132,8 @@ HcclResult TransportUrmaMem::BatchBufferSlice(
         u32 unitSize{0};
         HCCL_INFO("[TransportUrmaMem][BatchBufferSlice] SalGetDataTypeSize start");
         if (SalGetDataTypeSize(oneSideDescs[i].dataType, unitSize) != HCCL_SUCCESS) {
-            THROW<InternalException>(StringFormat("[TransportUrmaMem][BatchBufferSlice] Get dataType size failed!"));
+            HCCL_ERROR("[TransportUrmaMem][BatchBufferSlice] Get dataType size failed!");
+            return HcclResult::HCCL_E_INTERNAL;
         }
 
         u64 byteSize = oneSideDescs[i].count * unitSize;

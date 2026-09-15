@@ -161,12 +161,11 @@ HcclResult HrtRaTlvRequest(void* tlv_handle, u32 tlv_module_type, u32 tlv_ccu_ms
             HCCL_WARNING("[HrtRaTlvRequest]ra tlv request UNAVAIL. return: ret[%d]", ret);
             return HCCL_E_UNAVAIL;
         }
-        MACRO_THROW(
-            NetworkApiException,
-            StringFormat(
-                "[Request][RaTlv]errNo[0x%016llx] ra tlv request fail. params: tlv_handle=%p, tlv_module_type=%u, "
-                "tlv_ccu_msg_type=%u, return: ret=%d",
-                HCCL_ERROR_CODE(HcclResult::HCCL_E_NETWORK), tlv_handle, tlv_module_type, tlv_ccu_msg_type, ret));
+        HCCL_ERROR(
+            "[Request][RaTlv]errNo[0x%016llx] ra tlv request fail. params: tlv_handle=%p, tlv_module_type=%u, "
+            "tlv_ccu_msg_type=%u, return: ret=%d",
+            HCCL_ERROR_CODE(HcclResult::HCCL_E_NETWORK), tlv_handle, tlv_module_type, tlv_ccu_msg_type, ret);
+        return HcclResult::HCCL_E_NETWORK;
     }
 
     HCCL_INFO("tlv request success, tlv module type[%u], message type[%u]", tlv_module_type, tlv_ccu_msg_type);
@@ -772,9 +771,9 @@ HcclResult HrtRaSocketNonBlockSendHeart(const FdHandle fdHandle, void* data, u64
 
 HcclResult HrtRaSocketNonBlockRecvHeart(const FdHandle fdHandle, void* data, u64 size, u64* recvSize)
 {
-    CHECK_NULLPTR(fdHandle, "[HrtRaSocketNonBlockRecv] fdHandle is nullptr!");
-    CHECK_NULLPTR(data, "[HrtRaSocketNonBlockRecv] data is nullptr!");
-    CHECK_NULLPTR(recvSize, "[HrtRaSocketNonBlockRecv] recvSize is nullptr!");
+    CHK_PTR_NULL(fdHandle);
+    CHK_PTR_NULL(data);
+    CHK_PTR_NULL(recvSize);
     HCCL_DEBUG(
         "[HrtRaSocketNonBlockRecv] Input params: fdHandle=%p,data=%p, size=%llu, recvSize=%llu", fdHandle, data, size,
         *recvSize);
@@ -3253,7 +3252,7 @@ HcclResult HrtGetCcuMemInfo(
         HCCL_ERROR(
             "[Request][RaTlv]errNo[0x%016llx] ra tlv request fail. return: ret[%d], module type[%u], message type[%u]",
             HCCL_ERROR_CODE(HcclResult::HCCL_E_NETWORK), ret, tlv_module_type, send_msg.type);
-        throw NetworkApiException(StringFormat("call ra_tlv_request failed"));
+        return HcclResult::HCCL_E_NETWORK;
     }
     HrtSetMemInfoList(memInfoList, count, rsp->list);
     HCCL_INFO("tlv request success, tlv module type[%u], message type[%u]", tlv_module_type, send_msg.type);
@@ -3384,8 +3383,8 @@ HcclResult HrtRaGetTpAttrAsync(
     void* raReqHandle = nullptr;
     s32 ret = RaGetTpAttrAsync(handle, tpHandle, &attrBitmap, &attr, &raReqHandle);
     if (ret != 0) {
-        string msg = StringFormat("call RaGetTpAttrAsync failed, error code =%d.", ret);
-        THROW<NetworkApiException>(msg);
+        HCCL_ERROR("call RaGetTpAttrAsync failed, error code =%d.", ret);
+        return HcclResult::HCCL_E_NETWORK;
     }
 
     CHK_RET(WaitRequestResult(raReqHandle, reqHandle));

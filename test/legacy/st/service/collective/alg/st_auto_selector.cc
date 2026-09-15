@@ -407,7 +407,12 @@ TEST_F(AutoSelectorTest, TestAutoSelectorTwoTimesTwoAicpu)
 
     std::string hcclAlgo = "level0:fullmesh;level1:NA";
     std::cout << hcclAlgo << std::endl;
-    EnvConfig::GetInstance().algoCfg.hcclAlgoConfig.value = SetHcclAlgoConfig(hcclAlgo);
+    std::map<OpType, std::vector<HcclAlgoType>> algoConfig;
+    if (SetHcclAlgoConfig(hcclAlgo, algoConfig) != HcclResult::HCCL_SUCCESS) {
+        std::cout << "SetHcclAlgoConfig failed for hcclAlgo[" << hcclAlgo << "]" << std::endl;
+        return;
+    }
+    EnvConfig::GetInstance().algoCfg.hcclAlgoConfig.value = algoConfig;
     status = ExecuteSelector().SetVirtualTopo(&virtTopo).Run(opAllGather, params, allGatherAlgName);
     EXPECT_EQ(allGatherAlgName, "InsAllGatherMesh2D");
     std::cout << "The setted allgather insCollAlgName: " << allGatherAlgName << std::endl;

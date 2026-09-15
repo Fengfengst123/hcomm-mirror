@@ -242,7 +242,7 @@ TEST_F(SqeMgrTest, test_config_functions) { EXPECT_NO_THROW(sqeManager->ConfigSq
 
 TEST_F(SqeMgrTest, test_AddSqeToBuffer_functions)
 {
-    EXPECT_THROW(sqeManager->AddSqeToBuffer(nullptr, nullptr), Hccl::NullPtrException);
+    EXPECT_EQ(sqeManager->AddSqeToBuffer(nullptr, nullptr), HcclResult::HCCL_E_PTR);
 }
 
 TEST_F(SqeMgrTest, sqe_mgr_add_nullptr)

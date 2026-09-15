@@ -190,7 +190,18 @@ private:
     CfgField<std::string> primQueueGenName{"PRIM_QUEUE_GEN_NAME", "", Str2T<std::string>};
 
     CfgField<std::map<OpType, std::vector<HcclAlgoType>>> hcclAlgoConfig{
-        "HCCL_ALGO", std::map<OpType, std::vector<HcclAlgoType>>(), SetHcclAlgoConfig};
+        "HCCL_ALGO", std::map<OpType, std::vector<HcclAlgoType>>(),
+        [](const std::string& hcclAlgo) -> std::map<OpType, std::vector<HcclAlgoType>> {
+            std::map<OpType, std::vector<HcclAlgoType>> result;
+            HcclResult ret = SetHcclAlgoConfig(hcclAlgo, result);
+            if (ret != HCCL_SUCCESS) {
+                // CfgField 模板的 cast 回调签名 std::function<T(const std::string&)> 无错误码通道，
+                // 无法返回 HcclResult，此处保留 THROW 传播错误，待后续重构 CfgField 模板。
+                THROW<InvalidParamsException>(
+                    StringFormat("Env HCCL_ALGO config \"%s\" is invalid.", hcclAlgo.c_str()));
+            }
+            return result;
+        }};
 
     CfgField<u64> bufferSize{
         "HCCL_BUFFSIZE", HCCL_CCL_COMM_DEFAULT_BUFFER_SIZE* HCCL_CCL_COMM_FIXED_CALC_BUFFER_SIZE, Str2T<u64>,

@@ -98,7 +98,7 @@ private:
 
     DevBuffer* PackResToKernelLanuch(CollAlgOpReq& opReq);
 
-    void SetOneSidedKernelLaunchParam(HcclKernelLaunchParam& param, const DevBuffer* mem) const;
+    HcclResult SetOneSidedKernelLaunchParam(HcclKernelLaunchParam& param, const DevBuffer* mem) const;
 
     void OneSidedAicpuKernelLaunch(HcclKernelLaunchParam& param, Stream& stream) const;
 

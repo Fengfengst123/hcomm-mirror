@@ -32,7 +32,7 @@ public:
     ~HcclOneSidedConn();
 
     HcclResult Connect(const std::string& commId);
-    void WaitOneSidedTransportReady();
+    HcclResult WaitOneSidedTransportReady();
 
     HcclResult ExchangeMemDesc(const HcclMemDescs& localMemDescs, HcclMemDescs& remoteMemDescs, u32& actualNumOfRemote);
 

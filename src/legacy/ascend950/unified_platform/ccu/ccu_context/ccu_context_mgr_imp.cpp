@@ -388,8 +388,9 @@ HcclResult CtxMgrImp::InstantiationTranslator(uint16_t dieId)
     // 获取innerDieChannelId
     auto ret = CcuDeviceManager::GetLoopChannelId(deviceLogicId_, dieId, dieId, chaneelId);
     if (ret != HcclResult::HCCL_SUCCESS) {
-        THROW<CcuApiException>(
+        HCCL_ERROR(
             "Failed to get inner die channel id. deviceLogicId = %d, dieId = %u, ret = %d", deviceLogicId_, dieId, ret);
+        return HcclResult::HCCL_E_INTERNAL;
     }
     tmpChannelId[0] = chaneelId;
     // 获取interDieChannelId
@@ -407,9 +408,10 @@ HcclResult CtxMgrImp::InstantiationTranslator(uint16_t dieId)
     uint64_t tokenValue = 0;
     ret = CcuDeviceManager::GetCcuResourceSpaceTokenInfoForLocal(deviceLogicId_, dieId, tokenId, tokenValue);
     if (ret != HcclResult::HCCL_SUCCESS) {
-        THROW<CcuApiException>(
+        HCCL_ERROR(
             "Failed to get ccu resource space token info. deviceLogicId = %d, dieId = %u, ret = %d", deviceLogicId_,
             dieId, ret);
+        return HcclResult::HCCL_E_INTERNAL;
     }
     std::pair<uint64_t, uint64_t> ccuTokenInfo(tokenId, tokenValue);
     CcuResReq totalResReq;

@@ -133,16 +133,16 @@ void CcuTransportGroupMgr::Destroy()
     linkGrp2TransportGrpMap.clear();
 }
 
-vector<LinkGroup> CcuTransportGroupMgr::GetAllTransportGroups()
+HcclResult CcuTransportGroupMgr::GetAllTransportGroups(vector<LinkGroup>& linkGroups)
 {
-    vector<LinkGroup> linkGroups;
     for (auto iter = linkGrp2TransportGrpMap.begin(); iter != linkGrp2TransportGrpMap.end(); ++iter) {
         linkGroups.push_back(iter->first);
     }
     if (linkGroups.size() == 0) {
-        THROW<InternalException>("[CcuTransportGroupMgr][%s] used linkGroups vec is empty", __func__);
+        HCCL_ERROR("[CcuTransportGroupMgr][%s] used linkGroups vec is empty", __func__);
+        return HcclResult::HCCL_E_INTERNAL;
     }
-    return linkGroups;
+    return HcclResult::HCCL_SUCCESS;
 }
 
 } // namespace Hccl

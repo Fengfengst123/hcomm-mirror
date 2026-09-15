@@ -199,9 +199,9 @@ HcclResult AicpuUtils::HcclLaunchCcore(
     CHK_PTR_NULL(rtsq);
 
     if (ccoreType == CCORE_NOTIFY_TYPE) {
-        rtsq->CCoreNotifyRecord(dstAddr, turnNumAddr + turnNum * sizeof(uint32_t));
+        CHK_RET(rtsq->CCoreNotifyRecord(dstAddr, turnNumAddr + turnNum * sizeof(uint32_t)));
     } else {
-        rtsq->CCoreNotifyWait(dstAddr, turnNumAddr + turnNum * sizeof(uint32_t), isLast);
+        CHK_RET(rtsq->CCoreNotifyWait(dstAddr, turnNumAddr + turnNum * sizeof(uint32_t), isLast));
     }
     rtsq->LaunchTask();
     return HCCL_SUCCESS;

@@ -830,7 +830,8 @@ HcclResult CcuKernelMgr::InstantiationTranslator(const uint16_t dieId)
 
         // 统计&合并refManager和translator所有资源REQ
         auto refMangerResReq = CcuRep::CcuRepReferenceManager::GetResReq(dieId);
-        auto transLatorResReq = CcuRep::CcuRepTranslator::GetResReq(userDevId_, dieId);
+        CcuResReq transLatorResReq;
+        CHK_RET(CcuRep::CcuRepTranslator::GetResReq(userDevId_, dieId, transLatorResReq));
         MergeCcuResReq(totalResReq, refMangerResReq);
         MergeCcuResReq(totalResReq, transLatorResReq);
     }

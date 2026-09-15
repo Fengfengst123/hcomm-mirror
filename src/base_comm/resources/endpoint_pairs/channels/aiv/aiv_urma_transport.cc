@@ -452,17 +452,17 @@ void AivUrmaTransport::RecvExchangeData()
     HCCL_INFO("recv data %s, size=%llu", GetLinkDescInfo().c_str(), recvData_.size());
 }
 
-bool AivUrmaTransport::ConnVecUnpackProc(BinaryStream& binaryStream)
+HcclResult AivUrmaTransport::ConnVecUnpackProc(BinaryStream& binaryStream, bool& result)
 {
     uint32_t rmtConnNum;
     binaryStream >> rmtConnNum;
     HCCL_INFO("start unpack conn %s connNum=%u, rmtConnNum=%u", GetLinkDescInfo().c_str(), connNum_, rmtConnNum);
     if (connNum_ != rmtConnNum) {
-        MACRO_THROW(
-            InvalidParamsException, StringFormat("connNum=%u is not equal to rmtConnNum=%u", connNum_, rmtConnNum));
+        HCCL_ERROR("[%s] connNum=%u is not equal to rmtConnNum=%u", __func__, connNum_, rmtConnNum);
+        return HcclResult::HCCL_E_PARA;
     }
 
-    bool result = false; // 不需要发送 finish
+    result = false;
     for (uint32_t i = 0; i < rmtConnNum; i++) {
         uint32_t pos;
         binaryStream >> pos;
@@ -475,10 +475,10 @@ bool AivUrmaTransport::ConnVecUnpackProc(BinaryStream& binaryStream)
                 commonLocRes_.connVec[i]->Describe().c_str());
             commonLocRes_.connVec[i]->ParseRmtExchangeDto(rmtDto);
             commonLocRes_.connVec[i]->ImportRmtDto();
-            result = true; // connection 建链，需要发送finish
+            result = true;
         }
     }
-    return result;
+    return HcclResult::HCCL_SUCCESS;
 }
 
 void AivUrmaTransport::RmtBufferVecUnpackProc(uint32_t locNum, BinaryStream& binaryStream, RemoteBufferVec& bufferVec)
@@ -521,7 +521,12 @@ bool AivUrmaTransport::RecvDataProcess()
     BinaryStream binaryStream(recvData_);
     HandshakeMsgUnpack(binaryStream); // 这里怎么确认两边的msg一样
     RmtBufferVecUnpackProc(commonLocRes_.bufferVec.size(), binaryStream, rmtBufferVec_);
-    return ConnVecUnpackProc(binaryStream);
+    bool result = false;
+    if (ConnVecUnpackProc(binaryStream, result) != HcclResult::HCCL_SUCCESS) {
+        HCCL_ERROR("[%s] ConnVecUnpackProc failed", __func__);
+        return false;
+    }
+    return result;
 }
 
 bool AivUrmaTransport::IsConnsReady()

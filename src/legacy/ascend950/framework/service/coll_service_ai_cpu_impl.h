@@ -44,8 +44,8 @@ public:
 
     HcclResult AllocCollOpResource(CollOperator& op, const std::string& opAlgTag, void** addr) override;
 
-    void ReLoadWithOpBasedMode(CollOperator& op) override;
-    void ReLoadWithOffloadMode(CollOperator& op) override;
+    HcclResult ReLoadWithOpBasedMode(CollOperator& op) override;
+    HcclResult ReLoadWithOffloadMode(CollOperator& op) override;
 
     HcclResult ClearOpLoadedInfo(const std::string& opTag);
 

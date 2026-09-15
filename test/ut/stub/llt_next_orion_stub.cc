@@ -995,12 +995,7 @@ std::vector<char> UbMemTransport::GetUniqueId()
     return result;
 }
 
-std::vector<char> UbMemTransport::GetUniqueIdV2()
-{
-    std::vector<char> result;
-
-    return result;
-}
+HcclResult UbMemTransport::GetUniqueIdV2(std::vector<char>& result) { return HCCL_SUCCESS; }
 
 std::vector<char>
 UbMemTransport::GetSingleRmtBufferUniqueId(u64 addr, u64 size, u32 tokenId, u32 tokenValue, u32 notifyId) const
@@ -1576,7 +1571,7 @@ aclError aclrtExceptionInfoCallbackRegister(aclrtExceptionInfoCallback callback)
 aclError aclrtExceptionInfoCallbackUnregister(aclrtExceptionInfoCallback callback) { return ACL_ERROR_NONE; }
 }
 
-void HrtUnregTaskExceptionCallbackByModule(aclrtExceptionInfoCallback callback) {}
+HcclResult HrtUnregTaskExceptionCallbackByModule(aclrtExceptionInfoCallback callback) { return HCCL_SUCCESS; }
 
 u32 Hccl::HcclCommunicator::GetRankInParentComm() { return 0; }
 
@@ -1817,7 +1812,7 @@ P2PTransport::P2PTransport(
 
 HcclResult P2PTransport::GetRemoteMems(uint32_t* memNum, CommMem** remoteMem, char*** memInfos) { return HCCL_SUCCESS; }
 
-std::vector<char> P2PTransport::GetUniqueIdV2() { return {}; }
+HcclResult P2PTransport::GetUniqueIdV2(std::vector<char>& result) { return HCCL_SUCCESS; }
 
 std::string P2PTransport::Describe() const { return ""; }
 

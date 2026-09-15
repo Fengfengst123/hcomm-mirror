@@ -146,19 +146,21 @@ u32 TopoMatchBase::GcdTwo(u32 a, u32 b) const
     return a;
 }
 
-u32 TopoMatchBase::GcdMultiple(const std::vector<u32>& numbers) const
+HcclResult TopoMatchBase::GcdMultiple(const std::vector<u32>& numbers, u32& result) const
 {
     if (numbers.empty()) {
-        THROW<InvalidParamsException>(StringFormat("Input vector cannot be empty."));
+        HCCL_ERROR("[%s] Input vector cannot be empty.", __func__);
+        return HcclResult::HCCL_E_PARA;
     }
-    uint32_t result = numbers[0];
+    result = numbers[0];
     for (const auto num : numbers) {
         result = GcdTwo(result, num);
         if (result == 1) {
-            return 1;
+            result = 1;
+            return HcclResult::HCCL_SUCCESS;
         }
     }
-    return result;
+    return HcclResult::HCCL_SUCCESS;
 }
 
 HcclResult TopoMatchBase::GenerateLevel1(

@@ -978,12 +978,12 @@ std::vector<char> UbMemTransport::GetUniqueId()
     return result;
 }
 
-std::vector<char> UbMemTransport::GetUniqueIdV2()
+HcclResult UbMemTransport::GetUniqueIdV2(std::vector<char>& result)
 {
     if (baseStatus != TransportStatus::READY) {
-        MACRO_THROW(
-            InternalException,
-            StringFormat("transport status[%d] is not ready[%d], please check.", baseStatus, TransportStatus::READY));
+        HCCL_ERROR(
+            "[%s] transport status[%d] is not ready[%d], please check.", __func__, baseStatus, TransportStatus::READY);
+        return HcclResult::HCCL_E_INTERNAL;
     }
     u32 type = static_cast<u32>(transportType);
     BinaryStream binaryStream;
@@ -1015,9 +1015,8 @@ std::vector<char> UbMemTransport::GetUniqueIdV2()
     auto connUniqueIds = GetConnUniqueIds();
     binaryStream << connUniqueIds;
 
-    std::vector<char> result;
     binaryStream.Dump(result);
-    return result;
+    return HcclResult::HCCL_SUCCESS;
 }
 
 std::vector<char> UbMemTransport::PackConnData()

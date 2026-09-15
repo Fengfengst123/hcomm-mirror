@@ -119,7 +119,7 @@ void CcuTempAllReduceMeshDetour1D::CalcDetourOffset(
     return;
 }
 
-void CcuTempAllReduceMeshDetour1D::ProcessLinks(std::vector<LinkData>& links, const ResLinks& tempLinks) const
+HcclResult CcuTempAllReduceMeshDetour1D::ProcessLinks(std::vector<LinkData>& links, const ResLinks& tempLinks) const
 {
     // 整理links，要区分sendOnly与recvOnly，根据读写操作选择不同的绕路link
     // 固定2P用2-4条链路，每个链路用一个ms；4P用2条链路，其中直连用2个ms，绕路用1个
@@ -141,9 +141,10 @@ void CcuTempAllReduceMeshDetour1D::ProcessLinks(std::vector<LinkData>& links, co
             } else if (curLink.GetDirection() == LinkDirection::RECV_ONLY) {
                 recvLinks.emplace_back(curLink);
             } else {
-                THROW<InvalidParamsException>(StringFormat(
+                HCCL_ERROR(
                     "[CcuTempAllReduceMeshDetour1D][ProcessLinks] Rank[%d]--Peer[%d]--link[%d], unexpected link type.",
-                    myRank_, pair.first, i));
+                    myRank_, pair.first, i);
+                return HcclResult::HCCL_E_PARA;
             }
         }
     }
@@ -151,10 +152,11 @@ void CcuTempAllReduceMeshDetour1D::ProcessLinks(std::vector<LinkData>& links, co
     // 校验link
     if (sendLinks.size() != recvLinks.size() || directLinks.size() != tempRankSize_ - 1
         || sendLinks.size() % directLinks.size() != 0 || recvLinks.size() % directLinks.size() != 0) {
-        THROW<InvalidParamsException>(StringFormat(
+        HCCL_ERROR(
             "[CcuTempAllReduceMeshDetour1D][ProcessLinks] Unexpected "
             "directLinkSize[%u]--sendLinkSize[%u]--recvLinkSize[%u].",
-            directLinks.size(), sendLinks.size(), recvLinks.size()));
+            directLinks.size(), sendLinks.size(), recvLinks.size());
+        return HcclResult::HCCL_E_PARA;
     }
     for (uint32_t i = 0; i < directLinks.size(); i++) {
         HCCL_INFO(
@@ -175,7 +177,7 @@ void CcuTempAllReduceMeshDetour1D::ProcessLinks(std::vector<LinkData>& links, co
         links.emplace_back(recvLinks[i]);
     }
 
-    return;
+    return HcclResult::HCCL_SUCCESS;
 }
 
 void CcuTempAllReduceMeshDetour1D::GetAddrInfo(const TempFuncs& tempFuncs, uint64_t& inputAddr, uint64_t& outputAddr)
@@ -228,7 +230,7 @@ HcclResult CcuTempAllReduceMeshDetour1D::Run(
     uint64_t iterNum;
     CalcDetourOffset(sliceSize, tailOffset, tailSize, iterNum);
     std::vector<LinkData> links;
-    ProcessLinks(links, tempLinks);
+    CHK_RET(ProcessLinks(links, tempLinks));
 
     ccuInsAllReduceMeshDetour1D.Init(
         static_cast<uint32_t>(myRank_), inputAddr, outputAddr, offset, token, op_, tempVTopo_, iterNum, tailOffset,

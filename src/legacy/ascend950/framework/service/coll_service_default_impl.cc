@@ -267,18 +267,20 @@ void CollServiceDefaultImpl::RecoverTransport(
     THROW<NotSupportException>(StringFormat("CollServiceDefaultImpl::RecoverTransport not support yet."));
 }
 
-void CollServiceDefaultImpl::ReLoadWithOpBasedMode(CollOperator& op)
+HcclResult CollServiceDefaultImpl::ReLoadWithOpBasedMode(CollOperator& op)
 {
     HCCL_INFO("[CollServiceDeviceMode::%s] start.", __func__);
     LoadWithOpBasedModeNoRegister(op);
     HCCL_INFO("[CollServiceDeviceMode::%s] end.", __func__);
+    return HcclResult::HCCL_SUCCESS;
 }
 
-void CollServiceDefaultImpl::ReLoadWithOffloadMode(CollOperator& op)
+HcclResult CollServiceDefaultImpl::ReLoadWithOffloadMode(CollOperator& op)
 {
     HCCL_INFO("[CollServiceDeviceMode::%s] start.", __func__);
     LoadWithOffloadModeNoRegister(op);
     HCCL_INFO("[CollServiceDeviceMode::%s] end.", __func__);
+    return HcclResult::HCCL_SUCCESS;
 }
 
 } // namespace Hccl

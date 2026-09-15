@@ -361,10 +361,12 @@ TEST_F(EnvConfigTest, parse_env_config_HCCL_WHITELIST_FILE_should_fail)
 TEST_F(EnvConfigTest, parse_env_config_hccl_algo_invalid_test_1)
 {
     std::string str1 = "level0:yyy;level1:xxxx";
-    EXPECT_THROW(SetHcclAlgoConfig(str1), InvalidParamsException);
+    std::map<OpType, std::vector<HcclAlgoType>> algoConfig1;
+    EXPECT_EQ(SetHcclAlgoConfig(str1, algoConfig1), HcclResult::HCCL_E_PARA);
 
     std::string str2 = "abcdefg";
-    EXPECT_THROW(SetHcclAlgoConfig(str2), InvalidParamsException);
+    std::map<OpType, std::vector<HcclAlgoType>> algoConfig2;
+    EXPECT_EQ(SetHcclAlgoConfig(str2, algoConfig2), HcclResult::HCCL_E_PARA);
 }
 
 TEST_F(EnvConfigTest, parse_env_config_HCCL_DETOUR_test)

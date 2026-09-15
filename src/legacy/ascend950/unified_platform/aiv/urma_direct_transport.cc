@@ -187,17 +187,17 @@ void UrmaDirectTransport::RecvExchangeData()
     HCCL_INFO("recv data %s, size=%zu", GetLinkDescInfo().c_str(), recvData.size());
 }
 
-bool UrmaDirectTransport::ConnVecUnpackProc(BinaryStream& binaryStream)
+HcclResult UrmaDirectTransport::ConnVecUnpackProc(BinaryStream& binaryStream, bool& result)
 {
     u32 rmtConnNum;
     binaryStream >> rmtConnNum;
     HCCL_INFO("start unpack conn %s connNum=%u, rmtConnNum=%u", GetLinkDescInfo().c_str(), connNum, rmtConnNum);
     if (connNum != rmtConnNum) {
-        MACRO_THROW(
-            InvalidParamsException, StringFormat("connNum=%u is not equal to rmtConnNum=%u", connNum, rmtConnNum));
+        HCCL_ERROR("[%s] connNum=%u is not equal to rmtConnNum=%u", __func__, connNum, rmtConnNum);
+        return HcclResult::HCCL_E_PARA;
     }
 
-    bool result = false; // 不需要发送 finish
+    result = false;
     for (u32 i = 0; i < rmtConnNum; i++) {
         u32 pos;
         binaryStream >> pos;
@@ -209,10 +209,10 @@ bool UrmaDirectTransport::ConnVecUnpackProc(BinaryStream& binaryStream)
                 "parse and import pos=%u, rmt dto to connection[%s]", pos, commonLocRes.connVec[i]->Describe().c_str());
             commonLocRes.connVec[i]->ParseRmtExchangeDto(rmtDto);
             commonLocRes.connVec[i]->ImportRmtDto();
-            result = true; // connection 建链，需要发送finish
+            result = true;
         }
     }
-    return result;
+    return HcclResult::HCCL_SUCCESS;
 }
 
 void UrmaDirectTransport::RmtBufferVecUnpackProc(u32 locNum, BinaryStream& binaryStream, RemoteBufferVec& bufferVec)
@@ -257,7 +257,12 @@ bool UrmaDirectTransport::RecvDataProcess()
     BinaryStream binaryStream(recvData);
     HandshakeMsgUnpack(binaryStream);
     RmtBufferVecUnpackProc(bufferNum, binaryStream, rmtBufferVec);
-    return ConnVecUnpackProc(binaryStream);
+    bool result = false;
+    if (ConnVecUnpackProc(binaryStream, result) != HcclResult::HCCL_SUCCESS) {
+        HCCL_ERROR("[%s] ConnVecUnpackProc failed", __func__);
+        return false;
+    }
+    return result;
 }
 
 bool UrmaDirectTransport::IsConnsReady()

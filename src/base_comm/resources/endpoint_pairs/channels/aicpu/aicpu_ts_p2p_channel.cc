@@ -214,7 +214,9 @@ HcclResult AicpuTsP2pChannel::PackOpData(std::vector<char>& data)
 
     std::vector<char> result;
     Hccl::BinaryStream binaryStream;
-    binaryStream << memTransport_->GetUniqueIdV2();
+    std::vector<char> uniqueIdV2;
+    CHK_RET(memTransport_->GetUniqueIdV2(uniqueIdV2));
+    binaryStream << uniqueIdV2;
 
     binaryStream.Dump(result);
 

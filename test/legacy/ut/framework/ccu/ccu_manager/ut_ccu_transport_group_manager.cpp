@@ -728,9 +728,11 @@ TEST_F(CcuTransportGroupMgrTest, GetAllTransportGroups)
     // 创建utCcuTransportGroupMgr，并在linkGrp2TransportGrpMap中建立utLinkGroup与utCcuTransportGroup的映射
     CcuTransportGroupMgr utCcuTransportGroupMgr(impl);
     LinkGroup utLinkGroup{vector<LinkInfo>{LinkInfo{linkData}}};
-    EXPECT_THROW(utCcuTransportGroupMgr.GetAllTransportGroups(), InternalException);
+    vector<LinkGroup> emptyLinkGroups;
+    EXPECT_EQ(utCcuTransportGroupMgr.GetAllTransportGroups(emptyLinkGroups), HcclResult::HCCL_E_INTERNAL);
     utCcuTransportGroupMgr.linkGrp2TransportGrpMap[utLinkGroup] = std::move(utCcuTransportGroup);
-    EXPECT_NO_THROW(utCcuTransportGroupMgr.GetAllTransportGroups());
+    vector<LinkGroup> linkGroups;
+    EXPECT_EQ(utCcuTransportGroupMgr.GetAllTransportGroups(linkGroups), HcclResult::HCCL_SUCCESS);
 
     delete socket;
     delete rdmaHandle;

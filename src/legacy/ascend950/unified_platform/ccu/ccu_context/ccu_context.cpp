@@ -428,8 +428,15 @@ void CcuContext::ReadReduce(
     const CcuTransport& transport, const CcuRep::Memory& loc, const CcuRep::Memory& rem, const CcuRep::Variable& len,
     DataType dataType, ReduceOp opType, const CcuRep::MaskSignal& locSig, uint32_t mask)
 {
-    auto rep = std::make_shared<CcuRep::CcuRepRead>(
-        transport, loc, rem, len, CcuRep::GetUBDataType(dataType), CcuRep::GetUBReduceType(opType), locSig, mask);
+    uint16_t ubDataType;
+    if (CcuRep::GetUBDataType(dataType, ubDataType) != HcclResult::HCCL_SUCCESS) {
+        THROW<CcuApiException>("GetUBDataType failed for dataType[%s]", dataType.Describe().c_str());
+    }
+    uint16_t ubReduceType;
+    if (CcuRep::GetUBReduceType(opType, ubReduceType) != HcclResult::HCCL_SUCCESS) {
+        THROW<CcuApiException>("GetUBReduceType failed for reduceOp[%s]", opType.Describe().c_str());
+    }
+    auto rep = std::make_shared<CcuRep::CcuRepRead>(transport, loc, rem, len, ubDataType, ubReduceType, locSig, mask);
     Append(rep);
     SetDependencyInfo(locSig.Id(), mask, rep);
 }
@@ -447,8 +454,15 @@ void CcuContext::WriteReduce(
     const CcuTransport& transport, const CcuRep::Memory& rem, const CcuRep::Memory& loc, const CcuRep::Variable& len,
     DataType dataType, ReduceOp opType, const CcuRep::MaskSignal& locSig, uint32_t mask)
 {
-    auto rep = std::make_shared<CcuRep::CcuRepWrite>(
-        transport, rem, loc, len, CcuRep::GetUBDataType(dataType), CcuRep::GetUBReduceType(opType), locSig, mask);
+    uint16_t ubDataType;
+    if (CcuRep::GetUBDataType(dataType, ubDataType) != HcclResult::HCCL_SUCCESS) {
+        THROW<CcuApiException>("GetUBDataType failed for dataType[%s]", dataType.Describe().c_str());
+    }
+    uint16_t ubReduceType;
+    if (CcuRep::GetUBReduceType(opType, ubReduceType) != HcclResult::HCCL_SUCCESS) {
+        THROW<CcuApiException>("GetUBReduceType failed for reduceOp[%s]", opType.Describe().c_str());
+    }
+    auto rep = std::make_shared<CcuRep::CcuRepWrite>(transport, rem, loc, len, ubDataType, ubReduceType, locSig, mask);
     Append(rep);
     SetDependencyInfo(locSig.Id(), mask, rep);
 }
@@ -484,8 +498,15 @@ void CcuContext::LocalReduce(
     const CcuRep::Memory& dst, const CcuRep::Memory& src, const CcuRep::Variable& len, DataType dataType,
     ReduceOp opType, const CcuRep::MaskSignal& locSig, uint32_t mask)
 {
-    auto rep = std::make_shared<CcuRep::CcuRepLocCpy>(
-        dst, src, len, CcuRep::GetUBDataType(dataType), CcuRep::GetUBReduceType(opType), locSig, mask);
+    uint16_t ubDataType;
+    if (CcuRep::GetUBDataType(dataType, ubDataType) != HcclResult::HCCL_SUCCESS) {
+        THROW<CcuApiException>("GetUBDataType failed for dataType[%s]", dataType.Describe().c_str());
+    }
+    uint16_t ubReduceType;
+    if (CcuRep::GetUBReduceType(opType, ubReduceType) != HcclResult::HCCL_SUCCESS) {
+        THROW<CcuApiException>("GetUBReduceType failed for reduceOp[%s]", opType.Describe().c_str());
+    }
+    auto rep = std::make_shared<CcuRep::CcuRepLocCpy>(dst, src, len, ubDataType, ubReduceType, locSig, mask);
     Append(rep);
     SetDependencyInfo(locSig.Id(), mask, rep);
 }

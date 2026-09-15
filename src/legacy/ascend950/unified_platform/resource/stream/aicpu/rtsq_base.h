@@ -171,19 +171,21 @@ public:
         MACRO_THROW(NotSupportException, StringFormat("not supported."));
     }
 
-    virtual void CCoreNotifyWait(u64 waitAddr, u64 curTurnCntAddr, bool last)
+    virtual HcclResult CCoreNotifyWait(u64 waitAddr, u64 curTurnCntAddr, bool last)
     {
         (void)waitAddr;
         (void)curTurnCntAddr;
         (void)last;
-        MACRO_THROW(NotSupportException, StringFormat("not supported."));
+        HCCL_ERROR("[%s] not supported.", __func__);
+        return HcclResult::HCCL_E_NOT_SUPPORT;
     }
 
-    virtual void CCoreNotifyRecord(u64 recordAddr, u64 curTurnCntAddr)
+    virtual HcclResult CCoreNotifyRecord(u64 recordAddr, u64 curTurnCntAddr)
     {
         (void)recordAddr;
         (void)curTurnCntAddr;
-        MACRO_THROW(NotSupportException, StringFormat("not supported."));
+        HCCL_ERROR("[%s] not supported.", __func__);
+        return HcclResult::HCCL_E_NOT_SUPPORT;
     }
 
     virtual u64 GetSqeAddr() const { return 0; }
@@ -197,14 +199,14 @@ public:
 
     virtual HcclResult SetPreStreamSyncReady()
     {
-        MACRO_THROW(NotSupportException, StringFormat("not supported."));
-        return HCCL_SUCCESS;
+        HCCL_ERROR("[%s] not supported.", __func__);
+        return HcclResult::HCCL_E_NOT_SUPPORT;
     }
 
     virtual HcclResult SetPreStreamSyncFin()
     {
-        MACRO_THROW(NotSupportException, StringFormat("not supported."));
-        return HCCL_SUCCESS;
+        HCCL_ERROR("[%s] not supported.", __func__);
+        return HcclResult::HCCL_E_NOT_SUPPORT;
     }
 
     virtual bool GetPreStreamSyncStatus() { return false; }

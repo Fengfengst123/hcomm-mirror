@@ -80,7 +80,7 @@ protected:
         std::vector<u32>& numRanksPerBoard) const;
 
     u32 GcdTwo(u32 a, u32 b) const;
-    u32 GcdMultiple(const std::vector<u32>& numbers) const;
+    HcclResult GcdMultiple(const std::vector<u32>& numbers, u32& result) const;
 
     HcclResult GenerateLevel1(
         const std::set<RankId>& rankSetLevel1, u32 gcdInstSize, RankId rankId,

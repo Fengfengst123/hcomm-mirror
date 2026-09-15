@@ -46,7 +46,7 @@ public:
     JfcHandle GetJfcHandle(RdmaHandle rdmaHandle, CqCreateInfo& cqInfo, HrtUbJfcMode jfcMode);
     JfcHandle GetJfcHandleAndCqInfo(RdmaHandle rdmaHandle, CqCreateInfo& cqInfo, HrtUbJfcMode jfcMode);
     std::pair<uint32_t, uint32_t> GetDieAndFuncId(RdmaHandle rdmaHandle);
-    bool GetRtpEnable(RdmaHandle rdmaHandle);
+    HcclResult GetRtpEnable(RdmaHandle rdmaHandle, bool& result);
 
     std::pair<TokenIdHandle, uint32_t> GetTokenIdInfo(RdmaHandle rdmaHandle, const BufferKey<uintptr_t, u64>& bufKey);
     void PutTokenIdInfo(RdmaHandle rdmaHandle, const BufferKey<uintptr_t, u64>& bufKey, TokenIdHandle tokenIdHandle);

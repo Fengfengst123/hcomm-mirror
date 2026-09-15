@@ -48,8 +48,8 @@ public:
 
     virtual void Resume();
 
-    virtual void ReLoadWithOpBasedMode(CollOperator& op);
-    virtual void ReLoadWithOffloadMode(CollOperator& op);
+    virtual HcclResult ReLoadWithOpBasedMode(CollOperator& op);
+    virtual HcclResult ReLoadWithOffloadMode(CollOperator& op);
 
     virtual HcclResult GetAlgExecParam(bool clearEnable, u32 numBlocks, void*& commContext, u64& len);
 

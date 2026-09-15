@@ -321,7 +321,7 @@ TEST_F(HcclMc2ExTest, Ut_HcclLaunchCcoreWait_When_ValidParams_Expect_ReturnSucce
     MOCKER(halSqCqQuery).stubs().with(mockcpp::any(), outBoundP(&queryInfo, sizeof(queryInfo))).will(returnValue(0));
     MOCKER_CPP(&StreamLiteMgr::GetMaster).stubs().with().will(returnValue(&master));
     auto rtsq = static_cast<RtsqA5*>(master.GetRtsq());
-    MOCKER_CPP_VIRTUAL(*rtsq, &RtsqA5::CCoreNotifyWait).stubs().will(ignoreReturnValue());
+    MOCKER_CPP_VIRTUAL(*rtsq, &RtsqA5::CCoreNotifyWait).stubs().will(returnValue(HcclResult::HCCL_SUCCESS));
     MOCKER_CPP_VIRTUAL(*rtsq, &RtsqA5::LaunchTask).stubs().will(ignoreReturnValue());
 
     EXPECT_EQ(HCCL_SUCCESS, ::HcclLaunchCcoreWait(comm, 0, 0, 0, false));
@@ -357,7 +357,7 @@ TEST_F(HcclMc2ExTest, Ut_HcclLaunchCcorePost_When_ValidParams_Expect_ReturnSucce
     MOCKER(halSqCqQuery).stubs().with(mockcpp::any(), outBoundP(&queryInfo, sizeof(queryInfo))).will(returnValue(0));
     MOCKER_CPP(&StreamLiteMgr::GetMaster).stubs().with().will(returnValue(&master));
     auto rtsq = static_cast<RtsqA5*>(master.GetRtsq());
-    MOCKER_CPP_VIRTUAL(*rtsq, &RtsqA5::CCoreNotifyRecord).stubs().will(ignoreReturnValue());
+    MOCKER_CPP_VIRTUAL(*rtsq, &RtsqA5::CCoreNotifyRecord).stubs().will(returnValue(HcclResult::HCCL_SUCCESS));
     MOCKER_CPP_VIRTUAL(*rtsq, &RtsqA5::LaunchTask).stubs().will(ignoreReturnValue());
     EXPECT_EQ(HCCL_SUCCESS, ::HcclLaunchCcorePost(comm, 0, 0, 0));
 }

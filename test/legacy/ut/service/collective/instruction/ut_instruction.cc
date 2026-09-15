@@ -409,13 +409,13 @@ TEST_F(InstructionTest, test_ins_batch_read)
     DataSlice locSlice(BufferType::SCRATCH, 0, 100);
     DataSlice rmtSlice(BufferType::SCRATCH, 10, 100);
     unique_ptr<Instruction> readIns = make_unique<InsRead>(100, linkData, locSlice, rmtSlice);
-    insBatchRead->PushReadIns(move(readIns));
+    EXPECT_EQ(insBatchRead->PushReadIns(move(readIns)), HcclResult::HCCL_SUCCESS);
 
     DataType dataType(DataType::INT8);
     ReduceOp reduceOp(ReduceOp::SUM);
     unique_ptr<Instruction> readReduceIns
         = make_unique<InsReadReduce>(100, linkData, locSlice, rmtSlice, dataType, reduceOp);
-    insBatchRead->PushReadIns(move(readReduceIns));
+    EXPECT_EQ(insBatchRead->PushReadIns(move(readReduceIns)), HcclResult::HCCL_SUCCESS);
     EXPECT_EQ(readIns, nullptr);
     EXPECT_EQ(readReduceIns, nullptr);
     EXPECT_EQ(insBatchRead->readInsVec.size(), 2);
@@ -429,7 +429,7 @@ TEST_F(InstructionTest, test_ins_batch_read_PushReadIns_fail)
     DataSlice rmtSlice(BufferType::SCRATCH, 10, 100);
     unique_ptr<Instruction> writeIns = make_unique<InsWrite>(100, linkData, locSlice, rmtSlice);
 
-    EXPECT_THROW(insBatchRead->PushReadIns(move(writeIns)), NotSupportException);
+    EXPECT_EQ(insBatchRead->PushReadIns(move(writeIns)), HcclResult::HCCL_E_RUNTIME);
 }
 
 TEST_F(InstructionTest, test_ins_batch_write)
@@ -442,13 +442,13 @@ TEST_F(InstructionTest, test_ins_batch_write)
     DataSlice locSlice(BufferType::SCRATCH, 0, 100);
     DataSlice rmtSlice(BufferType::SCRATCH, 10, 100);
     unique_ptr<Instruction> writeIns = make_unique<InsWrite>(100, linkData, locSlice, rmtSlice);
-    insBatchWrite->PushWriteIns(move(writeIns));
+    EXPECT_EQ(insBatchWrite->PushWriteIns(move(writeIns)), HcclResult::HCCL_SUCCESS);
 
     DataType dataType(DataType::INT8);
     ReduceOp reduceOp(ReduceOp::SUM);
     unique_ptr<Instruction> writeReduceIns
         = make_unique<InsWriteReduce>(100, linkData, locSlice, rmtSlice, dataType, reduceOp);
-    insBatchWrite->PushWriteIns(move(writeReduceIns));
+    EXPECT_EQ(insBatchWrite->PushWriteIns(move(writeReduceIns)), HcclResult::HCCL_SUCCESS);
     EXPECT_EQ(writeIns, nullptr);
     EXPECT_EQ(writeReduceIns, nullptr);
     EXPECT_EQ(insBatchWrite->writeInsVec.size(), 2);
@@ -465,7 +465,7 @@ TEST_F(InstructionTest, test_ins_batch_write_PushWriteIns_fail)
     DataSlice rmtSlice(BufferType::SCRATCH, 10, 100);
     unique_ptr<Instruction> readIns = make_unique<InsRead>(100, linkData, locSlice, rmtSlice);
 
-    EXPECT_THROW(insBatchWrite->PushWriteIns(move(readIns)), NotSupportException);
+    EXPECT_EQ(insBatchWrite->PushWriteIns(move(readIns)), HcclResult::HCCL_E_RUNTIME);
 }
 
 TEST_F(InstructionTest, test_ins_write)

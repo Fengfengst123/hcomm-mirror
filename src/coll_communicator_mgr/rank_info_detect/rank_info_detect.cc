@@ -74,7 +74,7 @@ RankInfoDetect::RankInfoDetect()
         userDevId_, devLogicId_, devPhyId_);
 }
 
-void RankInfoDetect::SetupServer(HcclRootHandleV2& rootHandle)
+HcclResult RankInfoDetect::SetupServer(HcclRootHandleV2& rootHandle)
 {
     HCCL_DEBUG("[RankInfoDetect::%s] setup server start.", __func__);
 
@@ -83,30 +83,31 @@ void RankInfoDetect::SetupServer(HcclRootHandleV2& rootHandle)
 
     // 获取LocalHostIP
     hostIp_ = GetBootstrapIp(devPhyId_);
-    CHK_PRT_THROW(
-        hostIp_.IsInvalid(), HCCL_ERROR("[RankInfoDetect::%s] get hostIp fail.", __func__), InternalException,
-        "get hostIp fail");
+    CHK_PRT_RET(hostIp_.IsInvalid(), HCCL_ERROR("[RankInfoDetect::%s] get hostIp fail.", __func__), HCCL_E_INTERNAL);
 
     // 获取端口号port
     hostPort_ = GetHostListenPort();
 
     // 1. 创建serverSocket，启动监听并获取实际端口
-    shared_ptr<Socket> serverSocket = ServerInit();
+    shared_ptr<Socket> serverSocket = nullptr;
+    TRY_CATCH_RETURN(serverSocket = ServerInit(););
 
     // 2. 构建rootHandle
-    GetRootHandle(rootHandle);
+    TRY_CATCH_RETURN(GetRootHandle(rootHandle););
 
     // 3. 实际端口和identifier就绪后，使用最终tag下发白名单
     HcclResult ret = GetHandleAndAddHostSocketWhitelist();
     if (ret == HCCL_E_PTR) {
-        THROW<NullPtrException>("[RankInfoDetect::%s] get host socket handle failed, ret[%d].", __func__, ret);
+        HCCL_ERROR("[RankInfoDetect::%s] get host socket handle failed, ret[%d].", __func__, ret);
+        return HcclResult::HCCL_E_PTR;
     }
     if (ret == HCCL_E_NETWORK) {
-        THROW<NetworkApiException>("[RankInfoDetect::%s] add host socket whitelist failed, ret[%d].", __func__, ret);
+        HCCL_ERROR("[RankInfoDetect::%s] add host socket whitelist failed, ret[%d].", __func__, ret);
+        return HcclResult::HCCL_E_NETWORK;
     }
     if (ret != HCCL_SUCCESS) {
-        THROW<InternalException>(
-            "[RankInfoDetect::%s] configure host socket whitelist failed, ret[%d].", __func__, ret);
+        HCCL_ERROR("[RankInfoDetect::%s] configure host socket whitelist failed, ret[%d].", __func__, ret);
+        return HcclResult::HCCL_E_INTERNAL;
     }
 
     // 4. 拉起线程，调用RankInfoDetectService.Run()，注意新线程中需要HrtSetDevice
@@ -116,6 +117,7 @@ void RankInfoDetect::SetupServer(HcclRootHandleV2& rootHandle)
     threadHandle.detach();
 
     HCCL_DEBUG("[RankInfoDetect::%s] setup server end.", __func__);
+    return HcclResult::HCCL_SUCCESS;
 }
 
 SocketHandle RankInfoDetect::GetHostSocketHandle()
@@ -374,14 +376,14 @@ void RankInfoDetect::GetRootHandle(HcclRootHandleV2& rootHandle)
 
 void RankInfoDetect::GetRankTable(RankTableInfo& ranktable) const { ranktable = rankTable_; }
 
-void RankInfoDetect::WaitComplete(u32 listenPort, u32 listenStatus) const
+HcclResult RankInfoDetect::WaitComplete(u32 listenPort, u32 listenStatus) const
 {
     // 若server拓扑探测已正常结束则退出
     auto iter = g_detectServerStatus_.Find(listenPort);
     HCCL_INFO("[RankInfoDetect::%s] detect server listenPort[%u] status[%u].", __func__, listenPort, iter.second);
     CHK_PRT_RET(
-        !iter.second,
-        HCCL_INFO("[RankInfoDetect::%s] detect server listenPort[%u] status idle.", __func__, listenPort), );
+        !iter.second, HCCL_INFO("[RankInfoDetect::%s] detect server listenPort[%u] status idle.", __func__, listenPort),
+        HcclResult::HCCL_SUCCESS);
 
     const auto start = chrono::steady_clock::now();
     const auto timeout = std::chrono::seconds(EnvConfig::GetInstance().GetSocketConfig().GetLinkTimeOut());
@@ -393,11 +395,11 @@ void RankInfoDetect::WaitComplete(u32 listenPort, u32 listenStatus) const
             status = it.first->second;
         }
         if (status == RANKINFO_DETECT_SERVER_STATUS_ERROR) {
-            THROW<InternalException>(
-                StringFormat("[RankInfoDetect::%s] topo detect failed, port[%u].", __func__, listenPort));
+            HCCL_ERROR("[RankInfoDetect::%s] topo detect failed, port[%u].", __func__, listenPort);
+            return HcclResult::HCCL_E_INTERNAL;
         } else if (status == listenStatus) {
             HCCL_INFO("[RankInfoDetect::%s] topoExchangeServer port[%u] completed.", __func__, listenPort);
-            return;
+            return HcclResult::HCCL_SUCCESS;
         } else {
             const auto elapsed = chrono::duration_cast<chrono::seconds>(chrono::steady_clock::now() - start);
             if (elapsed > timeout) {
@@ -414,8 +416,7 @@ void RankInfoDetect::WaitComplete(u32 listenPort, u32 listenStatus) const
                     LOG_KEYWORDS_INIT_GROUP.c_str(), LOG_KEYWORDS_RANKTABLE_DETECT.c_str(),
                     HCOM_ERROR_CODE(HcclResult::HCCL_E_TIMEOUT), listenPort, static_cast<long long>(elapsed.count()),
                     static_cast<long long>(timeout.count()), identifier_.c_str());
-                THROW<TimeoutException>(StringFormat(
-                    "[RankInfoDetect::%s] wait port[%u] complete timeout[%lld s]", __func__, listenPort, elapsed));
+                return HcclResult::HCCL_E_TIMEOUT;
             }
             SaluSleep(ONE_MILLISECOND_OF_USLEEP);
             continue;

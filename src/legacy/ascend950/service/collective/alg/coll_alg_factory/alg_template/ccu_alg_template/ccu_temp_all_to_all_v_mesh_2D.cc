@@ -54,8 +54,8 @@ HcclResult CcuTempAlltoAllVMesh2D::CalcRes(AlgTempResReq& tempResReq)
     tempResReq.streamNum = tempResReq.queNum + 1; // 多申请一个 stream 给 ccuInsGroup
     uint32_t dieNum = tempVTopo_.size();
     if (dieNum != 2) { // concurrmesh的topoMatch返回的vTopo大小应当为2，对应X轴和Y轴的大小
-        THROW<InvalidParamsException>(
-            StringFormat("[CcuTempAlltoAllVMesh2D] Rank[%d], Invalid IODieNum[%u].", myRank_, dieNum));
+        HCCL_ERROR("[CcuTempAlltoAllVMesh2D] Rank[%d], Invalid IODieNum[%u].", myRank_, dieNum);
+        return HcclResult::HCCL_E_PARA;
     }
     HCCL_INFO(
         "[CcuTempAlltoAllVMesh2D] Rank[%d] requiredQueNum[%u] VtopoSize[%u], VtopoSize0[%u] VtopoSize1[%u].", myRank_,
@@ -117,8 +117,8 @@ HcclResult CcuTempAlltoAllVMesh2D::FillLinks(const ResLinks& tempLinks)
 {
     for (auto pair : tempLinks) {
         if (pair.second.size() == 0) { // ESL环境上暂只有直连链路
-            THROW<InvalidParamsException>(
-                StringFormat("[CcuTempAlltoAllVMesh2D] Rank[%d]--Peer[%d].", myRank_, pair.first));
+            HCCL_ERROR("[CcuTempAlltoAllVMesh2D] Rank[%d]--Peer[%d].", myRank_, pair.first);
+            return HcclResult::HCCL_E_PARA;
         }
         if (pair.first / dimSize_[0] == myRank_ / dimSize_[0]) {
             HCCL_INFO("[CcuTempAlltoAllVMesh2D][Run] Rank[%d] insert link to Rank[%d] in linksX", myRank_, pair.first);
@@ -127,8 +127,8 @@ HcclResult CcuTempAlltoAllVMesh2D::FillLinks(const ResLinks& tempLinks)
             HCCL_INFO("[CcuTempAlltoAllVMesh2D][Run] Rank[%d] insert link to Rank[%d] in linksY", myRank_, pair.first);
             linksY_.emplace_back(pair.second[0]);
         } else {
-            THROW<InvalidParamsException>(StringFormat(
-                "[CcuTempAlltoAllVMesh2D] Rank[%d], Unexpected peerRank[%d] in tempLinks.", myRank_, pair.first));
+            HCCL_ERROR("[CcuTempAlltoAllVMesh2D] Rank[%d], Unexpected peerRank[%d] in tempLinks.", myRank_, pair.first);
+            return HcclResult::HCCL_E_PARA;
         }
     }
     return HcclResult::HCCL_SUCCESS;
@@ -175,9 +175,10 @@ HcclResult CcuTempAlltoAllVMesh2D::Run(
     std::vector<InsQuePtr>& tempInsQues)
 {
     if (tempVTopo_.size() == 0 || tempInsQues.size() == 0) {
-        THROW<NullPtrException>(StringFormat(
+        HCCL_ERROR(
             "[CcuTempAlltoAllVMesh2D][Run] invalid tempVTopo size is [%u] or invalid tempInsQues size is [%u].",
-            tempVTopo_.size(), tempInsQues.size()));
+            tempVTopo_.size(), tempInsQues.size());
+        return HcclResult::HCCL_E_PTR;
     }
     // 分别记录两个Die上的link，构造rankGroup
     (void)tempFuncs;

@@ -181,7 +181,8 @@ static HcclResult FindOneUsableEid(
         CHK_RET(CommAddrToIpAddress(eidInfo.commAddr, ipAddr));
         const auto rdmaHandle = rdmaHandleMgr.GetByIp(devPhyId, ipAddr);
         CHK_PTR_NULL(rdmaHandle);
-        const bool rtpEnable = rdmaHandleMgr.GetRtpEnable(rdmaHandle);
+        bool rtpEnable;
+        CHK_RET(rdmaHandleMgr.GetRtpEnable(rdmaHandle, rtpEnable));
         if (!rtpEnable) {
             // 遍历端口可能较多，避免刷屏不打印
             continue;

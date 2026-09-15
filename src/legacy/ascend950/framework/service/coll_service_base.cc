@@ -418,14 +418,16 @@ void CollServiceBase::AddCountTask(bool isHead)
     HCCL_INFO("[CollServiceBase::AddCountTask] isHead[%d] dst addr[%p] src addr[%p]", isHead, dst, src);
 }
 
-void CollServiceBase::ReLoadWithOpBasedMode([[maybe_unused]] CollOperator& op)
+HcclResult CollServiceBase::ReLoadWithOpBasedMode([[maybe_unused]] CollOperator& op)
 {
-    THROW<NotSupportException>("ReLoadWithOpBasedMode was not support in this mode.");
+    HCCL_ERROR("[%s] ReLoadWithOpBasedMode was not support in this mode.", __func__);
+    return HcclResult::HCCL_E_NOT_SUPPORT;
 }
 
-void CollServiceBase::ReLoadWithOffloadMode([[maybe_unused]] CollOperator& op)
+HcclResult CollServiceBase::ReLoadWithOffloadMode([[maybe_unused]] CollOperator& op)
 {
-    THROW<NotSupportException>("ReLoadWithOffloadMode was not support in this mode.");
+    HCCL_ERROR("[%s] ReLoadWithOffloadMode was not support in this mode.", __func__);
+    return HcclResult::HCCL_E_NOT_SUPPORT;
 }
 
 void CollServiceBase::AllocQueueNotify(const InsQueue& insQueue)

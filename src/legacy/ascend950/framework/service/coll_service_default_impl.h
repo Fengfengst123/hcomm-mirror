@@ -42,9 +42,9 @@ public:
 
     void RecoverTransport(vector<LinkData>& links, vector<std::pair<LinkGroup, u32>> linkGroupPair) override;
 
-    void ReLoadWithOpBasedMode(CollOperator& op) override;
+    HcclResult ReLoadWithOpBasedMode(CollOperator& op) override;
 
-    void ReLoadWithOffloadMode(CollOperator& op) override;
+    HcclResult ReLoadWithOffloadMode(CollOperator& op) override;
 
 private:
     shared_ptr<PrimQueue> OrchestrateWithPrim(const CollAlgOperator& op) const;

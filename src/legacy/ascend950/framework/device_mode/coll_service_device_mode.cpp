@@ -308,7 +308,8 @@ HcclResult CollServiceDeviceMode::GetSnapShotDynamicBuf(CollOperator& op, Binary
         buf << levelRankPair.first << levelRankPair.second;
     }
 
-    auto transportLinkGroup = ccuInsPreprocessor.GetCcuComm()->GetCcuTransportGrpMgr()->GetAllTransportGroups();
+    vector<LinkGroup> transportLinkGroup;
+    CHK_RET(ccuInsPreprocessor.GetCcuComm()->GetCcuTransportGrpMgr()->GetAllTransportGroups(transportLinkGroup));
     vector<std::pair<LinkGroup, u32>> linkGroupPairs;
 
     //  临时规避多轮不同算子导致CNTCKE资源不足，cntCkeNum采用硬编码形式，待后续正式方案修改

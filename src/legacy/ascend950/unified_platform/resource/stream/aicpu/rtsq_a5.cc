@@ -491,22 +491,24 @@ void RtsqA5::RdmaDbSend(const uint64_t& dbAddr, const uint64_t& dbValue)
     RefreshInfo();
 }
 
-void RtsqA5::CCoreNotifyWait(u64 waitAddr, u64 curTurnCntAddr, bool last)
+HcclResult RtsqA5::CCoreNotifyWait(u64 waitAddr, u64 curTurnCntAddr, bool last)
 {
     BuildA5SqeCCoreNotifyWait(streamId_, taskId_, waitAddr, curTurnCntAddr, last, GetCurrSqeBuffer());
     HCCL_INFO(
         "RtsqA5::CCoreNotifyWait: streamId %u, taskId %u, waitAddr %llu, curTurnCntAddr %llu, last %d", streamId_,
         taskId_, waitAddr, curTurnCntAddr, last);
     RefreshInfo();
+    return HcclResult::HCCL_SUCCESS;
 }
 
-void RtsqA5::CCoreNotifyRecord(u64 recordAddr, u64 curTurnCntAddr)
+HcclResult RtsqA5::CCoreNotifyRecord(u64 recordAddr, u64 curTurnCntAddr)
 {
     BuildA5SqeCCoreNotifyRecord(streamId_, taskId_, recordAddr, curTurnCntAddr, GetCurrSqeBuffer());
     HCCL_INFO(
         "RtsqA5::CCoreNotifyRecord: streamId %u, taskId %u, recordAddr %llu, curTurnCntAddr %llu", streamId_, taskId_,
         recordAddr, curTurnCntAddr);
     RefreshInfo();
+    return HcclResult::HCCL_SUCCESS;
 }
 
 void RtsqA5::P2PWriteValue(u64 remoteAddr, u32 writeValue)

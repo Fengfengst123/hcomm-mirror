@@ -142,7 +142,7 @@ private:
     // 解析 所有通信域 快照静态buf
     HcclResult DeAllSnapShotStaticBuf(BinaryStream& buf, SnapShotBuf& localBuff);
     // 解析 ccuStatus
-    void DeserializeCcuStatusBuf(BinaryStream& buf, SnapShotBuf& localBuff) const;
+    HcclResult DeserializeCcuStatusBuf(BinaryStream& buf, SnapShotBuf& localBuff) const;
 
     // 全局通信域静态信息的序列化
     void SerializeParamsInfo(const CommParams& commParams, BinaryStream& binStream) const;

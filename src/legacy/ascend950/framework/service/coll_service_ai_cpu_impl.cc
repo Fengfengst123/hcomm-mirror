@@ -835,18 +835,20 @@ std::vector<char> CollServiceAiCpuImpl::PackAllTransportData() const
     return helper.GetPackedData(dataVec);
 }
 
-void CollServiceAiCpuImpl::ReLoadWithOpBasedMode(CollOperator& op)
+HcclResult CollServiceAiCpuImpl::ReLoadWithOpBasedMode(CollOperator& op)
 {
     HCCL_INFO("[CollServiceAiCpuImpl::%s] start.", __func__);
     LoadWithOpBasedModeNoRegister(op);
     HCCL_INFO("[CollServiceAiCpuImpl::%s] end.", __func__);
+    return HcclResult::HCCL_SUCCESS;
 }
 
-void CollServiceAiCpuImpl::ReLoadWithOffloadMode(CollOperator& op)
+HcclResult CollServiceAiCpuImpl::ReLoadWithOffloadMode(CollOperator& op)
 {
     HCCL_INFO("[CollServiceAiCpuImpl::%s] start.", __func__);
     LoadWithOffloadModeNoRegister(op);
     HCCL_INFO("[CollServiceAiCpuImpl::%s] end.", __func__);
+    return HcclResult::HCCL_SUCCESS;
 }
 
 void CollServiceAiCpuImpl::AllocQueueNotify([[maybe_unused]] const InsQueue& insQueue)
@@ -899,8 +901,7 @@ HcclResult CollServiceAiCpuImpl::FillBatchSendRecvData(const CollOperator& op)
 {
     if (dynamicDataSize == 0) {
         HCCL_ERROR("CollServiceAiCpuImpl::FillBatchSendRecvData dynamicDataSize is 0");
-        THROW<InternalException>(StringFormat("CollServiceAiCpuImpl::FillBatchSendRecvData dynamicDataSize is 0"));
-        return HCCL_E_PARA;
+        return HcclResult::HCCL_E_INTERNAL;
     }
     Buffer dynamicDataMem = kernelParamBuf_.get()->Range(sizeof(struct HcclKernelParamLite), dynamicDataSize);
     struct BatchSendRecvDataDes* batchSendRecvDataPtr
@@ -922,8 +923,7 @@ HcclResult CollServiceAiCpuImpl::FillAllToAllvData(const CollOperator& op)
 {
     if (dynamicDataSize == 0) {
         HCCL_ERROR("CollServiceAiCpuImpl::FillAllToAllvData dynamicDataSize is 0");
-        THROW<InternalException>(StringFormat("CollServiceAiCpuImpl::FillAllToAllvData dynamicDataSize is 0"));
-        return HCCL_E_PARA;
+        return HcclResult::HCCL_E_INTERNAL;
     }
     Buffer dynamicDataMem = kernelParamBuf_.get()->Range(sizeof(struct HcclKernelParamLite), dynamicDataSize);
     struct AllToAllvDataDes* alltoallvDataPtr = reinterpret_cast<struct AllToAllvDataDes*>(dynamicDataMem.GetAddr());
@@ -958,8 +958,7 @@ HcclResult CollServiceAiCpuImpl::FillAllToAllvcData(const CollOperator& op)
 {
     if (dynamicDataSize == 0) {
         HCCL_ERROR("CollServiceAiCpuImpl::FillAllToAllvcData dynamicDataSize is 0");
-        THROW<InternalException>(StringFormat("CollServiceAiCpuImpl::FillAllToAllvcData dynamicDataSize is 0"));
-        return HCCL_E_PARA;
+        return HcclResult::HCCL_E_INTERNAL;
     }
     Buffer dynamicDataMem = kernelParamBuf_.get()->Range(sizeof(struct HcclKernelParamLite), dynamicDataSize);
     struct AllToAllvcDataDes* alltoallvcDataPtr = reinterpret_cast<struct AllToAllvcDataDes*>(dynamicDataMem.GetAddr());

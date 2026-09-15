@@ -367,7 +367,12 @@ bool AicpuTsUboeUbRtpChannelHelper::RecvDataProcess()
     RmtBufferVecUnpackProc(notifyNum_, binaryStream, rmtNotifyVec_, UboeRmtBufType::NOTIFY);
     RmtBufferVecUnpackProc(bufferNum_, binaryStream, rmtBufferVec_, UboeRmtBufType::BUFFER);
     RmtDrainBufferUnpackProc(binaryStream);
-    return ConnVecUnpackProc(binaryStream);
+    bool result = false;
+    if (ConnVecUnpackProc(binaryStream, result) != HcclResult::HCCL_SUCCESS) {
+        HCCL_ERROR("[%s] ConnVecUnpackProc failed", __func__);
+        return false;
+    }
+    return result;
 }
 
 void AicpuTsUboeUbRtpChannelHelper::RmtBufferVecUnpackProc(
@@ -421,18 +426,17 @@ void AicpuTsUboeUbRtpChannelHelper::RmtDrainBufferUnpackProc(Hccl::BinaryStream&
     }
 }
 
-bool AicpuTsUboeUbRtpChannelHelper::ConnVecUnpackProc(Hccl::BinaryStream& binaryStream)
+HcclResult AicpuTsUboeUbRtpChannelHelper::ConnVecUnpackProc(Hccl::BinaryStream& binaryStream, bool& result)
 {
     u32 rmtConnNum;
     binaryStream >> rmtConnNum;
     HCCL_INFO("start unpack conn connNum=%u, rmtConnNum=%u", connNum_, rmtConnNum);
     if (connNum_ != rmtConnNum) {
-        MACRO_THROW(
-            Hccl::InvalidParamsException,
-            Hccl::StringFormat("connNum=%u is not equal to rmtConnNum=%u", connNum_, rmtConnNum));
+        HCCL_ERROR("[%s] connNum=%u is not equal to rmtConnNum=%u", __func__, connNum_, rmtConnNum);
+        return HcclResult::HCCL_E_PARA;
     }
 
-    bool result = false;
+    result = false;
     for (u32 i = 0; i < rmtConnNum; i++) {
         u32 pos;
         binaryStream >> pos;
@@ -447,7 +451,7 @@ bool AicpuTsUboeUbRtpChannelHelper::ConnVecUnpackProc(Hccl::BinaryStream& binary
             result = true;
         }
     }
-    return result;
+    return HcclResult::HCCL_SUCCESS;
 }
 
 static HcclResult SetUboeModuleDataName(Hccl::ModuleData& module, const std::string& name)
@@ -586,13 +590,12 @@ std::vector<char> AicpuTsUboeUbRtpChannelHelper::GetConnUniqueIds()
     return result;
 }
 
-std::vector<char> AicpuTsUboeUbRtpChannelHelper::GetUniqueIdV2()
+HcclResult AicpuTsUboeUbRtpChannelHelper::GetUniqueIdV2(std::vector<char>& result)
 {
     if (channelStatus != ChannelStatus::READY) {
-        MACRO_THROW(
-            Hccl::InternalException,
-            Hccl::StringFormat(
-                "channel status[%d] is not ready[%d], please check.", channelStatus, ChannelStatus::READY));
+        HCCL_ERROR(
+            "[%s] channel status[%d] is not ready[%d], please check.", __func__, channelStatus, ChannelStatus::READY);
+        return HcclResult::HCCL_E_INTERNAL;
     }
     Hccl::BinaryStream binaryStream;
     binaryStream << type_;
@@ -623,9 +626,8 @@ std::vector<char> AicpuTsUboeUbRtpChannelHelper::GetUniqueIdV2()
     auto connUniqueIds = GetConnUniqueIds();
     binaryStream << connUniqueIds;
 
-    std::vector<char> result;
     binaryStream.Dump(result);
-    return result;
+    return HcclResult::HCCL_SUCCESS;
 }
 
 HcclResult AicpuTsUboeUbRtpChannelHelper::H2DResPack(std::vector<char>& buffer)
@@ -638,7 +640,9 @@ HcclResult AicpuTsUboeUbRtpChannelHelper::H2DResPack(std::vector<char>& buffer)
 
     std::vector<char> result;
     Hccl::BinaryStream binaryStream;
-    binaryStream << GetUniqueIdV2();
+    std::vector<char> uniqueIdV2;
+    CHK_RET(GetUniqueIdV2(uniqueIdV2));
+    binaryStream << uniqueIdV2;
 
     binaryStream.Dump(result);
 

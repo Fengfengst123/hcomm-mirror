@@ -1954,7 +1954,10 @@ TEST(CommunicatorImplTest, st_should_success_when_GetSnapShotDynamicBuf)
     LinkInfo linkInfo{1, 0, IpAddress{"10.0.0.1"}, IpAddress{"10.0.0.2"}};
     LinkGroup utLinkGroup{vector<LinkInfo>{linkInfo}};
     vector<LinkGroup> utLinkGroups{utLinkGroup};
-    MOCKER_CPP(&CcuTransportGroupMgr::GetAllTransportGroups).stubs().with().will(returnValue(utLinkGroups));
+    MOCKER_CPP(&CcuTransportGroupMgr::GetAllTransportGroups)
+        .stubs()
+        .with(outBound(utLinkGroups))
+        .will(returnValue(HcclResult::HCCL_SUCCESS));
 
     // 执行步骤
     BinaryStream buf;

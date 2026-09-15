@@ -45,8 +45,11 @@ TEST_F(CcuAssistTest, Test)
     EXPECT_EQ(GetExpansionParam(1), 18014398509481984);
     EXPECT_EQ(GetCcuReduceType(ReduceOp::SUM), 0);
     EXPECT_EQ(GetCcuDataType(DataType::FP32, ReduceOp::SUM), 0);
-    EXPECT_EQ(GetUBReduceType(ReduceOp::SUM), 10);
-    EXPECT_EQ(GetUBDataType(DataType::FP32), 7);
+    uint16_t ubResult;
+    EXPECT_EQ(GetUBReduceType(ReduceOp::SUM, ubResult), HcclResult::HCCL_SUCCESS);
+    EXPECT_EQ(ubResult, 10);
+    EXPECT_EQ(GetUBDataType(DataType::FP32, ubResult), HcclResult::HCCL_SUCCESS);
+    EXPECT_EQ(ubResult, 7);
     EXPECT_EQ(GetReduceExpansionNum(ReduceOp::SUM, DataType::HIF8, DataType::FP32), 4);
     EXPECT_EQ(GetReduceTypeStr(DataType::FP32, ReduceOp::SUM), "fp32_sum");
 }
@@ -55,7 +58,8 @@ TEST_F(CcuAssistTest, Test1)
 {
     EXPECT_THROW(GetCcuDataType(DataType::BF16_SAT, ReduceOp::SUM), CcuApiException);
     EXPECT_THROW(GetCcuDataType(DataType::BF16_SAT, ReduceOp::MIN), CcuApiException);
-    EXPECT_THROW(GetUBReduceType(ReduceOp::PROD), CcuApiException);
-    EXPECT_THROW(GetUBDataType(DataType::BF16_SAT), CcuApiException);
+    uint16_t ubResult;
+    EXPECT_EQ(GetUBReduceType(ReduceOp::PROD, ubResult), HcclResult::HCCL_E_PARA);
+    EXPECT_EQ(GetUBDataType(DataType::BF16_SAT, ubResult), HcclResult::HCCL_E_PARA);
     EXPECT_THROW(GetCcuReduceType(ReduceOp::PROD), CcuApiException);
 }

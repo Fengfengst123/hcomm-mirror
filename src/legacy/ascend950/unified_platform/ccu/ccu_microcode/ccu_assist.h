@@ -30,8 +30,8 @@ namespace CcuRep {
 
     uint16_t GetCcuReduceType(ReduceOp reduceOp);
     uint16_t GetCcuDataType(DataType dataType, ReduceOp reduceOp);
-    uint16_t GetUBReduceType(ReduceOp reduceOp);
-    uint16_t GetUBDataType(DataType dataType);
+    HcclResult GetUBReduceType(ReduceOp reduceOp, uint16_t& result);
+    HcclResult GetUBDataType(DataType dataType, uint16_t& result);
     uint32_t GetReduceExpansionNum(ReduceOp reduceOp, DataType dataType, DataType outputDataType);
     std::string GetReduceTypeStr(DataType dataType, ReduceOp opType);
 

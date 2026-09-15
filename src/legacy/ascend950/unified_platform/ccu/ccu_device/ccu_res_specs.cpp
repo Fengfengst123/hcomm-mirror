@@ -66,10 +66,10 @@ static CcuVersion CheckCcuVersion()
     return CcuVersion::CCU_V1; // CCU驱动未更新前临时使用
 }
 
-static bool CheckDieEnable(const int32_t devLogicId, const uint8_t dieId)
+static HcclResult CheckDieEnable(const int32_t devLogicId, const uint8_t dieId, bool& result)
 {
     auto tlvHandle = HccpTlvHdcManager::GetInstance().GetTlvHandle(devLogicId);
-    CHECK_NULLPTR(tlvHandle, StringFormat("[%s] tlvHandle is nullptr, devLogicId[%d]", __func__, devLogicId));
+    CHK_PTR_NULL(tlvHandle);
     struct CustomChannelInfoIn inBuff;
     struct CustomChannelInfoOut outBuff;
     inBuff.op = CcuOpcodeType::CCU_U_OP_GET_DIE_WORKING;
@@ -80,7 +80,8 @@ static bool CheckDieEnable(const int32_t devLogicId, const uint8_t dieId)
         tlvHandle, MSG_TYPE_CCU_DISPATCH_CMD, static_cast<void*>(&inBuff), static_cast<void*>(&outBuff));
 
     const uint32_t enableFlag = outBuff.data.dataInfo.dataArray[0].dieinfo.enableFlag;
-    return enableFlag == CCU_ENABLE_FLAG;
+    result = enableFlag == CCU_ENABLE_FLAG;
+    return HcclResult::HCCL_SUCCESS;
 }
 
 static CcuBaseInfoData ParseOutBuffToBaseInfoData(const CustomChannelInfoOut& outBuff)
@@ -149,7 +150,9 @@ HcclResult CcuResSpecifications::Init_()
                      auto tlvHandle = HccpTlvHdcManager::GetInstance().GetTlvHandle(devLogicId);
                      auto memTypeBitmap = GetCombinedMemTypeBitmap(); auto count = GetMemTypeVector().size();
                      for (uint8_t dieId = 0; dieId < MAX_CCU_IODIE_NUM; dieId++) {
-                         dieEnableFlags[dieId] = CheckDieEnable(devLogicId, dieId);
+                         bool dieEnable;
+                         CHK_RET(CheckDieEnable(devLogicId, dieId, dieEnable));
+                         dieEnableFlags[dieId] = dieEnable;
                          if (!dieEnableFlags[dieId]) {
                              resSpecs[dieId] = CcuResSpecInfo{};
                              continue;

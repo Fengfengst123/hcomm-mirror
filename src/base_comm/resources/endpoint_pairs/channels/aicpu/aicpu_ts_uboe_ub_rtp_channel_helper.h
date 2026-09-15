@@ -89,9 +89,9 @@ protected:
     void RmtBufferVecUnpackProc(
         u32 locNum, Hccl::BinaryStream& binaryStream, RemoteBufferVec& bufferVec, UboeRmtBufType type);
     void RmtDrainBufferUnpackProc(Hccl::BinaryStream& binaryStream);
-    bool ConnVecUnpackProc(Hccl::BinaryStream& binaryStream);
+    HcclResult ConnVecUnpackProc(Hccl::BinaryStream& binaryStream, bool& result);
 
-    std::vector<char> GetUniqueIdV2();
+    HcclResult GetUniqueIdV2(std::vector<char>& result);
     std::vector<char> GetNotifyUniqueIds();
     std::vector<char> GetRmtBufferUniqueIds(RemoteBufferVec& bufferVec, UboeRmtBufType type) const;
     std::vector<char> GetLocBufferUniqueIds(LocalBufferVec& bufferVec, UboeRmtBufType type) const;

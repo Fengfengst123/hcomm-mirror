@@ -77,7 +77,8 @@ HcclResult TopoMatchMeshNHR::MatchTopo(
     u32 podNum = 0;
     vector<u32> instanceSizeVec = {};
     rankGraph_->GetNetInstanceList(0, instanceSizeVec, podNum);
-    u32 rankSizeLevel0 = GcdMultiple(instanceSizeVec); // 作为不规则topo level0的大小
+    u32 rankSizeLevel0;
+    CHK_RET(GcdMultiple(instanceSizeVec, rankSizeLevel0));
     HCCL_INFO(
         "[CollAlgFactory] [TopoMatchMeshNHR] Rank [%d], [%u] pods ,ranksize on each pod :[%s]", myRank_,
         instanceSizeVec.size(), PrintVector<u32>(instanceSizeVec).c_str());

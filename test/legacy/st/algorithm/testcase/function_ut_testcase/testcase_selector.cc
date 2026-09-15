@@ -60,7 +60,12 @@ protected:
 
     void SetAlgoEnv(std::string algo)
     {
-        EnvConfig::GetInstance().algoCfg.hcclAlgoConfig.value = SetHcclAlgoConfig(algo);
+        std::map<OpType, std::vector<HcclAlgoType>> algoConfig;
+        if (SetHcclAlgoConfig(algo, algoConfig) != HcclResult::HCCL_SUCCESS) {
+            std::cout << "SetHcclAlgoConfig failed for algo[" << algo << "]" << std::endl;
+            return;
+        }
+        EnvConfig::GetInstance().algoCfg.hcclAlgoConfig.value = algoConfig;
     }
 
     CollAlgOperator GetDefaultAlgOp(OpType opType, DataType dataType = DataType::FP16, u64 dataCount = 1024)

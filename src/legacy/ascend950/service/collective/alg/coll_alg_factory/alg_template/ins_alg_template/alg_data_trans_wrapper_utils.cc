@@ -224,12 +224,12 @@ HcclResult BatchTransSlicesLists(const LinkData& link, InsQuePtr queue, const Tr
                     sliceIdx, slices.dstSlices[sliceIdx].GetSize(), slices.srcSlices[sliceIdx].GetSize()),
                 HcclResult::HCCL_E_INTERNAL);
             if (!slices.reduceFlag) {
-                batchInstruction->PushWriteIns(std::make_unique<InsWrite>(
-                    link.GetRemoteRankId(), link, slices.srcSlices[sliceIdx], slices.dstSlices[sliceIdx]));
+                CHK_RET(batchInstruction->PushWriteIns(std::make_unique<InsWrite>(
+                    link.GetRemoteRankId(), link, slices.srcSlices[sliceIdx], slices.dstSlices[sliceIdx])));
             } else {
-                batchInstruction->PushWriteIns(std::make_unique<InsWriteReduce>(
+                CHK_RET(batchInstruction->PushWriteIns(std::make_unique<InsWriteReduce>(
                     link.GetRemoteRankId(), link, slices.srcSlices[sliceIdx], slices.dstSlices[sliceIdx],
-                    slices.dataType_, slices.reduceOp_));
+                    slices.dataType_, slices.reduceOp_)));
             }
         }
         queue->Append(std::move(batchInstruction));
@@ -244,12 +244,12 @@ HcclResult BatchTransSlicesLists(const LinkData& link, InsQuePtr queue, const Tr
                     sliceIdx, slices.dstSlices[sliceIdx].GetSize(), slices.srcSlices[sliceIdx].GetSize()),
                 HcclResult::HCCL_E_INTERNAL);
             if (!slices.reduceFlag) {
-                batchInstruction->PushReadIns(std::make_unique<InsRead>(
-                    link.GetRemoteRankId(), link, slices.dstSlices[sliceIdx], slices.srcSlices[sliceIdx]));
+                CHK_RET(batchInstruction->PushReadIns(std::make_unique<InsRead>(
+                    link.GetRemoteRankId(), link, slices.dstSlices[sliceIdx], slices.srcSlices[sliceIdx])));
             } else {
-                batchInstruction->PushReadIns(std::make_unique<InsReadReduce>(
+                CHK_RET(batchInstruction->PushReadIns(std::make_unique<InsReadReduce>(
                     link.GetRemoteRankId(), link, slices.dstSlices[sliceIdx], slices.srcSlices[sliceIdx],
-                    slices.dataType_, slices.reduceOp_));
+                    slices.dataType_, slices.reduceOp_)));
             }
         }
         queue->Append(std::move(batchInstruction));

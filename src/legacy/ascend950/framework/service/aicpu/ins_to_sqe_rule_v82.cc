@@ -711,11 +711,11 @@ void Interpret(
     [[maybe_unused]] ResMgrFetcher* resMgrFetcher)
 {
     HcclResult ret = stream.GetRtsq()->SetPreStreamSyncReady();
-    stream.GetRtsq()->LaunchTask();
     if (UNLIKELY(ret != HCCL_SUCCESS)) {
         string msg = StringFormat("[Interpret]SetPreStreamSyncReady failed");
         THROW<InternalException>(msg);
     }
+    stream.GetRtsq()->LaunchTask();
 }
 
 void Interpret(const InsAicpuReduce& insAicpuReduce, const StreamLite& stream, ResMgrFetcher* resMgrFetcher)

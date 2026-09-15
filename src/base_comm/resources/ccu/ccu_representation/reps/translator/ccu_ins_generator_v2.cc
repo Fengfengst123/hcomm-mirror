@@ -230,12 +230,13 @@ namespace CcuRep {
     {
         CHK_PTR_NULL(ccuRepLocCpy);
         if (ccuRepLocCpy->GetReduceFlag() == 0 && ccuRepLocCpy->GetUseCcuBuffer() == true) {
+            uint16_t firstBufId;
+            CHK_RET(ccuRepLocCpy->GetFirstBufId(firstBufId));
             CcuV2::CacheConfig cacheConfig{0x0, 0x0};
             CcuV2::TransLocMemToLocMem(
                 instr++, ccuRepLocCpy->GetDstAddrId(), ccuRepLocCpy->GetDstTokenId(), ccuRepLocCpy->GetSrcAddrId(),
-                ccuRepLocCpy->GetSrcTokenId(), ccuRepLocCpy->GetLenId(), ccuRepLocCpy->GetFirstBufId(),
-                ccuRepLocCpy->GetUsedBufNum(), ccuRepLocCpy->GetSemId(), ccuRepLocCpy->GetMask(), cacheConfig,
-                cacheConfig);
+                ccuRepLocCpy->GetSrcTokenId(), ccuRepLocCpy->GetLenId(), firstBufId, ccuRepLocCpy->GetUsedBufNum(),
+                ccuRepLocCpy->GetSemId(), ccuRepLocCpy->GetMask(), cacheConfig, cacheConfig);
         } else {
             // 使用旧接口或带规约场景，都走环回
             CcuV2::TransMemNotifyInfo notify = {};

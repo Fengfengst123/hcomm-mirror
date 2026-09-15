@@ -75,7 +75,8 @@ HcclResult TopoMatchConcurrMeshNHR::MatchTopo(
     if (!CheckSymmetric(instSizeList)) {
         // 非对称情形
         HCCL_DEBUG("[CollAlgFactory] [TopoMatchConcurrMeshNHR] Rank [%d], Asymmetric MatchTopo.", myRank_);
-        u32 gcdInstSize = GcdMultiple(instSizeList);
+        u32 gcdInstSize;
+        CHK_RET(GcdMultiple(instSizeList, gcdInstSize));
 
         // 计算 level 0 子通信域
         CHK_RET(GenerateLevel0(rankSetLevel0, gcdInstSize, myRank_, vTopo, virtRanks));

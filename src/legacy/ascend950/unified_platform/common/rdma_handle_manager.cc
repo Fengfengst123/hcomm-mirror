@@ -258,21 +258,24 @@ std::pair<uint32_t, uint32_t> RdmaHandleManager::GetDieAndFuncId(RdmaHandle rdma
     return DieAndFuncIdMap[rdmaHandle];
 }
 
-bool RdmaHandleManager::GetRtpEnable(RdmaHandle rdmaHandle)
+HcclResult RdmaHandleManager::GetRtpEnable(RdmaHandle rdmaHandle, bool& result)
 {
     std::lock_guard<std::mutex> lock(managerMutex);
 
     if (rdmaHandle == nullptr) {
-        THROW<InvalidParamsException>("[RdmaHandleManager][GetRtpEnable]rdmaHandle is nullptr, please check input.");
+        HCCL_ERROR("[%s] rdmaHandle is nullptr, please check input.", __func__);
+        return HcclResult::HCCL_E_PARA;
     }
 
     if (RtpEnableMap.find(rdmaHandle) != RtpEnableMap.end()) {
-        return RtpEnableMap[rdmaHandle];
+        result = RtpEnableMap[rdmaHandle];
+        return HcclResult::HCCL_SUCCESS;
     }
 
     RtpEnableMap[rdmaHandle] = HraGetRtpEnable(rdmaHandle);
     HCCL_RUN_INFO("[%s] GetRtpEnable return[%d]", __func__, RtpEnableMap[rdmaHandle]);
-    return RtpEnableMap[rdmaHandle];
+    result = RtpEnableMap[rdmaHandle];
+    return HcclResult::HCCL_SUCCESS;
 }
 
 std::pair<TokenIdHandle, uint32_t>

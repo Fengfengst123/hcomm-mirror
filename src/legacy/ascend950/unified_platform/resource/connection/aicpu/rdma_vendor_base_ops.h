@@ -273,7 +273,8 @@ protected:
 
         auto ret = memcpy_sp(va, wqeSize, wqe, wqeSize);
         if (UNLIKELY(ret != 0)) {
-            THROW<InternalException>(StringFormat("[RdmaBaseOps::%s] memcpy_s failed, ret = %d", __func__, ret));
+            HCCL_ERROR("[RdmaBaseOps::%s] memcpy_s failed, ret = %d", __func__, ret);
+            return HcclResult::HCCL_E_INTERNAL;
         }
 
         // pi维护用于传入DB Send用于Rtsq 敲door bell
@@ -320,7 +321,8 @@ protected:
         auto status
             = memcpy_sp(ReinterpretAs<void*>(sqContext_->dbSwVa), sizeof(uint32_t), &sqHeadNum, sizeof(uint32_t));
         if (UNLIKELY(status != 0)) {
-            THROW<InternalException>(StringFormat("[RdmaBaseOps::%s] Ring Sw DB failed, ret = %d", __func__, status));
+            HCCL_ERROR("[RdmaBaseOps::%s] Ring Sw DB failed, ret = %d", __func__, status);
+            return HcclResult::HCCL_E_INTERNAL;
         }
         return HCCL_SUCCESS;
     }

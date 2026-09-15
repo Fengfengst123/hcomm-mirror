@@ -99,7 +99,11 @@ RdmaHandleManager::GetTokenIdInfo(RdmaHandle rdmaHandle, const BufferKey<uintptr
     return std::make_pair(0, 0);
 }
 
-bool RdmaHandleManager::GetRtpEnable(RdmaHandle rdmaHandle) { return true; }
+HcclResult RdmaHandleManager::GetRtpEnable(RdmaHandle rdmaHandle, bool& result)
+{
+    result = true;
+    return HcclResult::HCCL_SUCCESS;
+}
 
 RdmaHandleManager& RdmaHandleManager::GetInstance()
 {

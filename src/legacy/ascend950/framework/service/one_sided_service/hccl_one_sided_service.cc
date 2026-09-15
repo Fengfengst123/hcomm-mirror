@@ -370,7 +370,7 @@ void HcclOneSidedService::AddWaitToUserStream(const Stream& stream) const
     waitNotify->Wait(stream, 1000); // host 和 device sync流程，等待1000ms
 }
 
-void HcclOneSidedService::SetOneSidedKernelLaunchParam(HcclKernelLaunchParam& param, const DevBuffer* mem) const
+HcclResult HcclOneSidedService::SetOneSidedKernelLaunchParam(HcclKernelLaunchParam& param, const DevBuffer* mem) const
 {
     CollOperator op = *comm_->GetCurrentCollOperator();
 
@@ -383,8 +383,8 @@ void HcclOneSidedService::SetOneSidedKernelLaunchParam(HcclKernelLaunchParam& pa
     param.kernel.comm.opCounterAddr = static_cast<u64>(counterBuf->GetAddr());
     auto ret = strcpy_s(param.kernel.comm.commId, sizeof(param.kernel.comm.commId), comm_->GetId().data());
     if (ret != EOK) {
-        THROW<InternalException>(
-            StringFormat("HcclOneSidedService::SetOneSidedKernelLaunchParam, strcpy_s commId failed! ret[%d]", ret));
+        HCCL_ERROR("[HcclOneSidedService][%s] strcpy_s commId failed! ret[%d]", __func__, ret);
+        return HcclResult::HCCL_E_INTERNAL;
     }
 
     param.kernel.oneSidedComm = true;
@@ -399,6 +399,7 @@ void HcclOneSidedService::SetOneSidedKernelLaunchParam(HcclKernelLaunchParam& pa
 
     param.kernel.kfcControlTransferH2DParams = comm_->GetKfcControlTransferH2D().GetCommunicateParams();
     param.kernel.kfcControlTransferD2HParams = comm_->GetKfcStatusTransferD2H().GetCommunicateParams();
+    return HcclResult::HCCL_SUCCESS;
 }
 
 void HcclOneSidedService::OneSidedAicpuKernelLaunch(HcclKernelLaunchParam& param, Stream& stream) const
@@ -477,13 +478,13 @@ HcclResult HcclOneSidedService::BatchOpKernelLaunch(
 
     HCCL_INFO("[HcclOneSidedService][BatchOpKernelLaunch] SetOneSidedKernelLaunchParam start");
     // 构造单边通信公共参数
-    SetOneSidedKernelLaunchParam(param, devMem);
+    CHK_RET(SetOneSidedKernelLaunchParam(param, devMem));
 
     std::shared_lock oneSidedConnslock(oneSidedConnsMutex_);
     auto it = oneSidedConns_.find(remoteRankId);
     if (it == oneSidedConns_.end()) {
         HCCL_ERROR("[HcclMemCommunication][BatchGet] Can't find oneSidedConn by remoteRank %u", remoteRankId);
-        throw out_of_range("Can't find oneSidedConn by remoteRank.");
+        return HcclResult::HCCL_E_NOT_FOUND;
     }
     HCCL_INFO("[HcclOneSidedService][BatchOpKernelLaunch] BatchPutGetDevBufs start");
     CHK_RET(BatchPutGetDevBufs(desc, descNum, it->second));
@@ -494,8 +495,8 @@ HcclResult HcclOneSidedService::BatchOpKernelLaunch(
     param.kernel.op.batchPutGetRemoteAddr = reinterpret_cast<void*>(devBatchPutGetRemoteBufs.get()->GetAddr());
     auto ret = strcpy_s(param.kernel.tagKey, sizeof(param.kernel.tagKey), opReq.algName.c_str());
     if (ret != EOK) {
-        THROW<InternalException>(
-            StringFormat("[HcclOneSidedService][BatchOpKernelLaunch], strcpy_s opReq.algName failed! ret[%d]", ret));
+        HCCL_ERROR("[HcclOneSidedService][BatchOpKernelLaunch], strcpy_s opReq.algName failed! ret[%d]", ret);
+        return HcclResult::HCCL_E_INTERNAL;
     }
 
     HCCL_INFO("[HcclOneSidedService][BatchOpKernelLaunch] OneSidedAicpuKernelLaunch start");

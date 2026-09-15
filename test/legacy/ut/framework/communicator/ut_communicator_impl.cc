@@ -1255,7 +1255,7 @@ TEST_F(CommunicatorImplTest, RecoverRankGraphData_ShouldReturnSuccess_WhenInputI
     SnapShotComm snapShotComm;
     CommunicatorImpl commImpl;
     const char* filePath = "test_legacy";
-    EXPECT_THROW(commImpl.RecoverRankGraphData(snapShotComm, filePath), InternalException);
+    EXPECT_EQ(commImpl.RecoverRankGraphData(snapShotComm, filePath), HcclResult::HCCL_E_INTERNAL);
 }
 
 TEST_F(CommunicatorImplTest, should_throw_exception_when_mirrorTaskManager_is_nullptr)
@@ -1716,7 +1716,10 @@ TEST_F(CommunicatorImplTest, ut_should_success_when_GetSnapShotDynamicBuf)
     LinkInfo linkInfo{1, 0, IpAddress{"10.0.0.1"}, IpAddress{"10.0.0.2"}};
     LinkGroup utLinkGroup{vector<LinkInfo>{linkInfo}};
     vector<LinkGroup> utLinkGroups{utLinkGroup};
-    MOCKER_CPP(&CcuTransportGroupMgr::GetAllTransportGroups).stubs().with().will(returnValue(utLinkGroups));
+    MOCKER_CPP(&CcuTransportGroupMgr::GetAllTransportGroups)
+        .stubs()
+        .with(outBound(utLinkGroups))
+        .will(returnValue(HcclResult::HCCL_SUCCESS));
 
     // 执行步骤
     BinaryStream buf;
@@ -2294,7 +2297,7 @@ TEST_F(CommunicatorImplTest, ut_ReLoadOpbasedOp_When_AICPU_TS_Expect_returnHCCL_
     EXPECT_EQ(fakeComm.ReLoadOpbasedOp(), HcclResult::HCCL_SUCCESS);
 
     fakeComm.opExecuteConfig.accState = AcceleratorState::CCU_MS;
-    EXPECT_THROW(fakeComm.ReLoadOpbasedOp(), NotSupportException); // CCU::ReLoadWithOffloadMode NotSupport
+    EXPECT_EQ(fakeComm.ReLoadOpbasedOp(), HcclResult::HCCL_E_NOT_SUPPORT); // CCU::ReLoadWithOpBasedMode NotSupport
 }
 
 TEST_F(LoadOffloadCollOpTest, Ut_LoadOffloadCollOp_When_HOSTCPU_TS_Expect_returnHCCL_E_NOT_SUPPORT)
@@ -2371,7 +2374,7 @@ TEST_F(CommunicatorImplTest, ut_ReLoadOffloadOp_When_AICPU_TS_Expect_returnHCCL_
     EXPECT_EQ(fakeComm.ReLoadOffloadOp(), HcclResult::HCCL_SUCCESS);
 
     fakeComm.opExecuteConfig.accState = AcceleratorState::CCU_MS;
-    EXPECT_THROW(fakeComm.ReLoadOffloadOp(), NotSupportException); // CCU::ReLoadWithOffloadMode NotSupport
+    EXPECT_EQ(fakeComm.ReLoadOffloadOp(), HcclResult::HCCL_E_NOT_SUPPORT); // CCU::ReLoadWithOffloadMode NotSupport
 }
 
 TEST_F(CommunicatorImplTest, Ut_CommunicatorImpl_When_SingleRankProc_Expect_OK_ReturnIsHCCL_SUCCESS)

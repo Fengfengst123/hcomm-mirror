@@ -505,7 +505,7 @@ private:
     void InitCollService();
     void InitHccpHdc() const;
     void InitCcuSuperFastLoad();
-    void InitPreResource();
+    HcclResult InitPreResource();
     void DeInitPreResource();
     void InitSocketManager();
     void InitRmaConnManager();

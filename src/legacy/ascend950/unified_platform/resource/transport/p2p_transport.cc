@@ -381,10 +381,11 @@ std::vector<char> P2PTransport::GetUniqueId()
     return result;
 }
 
-std::vector<char> P2PTransport::GetUniqueIdV2()
+HcclResult P2PTransport::GetUniqueIdV2(std::vector<char>& result)
 {
     if (baseStatus != TransportStatus::READY) {
-        MACRO_THROW(InternalException, StringFormat("transport status is not ready, please check"));
+        HCCL_ERROR("[%s] transport status is not ready, please check", __func__);
+        return HcclResult::HCCL_E_INTERNAL;
     }
     u32 type = static_cast<u32>(transportType);
     BinaryStream binaryStream;
@@ -405,9 +406,8 @@ std::vector<char> P2PTransport::GetUniqueIdV2()
     auto rmtBufferUniqueIds = GetRmtBufferUniqueIds();
     binaryStream << rmtBufferUniqueIds;
 
-    std::vector<char> result;
     binaryStream.Dump(result);
-    return result;
+    return HcclResult::HCCL_SUCCESS;
 }
 
 std::vector<char> P2PTransport::GetNotifyUniqueIds()

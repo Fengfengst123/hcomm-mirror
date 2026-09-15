@@ -506,7 +506,7 @@ TEST_F(SnapShotParserTest, DeserializeCcuStatusBufTest)
     SnapShotParser& parser = SnapShotParser::GetInstance();
     SnapShotBuf localBuff;
     // 调用DeserializeCcuStatusBuf函数
-    parser.DeserializeCcuStatusBuf(buf, localBuff);
+    EXPECT_EQ(parser.DeserializeCcuStatusBuf(buf, localBuff), HcclResult::HCCL_SUCCESS);
     EXPECT_EQ(localBuff.ccuStatusSnapshot.useMsCommIds.size(), useMsCommIdsSize);
     EXPECT_EQ(localBuff.ccuStatusSnapshot.useSchedCommIds.size(), useSchedCommIdsSize);
 

@@ -235,8 +235,8 @@ public:
             // Ring Cq Soft DB
             auto ret = memcpy_sp(ReinterpretAs<void*>(dbAddr), sizeof(uint32_t), &dbValue32, sizeof(uint32_t));
             if (UNLIKELY(ret != 0)) {
-                THROW<InternalException>(
-                    StringFormat("[Rdma1825Ops::%s] write soft Cq DB failed, ret = %d", __func__, ret));
+                HCCL_ERROR("[Rdma1825Ops::%s] write soft Cq DB failed, ret = %d", __func__, ret);
+                return HcclResult::HCCL_E_INTERNAL;
             }
             HCCL_INFO(
                 "[Rdma1825Ops::%s] CQ DB updated, cqTail[%u], dbAddr[0x%llx], dbValue[0x%llx]", __func__, cqTail_,
@@ -318,8 +318,8 @@ protected:
 
         auto ret = memcpy_sp(dst, sizeof(ownerSl), &ownerSl, sizeof(ownerSl));
         if (UNLIKELY(ret != 0)) {
-            THROW<InternalException>(
-                StringFormat("[Rdma1825Ops::%s] write invalid wqebb failed, ret = %d", __func__, ret));
+            HCCL_ERROR("[Rdma1825Ops::%s] write invalid wqebb failed, ret = %d", __func__, ret);
+            return HcclResult::HCCL_E_INTERNAL;
         }
         return HCCL_SUCCESS;
     }

@@ -33,7 +33,7 @@ public:
 
     std::vector<char> GetUniqueId() override;
 
-    std::vector<char> GetUniqueIdV2();
+    HcclResult GetUniqueIdV2(std::vector<char>& result);
 
     void Post(u32 index, const Stream& stream) override;
 

@@ -26,7 +26,7 @@ public:
     void Confirm();
     void Fallback();
     void Destroy();
-    vector<LinkGroup> GetAllTransportGroups();
+    HcclResult GetAllTransportGroups(vector<LinkGroup>& linkGroups);
     void Clean();
     void ResumeAll(u32 cntCkeNum);
 

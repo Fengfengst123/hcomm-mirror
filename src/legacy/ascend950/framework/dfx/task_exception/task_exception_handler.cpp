@@ -64,7 +64,13 @@ void TaskExceptionHandler::Register() const
     HCCL_INFO("[TaskExceptionHandler]exception process func registered.");
 }
 
-void TaskExceptionHandler::UnRegister() const { HrtUnregTaskExceptionCallbackByModule(Process); }
+void TaskExceptionHandler::UnRegister() const
+{
+    HcclResult ret = HrtUnregTaskExceptionCallbackByModule(Process);
+    if (ret != HcclResult::HCCL_SUCCESS) {
+        HCCL_ERROR("[%s] HrtUnregTaskExceptionCallbackByModule failed, ret[%d]", __func__, ret);
+    }
+}
 
 TaskExceptionHandler* TaskExceptionHandlerManager::GetHandler(size_t devId)
 {

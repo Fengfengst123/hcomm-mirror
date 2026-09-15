@@ -110,7 +110,7 @@ private:
     void GenerateLocalPsn();
     void ResetRequestCtxs();
     HcclResult StartImportJettyRequest(uint32_t jettyIndex, RequestHandle& reqHandle);
-    bool CheckRequestResults();
+    HcclResult CheckRequestResults(bool& result);
     void ConfigChannel();
     HcclResult ReleaseConnRes();
     void ThrowAbnormalStatus(const std::string& funcName);

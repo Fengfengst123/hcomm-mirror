@@ -605,7 +605,8 @@ TEST_F(CcuComponentTest, Ut_GetLoopTpAttr_Cached_ReturnsCachedValue)
     ccuComponent.tpAttrInfoMap[ipAddr] = cachedTpAttrInfo;
 
     TpHandle tpHandle = 12345;
-    TpAttrInfo result = ccuComponent.GetLoopTpAttr(ipAddr, tpHandle);
+    TpAttrInfo result;
+    EXPECT_EQ(ccuComponent.GetLoopTpAttr(ipAddr, tpHandle, result), HcclResult::HCCL_SUCCESS);
     EXPECT_EQ(result.tpAttr.at, 2);
     EXPECT_EQ(result.tpAttr.retryTimesInit, 1);
 
@@ -624,7 +625,8 @@ TEST_F(CcuComponentTest, Ut_GetLoopTpAttr_NotCached_CallsRaGetTpAttrAsync)
 
     MOCKER_CPP(&RdmaHandleManager::GetByIp).stubs().will(returnValue((void*)0x12345678));
 
-    TpAttrInfo result = ccuComponent.GetLoopTpAttr(ipAddr, tpHandle);
+    TpAttrInfo result;
+    EXPECT_EQ(ccuComponent.GetLoopTpAttr(ipAddr, tpHandle, result), HcclResult::HCCL_SUCCESS);
     EXPECT_EQ(ccuComponent.tpAttrInfoMap.count(ipAddr), 1);
 
     GlobalMockObject::verify();

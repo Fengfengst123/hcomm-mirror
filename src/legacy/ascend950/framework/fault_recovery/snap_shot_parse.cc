@@ -58,7 +58,7 @@ HcclResult SnapShotParser::ParseSnapshotToLocalBuff(void* snapshotBuf, uint32_t 
         HCCL_INFO("snapshotBuf start");
         CHK_RET(DeAllSnapShotStaticBuf(buf, localBuff));
         CHK_RET(DeAllSnapShotDynamicBuf(buf, localBuff));
-        DeserializeCcuStatusBuf(buf, localBuff);
+        CHK_RET(DeserializeCcuStatusBuf(buf, localBuff));
     } catch (std::exception& e) {
         HCCL_ERROR("[%s]Failed, exception caught:%s, please check input snapshot!", __func__, e.what());
         return HCCL_E_INTERNAL;
@@ -84,7 +84,8 @@ HcclResult SnapShotParser::DeAllSnapShotStaticBuf(BinaryStream& buf, SnapShotBuf
     s32 ret = memcpy_s(
         localBuff.snapshot.groupName, sizeof(localBuff.snapshot.groupName), tmpGroupName.c_str(), tmpGroupName.size());
     if (ret != 0) {
-        THROW<InternalException>(StringFormat("[%s] memcpy_s failed, ret=%d", __func__, ret));
+        HCCL_ERROR("[%s] memcpy_s failed, ret=%d", __func__, ret);
+        return HcclResult::HCCL_E_INTERNAL;
     }
     // 获取 子通信域 静态buf数量
     size_t groupNum{0};
@@ -103,7 +104,8 @@ HcclResult SnapShotParser::DeAllSnapShotStaticBuf(BinaryStream& buf, SnapShotBuf
             s32 tmpRet = memcpy_s(
                 subSnapshot.groupName, sizeof(subSnapshot.groupName), subComGroupName.c_str(), subComGroupName.size());
             if (tmpRet != 0) {
-                THROW<InternalException>(StringFormat("[%s] memcpy_s failed, ret=%d", __func__, tmpRet));
+                HCCL_ERROR("[%s] memcpy_s failed, ret=%d", __func__, tmpRet);
+                return HcclResult::HCCL_E_INTERNAL;
             }
         }
     }
@@ -160,16 +162,17 @@ HcclResult SnapShotParser::DeAllSnapShotDynamicBuf(BinaryStream& buf, SnapShotBu
     return HCCL_SUCCESS;
 }
 
-void SnapShotParser::DeserializeCcuStatusBuf(BinaryStream& buf, SnapShotBuf& localBuff) const
+HcclResult SnapShotParser::DeserializeCcuStatusBuf(BinaryStream& buf, SnapShotBuf& localBuff) const
 {
     HCCL_INFO("[%s] start", __func__);
 
     size_t useMsCommIdsSize{0};
     buf >> useMsCommIdsSize;
     if (useMsCommIdsSize > MAX_NUM_COMM_USING_MS) {
-        THROW<InternalException>(StringFormat(
+        HCCL_ERROR(
             "[%s] useMsCommIdsSize[%zu] > MAX_NUM_COMM_USING_MS[%u]", __func__, useMsCommIdsSize,
-            MAX_NUM_COMM_USING_MS));
+            MAX_NUM_COMM_USING_MS);
+        return HcclResult::HCCL_E_INTERNAL;
     }
     HCCL_INFO("[SnapShotParser][%s] useMsCommIdsSize = [%u]", __func__, useMsCommIdsSize);
     localBuff.ccuStatusSnapshot.useMsCommIds.resize(useMsCommIdsSize);
@@ -180,7 +183,8 @@ void SnapShotParser::DeserializeCcuStatusBuf(BinaryStream& buf, SnapShotBuf& loc
         s32 ret
             = memcpy_s(useMsCommIdCharArr.data(), sizeof(useMsCommIdCharArr), useMsCommId.c_str(), useMsCommId.size());
         if (ret != 0) {
-            THROW<InternalException>(StringFormat("[%s] memcpy_s failed, ret=%d", __func__, ret));
+            HCCL_ERROR("[%s] memcpy_s failed, ret=%d", __func__, ret);
+            return HcclResult::HCCL_E_INTERNAL;
         }
     }
 
@@ -195,10 +199,12 @@ void SnapShotParser::DeserializeCcuStatusBuf(BinaryStream& buf, SnapShotBuf& loc
         s32 ret = memcpy_s(
             useSchedCommIdCharArr.data(), sizeof(useSchedCommIdCharArr), useSchedCommId.c_str(), useSchedCommId.size());
         if (ret != 0) {
-            THROW<InternalException>(StringFormat("[%s] memcpy_s failed, ret=%d", __func__, ret));
+            HCCL_ERROR("[%s] memcpy_s failed, ret=%d", __func__, ret);
+            return HcclResult::HCCL_E_INTERNAL;
         }
     }
     HCCL_INFO("[%s] end", __func__);
+    return HcclResult::HCCL_SUCCESS;
 }
 
 // 生成 单个通信域 动态短流

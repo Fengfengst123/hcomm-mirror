@@ -30,8 +30,8 @@ namespace CcuRep {
 
     uint16_t GetCcuReduceType(Hccl::ReduceOp reduceOp);
     uint16_t GetCcuDataType(Hccl::DataType dataType, Hccl::ReduceOp reduceOp);
-    uint16_t GetUBReduceType(Hccl::ReduceOp reduceOp);
-    uint16_t GetUBDataType(Hccl::DataType dataType);
+    HcclResult GetUBReduceType(Hccl::ReduceOp reduceOp, uint16_t& result);
+    HcclResult GetUBDataType(Hccl::DataType dataType, uint16_t& result);
 
     uint64_t GetLoopParam(uint64_t loopCtxId, uint64_t gsaOffset, uint64_t loopIterNum);
     uint64_t GetParallelParam(uint64_t repeatNum, uint64_t repeatLoopIndex, uint64_t totalLoopNum);

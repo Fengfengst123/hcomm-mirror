@@ -49,7 +49,7 @@ void DlProfFunc::DlProfFunctionStubInit() { dlMsprofSysCycleTime = &HcclMsprofSy
 
 HcclResult DlProfFunc::DlProfFunctionInterInit()
 {
-    CHECK_NULLPTR(handle_, "[DlProfFunc::DlProfFunctionInterInit] handle_ is nullptr!");
+    CHK_PTR_NULL(handle_);
     dlMsprofSysCycleTime = (uint64_t(*)(void))dlsym(handle_, "MsprofSysCycleTime");
     CHK_PTR_NULL(dlMsprofSysCycleTime);
 

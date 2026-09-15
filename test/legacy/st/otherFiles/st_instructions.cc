@@ -487,8 +487,8 @@ TEST(InstructionTest, test_ins_BatchRead)
     unique_ptr<Instruction> readIns = make_unique<InsRead>(remoteRank, *linkData, *localSlice, *remoteSlice);
     unique_ptr<Instruction> readReduceIns
         = make_unique<InsReadReduce>(remoteRank, *linkData, *localSlice, *remoteSlice, dataType, reduceOp);
-    insBatchRead->PushReadIns(move(readIns));
-    insBatchRead->PushReadIns(move(readReduceIns));
+    EXPECT_EQ(insBatchRead->PushReadIns(move(readIns)), HcclResult::HCCL_SUCCESS);
+    EXPECT_EQ(insBatchRead->PushReadIns(move(readReduceIns)), HcclResult::HCCL_SUCCESS);
 
     EXPECT_EQ(remoteRank, insBatchRead->GetRemoteRank());
     EXPECT_EQ(true, *(insBatchRead->GetLink()) == *linkData);
@@ -514,7 +514,7 @@ TEST(InstructionTest, test_ins_batch_read_PushReadIns_fail)
     unique_ptr<Instruction> writeIns = make_unique<InsWrite>(remoteRank, *linkData, *localSlice, *remoteSlice);
     InsBatchRead* insBatchRead = new InsBatchRead(remoteRank, *linkData);
 
-    EXPECT_THROW(insBatchRead->PushReadIns(move(writeIns)), NotSupportException);
+    EXPECT_EQ(insBatchRead->PushReadIns(move(writeIns)), HcclResult::HCCL_E_RUNTIME);
 
     delete linkData;
     delete localSlice;
@@ -540,8 +540,8 @@ TEST(InstructionTest, test_ins_BatchWrite)
     unique_ptr<Instruction> writeIns = make_unique<InsWrite>(remoteRank, *linkData, *localSlice, *remoteSlice);
     unique_ptr<Instruction> writeReduceIns
         = make_unique<InsWriteReduce>(remoteRank, *linkData, *localSlice, *remoteSlice, dataType, reduceOp);
-    insBatchWrite->PushWriteIns(move(writeIns));
-    insBatchWrite->PushWriteIns(move(writeReduceIns));
+    EXPECT_EQ(insBatchWrite->PushWriteIns(move(writeIns)), HcclResult::HCCL_SUCCESS);
+    EXPECT_EQ(insBatchWrite->PushWriteIns(move(writeReduceIns)), HcclResult::HCCL_SUCCESS);
 
     EXPECT_EQ(remoteRank, insBatchWrite->GetRemoteRank());
     EXPECT_EQ(true, *(insBatchWrite->GetLink()) == *linkData);
@@ -567,7 +567,7 @@ TEST(InstructionTest, test_ins_batch_write_PushWriteIns_fail)
     unique_ptr<Instruction> readIns = make_unique<InsRead>(remoteRank, *linkData, *localSlice, *remoteSlice);
     InsBatchWrite* insBatchWrite = new InsBatchWrite(remoteRank, *linkData);
 
-    EXPECT_THROW(insBatchWrite->PushWriteIns(move(readIns)), NotSupportException);
+    EXPECT_EQ(insBatchWrite->PushWriteIns(move(readIns)), HcclResult::HCCL_E_RUNTIME);
     delete linkData;
     delete localSlice;
     delete remoteSlice;

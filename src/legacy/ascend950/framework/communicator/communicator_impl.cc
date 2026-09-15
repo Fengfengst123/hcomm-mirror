@@ -160,7 +160,7 @@ HcclResult CommunicatorImpl::InitCommResource(const CommParams& commParams)
     InitCcuSuperFastLoad();
     InitNotifyManager();
     InitStreamManager();
-    InitPreResource();
+    CHK_RET(InitPreResource());
     InitSocketManager();
     InitRmaConnManager();
     InitDataBufferManager();
@@ -343,8 +343,8 @@ HcclResult CommunicatorImpl::CreateSubComm(
             CHK_RET(subCommImpl->GetSocketManager().SetDeviceServerListenPortMap(rankIpPortMapPtr));
             return HcclResult::HCCL_SUCCESS;
         } else {
-            std::string msg = StringFormat("CreateSubComm fail, communicator has not been initialized, please check.");
-            THROW<InternalException>(msg);
+            HCCL_ERROR("CreateSubComm fail, communicator has not been initialized, please check.");
+            return HcclResult::HCCL_E_INTERNAL;
         });
     HCCL_ERROR("CreateSubComm fail !");
     return HcclResult::HCCL_E_INTERNAL;
@@ -369,8 +369,8 @@ HcclResult CommunicatorImpl::CreateSubComm(
             CHK_RET(subCommImpl->GetSocketManager().SetDeviceServerListenPortMap(rankIpPortMapPtr));
             return HcclResult::HCCL_SUCCESS;
         } else {
-            std::string msg = StringFormat("CreateSubComm fail, communicator has not been initialized, please check.");
-            THROW<InternalException>(msg);
+            HCCL_ERROR("CreateSubComm fail, communicator has not been initialized, please check.");
+            return HcclResult::HCCL_E_INTERNAL;
         });
     HCCL_ERROR("CreateSubComm fail !");
     return HcclResult::HCCL_E_INTERNAL;
@@ -1622,7 +1622,7 @@ void CommunicatorImpl::InitCcuSuperFastLoad()
         taskExceptionEnv, hostApiState, nodeState, l0State, l1State);
 }
 
-void CommunicatorImpl::InitPreResource()
+HcclResult CommunicatorImpl::InitPreResource()
 {
     // PCIE链路的两端实现enableP2P
     auto links = GetFullMeshLinks();
@@ -1632,8 +1632,8 @@ void CommunicatorImpl::InitPreResource()
             enableP2PDevices_.push_back(remotePhyId);
         }
     }
-    CHK_RET_THROW(
-        RuntimeApiException, "EnableP2P Failed", P2PEnableManager::GetInstance().EnableP2P(enableP2PDevices_));
+    CHK_RET(P2PEnableManager::GetInstance().EnableP2P(enableP2PDevices_));
+    return HcclResult::HCCL_SUCCESS;
 }
 
 void CommunicatorImpl::DeInitPreResource()
@@ -1993,16 +1993,16 @@ HcclResult CommunicatorImpl::Clean()
             }
             HCCL_INFO("[NsRecovery][Clean] start to clean host. ccu flag is true");
             auto collServiceCcu = dynamic_cast<CollServiceDeviceMode*>(collService);
-            CHECK_NULLPTR(collServiceCcu, "collServiceBase cast to CollServiceDeviceMode failed.");
+            CHK_PTR_NULL(collServiceCcu);
 
             CcuInsPreprocessor* ccuInsPreprocessor = collServiceCcu->GetCcuInsPreprocessor();
-            CHECK_NULLPTR(ccuInsPreprocessor, "ccuInsPreprocessor is nullptr!");
+            CHK_PTR_NULL(ccuInsPreprocessor);
 
             CcuCommunicator* ccuComm = ccuInsPreprocessor->GetCcuComm();
-            CHECK_NULLPTR(ccuComm, "ccuComm is nullptr!");
+            CHK_PTR_NULL(ccuComm);
 
             CcuTransportMgr* ccuTransportMgr = ccuComm->GetCcuTransportMgr();
-            CHECK_NULLPTR(ccuTransportMgr, "ccuTransportMgr is nullptr!");
+            CHK_PTR_NULL(ccuTransportMgr);
             ccuTransportMgr->Clean();
             return HcclResult::HCCL_SUCCESS;
         } else {
@@ -2044,8 +2044,7 @@ HcclResult CommunicatorImpl::Clean()
                 }
             }
         } else {
-            std::string msg = StringFormat("[NsRecovery][Clean] Aicpu kernel is not stopped yet. Cannot clean.");
-            THROW<InternalException>(msg);
+            HCCL_ERROR("[NsRecovery][Clean] Aicpu kernel is not stopped yet. Cannot clean.");
             return HcclResult::HCCL_E_INTERNAL;
         });
     return HcclResult::HCCL_SUCCESS;
@@ -2391,7 +2390,8 @@ HcclResult CommunicatorImpl::RecoverRankGraphData(SnapShotComm& snapShotComm, co
     // 根据changedInfo更新快照信息
     auto ret = DiffRankUpdater(changeInfo, snapShotComm.rankTableInfo);
     if (ret != HcclResult::HCCL_SUCCESS) {
-        THROW<InternalException>("DiffRankUpdater failed");
+        HCCL_ERROR("DiffRankUpdater failed");
+        return HcclResult::HCCL_E_INTERNAL;
     }
 
     const RankGraphBuilderBridge* bridge = GetRankGraphBuilderBridge();
@@ -2714,7 +2714,7 @@ ProfilingReporter& CommunicatorImpl::GetProfilingReporter() const
 
 HcclResult CommunicatorImpl::GetOneSidedService(HcclOneSidedService** service) const
 {
-    CHECK_NULLPTR(oneSidedService, "oneSidedService is nullptr!");
+    CHK_PTR_NULL(oneSidedService);
     *service = oneSidedService.get();
     return HCCL_SUCCESS;
 }
@@ -3162,9 +3162,8 @@ HcclResult CommunicatorImpl::AcceleratorFallback()
             ret = ReLoadOffloadOp();
             break;
         default:
-            THROW<InternalException>(
-                StringFormat("[CommunicatorImpl::%s] OpMode error, accelerator rollback failed", __func__));
-            break;
+            HCCL_ERROR("[%s] OpMode error, accelerator rollback failed", __func__);
+            return HcclResult::HCCL_E_INTERNAL;
     }
 
     // 缓存当前算子的加速模式；
@@ -3218,7 +3217,7 @@ HcclResult CommunicatorImpl::ReLoadOpbasedOp()
         HCCL_ERROR("CurrentCollOperator not initialized.");
         return HcclResult::HCCL_E_PTR;
     }
-    collService->ReLoadWithOpBasedMode(*currentCollOperator);
+    CHK_RET(collService->ReLoadWithOpBasedMode(*currentCollOperator));
     return HcclResult::HCCL_SUCCESS;
 }
 
@@ -3248,7 +3247,7 @@ HcclResult CommunicatorImpl::ReLoadOffloadOp()
         HCCL_ERROR("CurrentCollOperator not initialized.");
         return HcclResult::HCCL_E_PTR;
     }
-    collService->ReLoadWithOffloadMode(*currentCollOperator);
+    CHK_RET(collService->ReLoadWithOffloadMode(*currentCollOperator));
     return HcclResult::HCCL_SUCCESS;
 }
 

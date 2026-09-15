@@ -50,8 +50,8 @@ HcclResult CcuTempAllGatherMesh2D::CalcRes(AlgTempResReq& tempResReq)
     tempResReq.streamNum = tempResReq.queNum + 1; // 多申请一个 stream 给 ccuInsGroup
     uint32_t dieNum = tempVTopo_.size();
     if (dieNum != 2) { // concurrmesh的topoMatch返回的vTopo大小应当为2，对应X轴和Y轴的大小
-        THROW<InvalidParamsException>(
-            StringFormat("[CcuTempAllGatherMesh2D] Rank[%d], Invalid IODieNum[%u].", myRank_, dieNum));
+        HCCL_ERROR("[CcuTempAllGatherMesh2D] Rank[%d], Invalid IODieNum[%u].", myRank_, dieNum);
+        return HcclResult::HCCL_E_PARA;
     }
     HCCL_INFO(
         "[CcuTempAllGatherMesh2D] Rank[%d] requiredQueNum[%u] VtopoSize[%u], VtopoSize0[%u] VtopoSize1[%u].", myRank_,
@@ -106,9 +106,10 @@ HcclResult CcuTempAllGatherMesh2D::Run(
     // 分别记录两个Die上的link，构造rankGroup
     for (auto pair : tempLinks) {
         if (pair.second.size() == 0 || pair.second[0].GetHop() != 1) { // ESL环境上暂只有直连链路
-            THROW<InvalidParamsException>(StringFormat(
+            HCCL_ERROR(
                 "[CcuTempAllGatherMesh2D] Rank[%d]--Peer[%d], InvalidHop[%u].", myRank_, pair.first,
-                pair.second[0].GetHop()));
+                pair.second[0].GetHop());
+            return HcclResult::HCCL_E_PARA;
         }
         if ((pair.first / dimSize_[0] == myRank_ / dimSize_[0]) && pair.second[0].GetHop() == 1) {
             HCCL_INFO("[CcuTempAllGatherMesh2D][Run] Rank[%d] insert link to Rank[%d] in linksX", myRank_, pair.first);
@@ -117,8 +118,8 @@ HcclResult CcuTempAllGatherMesh2D::Run(
             HCCL_INFO("[CcuTempAllGatherMesh2D][Run] Rank[%d] insert link to Rank[%d] in linksY", myRank_, pair.first);
             linksY_.emplace_back(pair.second[0]);
         } else {
-            THROW<InvalidParamsException>(StringFormat(
-                "[CcuTempAllGatherMesh2D] Rank[%d], Unexpected peerRank[%d] in tempLinks.", myRank_, pair.first));
+            HCCL_ERROR("[CcuTempAllGatherMesh2D] Rank[%d], Unexpected peerRank[%d] in tempLinks.", myRank_, pair.first);
+            return HcclResult::HCCL_E_PARA;
         }
     }
 

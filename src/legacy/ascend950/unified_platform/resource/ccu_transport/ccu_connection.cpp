@@ -330,23 +330,24 @@ HcclResult CcuConnection::StartImportJettyRequest(uint32_t jettyIndex, RequestHa
     return HcclResult::HCCL_SUCCESS;
 }
 
-bool CcuConnection::CheckRequestResults()
+HcclResult CcuConnection::CheckRequestResults(bool& result)
 {
     if (reqHandles.size() == 0) {
-        return true;
+        result = true;
+        return HcclResult::HCCL_SUCCESS;
     }
 
     // 检查所有下发异步请求是否完成
     vector<size_t> completedReqs;
     for (size_t i = 0; i < reqHandles.size(); i++) {
-        ReqHandleResult result = HrtRaGetAsyncReqResult(reqHandles[i]);
-        if (result == ReqHandleResult::NOT_COMPLETED) {
+        ReqHandleResult reqResult = HrtRaGetAsyncReqResult(reqHandles[i]);
+        if (reqResult == ReqHandleResult::NOT_COMPLETED) {
             continue;
         }
 
-        if (result != ReqHandleResult::COMPLETED) {
-            THROW<InternalException>(StringFormat(
-                "[CcuConnection][%s] failed, result[%s] is unexpected.", __func__, result.Describe().c_str()));
+        if (reqResult != ReqHandleResult::COMPLETED) {
+            HCCL_ERROR("[%s] failed, result[%s] is unexpected.", __func__, reqResult.Describe().c_str());
+            return HcclResult::HCCL_E_INTERNAL;
         }
 
         // 记录已完成的reqHandles
@@ -359,13 +360,19 @@ bool CcuConnection::CheckRequestResults()
     }
 
     // 检查是否有剩余reqHandles
-    return reqHandles.size() == 0;
+    result = reqHandles.size() == 0;
+    return HcclResult::HCCL_SUCCESS;
 }
 
 void CcuConnection::UpdateExchangeStatus()
 {
     // 状态机保证为 InnerStatus::JETTY_IMPORTING
-    if (!CheckRequestResults()) {
+    bool allCompleted = false;
+    if (CheckRequestResults(allCompleted) != HcclResult::HCCL_SUCCESS) {
+        HCCL_ERROR("[%s] CheckRequestResults failed", __func__);
+        ThrowAbnormalStatus(std::string(__func__));
+    }
+    if (!allCompleted) {
         return;
     }
 

@@ -171,7 +171,8 @@ extern SocketIfName CastSocketIfName(const std::string& s);
 
 extern std::vector<HcclAlgoType> CastAlgoTypeVec(const std::string& s);
 
-extern std::map<OpType, std::vector<HcclAlgoType>> SetHcclAlgoConfig(const std::string& hcclAlgo);
+extern HcclResult
+SetHcclAlgoConfig(const std::string& hcclAlgo, std::map<OpType, std::vector<HcclAlgoType>>& hcclAlgoConfig);
 
 extern HcclResult
 SetSpecificAlgType(std::vector<std::string>& algos, std::map<OpType, std::vector<HcclAlgoType>>& hcclAlgoConfig);

@@ -301,12 +301,12 @@ HcclResult InsTempReduceMesh2D::GatherFromInput(
         DataSlice dstDataSlice(BufferType::SCRATCH, sliceScratchBaseOffset + axisRank * sliceSize, sliceSize);
         SlicesList recvSlicesList({srcDataSlice}, {dstDataSlice});
         DataInfo recvInfo(recvLink, recvSlicesList);
-        CHK_PRT_THROW(
+        CHK_PRT_RET(
             queIdx >= axisTempInsQues.size(),
             HCCL_ERROR(
                 "[InsTempReduceMesh2D] queIdx[%u] is bigger than axisTempInsQues size[%zu].", queIdx,
                 axisTempInsQues.size()),
-            InvalidParamsException, "queIdx is invalid");
+            HcclResult::HCCL_E_PARA);
         CHK_PRT_RET(
             Recv(recvInfo, axisTempInsQues[queIdx], 0, true, DmaMode::PUT),
             HCCL_ERROR("[InsTempReduceMesh2D] Recv data failed"), HcclResult::HCCL_E_INTERNAL);

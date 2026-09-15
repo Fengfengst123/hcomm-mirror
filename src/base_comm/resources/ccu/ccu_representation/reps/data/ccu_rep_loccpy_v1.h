@@ -51,7 +51,7 @@ namespace CcuRep {
         uint16_t GetReduceFlag() const { return reduceFlag; }
         bool GetUseCcuBuffer() const { return useCcuBuffer; }
 
-        uint16_t GetFirstBufId();
+        HcclResult GetFirstBufId(uint16_t& result);
         uint16_t GetUsedBufNum();
 
     private:

@@ -79,9 +79,10 @@ HcclResult CcuTempBroadcastMeshMem2Mem2D::PrepareLinks(const ResLinks& tempLinks
     // 分别记录两个Die上的link，构造rankGroup
     for (auto pair : tempLinks) {
         if (pair.second.size() == 0 || pair.second[0].GetHop() != 1) { // ESL环境上暂只有直连链路
-            THROW<InvalidParamsException>(StringFormat(
+            HCCL_ERROR(
                 "[CcuTempBroadcastMeshMem2Mem2D] Rank[%d]--Peer[%d], InvalidHop[%u].", myRank_, pair.first,
-                pair.second[0].GetHop()));
+                pair.second[0].GetHop());
+            return HcclResult::HCCL_E_PARA;
         }
         if ((pair.first / dimSize_[0] == myRank_ / dimSize_[0]) && pair.second[0].GetHop() == 1) {
             HCCL_INFO(
@@ -94,9 +95,9 @@ HcclResult CcuTempBroadcastMeshMem2Mem2D::PrepareLinks(const ResLinks& tempLinks
                 pair.first);
             linksY_.emplace_back(pair.second[0]);
         } else {
-            THROW<InvalidParamsException>(StringFormat(
-                "[CcuTempBroadcastMeshMem2Mem2D] Rank[%d], Unexpected peerRank[%d] in tempLinks.", myRank_,
-                pair.first));
+            HCCL_ERROR(
+                "[CcuTempBroadcastMeshMem2Mem2D] Rank[%d], Unexpected peerRank[%d] in tempLinks.", myRank_, pair.first);
+            return HcclResult::HCCL_E_PARA;
         }
     }
     return HcclResult::HCCL_SUCCESS;

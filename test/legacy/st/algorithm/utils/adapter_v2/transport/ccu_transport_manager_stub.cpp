@@ -48,7 +48,8 @@ HcclResult CcuTransportMgr::PrepareCreate(const LinkData& link, CcuTransport*& t
                                    ->GetCcuInsPreprocessor()
                                    ->GetCcuComm()
                                    ->GetCcuJettyMgr();
-    const auto channelJettys = ccuJettyMgr->GetChannelJettys(link);
+    std::pair<CcuChannelInfo, std::vector<CcuJetty*>> channelJettys;
+    CHK_RET(ccuJettyMgr->GetChannelJettys(link, channelJettys));
     const CcuChannelInfo& channelInfo = channelJettys.first;
     const std::vector<CcuJetty*>& ccuJettys = channelJettys.second;
     const auto& locAddr = link.GetLocalAddr();

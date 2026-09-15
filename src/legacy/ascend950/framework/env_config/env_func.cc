@@ -525,7 +525,8 @@ HcclResult ParserHcclAlgoLevel(const std::string& algoLevel, u32& level, HcclAlg
         return HCCL_E_PARA;
     }
     if (found == std::string::npos) {
-        THROW<InvalidParamsException>("algoLevel cannot find \":\".");
+        HCCL_ERROR("algoLevel cannot find \":\".");
+        return HcclResult::HCCL_E_PARA;
     }
 
     std::string orginalLevel = algoLevel.substr(0, found);
@@ -699,32 +700,33 @@ SetSpecificAlgType(std::vector<std::string>& algos, std::map<OpType, std::vector
     return HCCL_SUCCESS;
 }
 
-std::map<OpType, std::vector<HcclAlgoType>> SetHcclAlgoConfig(const std::string& hcclAlgo)
+HcclResult SetHcclAlgoConfig(const std::string& hcclAlgo, std::map<OpType, std::vector<HcclAlgoType>>& hcclAlgoConfig)
 {
     std::string algoConfig = hcclAlgo;
     algoConfig.erase(std::remove(algoConfig.begin(), algoConfig.end(), ' '), algoConfig.end());
-    std::map<OpType, std::vector<HcclAlgoType>> hcclAlgoConfig;
     if (algoConfig.empty()) {
         HCCL_RUN_INFO("hccl algo config is empty, HCCL use built-in algo selection.");
-        return hcclAlgoConfig;
+        return HcclResult::HCCL_SUCCESS;
     }
     std::vector<std::string> algoPerOptype;
     HcclResult splitRet = SplitHcclOpType(algoConfig, algoPerOptype);
     if (splitRet != HCCL_SUCCESS) {
-        THROW<InvalidParamsException>(StringFormat(
+        HCCL_ERROR(
             "Env HCCL_ALGO config \"%s\" is invalid. example [level0:NA;level1:NHR] or"
             "[allreduce=level0:NA;level1:ring/allgather=level0:NA;level1:H-D_R]",
-            hcclAlgo.c_str()));
+            hcclAlgo.c_str());
+        return HcclResult::HCCL_E_PARA;
     }
 
     bool anyCommonConfig = false;
     bool anySpecificConfig = false;
     HcclResult checkRet = CheckAlgoConfigValid(algoPerOptype, anyCommonConfig, anySpecificConfig);
     if (checkRet != HCCL_SUCCESS) {
-        THROW<InvalidParamsException>(StringFormat(
+        HCCL_ERROR(
             "Env HCCL_ALGO config \"%s\" is invalid. example [level0:NA;level1:NHR] or"
             "[allreduce=level0:NA;level1:ring/allgather=level0:NA;level1:H-D_R]",
-            hcclAlgo.c_str()));
+            hcclAlgo.c_str());
+        return HcclResult::HCCL_E_PARA;
     }
     HcclResult ret = HCCL_SUCCESS;
     if (anyCommonConfig) {
@@ -733,12 +735,13 @@ std::map<OpType, std::vector<HcclAlgoType>> SetHcclAlgoConfig(const std::string&
         ret = SetSpecificAlgType(algoPerOptype, hcclAlgoConfig);
     }
     if (ret != HCCL_SUCCESS) {
-        THROW<InvalidParamsException>(StringFormat(
+        HCCL_ERROR(
             "Env HCCL_ALGO config \"%s\" is invalid. example [level0:NA;level1:NHR] or"
             "[allreduce=level0:NA;level1:ring/allgather=level0:NA;level1:H-D_R]",
-            hcclAlgo.c_str()));
+            hcclAlgo.c_str());
+        return HcclResult::HCCL_E_PARA;
     }
-    return hcclAlgoConfig;
+    return HcclResult::HCCL_SUCCESS;
 }
 
 HcclAccelerator CastHcclAccelerator(const std::string& s)

@@ -618,9 +618,13 @@ TEST_F(InsToSqeRuleV82Test, Interpret_batch_write)
     DataSlice localSlice(BufferType::SCRATCH, 0, 100);
     DataSlice remoteSlice(BufferType::SCRATCH, 0, 100);
     InsBatchWrite insBatchWrite(remoteRank, link);
-    insBatchWrite.PushWriteIns(std::make_unique<InsWrite>(remoteRank, link, localSlice, remoteSlice));
-    insBatchWrite.PushWriteIns(
-        std::make_unique<InsWriteReduce>(remoteRank, link, localSlice, remoteSlice, DataType::FP32, ReduceOp::SUM));
+    EXPECT_EQ(
+        insBatchWrite.PushWriteIns(std::make_unique<InsWrite>(remoteRank, link, localSlice, remoteSlice)),
+        HcclResult::HCCL_SUCCESS);
+    EXPECT_EQ(
+        insBatchWrite.PushWriteIns(
+            std::make_unique<InsWriteReduce>(remoteRank, link, localSlice, remoteSlice, DataType::FP32, ReduceOp::SUM)),
+        HcclResult::HCCL_SUCCESS);
 
     std::vector<char> streamLite1{fakeStreamId, fakeSqId};
     StreamLite stream(streamLite1);
@@ -670,7 +674,7 @@ TEST_F(InsToSqeRuleV82Test, Interpret_batch_write_insWrite_size_is_0)
     auto insWrite = std::make_unique<InsWrite>(remoteRank, link, localSlice, remoteSlice);
     insWrite->localSlice_.size = 0;
     insWrite->remoteSlice_.size = 0;
-    insBatchWrite.PushWriteIns(std::move(insWrite));
+    EXPECT_EQ(insBatchWrite.PushWriteIns(std::move(insWrite)), HcclResult::HCCL_SUCCESS);
 
     std::vector<char> streamLite1{fakeStreamId, fakeSqId};
     StreamLite stream(streamLite1);
@@ -696,7 +700,7 @@ TEST_F(InsToSqeRuleV82Test, Interpret_batch_write_insWrite_size_isnot_0_err)
     InsBatchWrite insBatchWrite(remoteRank, link);
     auto insWrite = std::make_unique<InsWrite>(remoteRank, link, localSlice, remoteSlice);
     insWrite->localSlice_.size = 0;
-    insBatchWrite.PushWriteIns(std::move(insWrite));
+    EXPECT_EQ(insBatchWrite.PushWriteIns(std::move(insWrite)), HcclResult::HCCL_SUCCESS);
 
     std::vector<char> streamLite1{fakeStreamId, fakeSqId};
     StreamLite stream(streamLite1);
@@ -724,7 +728,7 @@ TEST_F(InsToSqeRuleV82Test, Interpret_batch_write_insWriteReduce_size_is_0)
         = std::make_unique<InsWriteReduce>(remoteRank, link, localSlice, remoteSlice, DataType::FP32, ReduceOp::SUM);
     insWriteReduce->localSlice_.size = 0;
     insWriteReduce->remoteSlice_.size = 0;
-    insBatchWrite.PushWriteIns(std::move(insWriteReduce));
+    EXPECT_EQ(insBatchWrite.PushWriteIns(std::move(insWriteReduce)), HcclResult::HCCL_SUCCESS);
 
     std::vector<char> streamLite1{fakeStreamId, fakeSqId};
     StreamLite stream(streamLite1);
@@ -751,7 +755,7 @@ TEST_F(InsToSqeRuleV82Test, Interpret_batch_write_insWriteReduce_size_isnot_0_er
     auto insWriteReduce
         = std::make_unique<InsWriteReduce>(remoteRank, link, localSlice, remoteSlice, DataType::FP32, ReduceOp::SUM);
     insWriteReduce->localSlice_.size = 0;
-    insBatchWrite.PushWriteIns(std::move(insWriteReduce));
+    EXPECT_EQ(insBatchWrite.PushWriteIns(std::move(insWriteReduce)), HcclResult::HCCL_SUCCESS);
 
     std::vector<char> streamLite1{fakeStreamId, fakeSqId};
     StreamLite stream(streamLite1);
@@ -775,9 +779,13 @@ TEST_F(InsToSqeRuleV82Test, Interpret_batch_read)
     DataSlice localSlice(BufferType::SCRATCH, 0, 100);
     DataSlice remoteSlice(BufferType::SCRATCH, 0, 100);
     InsBatchRead insBatchRead(remoteRank, link);
-    insBatchRead.PushReadIns(std::make_unique<InsRead>(remoteRank, link, localSlice, remoteSlice));
-    insBatchRead.PushReadIns(
-        std::make_unique<InsReadReduce>(remoteRank, link, localSlice, remoteSlice, DataType::FP32, ReduceOp::SUM));
+    EXPECT_EQ(
+        insBatchRead.PushReadIns(std::make_unique<InsRead>(remoteRank, link, localSlice, remoteSlice)),
+        HcclResult::HCCL_SUCCESS);
+    EXPECT_EQ(
+        insBatchRead.PushReadIns(
+            std::make_unique<InsReadReduce>(remoteRank, link, localSlice, remoteSlice, DataType::FP32, ReduceOp::SUM)),
+        HcclResult::HCCL_SUCCESS);
 
     std::vector<char> streamLite1{fakeStreamId, fakeSqId};
     StreamLite stream(streamLite1);
@@ -827,7 +835,7 @@ TEST_F(InsToSqeRuleV82Test, Interpret_batch_read_insRead_size_is_0)
     auto insRead = std::make_unique<InsRead>(remoteRank, link, localSlice, remoteSlice);
     insRead->localSlice_.size = 0;
     insRead->remoteSlice_.size = 0;
-    insBatchRead.PushReadIns(std::move(insRead));
+    EXPECT_EQ(insBatchRead.PushReadIns(std::move(insRead)), HcclResult::HCCL_SUCCESS);
 
     std::vector<char> streamLite1{fakeStreamId, fakeSqId};
     StreamLite stream(streamLite1);
@@ -853,7 +861,7 @@ TEST_F(InsToSqeRuleV82Test, Interpret_batch_read_insRead_size_isnot_0_err)
     InsBatchRead insBatchRead(remoteRank, link);
     auto insRead = std::make_unique<InsRead>(remoteRank, link, localSlice, remoteSlice);
     insRead->localSlice_.size = 0;
-    insBatchRead.PushReadIns(std::move(insRead));
+    EXPECT_EQ(insBatchRead.PushReadIns(std::move(insRead)), HcclResult::HCCL_SUCCESS);
 
     std::vector<char> streamLite1{fakeStreamId, fakeSqId};
     StreamLite stream(streamLite1);
@@ -881,7 +889,7 @@ TEST_F(InsToSqeRuleV82Test, Interpret_batch_read_insReadReduce_size_is_0)
         = std::make_unique<InsReadReduce>(remoteRank, link, localSlice, remoteSlice, DataType::FP32, ReduceOp::SUM);
     insReadReduce->localSlice_.size = 0;
     insReadReduce->remoteSlice_.size = 0;
-    insBatchRead.PushReadIns(std::move(insReadReduce));
+    EXPECT_EQ(insBatchRead.PushReadIns(std::move(insReadReduce)), HcclResult::HCCL_SUCCESS);
 
     std::vector<char> streamLite1{fakeStreamId, fakeSqId};
     StreamLite stream(streamLite1);
@@ -908,7 +916,7 @@ TEST_F(InsToSqeRuleV82Test, Interpret_batch_read_insReadReduce_size_isnot_0_err)
     auto insReadReduce
         = std::make_unique<InsReadReduce>(remoteRank, link, localSlice, remoteSlice, DataType::FP32, ReduceOp::SUM);
     insReadReduce->localSlice_.size = 0;
-    insBatchRead.PushReadIns(std::move(insReadReduce));
+    EXPECT_EQ(insBatchRead.PushReadIns(std::move(insReadReduce)), HcclResult::HCCL_SUCCESS);
 
     std::vector<char> streamLite1{fakeStreamId, fakeSqId};
     StreamLite stream(streamLite1);

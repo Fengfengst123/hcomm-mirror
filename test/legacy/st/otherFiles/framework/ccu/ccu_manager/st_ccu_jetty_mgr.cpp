@@ -151,7 +151,7 @@ TEST_F(CcuJettyMgrTest, St_GetChannelJettys_When_InterfaceOk_Expect_Return_Ok)
     EXPECT_EQ(ccuJettyMgr.PrepareCreate(links), HcclResult::HCCL_SUCCESS);
     for (const auto& link : links) {
         std::pair<CcuChannelInfo, std::vector<CcuJetty*>> channelJettyPair;
-        EXPECT_NO_THROW(channelJettyPair = ccuJettyMgr.GetChannelJettys(link));
+        EXPECT_EQ(ccuJettyMgr.GetChannelJettys(link, channelJettyPair), HcclResult::HCCL_SUCCESS);
     }
     // 打桩的channel分配函数，每个本端分配8个channel
     EXPECT_EQ(ccuJettyMgr.unconfirmedRecord_.allocations.size(), linkNum);
@@ -162,7 +162,7 @@ TEST_F(CcuJettyMgrTest, St_GetChannelJettys_When_InterfaceOk_Expect_Return_Ok)
     EXPECT_EQ(ccuJettyMgr.PrepareCreate(links), HcclResult::HCCL_SUCCESS);
     for (const auto& link : links) {
         std::pair<CcuChannelInfo, std::vector<CcuJetty*>> channelJettyPair;
-        EXPECT_NO_THROW(channelJettyPair = ccuJettyMgr.GetChannelJettys(link));
+        EXPECT_EQ(ccuJettyMgr.GetChannelJettys(link, channelJettyPair), HcclResult::HCCL_SUCCESS);
     }
     // channel全部复用
     EXPECT_EQ(ccuJettyMgr.unconfirmedRecord_.allocations.size(), 0);
@@ -175,7 +175,7 @@ TEST_F(CcuJettyMgrTest, St_GetChannelJettys_When_InterfaceOk_Expect_Return_Ok)
     EXPECT_EQ(ccuJettyMgr.PrepareCreate(newLinks), HcclResult::HCCL_SUCCESS);
     for (const auto& link : newLinks) {
         std::pair<CcuChannelInfo, std::vector<CcuJetty*>> channelJettyPair;
-        EXPECT_NO_THROW(channelJettyPair = ccuJettyMgr.GetChannelJettys(link));
+        EXPECT_EQ(ccuJettyMgr.GetChannelJettys(link, channelJettyPair), HcclResult::HCCL_SUCCESS);
     }
     // 新增两条两条连续需要申请
     uint32_t newRankNum = rankNum + newAddrNum;
@@ -198,7 +198,7 @@ TEST_F(CcuJettyMgrTest, St_GetChannelJettysAndNeedAllocResOverOneTime_When_Inter
     EXPECT_EQ(ccuJettyMgr.PrepareCreate(links), HcclResult::HCCL_SUCCESS);
     for (const auto& link : links) {
         std::pair<CcuChannelInfo, std::vector<CcuJetty*>> channelJettyPair;
-        EXPECT_NO_THROW(channelJettyPair = ccuJettyMgr.GetChannelJettys(link));
+        EXPECT_EQ(ccuJettyMgr.GetChannelJettys(link, channelJettyPair), HcclResult::HCCL_SUCCESS);
     }
     // 打桩的channel分配函数，每个本端分配8个channel
     EXPECT_EQ(ccuJettyMgr.unconfirmedRecord_.allocations.size(), linkNum);
@@ -264,7 +264,7 @@ TEST_F(CcuJettyMgrTest, St_Fallback_When_InterfaceOk_Expect_NoThrow)
     EXPECT_EQ(ccuJettyMgr.PrepareCreate(links), HcclResult::HCCL_SUCCESS);
     for (const auto& link : links) {
         std::pair<CcuChannelInfo, std::vector<CcuJetty*>> channelJettyPair;
-        EXPECT_NO_THROW(channelJettyPair = ccuJettyMgr.GetChannelJettys(link));
+        EXPECT_EQ(ccuJettyMgr.GetChannelJettys(link, channelJettyPair), HcclResult::HCCL_SUCCESS);
     }
     // 打桩的channel分配函数，每个本端分配8个channel
     EXPECT_EQ(ccuJettyMgr.unconfirmedRecord_.allocations.size(), linkNum);
@@ -288,7 +288,7 @@ TEST_F(CcuJettyMgrTest, St_FallbackAndGetChannelJettys_When_InterfaceOk_Expect_R
     EXPECT_EQ(ccuJettyMgr.PrepareCreate(links), HcclResult::HCCL_SUCCESS);
     for (const auto& link : links) {
         std::pair<CcuChannelInfo, std::vector<CcuJetty*>> channelJettyPair;
-        EXPECT_NO_THROW(channelJettyPair = ccuJettyMgr.GetChannelJettys(link));
+        EXPECT_EQ(ccuJettyMgr.GetChannelJettys(link, channelJettyPair), HcclResult::HCCL_SUCCESS);
     }
     // 打桩的channel分配函数，每个本端分配8个channel
     EXPECT_EQ(ccuJettyMgr.unconfirmedRecord_.allocations.size(), linkNum);
@@ -304,7 +304,7 @@ TEST_F(CcuJettyMgrTest, St_FallbackAndGetChannelJettys_When_InterfaceOk_Expect_R
     EXPECT_EQ(ccuJettyMgr.PrepareCreate(links), HcclResult::HCCL_SUCCESS);
     for (const auto& link : links) {
         std::pair<CcuChannelInfo, std::vector<CcuJetty*>> channelJettyPair;
-        EXPECT_NO_THROW(channelJettyPair = ccuJettyMgr.GetChannelJettys(link));
+        EXPECT_EQ(ccuJettyMgr.GetChannelJettys(link, channelJettyPair), HcclResult::HCCL_SUCCESS);
     }
     // channel全部复用
     EXPECT_EQ(ccuJettyMgr.unconfirmedRecord_.allocations.size(), 0);
@@ -336,7 +336,7 @@ TEST_F(CcuJettyMgrTest, St_CleanAndResume_When_InterfaceOk_Expect_NoThrow)
     EXPECT_EQ(ccuJettyMgr.PrepareCreate(links), HcclResult::HCCL_SUCCESS);
     for (const auto& link : links) {
         std::pair<CcuChannelInfo, std::vector<CcuJetty*>> channelJettyPair;
-        EXPECT_NO_THROW(channelJettyPair = ccuJettyMgr.GetChannelJettys(link));
+        EXPECT_EQ(ccuJettyMgr.GetChannelJettys(link, channelJettyPair), HcclResult::HCCL_SUCCESS);
     }
     // 打桩的channel分配函数，每个本端分配8个channel
     EXPECT_EQ(ccuJettyMgr.unconfirmedRecord_.allocations.size(), linkNum);
@@ -354,7 +354,7 @@ TEST_F(CcuJettyMgrTest, St_CleanAndResume_When_InterfaceOk_Expect_NoThrow)
     EXPECT_NO_THROW(ccuJettyMgr.Resume());
     for (const auto& link : links) {
         std::pair<CcuChannelInfo, std::vector<CcuJetty*>> channelJettyPair;
-        EXPECT_NO_THROW(channelJettyPair = ccuJettyMgr.GetChannelJettys(link));
+        EXPECT_EQ(ccuJettyMgr.GetChannelJettys(link, channelJettyPair), HcclResult::HCCL_SUCCESS);
     }
 }
 
@@ -372,7 +372,7 @@ TEST_F(CcuJettyMgrTest, St_GetUsedChannelCount_When_InterfaceOk_Expect_Ok)
     EXPECT_EQ(ccuJettyMgr.PrepareCreate(links), HcclResult::HCCL_SUCCESS);
     for (const auto& link : links) {
         std::pair<CcuChannelInfo, std::vector<CcuJetty*>> channelJettyPair;
-        EXPECT_NO_THROW(channelJettyPair = ccuJettyMgr.GetChannelJettys(link));
+        EXPECT_EQ(ccuJettyMgr.GetChannelJettys(link, channelJettyPair), HcclResult::HCCL_SUCCESS);
     }
     // 打桩的channel分配函数，每个本端分配8个channel
     EXPECT_EQ(ccuJettyMgr.unconfirmedRecord_.allocations.size(), linkNum);

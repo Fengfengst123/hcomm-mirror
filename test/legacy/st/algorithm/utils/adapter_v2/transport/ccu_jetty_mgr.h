@@ -27,7 +27,7 @@ public:
     ~CcuJettyMgr();
 
     HcclResult PrepareCreate(const std::vector<LinkData>& links);
-    std::pair<CcuChannelInfo, std::vector<CcuJetty*>> GetChannelJettys(const LinkData& link) const;
+    HcclResult GetChannelJettys(const LinkData& link, std::pair<CcuChannelInfo, std::vector<CcuJetty*>>& result) const;
 
     void Confirm();
     void Fallback();

@@ -393,8 +393,7 @@ HcclResult HostCpuRoceChannel::CheckSocketStatus()
 HcclResult HostCpuRoceChannel::CreateQp()
 {
     for (auto& conn : connections_) {
-        Hccl::CHECK_NULLPTR(
-            conn, Hccl::StringFormat("[HostCpuRoceChannel::%s] failed, connection pointer is nullptr", __func__));
+        CHK_PTR_NULL(conn);
         HcclResult ret = conn->CreateQp();
         if (ret == HCCL_E_AGAIN) {
             return HCCL_SUCCESS;
@@ -616,8 +615,7 @@ HcclResult HostCpuRoceChannel::ModifyQp()
 {
     for (uint32_t i = 0; i < connections_.size(); i++) {
         auto& conn = connections_[i];
-        Hccl::CHECK_NULLPTR(
-            conn, Hccl::StringFormat("[HostCpuRoceChannel::%s] failed, connection pointer is nullptr", __func__));
+        CHK_PTR_NULL(conn);
         CHK_RET(conn->ParseRmtExchangeDto(rmtConnDtos_[i]));
         Hccl::QpInfo& qpInfo = conn->GetQpInfo();
         qpInfo.serviceLevel = channelDesc_.roceAttr.sl;

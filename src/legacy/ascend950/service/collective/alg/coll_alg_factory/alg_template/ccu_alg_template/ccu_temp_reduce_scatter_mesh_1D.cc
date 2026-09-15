@@ -64,7 +64,7 @@ uint64_t CcuTempReduceScatterMesh1D::GetMaxSliceSize() const { return UB_MAX_DAT
  *      低精度模式，当dataType!=outputDataType时，dataType可选范围HIF8、E4M3、E5M2、INT8;outputDataType可选范围FP32、FP16、BF16;
  * 非Reduce算子：任意数据类型，dataType==outputDataType即可。
  */
-void CcuTempReduceScatterMesh1D::CheckCcuDataType() const
+HcclResult CcuTempReduceScatterMesh1D::CheckCcuDataType() const
 {
     if (op_.opType == OpType::REDUCESCATTER && op_.reduceOp == ReduceOp::SUM) {
         if (op_.dataType == op_.outputDataType) {
@@ -74,9 +74,10 @@ void CcuTempReduceScatterMesh1D::CheckCcuDataType() const
                 = {DataType::FP32,  DataType::FP16,  DataType::BFP16, DataType::UINT8,
                    DataType::UINT8, DataType::INT16, DataType::INT32};
             if (highPrecisionSupportedInputDataType.count(op_.dataType) == 0) {
-                THROW<CcuApiException>(StringFormat(
+                HCCL_ERROR(
                     "Unsupported DataType [%s] For OpType [%s].", op_.dataType.Describe().c_str(),
-                    op_.opType.Describe().c_str()));
+                    op_.opType.Describe().c_str());
+                return HcclResult::HCCL_E_INTERNAL;
             }
         } else {
             // reduce算子的低精度模式
@@ -85,24 +86,28 @@ void CcuTempReduceScatterMesh1D::CheckCcuDataType() const
                 = {DataType::HIF8, DataType::FP8E4M3, DataType::FP8E5M2, DataType::INT8};
             set<DataType> lowPrecisionSupportedOutputDataType = {DataType::FP32, DataType::FP16, DataType::BFP16};
             if (lowPrecisionSupportedInputDataType.count(op_.dataType) == 0) {
-                THROW<CcuApiException>(StringFormat(
+                HCCL_ERROR(
                     "Unsupported Input DataType [%s] For OpType [%s].", op_.dataType.Describe().c_str(),
-                    op_.opType.Describe().c_str()));
+                    op_.opType.Describe().c_str());
+                return HcclResult::HCCL_E_INTERNAL;
             }
             if (lowPrecisionSupportedOutputDataType.count(op_.outputDataType) == 0) {
-                THROW<CcuApiException>(StringFormat(
+                HCCL_ERROR(
                     "Unsupported Output DataType [%s] For OpType [%s].", op_.outputDataType.Describe().c_str(),
-                    op_.opType.Describe().c_str()));
+                    op_.opType.Describe().c_str());
+                return HcclResult::HCCL_E_INTERNAL;
             }
         }
     } else {
         if (op_.dataType != op_.outputDataType) {
-            THROW<CcuApiException>(StringFormat(
+            HCCL_ERROR(
                 "Inconsistent DataType[%s]--OutputDataType[%s] for OpType[%s].", op_.dataType.Describe().c_str(),
-                op_.outputDataType.Describe().c_str(), op_.opType.Describe().c_str()));
+                op_.outputDataType.Describe().c_str(), op_.opType.Describe().c_str());
+            return HcclResult::HCCL_E_INTERNAL;
         }
     }
     HCCL_INFO("CheckCcuDataType Success!");
+    return HcclResult::HCCL_SUCCESS;
 }
 
 HcclResult CcuTempReduceScatterMesh1D::Run(
@@ -130,7 +135,7 @@ HcclResult CcuTempReduceScatterMesh1D::Run(
     HCCL_INFO(
         "[CcuTempReduceScatterMesh1D] dataType outputDatatype %s %s", op_.dataType.Describe().c_str(),
         op_.outputDataType.Describe().c_str());
-    CheckCcuDataType();
+    CHK_RET(CheckCcuDataType());
     if (opMode_ == OpMode::OPBASE) {
         if (tempFuncs.isForepart) {
             inputAddr = BufferTypeToAddr(tempFuncs.usrData.usrInSlices[myRank_].GetType());

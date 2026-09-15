@@ -100,6 +100,22 @@ static int RaGetDevEidInfoListStub(struct RaInfo info, struct HccpDevEidInfo inf
     return 0;
 }
 
+static HcclResult MockGetRtpEnableFalse(Hccl::RdmaHandleManager* mgr, Hccl::RdmaHandle rdmaHandle, bool& rtpEnable)
+{
+    (void)mgr;
+    (void)rdmaHandle;
+    rtpEnable = false;
+    return HcclResult::HCCL_SUCCESS;
+}
+
+static HcclResult MockGetRtpEnableTrue(Hccl::RdmaHandleManager* mgr, Hccl::RdmaHandle rdmaHandle, bool& rtpEnable)
+{
+    (void)mgr;
+    (void)rdmaHandle;
+    rtpEnable = true;
+    return HcclResult::HCCL_SUCCESS;
+}
+
 // 为 ccu 两个die添加网络通信设备
 void MockCcuNetworkDeviceDefault(int32_t devPhyId)
 {
@@ -126,8 +142,9 @@ void MockCcuNetworkDeviceDefault(int32_t devPhyId)
         .stubs()
         .will(returnValue(fakeTokenInfo)); // 打桩保证内存注册成功
 
+    // 打桩覆盖环回选择不同端口：首次返回false跳过第一个EID，然后返回true选择下一个
     MOCKER_CPP(&Hccl::RdmaHandleManager::GetRtpEnable)
         .stubs()
-        .will(returnValue(false)) // 打桩覆盖环回选择不同端口
-        .then(returnValue(true));
+        .will(invoke(MockGetRtpEnableFalse))
+        .then(invoke(MockGetRtpEnableTrue));
 }

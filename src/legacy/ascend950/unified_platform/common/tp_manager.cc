@@ -423,9 +423,12 @@ HcclResult TpManager::AdvanceDeviceWaitListPhase(
         HCCL_INFO(
             "[TpManager][GetTpInfo] list stage ok, devPhyId[%u] tpInfoNum[%u] firstTpHandle[%llu] param[%s].", devPhyId,
             reqCtx.tpInfoNum, static_cast<unsigned long long>(list[0].tpHandle), param.Describe().c_str());
-        TRY_CATCH_PROCESS_THROW(
-            NetworkApiException, StartGetTpAttrForFirstTpDevice(param, reqCtx),
-            "[TpManager][AdvanceDeviceWaitListPhase] StartGetTpAttrForFirstTpDevice failed", qosReqMap.erase(it));
+        HcclResult tpAttrRet = StartGetTpAttrForFirstTpDevice(param, reqCtx);
+        if (tpAttrRet != HcclResult::HCCL_SUCCESS) {
+            qosReqMap.erase(it);
+            HCCL_ERROR("[%s] StartGetTpAttrForFirstTpDevice failed, ret[%d]", __func__, tpAttrRet);
+            return tpAttrRet;
+        }
         return HcclResult::HCCL_E_AGAIN;
     }
     RequestCtx completedReqCtx = std::move(it->second);
@@ -905,7 +908,7 @@ void TpManager::StartGetTpInfoListRequest(
     reqCtx.handle = RaUbGetTpInfoAsync(rdmaHandle, param, reqCtx.dataBuffer, reqCtx.tpInfoNum);
 }
 
-void TpManager::StartGetTpAttrForFirstTpDevice(const RaUbGetTpInfoParam& param, RequestCtx& reqCtx) const
+HcclResult TpManager::StartGetTpAttrForFirstTpDevice(const RaUbGetTpInfoParam& param, RequestCtx& reqCtx) const
 {
     (void)memset_s(&reqCtx.tpAttr, sizeof(reqCtx.tpAttr), 0, sizeof(reqCtx.tpAttr));
     reqCtx.tpAttrBitmap = BuildGetTpAttrBitmapForSlPolicy(param.tpProtocol);
@@ -914,18 +917,20 @@ void TpManager::StartGetTpAttrForFirstTpDevice(const RaUbGetTpInfoParam& param, 
     const uint64_t firstTpHandle = list[0].tpHandle;
     const RdmaHandle rdmaHandle = ResolveUbRdmaHandle(false, devPhyId, param.locAddr);
     if (!rdmaHandle) {
-        THROW<InternalException>(
-            "[TpManager][%s] can not find rdmaHandle for GetTpAttrAsync, devPhyId[%u].", __func__, devPhyId);
+        HCCL_ERROR("[TpManager][%s] can not find rdmaHandle for GetTpAttrAsync, devPhyId[%u].", __func__, devPhyId);
+        return HcclResult::HCCL_E_INTERNAL;
     }
     const HcclResult hret
         = HrtRaStartGetTpAttrAsync(rdmaHandle, firstTpHandle, reqCtx.tpAttrBitmap, reqCtx.tpAttr, reqCtx.handle);
     if (hret != HcclResult::HCCL_SUCCESS) {
-        THROW<NetworkApiException>(StringFormat(
+        HCCL_ERROR(
             "[TpManager][StartGetTpAttrForFirstTpDevice] HrtRaStartGetTpAttrAsync "
             "failed hcclRet[%d] tpHandle[%llu].",
-            static_cast<int>(hret), firstTpHandle));
+            static_cast<int>(hret), firstTpHandle);
+        return HcclResult::HCCL_E_NETWORK;
     }
     reqCtx.phase = RequestCtx::ReqPhase::WAIT_TP_ATTR;
+    return HcclResult::HCCL_SUCCESS;
 }
 
 HcclResult TpManager::MapTpInfoFromTpAttr(

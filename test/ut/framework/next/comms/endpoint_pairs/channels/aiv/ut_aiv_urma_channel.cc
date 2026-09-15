@@ -964,10 +964,12 @@ TEST_F(AivUrmaTransportTest, Ut_ConnVecUnpackProc_WhenConnNumZero_ReturnsFalse)
     BinaryStream binaryStream;
     binaryStream << static_cast<uint32_t>(0);
 
-    EXPECT_FALSE(transport->ConnVecUnpackProc(binaryStream));
+    bool result = true;
+    EXPECT_EQ(transport->ConnVecUnpackProc(binaryStream, result), HcclResult::HCCL_SUCCESS);
+    EXPECT_FALSE(result);
 }
 
-TEST_F(AivUrmaTransportTest, Ut_ConnVecUnpackProc_WhenConnNumMismatch_Throws)
+TEST_F(AivUrmaTransportTest, Ut_ConnVecUnpackProc_WhenConnNumMismatch_Expect_E_PARA)
 {
     auto conn = MakeConn();
     Socket socket(nullptr, IpAddress(), 0, IpAddress(), "ut", SocketRole::CLIENT, Hccl::NicType::DEVICE_NIC_TYPE);
@@ -975,7 +977,8 @@ TEST_F(AivUrmaTransportTest, Ut_ConnVecUnpackProc_WhenConnNumMismatch_Throws)
     BinaryStream binaryStream;
     binaryStream << static_cast<uint32_t>(2);
 
-    EXPECT_THROW(transport->ConnVecUnpackProc(binaryStream), InvalidParamsException);
+    bool result;
+    EXPECT_EQ(transport->ConnVecUnpackProc(binaryStream, result), HcclResult::HCCL_E_PARA);
 }
 
 TEST_F(AivUrmaTransportTest, Ut_GetRemoteMems_WhenParamNull_Returns_E_PARA)

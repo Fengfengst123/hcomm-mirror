@@ -120,48 +120,56 @@ namespace CcuRep {
 
         TEST_F(CcuAssistTest, GetUBReduceType_SUM)
         {
-            uint16_t result = GetUBReduceType(Hccl::ReduceOp::SUM);
+            uint16_t result;
+            EXPECT_EQ(GetUBReduceType(Hccl::ReduceOp::SUM, result), HcclResult::HCCL_SUCCESS);
             EXPECT_EQ(result, 10);
         }
 
         TEST_F(CcuAssistTest, GetUBReduceType_MAX)
         {
-            uint16_t result = GetUBReduceType(Hccl::ReduceOp::MAX);
+            uint16_t result;
+            EXPECT_EQ(GetUBReduceType(Hccl::ReduceOp::MAX, result), HcclResult::HCCL_SUCCESS);
             EXPECT_EQ(result, 8);
         }
 
         TEST_F(CcuAssistTest, GetUBReduceType_MIN)
         {
-            uint16_t result = GetUBReduceType(Hccl::ReduceOp::MIN);
+            uint16_t result;
+            EXPECT_EQ(GetUBReduceType(Hccl::ReduceOp::MIN, result), HcclResult::HCCL_SUCCESS);
             EXPECT_EQ(result, 9);
         }
 
         TEST_F(CcuAssistTest, GetUBReduceType_Unsupported)
         {
-            EXPECT_THROW(GetUBReduceType(Hccl::ReduceOp::PROD), Hccl::CcuApiException);
+            uint16_t result;
+            EXPECT_EQ(GetUBReduceType(Hccl::ReduceOp::PROD, result), HcclResult::HCCL_E_PARA);
         }
 
         TEST_F(CcuAssistTest, GetUBDataType_FP32)
         {
-            uint16_t result = GetUBDataType(Hccl::DataType::FP32);
+            uint16_t result;
+            EXPECT_EQ(GetUBDataType(Hccl::DataType::FP32, result), HcclResult::HCCL_SUCCESS);
             EXPECT_EQ(result, 7);
         }
 
         TEST_F(CcuAssistTest, GetUBDataType_FP16)
         {
-            uint16_t result = GetUBDataType(Hccl::DataType::FP16);
+            uint16_t result;
+            EXPECT_EQ(GetUBDataType(Hccl::DataType::FP16, result), HcclResult::HCCL_SUCCESS);
             EXPECT_EQ(result, 6);
         }
 
         TEST_F(CcuAssistTest, GetUBDataType_INT32)
         {
-            uint16_t result = GetUBDataType(Hccl::DataType::INT32);
+            uint16_t result;
+            EXPECT_EQ(GetUBDataType(Hccl::DataType::INT32, result), HcclResult::HCCL_SUCCESS);
             EXPECT_EQ(result, 2);
         }
 
         TEST_F(CcuAssistTest, GetUBDataType_Unsupported)
         {
-            EXPECT_THROW(GetUBDataType(Hccl::DataType::HIF8), Hccl::CcuApiException);
+            uint16_t result;
+            EXPECT_EQ(GetUBDataType(Hccl::DataType::HIF8, result), HcclResult::HCCL_E_PARA);
         }
 
     } // namespace

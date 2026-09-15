@@ -177,17 +177,19 @@ bool CcuJettyMgr::FindAvailableBatch(const BatchKey& batchKey, ResourceBatch*& b
     return true;
 }
 
-CcuJettyMgr::CcuChannelJettyInfo CcuJettyMgr::GetChannelJettys(const LinkData& link) const
+HcclResult
+CcuJettyMgr::GetChannelJettys(const LinkData& link, std::pair<CcuChannelInfo, std::vector<CcuJetty*>>& result) const
 {
     const auto& it = allocatedChannelIdMap_.find(link);
-    CHK_RET_THROW(
-        InternalException,
-        StringFormat(
-            "[CcuJettyMgr][%s] failed to find allocated channelId of link[%s], ", "devLogicId[%d].", __func__,
-            link.Describe().c_str(), devLogicId_),
-        it == allocatedChannelIdMap_.end());
+    if (it == allocatedChannelIdMap_.end()) {
+        HCCL_ERROR(
+            "[CcuJettyMgr][%s] failed to find allocated channelId of link[%s], devLogicId[%d].", __func__,
+            link.Describe().c_str(), devLogicId_);
+        return HcclResult::HCCL_E_INTERNAL;
+    }
     // 内部维护数据保证channelJettyInfoMap_记录的资源存在
-    return channelJettyInfoMap_.at(it->second);
+    result = channelJettyInfoMap_.at(it->second);
+    return HcclResult::HCCL_SUCCESS;
 }
 
 void CcuJettyMgr::Confirm() { unconfirmedRecord_.Clear(); }

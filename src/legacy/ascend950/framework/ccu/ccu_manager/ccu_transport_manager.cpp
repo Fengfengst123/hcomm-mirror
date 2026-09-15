@@ -101,7 +101,7 @@ static HcclResult CheckIfLinkProtocolSupport(const LinkData& link)
 HcclResult CcuTransportMgr::CreateTransportByLink(const LinkData& link, CcuTransport*& transport)
 {
     HCCL_INFO("[CcuTransportMgr][%s] begin", __func__);
-    CHECK_NULLPTR(comm, "[CcuTransportMgr::CreateTransportByLink] comm is nullptr!");
+    CHK_PTR_NULL(comm);
     CHK_RET(CheckIfLinkProtocolSupport(link));
 
     std::string socketTag = comm->GetEstablishLinkSocketTag();
@@ -116,7 +116,8 @@ HcclResult CcuTransportMgr::CreateTransportByLink(const LinkData& link, CcuTrans
                                    ->GetCcuInsPreprocessor()
                                    ->GetCcuComm()
                                    ->GetCcuJettyMgr();
-    const auto channelJettys = ccuJettyMgr->GetChannelJettys(link);
+    std::pair<CcuChannelInfo, std::vector<CcuJetty*>> channelJettys;
+    CHK_RET(ccuJettyMgr->GetChannelJettys(link, channelJettys));
     const CcuChannelInfo& channelInfo = channelJettys.first;
     const std::vector<CcuJetty*>& ccuJettys = channelJettys.second;
 

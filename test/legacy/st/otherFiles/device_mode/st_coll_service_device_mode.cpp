@@ -398,7 +398,10 @@ TEST_F(CollServiceDeviceModeTest, test_GetSnapShotDynamicBuf)
 
     u32 utCntCke = 3;
     vector<CcuTransport*> utCcuTransportVec;
-    MOCKER_CPP(&CcuTransportGroupMgr::GetAllTransportGroups).stubs().with().will(returnValue(utLinkGroups));
+    MOCKER_CPP(&CcuTransportGroupMgr::GetAllTransportGroups)
+        .stubs()
+        .with(outBound(utLinkGroups))
+        .will(returnValue(HcclResult::HCCL_SUCCESS));
     CollAlgComponent collAlgComponent(nullptr, DevType::DEV_TYPE_950, 0, 1);
     MOCKER_CPP_VIRTUAL(collAlgComponent, &CollAlgComponent::GetCollAlgOpReq)
         .stubs()

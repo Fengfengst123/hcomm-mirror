@@ -60,7 +60,7 @@ private:
     void SendFinish();
     void RecvFinish();
     void RmtBufferVecUnpackProc(uint32_t locNum, BinaryStream& binaryStream, RemoteBufferVec& bufferVec);
-    bool ConnVecUnpackProc(BinaryStream& binaryStream);
+    HcclResult ConnVecUnpackProc(BinaryStream& binaryStream, bool& result);
     bool IsResReady();
     bool IsConnsReady();
     bool RecvDataProcess();

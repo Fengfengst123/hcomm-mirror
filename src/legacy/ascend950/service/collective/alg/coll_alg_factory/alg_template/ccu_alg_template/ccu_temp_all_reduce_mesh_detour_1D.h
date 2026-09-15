@@ -50,7 +50,7 @@ public:
 private:
     void GetAddrInfo(const TempFuncs& tempFuncs, uint64_t& inputAddr, uint64_t& outputAddr);
     void CalcDetourOffset(uint64_t sliceSize, uint64_t& tailOffset, uint64_t& tailSize, uint64_t& iterNum);
-    void ProcessLinks(std::vector<LinkData>& links, const ResLinks& tempLinks) const;
+    HcclResult ProcessLinks(std::vector<LinkData>& links, const ResLinks& tempLinks) const;
     ReduceOp reduceOp_;
     DataType dataType_;
     uint64_t detourPathNum_{0}; // 到每个对端有几个绕路路径

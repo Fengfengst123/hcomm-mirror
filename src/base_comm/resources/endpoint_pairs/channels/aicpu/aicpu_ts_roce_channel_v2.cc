@@ -477,8 +477,7 @@ HcclResult AicpuTsRoceChannelV2::CheckSocketStatus()
 HcclResult AicpuTsRoceChannelV2::CreateQp()
 {
     for (auto& conn : connections_) {
-        Hccl::CHECK_NULLPTR(
-            conn, Hccl::StringFormat("[AicpuTsRoceChannelV2::%s] failed, connection pointer is nullptr", __func__));
+        CHK_PTR_NULL(conn);
         HcclResult ret = conn->CreateQp();
         if (ret == HCCL_E_AGAIN) {
             return HCCL_SUCCESS;
@@ -688,8 +687,7 @@ HcclResult AicpuTsRoceChannelV2::ConnVecUnpackProc(Hccl::BinaryStream& binaryStr
 HcclResult AicpuTsRoceChannelV2::ModifyQp()
 {
     for (auto& conn : connections_) {
-        Hccl::CHECK_NULLPTR(
-            conn, Hccl::StringFormat("[AicpuTsRoceChannelV2::%s] failed, connection pointer is nullptr", __func__));
+        CHK_PTR_NULL(conn);
         CHK_RET(conn->ParseRmtExchangeDto(rmtConnDto_));
         HcclResult ret = conn->ModifyQp();
         if (ret == HCCL_E_AGAIN) {
@@ -805,8 +803,7 @@ HcclResult AicpuTsRoceChannelV2::BuildAndGetSqContext(std::vector<SqContext>& sq
 
     for (uint32_t i = 0; i < connNum_; i++) {
         auto& conn = connections_[i];
-        Hccl::CHECK_NULLPTR(
-            conn, Hccl::StringFormat("[AicpuTsRoceChannelV2::%s] failed, connection pointer is nullptr", __func__));
+        CHK_PTR_NULL(conn);
         SqContext sqContext;
         CHK_RET(conn->BuildSqContext(&sqContext));
         sqList[i] = sqContext;
@@ -836,8 +833,7 @@ HcclResult AicpuTsRoceChannelV2::BuildAndGetCqContext(std::vector<CqContext>& cq
 
     for (uint32_t i = 0; i < connNum_; i++) {
         auto& conn = connections_[i];
-        Hccl::CHECK_NULLPTR(
-            conn, Hccl::StringFormat("[AicpuTsRoceChannelV2::%s] failed, connection pointer is nullptr", __func__));
+        CHK_PTR_NULL(conn);
         CqContext cqContext;
         CHK_RET(conn->BuildCqContext(&cqContext));
         cqList[i] = cqContext;

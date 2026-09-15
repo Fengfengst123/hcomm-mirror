@@ -43,7 +43,7 @@ namespace {
         HcclRootHandleV2 rootHandle{};
         std::shared_ptr<RankInfoDetect> rankInfoDetectServer;
         EXCEPTION_CATCH((rankInfoDetectServer = std::make_shared<RankInfoDetect>()), return HCCL_E_MEMORY);
-        TRY_CATCH_RETURN(rankInfoDetectServer->SetupServer(rootHandle));
+        CHK_RET(rankInfoDetectServer->SetupServer(rootHandle));
 
         u32 rootHandleLen = sizeof(HcclRootHandleV2);
         CHK_PRT_RET(
@@ -90,9 +90,7 @@ namespace {
         EXCEPTION_CATCH((rankInfoDetectAgent = std::make_shared<RankInfoDetect>()), return HCCL_E_MEMORY);
 
         EXCEPTION_CATCH(rankInfoDetectAgent->SetupAgent(nRanks, rank, rootHandle), return HCCL_E_INTERNAL);
-        EXCEPTION_CATCH(
-            rankInfoDetectAgent->WaitComplete(rootHandle.listenPort, RANKINFO_DETECT_SERVER_STATUS_IDLE),
-            return HCCL_E_INTERNAL);
+        CHK_RET(rankInfoDetectAgent->WaitComplete(rootHandle.listenPort, RANKINFO_DETECT_SERVER_STATUS_IDLE));
 
         rankInfoDetectAgent->GetRankTable(rankTable);
         // bridge 不暴露 RankInfoDetect 类型；调用方持有类型擦除后的 shared_ptr，

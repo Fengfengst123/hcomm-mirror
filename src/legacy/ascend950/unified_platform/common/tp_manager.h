@@ -213,7 +213,7 @@ private:
     HcclResult
     HandleCompletedTpAttrRequest(const TpAttrRequestCtx reqCtx, const TpHandle tpHandle, TpAttrInfo& tpAttrInfo);
 
-    void StartGetTpAttrForFirstTpDevice(const RaUbGetTpInfoParam& param, RequestCtx& reqCtx) const;
+    HcclResult StartGetTpAttrForFirstTpDevice(const RaUbGetTpInfoParam& param, RequestCtx& reqCtx) const;
     HcclResult
     HandleCompletedRequest(const RequestCtx reqCtx, const RaUbGetTpInfoParam& param, TpInfo& tpInfo, bool withSlPolicy);
     HcclResult MapTpInfoFromTpAttr(

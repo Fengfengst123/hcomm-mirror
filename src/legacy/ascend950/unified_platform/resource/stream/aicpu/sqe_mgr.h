@@ -55,7 +55,7 @@ private:
 
     u32 GetTailToHeadDist(u32 sqId, u32 head, u32 tail);
 
-    void AddSqeToBuffer(void* bufferAddr, void* sqeAddr) const;
+    HcclResult AddSqeToBuffer(void* bufferAddr, void* sqeAddr) const;
 
     u32 devPhyId;
 

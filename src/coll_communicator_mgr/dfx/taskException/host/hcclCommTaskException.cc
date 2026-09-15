@@ -132,7 +132,7 @@ HcclResult TaskExceptionHost::Register(u64 commHandle)
         CHK_PRT_RET(
             ret != ACL_SUCCESS, HCCL_ERROR("[%s]aclrtExceptionInfoCallbackRegister failed, ret[%d]", __func__, ret),
             HCCL_E_RUNTIME);
-        Hccl::HrtUnregTaskExceptionCallbackByModule(Hccl::TaskExceptionHandler::Process);
+        CHK_RET(Hccl::HrtUnregTaskExceptionCallbackByModule(Hccl::TaskExceptionHandler::Process));
         HCCL_RUN_INFO(
             "[%s]aclrtExceptionInfoCallbackRegister set ProcessCallback success and unregister legacy "
             "TaskExceptionHandler::Process callback",

@@ -41,7 +41,7 @@ private:
         const TempFuncs& tempFuncs, const RankSliceInfo& sliceInfoVec, uint64_t& inputAddr, uint64_t& outputAddr,
         uint64_t& offset);
     void CalcDetourOffset(uint64_t sliceSize, uint64_t& tailOffset, uint64_t& tailSize, uint64_t& loopIterNum);
-    void ProcessLinks(std::vector<LinkData>& links, const ResLinks& tempLinks) const;
+    HcclResult ProcessLinks(std::vector<LinkData>& links, const ResLinks& tempLinks) const;
 
     uint64_t detourPathNum_{0}; // 到每个对端有几个绕路路径
     uint64_t pathNumPerPeer_{0};

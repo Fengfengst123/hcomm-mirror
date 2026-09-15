@@ -42,7 +42,7 @@ public:
     GenExtIns(const RankGraph* rankGraph, const TemplateInfo& tmpInfo, const std::vector<InsQuePtr>& tempInsQues) const;
 
 private:
-    void CheckCcuDataType() const;
+    HcclResult CheckCcuDataType() const;
     ReduceOp reduceOp_;
     DataType dataType_;
 };

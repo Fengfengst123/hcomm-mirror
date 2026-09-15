@@ -315,7 +315,8 @@ void HrtStreamSetMode(HcclRtStream streamPtr, const uint64_t stmMode)
 HcclResult HrtGetDeviceInfo(uint32_t deviceLogicId, int32_t moduleType, aclrtDevAttr infoType, int64_t& val)
 {
     if (moduleType != DEV_MODULE_TYPE::MODULE_TYPE_SYSTEM) {
-        THROW<NotSupportException>(StringFormat("[hrtGetDeviceInfo]Unsupported moduleType[%d].", moduleType));
+        HCCL_ERROR("[hrtGetDeviceInfo]Unsupported moduleType[%d].", moduleType);
+        return HcclResult::HCCL_E_NOT_SUPPORT;
     }
     aclError ret = aclrtGetDeviceInfo(deviceLogicId, infoType, ReinterpretAs<int64_t*>(&val));
     HCCL_INFO(
@@ -1139,15 +1140,15 @@ void HrtRegTaskExceptionCallbackByModule(aclrtExceptionInfoCallback callback)
     }
 }
 
-void HrtUnregTaskExceptionCallbackByModule(aclrtExceptionInfoCallback callback)
+HcclResult HrtUnregTaskExceptionCallbackByModule(aclrtExceptionInfoCallback callback)
 {
     HCCL_INFO("[HrtUnregTaskExceptionCallbackByModule] callback[%p].", callback);
     aclError ret = aclrtExceptionInfoCallbackUnregister(callback);
     if (ret != ACL_SUCCESS) {
-        string msg = StringFormat(
-            "Call aclrtExceptionInfoCallbackUnregister failed. return[%d], callback[%p].", ret, callback);
-        THROW<RuntimeApiException>(msg);
+        HCCL_ERROR("Call aclrtExceptionInfoCallbackUnregister failed. return[%d], callback[%p].", ret, callback);
+        return HcclResult::HCCL_E_RUNTIME;
     }
+    return HcclResult::HCCL_SUCCESS;
 }
 
 u32 HrtStreamGetSqId(const aclrtStream ptr)

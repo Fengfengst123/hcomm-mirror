@@ -38,7 +38,7 @@ public:
 
     std::vector<char> GetUniqueId() override;
 
-    std::vector<char> GetUniqueIdV2();
+    HcclResult GetUniqueIdV2(std::vector<char>& result);
     std::vector<char> PackConnData();
 
     vector<char>& GetRmtCntNotifyDesc() override // 仅UB 支持

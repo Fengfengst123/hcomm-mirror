@@ -219,7 +219,8 @@ static HcclResult FindOneUsableEid(const uint32_t devLogicId, const uint8_t dieI
             continue;
         }
         const RdmaHandle rdmaHandle = rdmaHandleMgr.GetByIp(devPhyId, eidInfo.ipAddress);
-        const bool rtpEnable = rdmaHandleMgr.GetRtpEnable(rdmaHandle);
+        bool rtpEnable;
+        CHK_RET(rdmaHandleMgr.GetRtpEnable(rdmaHandle, rtpEnable));
         if (rtpEnable) {
             feId = eidInfo.funcId;
             ipAddr = eidInfo.ipAddress;
@@ -566,11 +567,12 @@ TpInfo CcuComponent::GetTpInfo(const IpAddress& ipAddr)
     return srcIter->second;
 }
 
-TpAttrInfo CcuComponent::GetLoopTpAttr(const IpAddress& ipAddr, const TpHandle tpHandle)
+HcclResult CcuComponent::GetLoopTpAttr(const IpAddress& ipAddr, const TpHandle tpHandle, TpAttrInfo& tpAttrInfo)
 {
     const auto& srcIter = tpAttrInfoMap.find(ipAddr);
     if (srcIter != tpAttrInfoMap.end()) {
-        return srcIter->second;
+        tpAttrInfo = srcIter->second;
+        return HcclResult::HCCL_SUCCESS;
     }
 
     auto& rdmaHandleMgr = RdmaHandleManager::GetInstance();
@@ -581,36 +583,36 @@ TpAttrInfo CcuComponent::GetLoopTpAttr(const IpAddress& ipAddr, const TpHandle t
     constexpr uint32_t TP_ATTR_BITMAP = (1U << kTpAttrRetryTimesInitBit) | (1U << kTpAttrAtBit);
     const GetTpAttrParam tpAttrParam = {tpHandle, TP_ATTR_BITMAP};
 
-    TpAttrInfo tpAttrInfo{};
+    TpAttrInfo tempTpAttrInfo{};
     auto& tpMgr = TpManager::GetInstance(devLogicId);
     const auto timeout = std::chrono::milliseconds(LOOP_CHANNEL_WAIT_TIMEOUT_MS);
     const auto startTime = std::chrono::steady_clock::now();
 
-    HcclResult ret = tpMgr.GetTpAttr(tpAttrParam, tpAttrInfo, rdmaHandle);
+    HcclResult ret = tpMgr.GetTpAttr(tpAttrParam, tempTpAttrInfo, rdmaHandle);
     while (ret == HcclResult::HCCL_E_AGAIN) {
         if ((std::chrono::steady_clock::now() - startTime) >= timeout) {
-            THROW<InternalException>(
-                "[CcuComponent][%s] failed, get tp attr "
-                "timeout[%d ms], devLogicId[%d].",
-                __func__, timeout, devLogicId);
+            HCCL_ERROR(
+                "[CcuComponent][%s] failed, get tp attr timeout[%d ms], devLogicId[%d].", __func__, timeout,
+                devLogicId);
+            return HcclResult::HCCL_E_INTERNAL;
         }
-        ret = tpMgr.GetTpAttr(tpAttrParam, tpAttrInfo, rdmaHandle);
+        ret = tpMgr.GetTpAttr(tpAttrParam, tempTpAttrInfo, rdmaHandle);
     }
 
     if (ret != HcclResult::HCCL_SUCCESS) {
-        THROW<InternalException>(
-            "[CcuComponent][%s] failed, ret[%u], "
-            "devLogicId[%d].",
-            __func__, ret, devLogicId);
+        HCCL_ERROR("[CcuComponent][%s] failed, ret[%u], devLogicId[%d].", __func__, ret, devLogicId);
+        return HcclResult::HCCL_E_INTERNAL;
     }
 
-    tpAttrInfoMap[ipAddr] = tpAttrInfo;
-    return tpAttrInfo;
+    tpAttrInfoMap[ipAddr] = tempTpAttrInfo;
+    tpAttrInfo = tempTpAttrInfo;
+    return HcclResult::HCCL_SUCCESS;
 }
 
 HcclResult CcuComponent::GetLoopJettyTimeout(const IpAddress& ipAddr, const TpHandle tpHandle, uint8_t& errTimeout)
 {
-    const auto tpAttrInfo = GetLoopTpAttr(ipAddr, tpHandle);
+    TpAttrInfo tpAttrInfo;
+    CHK_RET(GetLoopTpAttr(ipAddr, tpHandle, tpAttrInfo));
     // CTP 协议不感知 TP 建链，跳过 GetTpTotalTimeout（对齐 DevUbConnection::GetTimeOut 的 CTP 分支），
     // tpTimeOutMs 保持 0，由 TpManager::CalcTaTimeout 内部按 CTP 规则直接使用 taTimeOut_
     uint32_t tpTimeOutMs = 0;
@@ -1061,11 +1063,10 @@ HcclResult CcuComponent::CleanDieCkes(const uint8_t dieId) const
     return HcclResult::HCCL_SUCCESS;
 }
 
-void CcuComponent::SetProcess(CcuOpcodeType opCode) const
+HcclResult CcuComponent::SetProcess(CcuOpcodeType opCode) const
 {
     auto tlvHandle = HccpTlvHdcManager::GetInstance().GetTlvHandle(devLogicId);
-    CHECK_NULLPTR(
-        tlvHandle, StringFormat("[CcuComponent][%s] tlvHandle is nullptr, devLogicId[%d]", __func__, devLogicId));
+    CHK_PTR_NULL(tlvHandle);
 
     struct CustomChannelInfoIn inBuff;
     struct CustomChannelInfoOut outBuff;
@@ -1084,6 +1085,7 @@ void CcuComponent::SetProcess(CcuOpcodeType opCode) const
         HrtRaTlvRequestForCustomChannel(
             tlvHandle, MSG_TYPE_CCU_DISPATCH_CMD, static_cast<void*>(&inBuff), static_cast<void*>(&outBuff));
     }
+    return HcclResult::HCCL_SUCCESS;
 }
 
 HcclResult CcuComponent::SetTaskKill()
@@ -1107,7 +1109,7 @@ HcclResult CcuComponent::SetTaskKill()
         return HcclResult::HCCL_E_INTERNAL;
     }
 
-    SetProcess(CcuOpcodeType::CCU_U_OP_SET_TASKKILL);
+    CHK_RET(SetProcess(CcuOpcodeType::CCU_U_OP_SET_TASKKILL));
     status = CcuTaskKillStatus::TASK_KILL;
     HCCL_INFO("[CcuComponent][%s] success, state = %u, devLogicId = %d.", __func__, status, devLogicId);
     return HcclResult::HCCL_SUCCESS;
@@ -1138,7 +1140,7 @@ HcclResult CcuComponent::SetTaskKillDone()
         return HcclResult::HCCL_E_INTERNAL;
     }
 
-    SetProcess(CcuOpcodeType::CCU_U_OP_CLEAN_TASKKILL_STATE);
+    CHK_RET(SetProcess(CcuOpcodeType::CCU_U_OP_CLEAN_TASKKILL_STATE));
     status = CcuTaskKillStatus::INIT;
     HCCL_INFO("[CcuComponent][%s] success, state = %u, devLogicId = %d", __func__, status, devLogicId);
     return HcclResult::HCCL_SUCCESS;
@@ -1146,7 +1148,7 @@ HcclResult CcuComponent::SetTaskKillDone()
 
 HcclResult CcuComponent::CleanTaskKillState() const
 {
-    SetProcess(CcuOpcodeType::CCU_U_OP_CLEAN_TASKKILL_STATE);
+    CHK_RET(SetProcess(CcuOpcodeType::CCU_U_OP_CLEAN_TASKKILL_STATE));
     return HcclResult::HCCL_SUCCESS;
 }
 

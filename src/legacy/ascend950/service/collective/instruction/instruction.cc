@@ -246,16 +246,18 @@ RankId InsBatchRead::GetRemoteRank() const { return remoteRank; }
 
 const LinkData* InsBatchRead::GetLink() const { return &link; }
 
-void InsBatchRead::PushReadIns(unique_ptr<Instruction> readIns)
+HcclResult InsBatchRead::PushReadIns(unique_ptr<Instruction> readIns)
 {
     if (readIns->GetType() != InstructionType::READ && readIns->GetType() != InstructionType::READ_REDUCE) {
-        THROW<NotSupportException>(StringFormat(
+        HCCL_ERROR(
             "[InsBatchRead][%s] only support read and readReduce instruction type, "
             "but get instruction type[%s]",
-            __func__, readIns->GetType().Describe().c_str()));
+            __func__, readIns->GetType().Describe().c_str());
+        return HcclResult::HCCL_E_RUNTIME;
     }
 
     readInsVec.push_back(std::move(readIns));
+    return HcclResult::HCCL_SUCCESS;
 }
 
 string InsReadReduceExtend::Describe() const
@@ -323,16 +325,18 @@ RankId InsBatchWrite::GetRemoteRank() const { return remoteRank; }
 
 const LinkData* InsBatchWrite::GetLink() const { return &link; }
 
-void InsBatchWrite::PushWriteIns(unique_ptr<Instruction> writeIns)
+HcclResult InsBatchWrite::PushWriteIns(unique_ptr<Instruction> writeIns)
 {
     if (writeIns->GetType() != InstructionType::WRITE && writeIns->GetType() != InstructionType::WRITE_REDUCE) {
-        THROW<NotSupportException>(StringFormat(
+        HCCL_ERROR(
             "[InsBatchWrite][%s] only support Write and WriteReduce instruction "
             "type, but get instruction type[%s]",
-            __func__, writeIns->GetType().Describe().c_str()));
+            __func__, writeIns->GetType().Describe().c_str());
+        return HcclResult::HCCL_E_RUNTIME;
     }
 
     writeInsVec.push_back(std::move(writeIns));
+    return HcclResult::HCCL_SUCCESS;
 }
 
 string InsWriteReduceExtend::Describe() const

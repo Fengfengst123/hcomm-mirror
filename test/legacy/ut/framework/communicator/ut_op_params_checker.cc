@@ -570,11 +570,11 @@ TEST_F(OpParamsCheckerTest, should_fail_when_check_unsupported_datatype_mc2_lowP
     config.opType = static_cast<uint32_t>(AicpuComType::HCCL_CMD_REDUCE_SCATTER);
     config.dataType = static_cast<uint32_t>(DataType::INT16);
     config.outputDataType = static_cast<uint32_t>(DataType::FP16);
-    EXPECT_THROW(OpParamsChecker::CheckOpDataTypeMC2(config), InvalidParamsException);
+    EXPECT_EQ(OpParamsChecker::CheckOpDataTypeMC2(config), HcclResult::HCCL_E_PARA);
 
     config.dataType = static_cast<uint32_t>(DataType::INT8);
     config.outputDataType = static_cast<uint32_t>(DataType::INT32);
-    EXPECT_THROW(OpParamsChecker::CheckOpDataTypeMC2(config), InvalidParamsException);
+    EXPECT_EQ(OpParamsChecker::CheckOpDataTypeMC2(config), HcclResult::HCCL_E_PARA);
 }
 
 TEST_F(OpParamsCheckerTest, should_fail_when_check_unsupported_datatype_mc2_lowP_V2)
@@ -584,11 +584,11 @@ TEST_F(OpParamsCheckerTest, should_fail_when_check_unsupported_datatype_mc2_lowP
     config.opType = static_cast<uint32_t>(AicpuComType::HCCL_CMD_REDUCE_SCATTER);
     config.srcDataType = static_cast<uint32_t>(DataType::INT16);
     config.dstDataType = static_cast<uint32_t>(DataType::FP16);
-    EXPECT_THROW(OpParamsChecker::CheckOpDataTypeMC2V2(config), InvalidParamsException);
+    EXPECT_EQ(OpParamsChecker::CheckOpDataTypeMC2V2(config), HcclResult::HCCL_E_PARA);
 
     config.srcDataType = static_cast<uint32_t>(DataType::INT8);
     config.dstDataType = static_cast<uint32_t>(DataType::INT32);
-    EXPECT_THROW(OpParamsChecker::CheckOpDataTypeMC2V2(config), InvalidParamsException);
+    EXPECT_EQ(OpParamsChecker::CheckOpDataTypeMC2V2(config), HcclResult::HCCL_E_PARA);
 }
 
 TEST_F(OpParamsCheckerTest, should_fail_when_check_unsupported_datatype_mc2_highP)
@@ -598,7 +598,7 @@ TEST_F(OpParamsCheckerTest, should_fail_when_check_unsupported_datatype_mc2_high
     config.opType = static_cast<uint32_t>(AicpuComType::HCCL_CMD_REDUCE_SCATTER);
     config.dataType = static_cast<uint32_t>(DataType::INT64);
     config.outputDataType = static_cast<uint32_t>(DataType::INT64);
-    EXPECT_THROW(OpParamsChecker::CheckOpDataTypeMC2(config), InvalidParamsException);
+    EXPECT_EQ(OpParamsChecker::CheckOpDataTypeMC2(config), HcclResult::HCCL_E_PARA);
 }
 
 TEST_F(OpParamsCheckerTest, should_fail_when_check_unsupported_datatype_mc2_highP_V2)
@@ -608,7 +608,7 @@ TEST_F(OpParamsCheckerTest, should_fail_when_check_unsupported_datatype_mc2_high
     config.opType = static_cast<uint32_t>(AicpuComType::HCCL_CMD_REDUCE_SCATTER);
     config.srcDataType = static_cast<uint32_t>(DataType::INT64);
     config.dstDataType = static_cast<uint32_t>(DataType::INT64);
-    EXPECT_THROW(OpParamsChecker::CheckOpDataTypeMC2V2(config), InvalidParamsException);
+    EXPECT_EQ(OpParamsChecker::CheckOpDataTypeMC2V2(config), HcclResult::HCCL_E_PARA);
 }
 
 TEST_F(OpParamsCheckerTest, should_fail_when_check_unsupported_datatype_mc2_optype_without_reduce)
@@ -624,7 +624,7 @@ TEST_F(OpParamsCheckerTest, should_fail_when_check_unsupported_datatype_mc2_opty
         config.opType = optype;
         config.dataType = static_cast<uint32_t>(DataType::INT8);
         config.outputDataType = static_cast<uint32_t>(DataType::INT16);
-        EXPECT_THROW(OpParamsChecker::CheckOpDataTypeMC2(config), InvalidParamsException);
+        EXPECT_EQ(OpParamsChecker::CheckOpDataTypeMC2(config), HcclResult::HCCL_E_PARA);
     }
 }
 

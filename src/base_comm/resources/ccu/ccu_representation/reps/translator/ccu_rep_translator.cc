@@ -161,23 +161,23 @@ namespace CcuRep {
                    13; // 13:翻译器翻译过程中额外需要的指令空间大小(插入3条通用操作指令+1条终止指令+9条repJump)
     }
 
-    CcuResReq CcuRepTranslator::GetResReq(const int32_t userDevId, uint8_t dieId)
+    HcclResult CcuRepTranslator::GetResReq(const int32_t userDevId, uint8_t dieId, CcuResReq& resReq)
     {
         // 申请离散 xn 资源
         // 需要申请若干xn、gsa、cke设置为固定值用于通用操作
         CcuVersion tempCcuVersion = CcuVersion::CCU_INVALID;
         HcclResult ret = CcuDevMgrImp::GetCcuVersion(userDevId, tempCcuVersion);
         if (ret != HcclResult::HCCL_SUCCESS || tempCcuVersion == CcuVersion::CCU_INVALID) {
-            Hccl::THROW<Hccl::CcuApiException>("[CcuRepTranslator] GetResReq: Invalid CCU Type!");
+            HCCL_ERROR("[CcuRepTranslator] GetResReq: Invalid CCU Type!");
+            return HcclResult::HCCL_E_INTERNAL;
         }
 
-        CcuResReq resReq;
         int varNum = XN_NUM;
         int gsaNum = tempCcuVersion == CcuVersion::CCU_V1 ? GSA_NUM : 0;
         resReq.xnReq[dieId] = varNum;
         resReq.gsaReq[dieId] = gsaNum;
         resReq.ckeReq[dieId] = CKE_NUM;
-        return resReq;
+        return HcclResult::HCCL_SUCCESS;
     }
 
     void CcuRepTranslator::GetRes(CcuRepResource& res)

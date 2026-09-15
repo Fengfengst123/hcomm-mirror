@@ -146,7 +146,7 @@ namespace CcuRep {
         return ccuSumDataTypeMap[dataType];
     }
 
-    uint16_t GetUBReduceType(Hccl::ReduceOp reduceOp)
+    HcclResult GetUBReduceType(Hccl::ReduceOp reduceOp, uint16_t& result)
     {
         static std::map<Hccl::ReduceOp, uint16_t> ubReduceTypeMap = {
             {Hccl::ReduceOp::SUM, 10},
@@ -155,13 +155,15 @@ namespace CcuRep {
         };
 
         if (ubReduceTypeMap.find(reduceOp) == ubReduceTypeMap.end()) {
-            Hccl::THROW<Hccl::CcuApiException>("Unsupported reduceOp[%s] for UB Reduce", reduceOp.Describe().c_str());
+            HCCL_ERROR("Unsupported reduceOp[%s] for UB Reduce", reduceOp.Describe().c_str());
+            return HcclResult::HCCL_E_PARA;
         }
 
-        return ubReduceTypeMap[reduceOp];
+        result = ubReduceTypeMap[reduceOp];
+        return HcclResult::HCCL_SUCCESS;
     }
 
-    uint16_t GetUBDataType(Hccl::DataType dataType)
+    HcclResult GetUBDataType(Hccl::DataType dataType, uint16_t& result)
     {
         static std::map<Hccl::DataType, uint16_t> ubDataTypeMap
             = {{Hccl::DataType::FP32, 7},  {Hccl::DataType::FP16, 6},   {Hccl::DataType::BFP16, 8},
@@ -169,10 +171,11 @@ namespace CcuRep {
                {Hccl::DataType::INT32, 2}, {Hccl::DataType::UINT16, 4}, {Hccl::DataType::UINT32, 5}};
 
         if (ubDataTypeMap.find(dataType) == ubDataTypeMap.end()) {
-            Hccl::THROW<Hccl::CcuApiException>(
-                "Unsupported Hccl::DataType[%s] for UB Reduce", dataType.Describe().c_str());
+            HCCL_ERROR("Unsupported Hccl::DataType[%s] for UB Reduce", dataType.Describe().c_str());
+            return HcclResult::HCCL_E_PARA;
         }
-        return ubDataTypeMap[dataType];
+        result = ubDataTypeMap[dataType];
+        return HcclResult::HCCL_SUCCESS;
     }
 
     uint64_t GetTokenInfo(uint64_t va, uint64_t size)

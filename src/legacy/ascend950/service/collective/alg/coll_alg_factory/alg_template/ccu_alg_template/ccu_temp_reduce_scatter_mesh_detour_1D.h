@@ -48,7 +48,7 @@ public:
     void InitReduceInfo(const ReduceOp& reduceOp, const DataType& dataType);
 
 private:
-    void ProcessLinks(std::vector<LinkData>& links, const ResLinks& tempLinks);
+    HcclResult ProcessLinks(std::vector<LinkData>& links, const ResLinks& tempLinks);
     ReduceOp reduceOp_;
     DataType dataType_;
     uint64_t detourPathNum_{0}; // 到每个对端有几个绕路路径

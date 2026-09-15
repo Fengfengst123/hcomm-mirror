@@ -115,7 +115,7 @@ private:
     CreateAndImportLoopJettys(const uint8_t dieId, const IpAddress& ipAddr, const vector<JettyInfo>& jettyInfos);
     TpInfo RequestNewTpInfo(const IpAddress& srcIpAddr, const IpAddress& dstIpAddr) const;
     TpInfo GetTpInfo(const IpAddress& ipAddr);
-    TpAttrInfo GetLoopTpAttr(const IpAddress& ipAddr, const TpHandle tpHandle);
+    HcclResult GetLoopTpAttr(const IpAddress& ipAddr, const TpHandle tpHandle, TpAttrInfo& tpAttrInfo);
     HcclResult GetLoopJettyTimeout(const IpAddress& ipAddr, const TpHandle tpHandle, uint8_t& errTimeout);
     uint32_t GetPsn(const IpAddress& ipAddr);
     HcclResult ConfigLoopChannel(const uint8_t dieId, const IpAddress& ipAddr, const ChannelInfo& channelInfo);
@@ -125,7 +125,7 @@ private:
     void UnimportAllJetty();
     void DestroyAllJetty();
 
-    void SetProcess(CcuOpcodeType opCode) const;
+    HcclResult SetProcess(CcuOpcodeType opCode) const;
     void PrintCcuMissionStatus(int32_t devLogicId) const;
 };
 

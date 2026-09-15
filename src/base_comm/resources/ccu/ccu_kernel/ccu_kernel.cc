@@ -2218,9 +2218,12 @@ HcclResult CcuKernel::ReadReduceNb(
     auto opType_ = HcommReduceOpToHcclReduceOp(opType);
     auto dataType_ = HcommDataTypeToHcclDataType(dataType);
 
+    uint16_t ubDataType;
+    CHK_RET(CcuRep::GetUBDataType(dataType_, ubDataType));
+    uint16_t ubReduceType;
+    CHK_RET(CcuRep::GetUBReduceType(opType_, ubReduceType));
     auto rep = std::make_shared<CcuRep::CcuRepRead>(
-        insGenerator, channel, loc, rem, len, CcuRep::GetUBDataType(dataType_), CcuRep::GetUBReduceType(opType_), event,
-        mask);
+        insGenerator, channel, loc, rem, len, ubDataType, ubReduceType, event, mask);
     Append(rep);
     SetDependencyInfo(event.Id(), mask, rep);
     return HCCL_SUCCESS;
@@ -2247,9 +2250,12 @@ HcclResult CcuKernel::WriteReduceNb(
     auto opType_ = HcommReduceOpToHcclReduceOp(opType);
     auto dataType_ = HcommDataTypeToHcclDataType(dataType);
 
+    uint16_t ubDataType;
+    CHK_RET(CcuRep::GetUBDataType(dataType_, ubDataType));
+    uint16_t ubReduceType;
+    CHK_RET(CcuRep::GetUBReduceType(opType_, ubReduceType));
     auto rep = std::make_shared<CcuRep::CcuRepWrite>(
-        insGenerator, channel, rem, loc, len, CcuRep::GetUBDataType(dataType_), CcuRep::GetUBReduceType(opType_), event,
-        mask);
+        insGenerator, channel, rem, loc, len, ubDataType, ubReduceType, event, mask);
     Append(rep);
     SetDependencyInfo(event.Id(), mask, rep);
     return HCCL_SUCCESS;
@@ -2297,8 +2303,12 @@ HcclResult CcuKernel::LocalReduceNb(
     auto opType_ = HcommReduceOpToHcclReduceOp(opType);
     auto dataType_ = HcommDataTypeToHcclDataType(dataType);
 
-    auto rep = std::make_shared<CcuRep::CcuRepLocCpy>(
-        insGenerator, dst, src, len, CcuRep::GetUBDataType(dataType_), CcuRep::GetUBReduceType(opType_), event, mask);
+    uint16_t ubDataType;
+    CHK_RET(CcuRep::GetUBDataType(dataType_, ubDataType));
+    uint16_t ubReduceType;
+    CHK_RET(CcuRep::GetUBReduceType(opType_, ubReduceType));
+    auto rep
+        = std::make_shared<CcuRep::CcuRepLocCpy>(insGenerator, dst, src, len, ubDataType, ubReduceType, event, mask);
     Append(rep);
     SetDependencyInfo(event.Id(), mask, rep);
     return HCCL_SUCCESS;

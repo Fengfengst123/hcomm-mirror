@@ -49,7 +49,7 @@ HcclResult HcclOneSidedConn::Connect([[maybe_unused]] const std::string& commId)
     }
 
     // 推动式建链
-    WaitOneSidedTransportReady();
+    CHK_RET(WaitOneSidedTransportReady());
 
     // 保存socket
     SocketConfig socketConfig(linkData_.GetRemoteRankId(), linkData_, comm_->GetEstablishLinkSocketTag());
@@ -65,7 +65,7 @@ HcclResult HcclOneSidedConn::Connect([[maybe_unused]] const std::string& commId)
     return HCCL_SUCCESS;
 }
 
-void HcclOneSidedConn::WaitOneSidedTransportReady()
+HcclResult HcclOneSidedConn::WaitOneSidedTransportReady()
 {
     auto timeout = std::chrono::seconds(EnvConfig::GetInstance().GetSocketConfig().GetLinkTimeOut());
     HcclUs startTime = std::chrono::steady_clock::now();
@@ -80,9 +80,10 @@ void HcclOneSidedConn::WaitOneSidedTransportReady()
             HCCL_ERROR(
                 "[%s][%s] wait socket establish timeout, WaitOneSidedTransportReady timeout.",
                 LOG_KEYWORDS_INIT_CHANNEL.c_str(), LOG_KEYWORDS_TIMEOUT.c_str());
-            THROW<InternalException>("WaitOneSidedTransportReady timeout.");
+            return HcclResult::HCCL_E_INTERNAL;
         }
     }
+    return HcclResult::HCCL_SUCCESS;
 }
 
 HcclResult HcclOneSidedConn::SendLocalMemDesc(const HcclMemDescs& localMemDescs)
@@ -95,7 +96,8 @@ HcclResult HcclOneSidedConn::SendLocalMemDesc(const HcclMemDescs& localMemDescs)
     } else {
         HCCL_INFO("send descSize:%u", localMemDescs.arrayLength * sizeof(HcclMemDesc));
         if (static_cast<u64>(localMemDescs.arrayLength) > static_cast<u64>(UINT32_MAX) / sizeof(HcclMemDesc)) {
-            THROW<InternalException>("integer overflow occurs");
+            HCCL_ERROR("[%s] integer overflow occurs", __func__);
+            return HcclResult::HCCL_E_INTERNAL;
         }
         socket_->Send((u8*)(localMemDescs.array), localMemDescs.arrayLength * sizeof(HcclMemDesc));
     }
@@ -270,7 +272,8 @@ HcclResult HcclOneSidedConn::BatchBufferSlice(
     if (transportMemPtr_ != nullptr) {
         CHK_RET(transportMemPtr_->BatchBufferSlice(oneSideDescs, descNum, localRmaBufferSlice, remoteRmaBufferSlice));
     } else {
-        THROW<InternalException>("transportMemPtr is nullptr");
+        HCCL_ERROR("[%s] transportMemPtr is nullptr", __func__);
+        return HcclResult::HCCL_E_INTERNAL;
     }
 
     for (u32 i = 0; i < descNum; i++) {

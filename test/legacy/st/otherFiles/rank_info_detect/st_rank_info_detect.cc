@@ -89,7 +89,7 @@ protected:
     std::string tag = "test";
 };
 
-TEST_F(RankInfoDetectTest, St_SetupServer_When_Invalid_Ip_Expect_THROW)
+TEST_F(RankInfoDetectTest, St_SetupServer_When_Invalid_Ip_Expect_E_INTERNAL)
 {
     // when
     MOCKER(GetBootstrapIp).stubs().with(mockcpp::any()).will(returnValue(IpAddress()));
@@ -102,7 +102,7 @@ TEST_F(RankInfoDetectTest, St_SetupServer_When_Invalid_Ip_Expect_THROW)
     // check
     shared_ptr<RankInfoDetect> rankInfoDetect = make_shared<RankInfoDetect>();
     HcclRootHandleV2 outRootHandle;
-    EXPECT_THROW(rankInfoDetect->SetupServer(outRootHandle), InternalException);
+    EXPECT_EQ(rankInfoDetect->SetupServer(outRootHandle), HcclResult::HCCL_E_INTERNAL);
 }
 
 TEST_F(RankInfoDetectTest, St_GetHostSocketHandle_When_Whitelist_Expect_AddHost_NO_THROW)
@@ -178,7 +178,7 @@ TEST_F(RankInfoDetectTest, St_SetupRankInfoDetectService_When_InpSt_Expect_NO_TH
     EXPECT_NO_THROW(rankInfoDetect.SetupRankInfoDetectService(ErrContextPub{}, socket, 0, 0, "test", {}));
 }
 
-TEST_F(RankInfoDetectTest, St_SetupRankInfoDetectService_When_Setup_Fail_Expect_THROW)
+TEST_F(RankInfoDetectTest, St_SetupRankInfoDetectService_When_Setup_Fail_Expect_E_INTERNAL)
 {
     // when
     MOCKER_CPP(&RankInfoDetectService::Setup).stubs().with(mockcpp::any()).will(throws(InternalException("aaa")));
@@ -256,8 +256,8 @@ TEST_F(RankInfoDetectTest, St_WaitComplete_When_InpSt_Expect_Right)
     // check
     RankInfoDetect rankInfoDetect;
     HcclRootHandleV2 rootHandle;
-    EXPECT_THROW(rankInfoDetect.WaitComplete(5000), InternalException);
-    EXPECT_NO_THROW(rankInfoDetect.WaitComplete(6000));
+    EXPECT_EQ(rankInfoDetect.WaitComplete(5000, RANKINFO_DETECT_SERVER_STATUS_IDLE), HcclResult::HCCL_E_INTERNAL);
+    EXPECT_EQ(rankInfoDetect.WaitComplete(6000, RANKINFO_DETECT_SERVER_STATUS_IDLE), HcclResult::HCCL_SUCCESS);
 
     // when
     EnvSocketConfig envConfig;
@@ -267,5 +267,5 @@ TEST_F(RankInfoDetectTest, St_WaitComplete_When_InpSt_Expect_Right)
     MOCKER_CPP(&EnvConfig::GetSocketConfig).stubs().will(returnValue(fakeEnvConfig));
 
     // check
-    EXPECT_THROW(rankInfoDetect.WaitComplete(4000), TimeoutException);
+    EXPECT_EQ(rankInfoDetect.WaitComplete(4000, RANKINFO_DETECT_SERVER_STATUS_IDLE), HcclResult::HCCL_E_TIMEOUT);
 }
