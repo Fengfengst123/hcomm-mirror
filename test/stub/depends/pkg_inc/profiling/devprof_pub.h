@@ -76,7 +76,7 @@ MSVP_PROF_API int32_t AdprofAicpuStartRegister(AicpuStartFunc aicpuStartCallback
  * @param[in] length     length of profiling data
  * @return 0:SUCCESS, !0:FAILED
  */
-MSVP_PROF_API int32_t AdprofReportAdditionalInfo(uint32_t nonPersistantFlag, const void* data, uint32_t length);
+MSVP_PROF_API int32_t AdprofReportAdditionalInfo(uint32_t agingFlag, const void* data, uint32_t length);
 
 /**
  * @ingroup libascend_devprof

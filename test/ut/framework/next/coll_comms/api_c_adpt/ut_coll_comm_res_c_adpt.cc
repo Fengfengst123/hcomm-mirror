@@ -1082,3 +1082,47 @@ TEST_F(HcclChannelDescTest, Ut_HcclChannelAcquireWithConfig_When_SharedJetty_UbR
 {
     DoSharedJettyAcquireTest(COMM_PROTOCOL_UB_RTP, "ut_sj_ubrtp");
 }
+
+// 适配层: 共享 jetty 路径下 commTag（identifier）长度超过 HCOMM_CHANNEL_NAME_MAX_LEN(191) 时返回 HCCL_E_PARA
+// 覆盖 CreateSharedJettyChannelsForGroup（line 998-1002）新增的超长 channelName 校验错误路径
+TEST_F(HcclChannelDescTest, Ut_HcclChannelAcquireWithConfig_When_SharedJettyChannelNameTooLong_Expect_E_PARA)
+{
+    // identifier_ 为 const 成员，构造后通过 const_cast 注入超长值以触发校验
+    const std::string longIdentifier(HCOMM_CHANNEL_NAME_MAX_LEN + 1, 'x');
+    const_cast<std::string&>(hcclCommPtr->identifier_) = longIdentifier;
+    comm = static_cast<HcclComm>(hcclCommPtr.get());
+
+    HcclChannelConfig config = nullptr;
+    ASSERT_EQ(HcclChannelConfigCreate(&config), HCCL_SUCCESS);
+    ASSERT_EQ(HcclChannelConfigSetInt(config, HCCL_CHANNEL_CONFIG_TYPE_IS_SHARED_QUEUE, 1), HCCL_SUCCESS);
+    ASSERT_EQ(HcclChannelConfigSetStr(config, HCCL_CHANNEL_CONFIG_TYPE_SHARED_QUEUE_TAG, "ut_sj_long"), HCCL_SUCCESS);
+
+    std::vector<HcclChannelDesc> channelDesc(1);
+    std::vector<ChannelHandle> channels(1);
+    ASSERT_EQ(HcclChannelDescInit(channelDesc.data(), 1), HCCL_SUCCESS);
+    channelDesc[0].remoteRank = 2;
+    channelDesc[0].channelProtocol = COMM_PROTOCOL_UB_CTP;
+    channelDesc[0].notifyNum = 1;
+    channelDesc[0].localEndpoint.protocol = COMM_PROTOCOL_UB_CTP;
+    channelDesc[0].localEndpoint.loc.locType = ENDPOINT_LOC_TYPE_DEVICE;
+    channelDesc[0].localEndpoint.loc.device.devPhyId = 0U;
+    channelDesc[0].localEndpoint.commAddr.type = COMM_ADDR_TYPE_IP_V4;
+    channelDesc[0].localEndpoint.commAddr.addr.s_addr = 0x01000001U;
+    channelDesc[0].remoteEndpoint.protocol = COMM_PROTOCOL_UB_CTP;
+    channelDesc[0].remoteEndpoint.loc.locType = ENDPOINT_LOC_TYPE_DEVICE;
+    channelDesc[0].remoteEndpoint.loc.device.devPhyId = 1U;
+    channelDesc[0].remoteEndpoint.commAddr.type = COMM_ADDR_TYPE_IP_V4;
+    channelDesc[0].remoteEndpoint.commAddr.addr.s_addr = 0x02000002U;
+
+    // 仅需打通到 CreateSharedJettyChannelsForGroup 的前置依赖：校验在该函数入口即返回，无需后续建链/交换 mock
+    MOCKER(&hcomm::ClusterMonitor::RegisterToClusterMonitor).stubs().will(returnValue(HCCL_SUCCESS));
+    MOCKER_CPP(&MyRank::GetOpExpansionMode).stubs().will(returnValue(0u));
+    MOCKER_CPP(&EndpointMgr::GetWithTag).stubs().will(returnValue(HCCL_SUCCESS));
+    MOCKER_CPP(&MyRank::PrepareMemHandles).stubs().will(returnValue(HCCL_SUCCESS));
+
+    ret = HcclChannelAcquireWithConfig(
+        comm, CommEngine::COMM_ENGINE_AIV, channelDesc.data(), 1, config, channels.data());
+    EXPECT_EQ(ret, HCCL_E_PARA);
+
+    HcclChannelConfigDestroy(config);
+}

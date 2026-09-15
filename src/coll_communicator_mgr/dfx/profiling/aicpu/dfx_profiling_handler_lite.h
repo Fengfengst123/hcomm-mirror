@@ -24,7 +24,7 @@ __attribute__((weak)) int32_t
 MsprofReportBatchAdditionalInfo(uint32_t nonPersistantFlag, const VOID_PTR data, uint32_t length);
 __attribute__((weak)) int32_t
 AdprofReportBatchAdditionalInfo(uint32_t nonPersistantFlag, const void* data, uint32_t length);
-__attribute__((weak)) int32_t AdprofReportAdditionalInfo(uint32_t nonPersistantFlag, const void* data, uint32_t length);
+__attribute__((weak)) int32_t AdprofReportAdditionalInfo(uint32_t agingFlag, const void* data, uint32_t length);
 __attribute__((weak)) int32_t
 MsprofReportAdditionalInfo(uint32_t nonPersistantFlag, const VOID_PTR data, uint32_t length);
 __attribute__((weak)) int32_t AdprofCheckFeatureIsOn(uint64_t feature);

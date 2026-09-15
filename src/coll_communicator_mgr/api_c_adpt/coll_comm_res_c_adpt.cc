@@ -1115,10 +1115,16 @@ static HcclResult CreateSharedJettyChannelsForGroup(
 {
     std::vector<HcclChannelDesc> hcclDescs(needCreate, channelDescs[repIdx]);
     std::vector<HcommChannelDesc> hcommDescs(needCreate);
-    const std::string channelNameStr = commTag;
+    char channelNameBuf[HCOMM_CHANNEL_NAME_MAX_LEN + 1] = {0};
+    CHK_PRT_RET(
+        commTag.size() > HCOMM_CHANNEL_NAME_MAX_LEN,
+        HCCL_ERROR(
+            "[%s] channelName too long, max[%u], actual[%zu].", __func__, HCOMM_CHANNEL_NAME_MAX_LEN, commTag.size()),
+        HCCL_E_PARA);
+    CHK_SAFETY_FUNC_RET(strcpy_s(channelNameBuf, sizeof(channelNameBuf), commTag.c_str()));
     for (uint32_t j = 0; j < needCreate; ++j) {
         hcommDescs[j] = MyRankUtils::ChannelDescHccl2Hcomm(hcclDescs[j], hccl::CommConfig{});
-        hcommDescs[j].channelName = channelNameStr.c_str();
+        hcommDescs[j].channelName = channelNameBuf;
     }
     std::string socketTag = commTag + "_engine_" + std::to_string(static_cast<uint32_t>(engine));
     HcclResult sockRet = myRank->BatchCreateSockets(hcclDescs.data(), needCreate, socketTag, hcommDescs, engine);
