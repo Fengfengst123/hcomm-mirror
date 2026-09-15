@@ -198,6 +198,14 @@ HcclResult AicpuTsRoceEndpoint::Init()
     serverSocketContext_.emplace(netDev_, netDevRefPhyId_);
     try {
         regedMemMgr_ = std::make_shared<AicpuTsRoceRegedMemMgr>(netDev_, ctxHandle_);
+        // 远端接口经 Forwarder 转发到同一组合 mgr（mgr 本身只继承 LocalRegedMemMgr）
+        remoteForwarder_ = std::make_shared<RemoteRegedMemMgrForwarder>(
+            [this](const void* memDesc, uint32_t descLen, HcommMem* outMem) {
+                return regedMemMgr_->MemoryImport(memDesc, descLen, outMem);
+            },
+            [this](const void* memDesc, uint32_t descLen) {
+                return regedMemMgr_->MemoryUnimport(memDesc, descLen);
+            });
     } catch (std::exception& e) {
         HCCL_ERROR("[%s]Failed, exception caught:%s", __func__, e.what());
         ctxHandle_ = nullptr;

@@ -36,7 +36,9 @@ public:
 
     HcclResult Init() override;
 
-    RegedMemMgr* GetRegedMemMgr() override { return regedMemMgr_.get(); }
+    // 组合 mgr：本端直达对象；远端经 Forwarder 包装同一对象（避免 mgr 多继承）
+    LocalRegedMemMgr* GetLocalRegMemMgr() override { return regedMemMgr_.get(); }
+    RemoteRegedMemMgr* GetRemoteRegMemMgr() override { return remoteForwarder_.get(); }
     void* GetRdmaHandle() override { return ctxHandle_; }
     bool IsCtxHandleValid() const override;
 
@@ -57,6 +59,8 @@ private:
 
     void* ctxHandle_{nullptr};
     std::shared_ptr<AicpuTsRoceRegedMemMgr> regedMemMgr_{};
+    // 远端接口视图：转发到 regedMemMgr_，Init 构造
+    std::shared_ptr<RemoteRegedMemMgrForwarder> remoteForwarder_{};
     HcclNetDev netDev_{nullptr};
     uint32_t netDevRefPhyId_{UINT32_MAX};
     // Init 内 AcquireSharedNetDev 成功后构造

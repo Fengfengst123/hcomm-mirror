@@ -23,14 +23,14 @@ UbMemEndpoint::UbMemEndpoint(const EndpointDesc& endpointDesc) : Endpoint(endpoi
 UbMemEndpoint::~UbMemEndpoint() noexcept { (void)ReleaseCache(); }
 
 HcclResult
-UbMemEndpoint::AttachCache(const MemMgrCacheKey& key, const std::function<std::shared_ptr<RegedMemMgr>()>& creator)
+UbMemEndpoint::AttachCache(const MemMgrCacheKey& key, const std::function<std::shared_ptr<LocalRegedMemMgr>()>& creator)
 {
     cacheKey_ = key;
     cacheKeepAlive_ = ProcRegedMemMgrCache::GetHolder();
-    // cache key 含 protocol 唯一决定具体 RegedMemMgr 类型，static_pointer_cast 转换安全
-    regedMemMgr_ = std::static_pointer_cast<UbMemRegedMemMgr>(cacheKeepAlive_->GetOrCreate(cacheKey_, creator));
-    if (regedMemMgr_ == nullptr) {
-        HCCL_ERROR("[UbMemEndpoint][%s] regedMemMgr_ is null", __func__);
+    // cache key 含 protocol 唯一决定具体 mgr 类型，static_pointer_cast 转换安全
+    localMemMgr_ = std::static_pointer_cast<UbMemRegedMemMgr>(cacheKeepAlive_->GetOrCreate(cacheKey_, creator));
+    if (localMemMgr_ == nullptr) {
+        HCCL_ERROR("[UbMemEndpoint][%s] localMemMgr_ is null", __func__);
         CHK_RET(ReleaseCache());
         return HCCL_E_INTERNAL;
     }

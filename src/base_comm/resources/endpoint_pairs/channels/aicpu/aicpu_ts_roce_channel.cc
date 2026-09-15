@@ -524,7 +524,7 @@ HcclResult AicpuTsRoceChannel::Serialize(std::shared_ptr<hccl::DeviceMem>& out)
 
     auto* ep = static_cast<Endpoint*>(endpointHandle_);
     CHK_PTR_NULL(ep);
-    auto* mgr = dynamic_cast<AicpuTsRoceRegedMemMgr*>(ep->GetRegedMemMgr());
+    auto* mgr = dynamic_cast<AicpuTsRoceRegedMemMgr*>(ep->GetLocalRegMemMgr());
     CHK_PTR_NULL(mgr);
     CHK_RET(mgr->GetAllMemDetails(localMd, remoteMd));
     CHK_RET(transport_->GetAiQpInfo(aiQpInfos));

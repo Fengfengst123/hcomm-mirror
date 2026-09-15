@@ -263,6 +263,11 @@ HcclResult AicpuTsRoceRegedMemMgr::GetParamsFromMemDesc(
         HCCL_ERROR("[AicpuTsRoceRegedMemMgr][GetParamsFromMemDesc] descLen[%u] too small", descLen);
         return HCCL_E_PARA;
     }
+    if (descLen > MAX_MEM_DESC_LEN) {
+        HCCL_ERROR(
+            "[AicpuTsRoceRegedMemMgr][GetParamsFromMemDesc] descLen[%u] exceeds limit[%u]", descLen, MAX_MEM_DESC_LEN);
+        return HCCL_E_PARA;
+    }
     const auto* base = static_cast<const char*>(memDesc);
     if (memcpy_s(&endpointDesc, sizeof(EndpointDesc), base + descLen - sizeof(EndpointDesc), sizeof(EndpointDesc))
         != EOK) {

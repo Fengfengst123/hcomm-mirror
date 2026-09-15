@@ -16,6 +16,7 @@
 #include "local_rdma_rma_buffer.h"
 #include "hccl_one_sided_data.h"
 #include "acl/acl_rt.h"
+#include <unistd.h>
 
 namespace hcomm {
 
@@ -278,24 +279,9 @@ HcclResult
 RoceRegedMemMgr::GetMemDesc(const EndpointDesc endpointDesc, Hccl::LocalRdmaRmaBuffer* localRdmaRmaBuffer) const
 {
     auto dto = localRdmaRmaBuffer->GetExchangeDto();
-    Hccl::BinaryStream localRdmaRmaBufferStream;
-    dto->Serialize(localRdmaRmaBufferStream);
+    CHK_SMART_PTR_NULL(dto);
     std::vector<char> tempLocalMemDesc;
-    localRdmaRmaBufferStream.Dump(tempLocalMemDesc);
-    HCCL_DEBUG("[RoceRegedMemMgr][GetMemDesc] [%s] dump data size [%u]", __func__, tempLocalMemDesc.size());
-    if (tempLocalMemDesc.empty()) {
-        HCCL_ERROR("[RoceRegedMemMgr][GetMemDesc] [%s] tempLocalMemDesc export failed.", __func__);
-        return HCCL_E_INTERNAL;
-    }
-
-    std::vector<char> tempLocalEndpointDesc;
-    tempLocalEndpointDesc.resize(sizeof(EndpointDesc));
-    if (memcpy_s(tempLocalEndpointDesc.data(), sizeof(EndpointDesc), &endpointDesc, sizeof(EndpointDesc)) != EOK) {
-        HCCL_ERROR("[RoceRegedMemMgr][GetMemDesc] [%s] endpointDesc memcpy_s failed.", __func__);
-        return HCCL_E_INTERNAL;
-    }
-
-    tempLocalMemDesc.insert(tempLocalMemDesc.end(), tempLocalEndpointDesc.begin(), tempLocalEndpointDesc.end());
+    CHK_RET(BuildMemDesc(*dto, endpointDesc, tempLocalMemDesc));
     localRdmaRmaBuffer->Desc = std::move(tempLocalMemDesc);
     return HCCL_SUCCESS;
 }
@@ -315,100 +301,6 @@ RoceRegedMemMgr::MemoryExport(const EndpointDesc& endpointDesc, void* memHandle,
 
     *memDescLen = static_cast<uint32_t>(localRdmaRmaBuffer->Desc.size());
     *memDesc = static_cast<void*>(localRdmaRmaBuffer->Desc.data());
-    return HCCL_SUCCESS;
-}
-
-HcclResult RoceRegedMemMgr::GetParamsFromMemDesc(
-    const void* memDesc, uint32_t descLen, EndpointDesc& endpointDesc, Hccl::ExchangeRdmaBufferDto& dto) const
-{
-    const char* description = static_cast<const char*>(memDesc);
-
-    if (descLen < sizeof(EndpointDesc)) {
-        HCCL_ERROR(
-            "[RoceRegedMemMgr][GetParamsFromMemDesc] [%s] descLen[%u] is too small. aim size:[%llu]", __func__, descLen,
-            sizeof(EndpointDesc));
-        return HCCL_E_INTERNAL;
-    }
-    if (memcpy_s(
-            &endpointDesc, sizeof(EndpointDesc), description + descLen - sizeof(EndpointDesc), sizeof(EndpointDesc))
-        != EOK) {
-        HCCL_ERROR(
-            "[RoceRegedMemMgr][GetParamsFromMemDesc] [%s] endpointDesc copy error. aim size:[%llu]", __func__,
-            sizeof(EndpointDesc));
-        return HCCL_E_INTERNAL;
-    }
-
-    std::vector<char> tempDesc{};
-    tempDesc.resize(TRANSPORT_EMD_ESC_SIZE);
-    tempDesc.assign(description, description + descLen - sizeof(EndpointDesc));
-    Hccl::BinaryStream remoteRdmaRmaBufferStream(tempDesc);
-    dto.Deserialize(remoteRdmaRmaBufferStream);
-    return HCCL_SUCCESS;
-}
-
-HcclResult RoceRegedMemMgr::MemoryImport(const void* memDesc, uint32_t descLen, HcommMem* outMem)
-{
-    HCCL_INFO("[%s] Begin", __FUNCTION__);
-    CHK_PTR_NULL(memDesc);
-    CHK_PTR_NULL(outMem);
-    std::lock_guard<std::mutex> lock(memMtx_);
-
-    EndpointDesc endpointDesc;
-    Hccl::ExchangeRdmaBufferDto dto;
-    CHK_RET(GetParamsFromMemDesc(memDesc, descLen, endpointDesc, dto));
-
-    std::shared_ptr<Hccl::RemoteRdmaRmaBuffer> remoteRdmaRmaBuffer;
-    EXCEPTION_CATCH(remoteRdmaRmaBuffer = std::make_shared<Hccl::RemoteRdmaRmaBuffer>(rdmaHandle_, dto),
-                    return HCCL_E_PTR;);
-
-    hccl::BufferKey<uintptr_t, u64> tempKey(static_cast<uintptr_t>(dto.addr), dto.size);
-    if (remoteRdmaRmaBufferMgrs_.find(endpointDesc) == remoteRdmaRmaBufferMgrs_.end()) {
-        std::unique_ptr<RemoteRdmaRmaBufferMgr> remoteRdmaRmaBufferMgr;
-        EXCEPTION_CATCH((remoteRdmaRmaBufferMgr = std::make_unique<RemoteRdmaRmaBufferMgr>()), return HCCL_E_PTR);
-        CHK_SMART_PTR_NULL(remoteRdmaRmaBufferMgr);
-        remoteRdmaRmaBufferMgrs_[endpointDesc] = std::move(remoteRdmaRmaBufferMgr);
-        HCCL_INFO("remoteRdmaRmaBufferMgrs_ add remoteRdmaRmaBufferMgr successfully!");
-    }
-
-    auto resultPair = remoteRdmaRmaBufferMgrs_[endpointDesc]->Add(tempKey, remoteRdmaRmaBuffer);
-    if (!resultPair.second) {
-        HCCL_ERROR("[RoceRegedMemMgr][MemoryImport] This memDesc has already been imported!");
-        return HCCL_E_AGAIN;
-    }
-
-    outMem->addr = ReinterpretAs<void*>(remoteRdmaRmaBuffer->GetAddr());
-    outMem->size = remoteRdmaRmaBuffer->GetSize();
-    return HCCL_SUCCESS;
-}
-
-HcclResult RoceRegedMemMgr::MemoryUnimport(const void* memDesc, uint32_t descLen)
-{
-    HCCL_INFO("[%s] Begin", __FUNCTION__);
-    CHK_PTR_NULL(memDesc);
-    std::lock_guard<std::mutex> lock(memMtx_);
-
-    EndpointDesc endpointDesc;
-    Hccl::ExchangeRdmaBufferDto dto;
-    CHK_RET(GetParamsFromMemDesc(memDesc, descLen, endpointDesc, dto));
-
-    if (remoteRdmaRmaBufferMgrs_.find(endpointDesc) == remoteRdmaRmaBufferMgrs_.end()) {
-        HCCL_ERROR("[RoceRegedMemMgr][MemoryUnimport] Remote buffer manager Not Found.");
-        return HCCL_E_NOT_FOUND;
-    }
-
-    HCCL_INFO("[MemoryUnimport][Rdma] MemoryUnimport");
-    hccl::BufferKey<uintptr_t, u64> tempKey(static_cast<uintptr_t>(dto.addr), dto.size);
-
-    bool resultPair = false;
-    EXCEPTION_CATCH(resultPair = remoteRdmaRmaBufferMgrs_[endpointDesc]->Del(tempKey), return HCCL_E_NOT_FOUND);
-    if (!resultPair) {
-        HCCL_INFO("[RoceRegedMemMgr][[MemoryUnimport] Memory reference count is larger than 0"
-                  "(used by other RemoteRank).");
-        return HCCL_E_AGAIN;
-    }
-    if (!remoteRdmaRmaBufferMgrs_[endpointDesc]->size()) {
-        remoteRdmaRmaBufferMgrs_.erase(endpointDesc);
-    }
     return HCCL_SUCCESS;
 }
 

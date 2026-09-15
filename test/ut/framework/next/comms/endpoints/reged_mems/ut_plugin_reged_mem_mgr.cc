@@ -281,20 +281,20 @@ TEST_F(PluginRegedMemMgrTest, Ut_SetNicEndpointCtx_When_Called_Expect_ConstructP
     desc.loc.locType = ENDPOINT_LOC_TYPE_HOST;
 
     PluginEndpointHolder holder(desc, &entry);
-    // SetNicEndpointCtx 前 GetRegedMemMgr 返回空
-    EXPECT_EQ(holder.GetRegedMemMgr(), nullptr);
+    // SetNicEndpointCtx 前 GetLocalRegMemMgr 返回空
+    EXPECT_EQ(holder.GetLocalRegMemMgr(), nullptr);
 
     HcommNicEndpointOps* ops = MakeHeapFakeOps();
     void* fakeCtx = reinterpret_cast<void*>(0xCAFE);
     holder.SetNicEndpointCtx(ops, fakeCtx);
 
-    EXPECT_NE(holder.GetRegedMemMgr(), nullptr);
+    EXPECT_NE(holder.GetLocalRegMemMgr(), nullptr);
     EXPECT_EQ(holder.GetNicOps(), ops);
     EXPECT_EQ(holder.GetNicCtx(), fakeCtx);
     // holder 析构时 delete ops（堆分配，安全）
 }
 
-// TC-PluginEndpointHolder_GetRegedMemMgr-002 异常: SetNicEndpointCtx 前调 GetRegedMemMgr 返回空
+// TC-PluginEndpointHolder_GetLocalRegMemMgr-002 异常: SetNicEndpointCtx 前调 GetLocalRegMemMgr 返回空
 TEST_F(PluginRegedMemMgrTest, Ut_GetRegedMemMgr_When_BeforeSetNicCtx_Expect_ReturnNull)
 {
     NicPluginEntry entry{nullptr, &g_fakePluginInfo, nullptr, nullptr};
@@ -303,10 +303,10 @@ TEST_F(PluginRegedMemMgrTest, Ut_GetRegedMemMgr_When_BeforeSetNicCtx_Expect_Retu
     desc.loc.locType = ENDPOINT_LOC_TYPE_HOST;
 
     PluginEndpointHolder holder(desc, &entry);
-    EXPECT_EQ(holder.GetRegedMemMgr(), nullptr);
+    EXPECT_EQ(holder.GetLocalRegMemMgr(), nullptr);
 }
 
-// TC-PluginEndpointHolder_GetRegedMemMgr-001: GetRegedMemMgr 返回 PluginRegedMemMgr 类型
+// TC-PluginEndpointHolder_GetLocalRegMemMgr-001: GetLocalRegMemMgr 返回 PluginRegedMemMgr 类型
 TEST_F(PluginRegedMemMgrTest, Ut_GetRegedMemMgr_When_AfterSetNicCtx_Expect_NonNull)
 {
     NicPluginEntry entry{nullptr, &g_fakePluginInfo, nullptr, nullptr};
@@ -318,9 +318,9 @@ TEST_F(PluginRegedMemMgrTest, Ut_GetRegedMemMgr_When_AfterSetNicCtx_Expect_NonNu
     HcommNicEndpointOps* ops = MakeHeapFakeOps();
     holder.SetNicEndpointCtx(ops, reinterpret_cast<void*>(0x1));
 
-    auto* mgr = holder.GetRegedMemMgr();
+    auto* mgr = holder.GetLocalRegMemMgr();
     ASSERT_NE(mgr, nullptr);
-    // 经 GetRegedMemMgr 路径触发 nicOps
+    // 经 GetLocalRegMemMgr 路径触发 nicOps
     CommMem mem{COMM_MEM_TYPE_HOST, reinterpret_cast<void*>(0x1000), 4096};
     void* handle = nullptr;
     EXPECT_EQ(mgr->RegisterMemory(&mem, "tag", &handle), HCCL_SUCCESS);

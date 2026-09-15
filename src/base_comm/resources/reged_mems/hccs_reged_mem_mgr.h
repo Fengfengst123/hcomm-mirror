@@ -24,8 +24,10 @@
 namespace hcomm {
 /**
  * @note 职责：用于通信设备EndPoint的注册内存信息管理，支持基于RmaBufferMgr类的重叠内存的检测报错等。
+ *       本端+远端一体的组合型 mgr：只继承 LocalRegedMemMgr（避免多继承），远端接口经
+ *       RemoteRegedMemMgrForwarder 包装后对外暴露（见 Endpoint 的 GetRemoteRegMemMgr）。
  */
-class HccsRegedMemMgr : public RegedMemMgr {
+class HccsRegedMemMgr : public LocalRegedMemMgr {
 public:
     using LocalIpcRmaBufferMgr
         = hcomm::RmaBufferMgr<hccl::BufferKey<uintptr_t, u64>, std::shared_ptr<hccl::LocalIpcRmaBuffer>>;
@@ -39,8 +41,9 @@ public:
     HcclResult UnregisterMemory(void* memHandle) override;
     HcclResult
     MemoryExport(const EndpointDesc& endpointDesc, void* memHandle, void** memDesc, uint32_t* memDescLen) override;
-    HcclResult MemoryImport(const void* memDesc, uint32_t descLen, HcommMem* outMem) override;
-    HcclResult MemoryUnimport(const void* memDesc, uint32_t descLen) override;
+    // 远端接口：非 RemoteRegedMemMgr 派生（组合 mgr 单继承 Local），保持 virtual 以便 Forwarder 经本类指针转发时虚派发
+    virtual HcclResult MemoryImport(const void* memDesc, uint32_t descLen, HcommMem* outMem);
+    virtual HcclResult MemoryUnimport(const void* memDesc, uint32_t descLen);
     HcclResult GetAllMemHandles(void** memHandles, uint32_t* memHandleNum) override;
 
     HcclResult MemoryGrant(const HcommMemGrantInfo* remoteGrantInfo);

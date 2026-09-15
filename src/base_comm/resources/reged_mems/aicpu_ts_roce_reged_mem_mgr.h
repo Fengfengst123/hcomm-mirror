@@ -25,7 +25,9 @@
 #include "remote_rdma_rma_buffer.h"
 
 namespace hcomm {
-class AicpuTsRoceRegedMemMgr : public RegedMemMgr {
+// 本端+远端一体的组合型 mgr：只继承 LocalRegedMemMgr（避免多继承），远端接口经
+// RemoteRegedMemMgrForwarder 包装后对外暴露（见 Endpoint 的 GetRemoteRegMemMgr）。
+class AicpuTsRoceRegedMemMgr : public LocalRegedMemMgr {
 public:
     AicpuTsRoceRegedMemMgr(HcclNetDev netDev, RdmaHandle rdmaHandle);
     ~AicpuTsRoceRegedMemMgr() override = default;
@@ -34,8 +36,9 @@ public:
     HcclResult UnregisterMemory(void* memHandle) override;
     HcclResult
     MemoryExport(const EndpointDesc& endpointDesc, void* memHandle, void** memDesc, uint32_t* memDescLen) override;
-    HcclResult MemoryImport(const void* memDesc, uint32_t descLen, HcommMem* outMem) override;
-    HcclResult MemoryUnimport(const void* memDesc, uint32_t descLen) override;
+    // 远端接口：非 RemoteRegedMemMgr 派生（组合 mgr 单继承 Local），保持 virtual 以便 Forwarder 经本类指针转发时虚派发
+    virtual HcclResult MemoryImport(const void* memDesc, uint32_t descLen, HcommMem* outMem);
+    virtual HcclResult MemoryUnimport(const void* memDesc, uint32_t descLen);
     HcclResult GetAllMemHandles(void** memHandles, uint32_t* memHandleNum) override;
 
     HcclResult GetAllMemDetails(std::vector<RoceMemDetails>& localOut, std::vector<RoceMemDetails>& remoteOut) const;

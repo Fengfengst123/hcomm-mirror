@@ -44,8 +44,8 @@ public:
           ctxHandle_(rdma)
     {}
     HcclResult Init() override { return HCCL_SUCCESS; }
-    // 内存方法在 RegedMemMgr 上，Endpoint 不再 override；返回空 RegedMemMgr。
-    RegedMemMgr* GetRegedMemMgr() override { return nullptr; }
+    // 内存方法在 mgr 上，Endpoint 不再承载；stub 不实现
+    LocalRegedMemMgr* GetLocalRegMemMgr() override { return nullptr; }
     void* GetRdmaHandle() override { return ctxHandle_; }
     bool IsCtxHandleValid() const override { return ctxHandle_ != nullptr; }
 

@@ -44,8 +44,8 @@ public:
     HcclResult Init() override { return HCCL_SUCCESS; }
     void* GetRdmaHandle() override { return ctxHandle_; }
     bool IsCtxHandleValid() const override { return ctxHandle_ != nullptr; }
-    // 内存方法在 RegedMemMgr 上，Endpoint 不再 override
-    RegedMemMgr* GetRegedMemMgr() override { return nullptr; }
+    // 内存方法在 mgr 上，Endpoint 不再承载
+    LocalRegedMemMgr* GetLocalRegMemMgr() override { return nullptr; }
 
 private:
     void* ctxHandle_{nullptr};
@@ -99,18 +99,26 @@ public:
           mgr_(std::move(mgr)),
           ctxHandle_(rdmaHandle)
     {
-        // regedMemMgr_ 移至各子类；GetRegedMemMgr() 直接返回 mgr_
+        // aicpu_ts 的内存 mgr 是组合 mgr，本端直达；远端经 Forwarder 包装同一对象
+        remoteForwarder_ = std::make_shared<RemoteRegedMemMgrForwarder>(
+            [this](const void* memDesc, uint32_t descLen, HcommMem* outMem) {
+                return mgr_->MemoryImport(memDesc, descLen, outMem);
+            },
+            [this](const void* memDesc, uint32_t descLen) {
+                return mgr_->MemoryUnimport(memDesc, descLen);
+            });
     }
 
     HcclResult Init() override { return HCCL_SUCCESS; }
-    // 内存方法在 RegedMemMgr 上，Endpoint 不再 override
-    RegedMemMgr* GetRegedMemMgr() override { return mgr_.get(); }
+    LocalRegedMemMgr* GetLocalRegMemMgr() override { return mgr_.get(); }
+    RemoteRegedMemMgr* GetRemoteRegMemMgr() override { return remoteForwarder_.get(); }
     void* GetRdmaHandle() override { return ctxHandle_; }
     bool IsCtxHandleValid() const override { return ctxHandle_ != nullptr; }
 
 private:
     void* ctxHandle_{nullptr};
     std::shared_ptr<AicpuTsRoceRegedMemMgr> mgr_;
+    std::shared_ptr<RemoteRegedMemMgrForwarder> remoteForwarder_{};
 };
 } // namespace
 

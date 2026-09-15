@@ -153,7 +153,7 @@ HcclResult HccsRegedMemMgr::SerializeToMemDesc(
             &ipcRmaBufferDesc[0] + (ipcRmaBufferDesc.length() - sizeof(EndpointDesc)), sizeof(EndpointDesc),
             &endpointDesc, sizeof(EndpointDesc))
         != EOK) {
-        HCCL_ERROR("[RoceRegedMemMgr][SerializeToMemDesc] [%s] endpointDesc memcpy_s failed.", __func__);
+        HCCL_ERROR("[HccsRegedMemMgr][%s] endpointDesc memcpy_s failed.", __FUNCTION__);
         return HCCL_E_INTERNAL;
     }
 
@@ -189,12 +189,17 @@ HcclResult HccsRegedMemMgr::DeSerializeFromMemDesc(
     CHK_PTR_NULL(memDesc);
 
     const char* description = static_cast<const char*>(memDesc);
-    HCCL_INFO("[%s] descLen[%u] memDesc[%s]", __FUNCTION__, descLen, description);
 
     if (descLen <= sizeof(EndpointDesc)) {
         HCCL_ERROR(
             "[HccsRegedMemMgr][DeSerializeFromMemDesc] [%s] descLen :%u too small error. need more than size:[%llu]",
             __func__, sizeof(EndpointDesc));
+        return HCCL_E_INTERNAL;
+    }
+    // descLen 来自对端进程，解析前拦截异常大的长度，防恶意输入触发大额内存分配
+    if (descLen > MAX_MEM_DESC_LEN) {
+        HCCL_ERROR(
+            "[HccsRegedMemMgr][DeSerializeFromMemDesc] descLen[%u] exceeds limit[%u]", descLen, MAX_MEM_DESC_LEN);
         return HCCL_E_INTERNAL;
     }
 

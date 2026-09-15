@@ -22,9 +22,11 @@ namespace hcomm {
 /**
  * @note 职责：NIC 插件 endpoint 的 RegedMemMgr，内存方法转发到 nicOps_。
  *       GetAllMemHandles 插件 ops 表无此字段，返回 NOT_SUPPORT。
+ *       本端+远端一体：只继承 LocalRegedMemMgr（避免多继承），远端接口经
+ *       RemoteRegedMemMgrForwarder 包装后对外暴露（见 PluginEndpointHolder）。
  *       nicOps_/nicCtx_ 构造期注入，运行期只读。
  */
-class PluginRegedMemMgr : public RegedMemMgr {
+class PluginRegedMemMgr : public LocalRegedMemMgr {
 public:
     PluginRegedMemMgr(HcommNicEndpointOps* nicOps, void* nicCtx) : nicOps_(nicOps), nicCtx_(nicCtx) {}
     ~PluginRegedMemMgr() override = default;
@@ -43,11 +45,12 @@ public:
         (void)endpointDesc;
         return static_cast<HcclResult>(nicOps_->memoryExport(nicCtx_, memHandle, memDesc, memDescLen));
     }
-    HcclResult MemoryImport(const void* memDesc, uint32_t descLen, HcommMem* outMem) override
+    // 远端接口：非 RemoteRegedMemMgr 派生（组合 mgr 单继承 Local），保持 virtual 以便 Forwarder 经本类指针转发时虚派发
+    virtual HcclResult MemoryImport(const void* memDesc, uint32_t descLen, HcommMem* outMem)
     {
         return static_cast<HcclResult>(nicOps_->memoryImport(nicCtx_, memDesc, descLen, outMem));
     }
-    HcclResult MemoryUnimport(const void* memDesc, uint32_t descLen) override
+    virtual HcclResult MemoryUnimport(const void* memDesc, uint32_t descLen)
     {
         return static_cast<HcclResult>(nicOps_->memoryUnimport(nicCtx_, memDesc, descLen));
     }
@@ -101,7 +104,7 @@ private:
 
 /**
  * @note 职责：NIC插件Endpoint占位子类，nicOps_/nicCtx_ 从 Endpoint 基类移入此 private 成员。
- *         内存操作经 GetRegedMemMgr() 返回组合持有的 PluginRegedMemMgr（转发到 nicOps_）。
+ *         内存操作经 GetLocalRegMemMgr()/GetRemoteRegMemMgr() 返回组合持有的 PluginRegedMemMgr（转发到 nicOps_）。
  */
 class PluginEndpointHolder : public Endpoint {
 public:
@@ -118,13 +121,22 @@ public:
         nicOps_ = nicOps;
         nicCtx_ = nicCtx;
         regedMemMgr_ = std::make_shared<PluginRegedMemMgr>(nicOps, nicCtx);
+        // 远端接口经 Forwarder 转发到同一组合 mgr（mgr 本身只继承 LocalRegedMemMgr）
+        remoteForwarder_ = std::make_shared<RemoteRegedMemMgrForwarder>(
+            [this](const void* memDesc, uint32_t descLen, HcommMem* outMem) {
+                return regedMemMgr_->MemoryImport(memDesc, descLen, outMem);
+            },
+            [this](const void* memDesc, uint32_t descLen) {
+                return regedMemMgr_->MemoryUnimport(memDesc, descLen);
+            });
         serverSocketContext_.emplace(nicOps, nicCtx);
     }
     HcommNicEndpointOps* GetNicOps() const { return nicOps_; }
     void* GetNicCtx() const { return nicCtx_; }
 
-    // 返回组合持有的 PluginRegedMemMgr
-    RegedMemMgr* GetRegedMemMgr() override { return regedMemMgr_.get(); }
+    // 组合 mgr：本端直达对象；远端经 Forwarder 包装同一对象（避免 mgr 多继承）
+    LocalRegedMemMgr* GetLocalRegMemMgr() override { return regedMemMgr_.get(); }
+    RemoteRegedMemMgr* GetRemoteRegMemMgr() override { return remoteForwarder_.get(); }
 
     // 返回组合持有的 PluginServerSocketContext（SetNicEndpointCtx 前返回 nullptr）
     ServerSocketContext* GetServerSocketContext() override
@@ -141,6 +153,7 @@ private:
     HcommNicEndpointOps* nicOps_{nullptr};
     void* nicCtx_{nullptr};
     std::shared_ptr<PluginRegedMemMgr> regedMemMgr_{};               // 组合持有 PluginRegedMemMgr
+    std::shared_ptr<RemoteRegedMemMgrForwarder> remoteForwarder_{};  // 远端接口视图，SetNicEndpointCtx 构造
     std::optional<PluginServerSocketContext> serverSocketContext_{}; // 组合持有 PluginServerSocketContext
 };
 

@@ -71,6 +71,7 @@ set(src_to_test_list
     comms/endpoint_pairs/channels/aicpu/ut_dev_rdma_connection.cc
     comms/endpoints/ut_ub_mem_endpoint.cc
     comms/endpoints/reged_mems/ut_roce_mem_test.cc
+    comms/endpoints/reged_mems/ut_endpoint_remote_reged_mem_mgr.cc
     comms/endpoints/reged_mems/ut_urma_mem_test.cc
     comms/endpoints/reged_mems/ut_ub_mem_test.cc
     comms/endpoints/reged_mems/ut_hccs_reged_mem_mgr_test.cc

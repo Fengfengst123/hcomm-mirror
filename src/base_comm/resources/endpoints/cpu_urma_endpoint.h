@@ -31,7 +31,9 @@ public:
 
     HcclResult Init() override;
 
-    RegedMemMgr* GetRegedMemMgr() override { return regedMemMgr_.get(); }
+    // 本端走进程级 mgr，远端走实例级 mgr，两个接口各返回各的
+    LocalRegedMemMgr* GetLocalRegMemMgr() override { return localMemMgr_.get(); }
+    RemoteRegedMemMgr* GetRemoteRegMemMgr() override { return remoteMemMgr_.get(); }
     void* GetRdmaHandle() override { return ctxHandle_; }
     bool IsCtxHandleValid() const override;
     // 共享 Jetty 上下文访问入口：返回 CommQueueContext 基类视图，调用方按需 downcast JettyContext
@@ -43,12 +45,14 @@ public:
 
 private:
     HcclResult ReleaseEndpointCtx();
-    HcclResult AttachCache(const MemMgrCacheKey& key, const std::function<std::shared_ptr<RegedMemMgr>()>& creator);
+    HcclResult
+    AttachCache(const MemMgrCacheKey& key, const std::function<std::shared_ptr<LocalRegedMemMgr>()>& creator);
     HcclResult ReleaseCache();
 
     void* ctxHandle_{nullptr};
     std::shared_ptr<EndpointCtx> endpointCtx_{};
-    std::shared_ptr<UbRegedMemMgr> regedMemMgr_{};
+    std::shared_ptr<LocalRegedMemMgr> localMemMgr_{};   // 进程级 mgr（跨 endpoint 复用，只管本端）
+    std::shared_ptr<RemoteRegedMemMgr> remoteMemMgr_{}; // 实例级远端 mgr（EndpointRemoteRegedMemMgr，Ub 适配）
     std::optional<HostServerSocketContext> serverSocketContext_{};
     MemMgrCacheKey cacheKey_{};
     std::shared_ptr<ProcRegedMemMgrCache> cacheKeepAlive_{};

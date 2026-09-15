@@ -23,7 +23,7 @@
 
 namespace hcomm {
 
-class UbMemRegedMemMgr : public RegedMemMgr {
+class UbMemRegedMemMgr : public LocalRegedMemMgr {
 public:
     using LocalIpcRmaBufferMgr
         = hcomm::RmaBufferMgr<hccl::BufferKey<uintptr_t, u64>, std::shared_ptr<Hccl::LocalIpcRmaBuffer>>;
@@ -35,8 +35,6 @@ public:
     HcclResult UnregisterMemory(void* memHandle) override;
     HcclResult
     MemoryExport(const EndpointDesc& endpointDesc, void* memHandle, void** memDesc, uint32_t* memDescLen) override;
-    HcclResult MemoryImport(const void* memDesc, uint32_t descLen, HcommMem* outMem) override;
-    HcclResult MemoryUnimport(const void* memDesc, uint32_t descLen) override;
     HcclResult GetAllMemHandles(void** memHandles, uint32_t* memHandleNum) override;
 
 private:

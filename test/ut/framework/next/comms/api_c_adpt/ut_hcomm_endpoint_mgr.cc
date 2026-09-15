@@ -43,7 +43,7 @@ public:
     ~UtStubEndpoint() noexcept override = default;
 
     HcclResult Init() override { return HCCL_SUCCESS; }
-    RegedMemMgr* GetRegedMemMgr() override { return nullptr; }
+    LocalRegedMemMgr* GetLocalRegMemMgr() override { return nullptr; }
     void* GetRdmaHandle() override { return nullptr; }
     bool IsCtxHandleValid() const override { return false; }
 };

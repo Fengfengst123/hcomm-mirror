@@ -55,12 +55,14 @@ inline Hccl::PortDeploymentType LocTypeToPortType(EndpointLocType locType)
 }
 
 struct MemMgrEntry {
-    std::shared_ptr<RegedMemMgr> mgrPtr{nullptr};
+    // 缓存的进程级 mgr 只管本端内存（注册/注销/导出），故按 LocalRegedMemMgr 持有
+    std::shared_ptr<LocalRegedMemMgr> mgrPtr{nullptr};
     u64 refCount{0};
 };
 
 /**
- * @note 进程级 RegedMemMgr 复用缓存。同一网卡跨 EndpointHandle 复用实例，跳过冗余硬件注册。
+ * @note 进程级 LocalRegedMemMgr（本端内存）复用缓存。同一网卡跨 EndpointHandle 复用实例，
+ *       跳过冗余硬件注册。远端内存由各 Endpoint 实例的 remoteMemMgr_ 自管，不进缓存。
  *
  * 仍是单例。构造 private、禁止拷贝，GetHolder() 里 static shared_ptr 只 new 一次，
  * 之后每次调用返回同一对象的 shared_ptr 拷贝。变的是生命周期，不是实例个数。
@@ -78,8 +80,8 @@ public:
     static std::shared_ptr<ProcRegedMemMgrCache> GetHolder();
 
     // hit: refCount++ 返已有 shared_ptr; miss: 调 creator() 建实例 insert refCount=1
-    std::shared_ptr<RegedMemMgr>
-    GetOrCreate(const MemMgrCacheKey& key, std::function<std::shared_ptr<RegedMemMgr>()> creator);
+    std::shared_ptr<LocalRegedMemMgr>
+    GetOrCreate(const MemMgrCacheKey& key, std::function<std::shared_ptr<LocalRegedMemMgr>()> creator);
 
     // refCount--, 归 0 则 erase cacheMap_ 条目
     void Release(const MemMgrCacheKey& key);

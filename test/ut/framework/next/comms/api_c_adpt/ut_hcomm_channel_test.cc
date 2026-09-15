@@ -25,7 +25,7 @@ public:
     explicit ChannelStubEndpoint(const EndpointDesc& desc) : Endpoint(desc) {}
 
     HcclResult Init() override { return HCCL_SUCCESS; }
-    hcomm::RegedMemMgr* GetRegedMemMgr() override { return nullptr; }
+    hcomm::LocalRegedMemMgr* GetLocalRegMemMgr() override { return nullptr; }
     void* GetRdmaHandle() override { return nullptr; }
     bool IsCtxHandleValid() const override { return false; }
 };

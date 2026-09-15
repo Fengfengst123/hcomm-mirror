@@ -20,8 +20,8 @@ std::shared_ptr<ProcRegedMemMgrCache> ProcRegedMemMgrCache::GetHolder()
     return holder;
 }
 
-std::shared_ptr<RegedMemMgr>
-ProcRegedMemMgrCache::GetOrCreate(const MemMgrCacheKey& key, std::function<std::shared_ptr<RegedMemMgr>()> creator)
+std::shared_ptr<LocalRegedMemMgr>
+ProcRegedMemMgrCache::GetOrCreate(const MemMgrCacheKey& key, std::function<std::shared_ptr<LocalRegedMemMgr>()> creator)
 {
     std::lock_guard<std::mutex> lock(mtx_);
     auto it = cacheMap_.find(key);

@@ -1,0 +1,189 @@
+/**
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd.
+ * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+ * CANN Open Software License Agreement Version 2.0 (the "License").
+ * Please refer to the License for details. You may not use this file except in compliance with the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
+ */
+
+#include "gtest/gtest.h"
+#include <mockcpp/mockcpp.hpp>
+#include <securec.h>
+#include <cstring>
+#include <string>
+#include <vector>
+
+#define private public
+#include "endpoint_remote_reged_mem_mgr.h"
+#undef private
+
+using namespace hcomm;
+
+namespace {
+
+// 构造 memDesc：DTO 序列化 + EndpointDesc + u64 pid（与 GetMemDesc 写入布局一致）
+std::vector<char> BuildMemDesc(uintptr_t addr, uint64_t size, const EndpointDesc& ep, uint64_t pid)
+{
+    Hccl::ExchangeRdmaBufferDto dto(addr, size, 42U, "ut");
+    Hccl::BinaryStream stream;
+    dto.Serialize(stream);
+    std::vector<char> desc;
+    stream.Dump(desc);
+
+    std::vector<char> tail(sizeof(EndpointDesc) + sizeof(uint64_t));
+    EXPECT_EQ(memcpy_s(tail.data(), sizeof(EndpointDesc), &ep, sizeof(EndpointDesc)), EOK);
+    EXPECT_EQ(memcpy_s(tail.data() + sizeof(EndpointDesc), sizeof(uint64_t), &pid, sizeof(pid)), EOK);
+    desc.insert(desc.end(), tail.begin(), tail.end());
+    return desc;
+}
+
+} // namespace
+
+class EndpointRemoteMemMgrTest : public testing::Test {
+protected:
+    void TearDown() override
+    {
+        GlobalMockObject::verify();
+        GlobalMockObject::reset();
+    }
+};
+
+TEST_F(EndpointRemoteMemMgrTest, Ut_MemoryImport_When_MemDescNull_Expect_Return_Ptr)
+{
+    EndpointRemoteRegedMemMgr mgr(nullptr, ParseRoceMemDesc, CreateRoceRemoteBuffer);
+    HcommMem out{};
+    EXPECT_EQ(mgr.MemoryImport(nullptr, 100U, &out), HCCL_E_PTR);
+}
+
+TEST_F(EndpointRemoteMemMgrTest, Ut_MemoryImport_When_OutMemNull_Expect_Return_Ptr)
+{
+    EndpointRemoteRegedMemMgr mgr(nullptr, ParseRoceMemDesc, CreateRoceRemoteBuffer);
+    EndpointDesc ep{};
+    auto desc = BuildMemDesc(0x1000, 0x100, ep, 1234U);
+    EXPECT_EQ(mgr.MemoryImport(desc.data(), static_cast<uint32_t>(desc.size()), nullptr), HCCL_E_PTR);
+}
+
+// 不带 pid 的旧格式 desc（长度不足）直接报错，强制两端同版本
+TEST_F(EndpointRemoteMemMgrTest, Ut_MemoryImport_When_OldFormatDesc_Expect_Return_Internal)
+{
+    EndpointRemoteRegedMemMgr mgr(nullptr, ParseRoceMemDesc, CreateRoceRemoteBuffer);
+    EndpointDesc ep{};
+    char buf[sizeof(EndpointDesc)] = {};
+    EXPECT_EQ(memcpy_s(buf, sizeof(EndpointDesc), &ep, sizeof(EndpointDesc)), EOK);
+    HcommMem out{};
+    EXPECT_EQ(mgr.MemoryImport(buf, sizeof(EndpointDesc), &out), HCCL_E_INTERNAL);
+}
+
+// 长度达标的旧格式 desc（无 pid）会被 DTO 回读校验拦截，验证不会错位解析成错误归属键
+TEST_F(EndpointRemoteMemMgrTest, Ut_MemoryImport_When_OldFormatDescLongEnough_Expect_Return_Internal)
+{
+    EndpointRemoteRegedMemMgr mgr(nullptr, ParseRoceMemDesc, CreateRoceRemoteBuffer);
+    EndpointDesc ep{};
+    Hccl::ExchangeRdmaBufferDto dto(0x1000, 0x100, 42U, "ut-mem-info");
+    Hccl::BinaryStream stream;
+    dto.Serialize(stream);
+    std::vector<char> desc;
+    stream.Dump(desc);
+    std::vector<char> epTail(sizeof(EndpointDesc));
+    EXPECT_EQ(memcpy_s(epTail.data(), sizeof(EndpointDesc), &ep, sizeof(EndpointDesc)), EOK);
+    desc.insert(desc.end(), epTail.begin(), epTail.end());
+
+    HcommMem out{};
+    EXPECT_EQ(mgr.MemoryImport(desc.data(), static_cast<uint32_t>(desc.size()), &out), HCCL_E_INTERNAL);
+    EXPECT_EQ(mgr.remoteRmaBufferMgrs_.size(), 0U);
+}
+
+// 同 {endpointDesc, pid} 重复导入：幂等成功，ref 叠加，不报 E_AGAIN
+TEST_F(EndpointRemoteMemMgrTest, Ut_MemoryImport_When_SameDescTwice_Expect_IdempotentRefInc)
+{
+    EndpointRemoteRegedMemMgr mgr(nullptr, ParseRoceMemDesc, CreateRoceRemoteBuffer);
+    EndpointDesc ep{};
+    auto desc = BuildMemDesc(0x1000, 0x100, ep, 1234U);
+    uint32_t descLen = static_cast<uint32_t>(desc.size());
+
+    HcommMem out{};
+    EXPECT_EQ(mgr.MemoryImport(desc.data(), descLen, &out), HCCL_SUCCESS);
+    EXPECT_EQ(mgr.MemoryImport(desc.data(), descLen, &out), HCCL_SUCCESS);
+    EXPECT_EQ(mgr.remoteRmaBufferMgrs_.size(), 1U);
+
+    auto& bufferMgr = mgr.remoteRmaBufferMgrs_.begin()->second;
+    ASSERT_NE(bufferMgr, nullptr);
+    EXPECT_EQ(bufferMgr->size(), 1U);
+    EXPECT_EQ(bufferMgr->Begin()->second.ref, 2U);
+}
+
+// 重复导入跳过 creator_：creator 仅在首次导入调用一次（Ub 族 creator 含硬件 import，避免重复导入空转）
+TEST_F(EndpointRemoteMemMgrTest, Ut_MemoryImport_When_Duplicate_Expect_CreatorCalledOnce)
+{
+    uint32_t creatorCalls = 0;
+    auto countingCreator = [&creatorCalls](RdmaHandle handle, const Hccl::Serializable& dto) {
+        creatorCalls++;
+        return CreateRoceRemoteBuffer(handle, dto);
+    };
+    EndpointRemoteRegedMemMgr mgr(nullptr, ParseRoceMemDesc, countingCreator);
+    EndpointDesc ep{};
+    auto desc = BuildMemDesc(0x5000, 0x100, ep, 1234U);
+    uint32_t descLen = static_cast<uint32_t>(desc.size());
+
+    HcommMem out{};
+    ASSERT_EQ(mgr.MemoryImport(desc.data(), descLen, &out), HCCL_SUCCESS);
+    ASSERT_EQ(mgr.MemoryImport(desc.data(), descLen, &out), HCCL_SUCCESS);
+    EXPECT_EQ(creatorCalls, 1U);
+    EXPECT_EQ(mgr.remoteRmaBufferMgrs_.begin()->second->Begin()->second.ref, 2U);
+
+    // 两次 unimport 走对称的引用递减：第一次仅减引用，第二次真正删除
+    EXPECT_EQ(mgr.MemoryUnimport(desc.data(), descLen), HCCL_SUCCESS);
+    EXPECT_EQ(mgr.remoteRmaBufferMgrs_.begin()->second->size(), 1U);
+    EXPECT_EQ(mgr.MemoryUnimport(desc.data(), descLen), HCCL_SUCCESS);
+    EXPECT_TRUE(mgr.remoteRmaBufferMgrs_.empty());
+}
+
+// 同 endpointDesc 不同 pid：各自独立管理，互不冲突
+TEST_F(EndpointRemoteMemMgrTest, Ut_MemoryImport_When_DifferentPid_Expect_SeparateOwners)
+{
+    EndpointRemoteRegedMemMgr mgr(nullptr, ParseRoceMemDesc, CreateRoceRemoteBuffer);
+    EndpointDesc ep{};
+    auto desc1 = BuildMemDesc(0x2000, 0x100, ep, 1111U);
+    auto desc2 = BuildMemDesc(0x2000, 0x100, ep, 2222U);
+
+    HcommMem out{};
+    EXPECT_EQ(mgr.MemoryImport(desc1.data(), static_cast<uint32_t>(desc1.size()), &out), HCCL_SUCCESS);
+    EXPECT_EQ(mgr.MemoryImport(desc2.data(), static_cast<uint32_t>(desc2.size()), &out), HCCL_SUCCESS);
+    EXPECT_EQ(mgr.remoteRmaBufferMgrs_.size(), 2U);
+}
+
+// 两次导入后逐次 unimport：第一次只减引用，最后一次才真正删除并清理记录
+TEST_F(EndpointRemoteMemMgrTest, Ut_MemoryUnimport_When_LastRef_Expect_OwnerErased)
+{
+    EndpointRemoteRegedMemMgr mgr(nullptr, ParseRoceMemDesc, CreateRoceRemoteBuffer);
+    EndpointDesc ep{};
+    auto desc = BuildMemDesc(0x3000, 0x100, ep, 1234U);
+    uint32_t descLen = static_cast<uint32_t>(desc.size());
+
+    HcommMem out{};
+    ASSERT_EQ(mgr.MemoryImport(desc.data(), descLen, &out), HCCL_SUCCESS);
+    ASSERT_EQ(mgr.MemoryImport(desc.data(), descLen, &out), HCCL_SUCCESS);
+
+    EXPECT_EQ(mgr.MemoryUnimport(desc.data(), descLen), HCCL_SUCCESS);
+    EXPECT_EQ(mgr.remoteRmaBufferMgrs_.size(), 1U);
+    EXPECT_EQ(mgr.remoteRmaBufferMgrs_.begin()->second->size(), 1U);
+
+    EXPECT_EQ(mgr.MemoryUnimport(desc.data(), descLen), HCCL_SUCCESS);
+    EXPECT_TRUE(mgr.remoteRmaBufferMgrs_.empty());
+}
+
+TEST_F(EndpointRemoteMemMgrTest, Ut_MemoryUnimport_When_OwnerMissing_Expect_Return_NotFound)
+{
+    EndpointRemoteRegedMemMgr mgr(nullptr, ParseRoceMemDesc, CreateRoceRemoteBuffer);
+    EndpointDesc ep{};
+    auto desc = BuildMemDesc(0x4000, 0x100, ep, 1234U);
+    EXPECT_EQ(mgr.MemoryUnimport(desc.data(), static_cast<uint32_t>(desc.size())), HCCL_E_NOT_FOUND);
+}
+
+TEST_F(EndpointRemoteMemMgrTest, Ut_MemoryUnimport_When_MemDescNull_Expect_Return_Ptr)
+{
+    EndpointRemoteRegedMemMgr mgr(nullptr, ParseRoceMemDesc, CreateRoceRemoteBuffer);
+    EXPECT_EQ(mgr.MemoryUnimport(nullptr, 100U), HCCL_E_PTR);
+}

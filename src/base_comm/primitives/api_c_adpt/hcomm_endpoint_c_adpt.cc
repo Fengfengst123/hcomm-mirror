@@ -195,7 +195,7 @@ HcclResult CreateBuiltinEndpoint(const EndpointDesc* endpoint, EndpointHandle* e
         return ret;
     }
 
-    // 内置 endpoint 不再调 SetNicEndpointCtx（内存操作经 GetRegedMemMgr() 路径）
+    // 内置 endpoint 不再调 SetNicEndpointCtx（内存操作经 GetLocalRegMemMgr()/GetRemoteRegMemMgr() 路径）
 
     const EndpointHandle handle = static_cast<EndpointHandle>(endpointPtr.get());
     CHK_PTR_NULL(handle);

@@ -12,6 +12,7 @@
 #include "log.h"
 #include "hccl/hccl_res.h"
 #include "ub_reged_mem_mgr.h"
+#include "endpoint_remote_reged_mem_mgr.h"
 #include "adapter_rts_common.h"
 #include "rdma_handle_manager.h"
 #include "mgr/endpoint_ctx_mgr.h"
@@ -87,10 +88,16 @@ HcclResult UbRtpEndpoint::Init()
         "%s success, devPhyId[%u], eidAddr[%s], ctxHandle[%p]", __func__, devPhyId, eidAddr.Describe().c_str(),
         ctxHandle_);
 
-    EXCEPTION_CATCH(regedMemMgr_ = std::make_shared<UbRegedMemMgr>(ctxHandle_), {
+    // ub_rtp 的本端/远端内存 mgr 均为实例独有，不走进程级缓存
+    EXCEPTION_CATCH(localMemMgr_ = std::make_shared<UbRegedMemMgr>(ctxHandle_), {
         CHK_RET(ReleaseEndpointCtx());
         return HCCL_E_INTERNAL;
     });
+    EXCEPTION_CATCH(
+        remoteMemMgr_ = std::make_shared<EndpointRemoteRegedMemMgr>(ctxHandle_, ParseUbMemDesc, CreateUbRemoteBuffer), {
+            CHK_RET(ReleaseEndpointCtx());
+            return HCCL_E_INTERNAL;
+        });
 
     return HcclResult::HCCL_SUCCESS;
 }

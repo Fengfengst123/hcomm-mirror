@@ -13,12 +13,12 @@
 #include "hccl_common.h"
 #include "ub_reged_mem_mgr.h"
 #include <algorithm>
+#include <unistd.h>
 #include "log.h"
 #include "hccl/hccl_res.h"
 #include "hccl_mem_v2.h"
 #include "exchange_ub_buffer_dto.h"
 #include "local_ub_rma_buffer_manager.h"
-#include "remote_rma_buffer.h"
 #include "local_ub_rma_buffer.h"
 
 namespace hcomm {
@@ -64,27 +64,9 @@ HcclResult UbRegedMemMgr::UnregisterMemory(void* memHandle)
 HcclResult UbRegedMemMgr::GetMemDesc(const EndpointDesc endpointDesc, Hccl::LocalUbRmaBuffer* localUbRmaBuffer) const
 {
     auto dto = localUbRmaBuffer->GetExchangeDto();
-    Hccl::BinaryStream localUbRmaBufferStream;
-    dto->Serialize(localUbRmaBufferStream);
+    CHK_SMART_PTR_NULL(dto);
     std::vector<char> tempLocalMemDesc;
-    localUbRmaBufferStream.Dump(tempLocalMemDesc);
-    HCCL_DEBUG("[UbRegedMemMgr][GetMemDesc] [%s] dump data size [%u]", __func__, tempLocalMemDesc.size());
-    // 判断内存描述符是否正确导出
-    if (tempLocalMemDesc.empty()) {
-        HCCL_ERROR("[UbRegedMemMgr][GetMemDesc] [%s] tempLocalMemDesc export failed.", __func__);
-        return HCCL_E_INTERNAL;
-    }
-
-    std::vector<char> tempLocalEndpointDesc;
-    tempLocalEndpointDesc.resize(sizeof(EndpointDesc));
-    if (memcpy_s(tempLocalEndpointDesc.data(), sizeof(EndpointDesc), &endpointDesc, sizeof(EndpointDesc)) != EOK) {
-        HCCL_ERROR("[UbRegedMemMgr][GetMemDesc] [%s] endpointDesc memcpy_s failed.", __func__);
-        return HCCL_E_INTERNAL;
-    }
-
-    tempLocalMemDesc.insert(tempLocalMemDesc.end(), tempLocalEndpointDesc.begin(), tempLocalEndpointDesc.end());
-
-    // 内存描述符拷贝
+    CHK_RET(BuildMemDesc(*dto, endpointDesc, tempLocalMemDesc));
     localUbRmaBuffer->Desc = std::move(tempLocalMemDesc);
     return HCCL_SUCCESS;
 }
@@ -108,106 +90,6 @@ UbRegedMemMgr::MemoryExport(const EndpointDesc& endpointDesc, void* memHandle, v
     *memDescLen = static_cast<uint32_t>(localUbRmaBuffer->Desc.size());
     *memDesc = static_cast<void*>(localUbRmaBuffer->Desc.data());
 
-    return HCCL_SUCCESS;
-}
-
-HcclResult UbRegedMemMgr::GetParamsFromMemDesc(
-    const void* memDesc, uint32_t descLen, EndpointDesc& endpointDesc, Hccl::ExchangeUbBufferDto& dto) const
-{
-    const char* description = static_cast<const char*>(memDesc);
-
-    CHK_PRT_RET(
-        descLen < sizeof(EndpointDesc),
-        HCCL_ERROR("[%s] descLen[%u] is too small, expected at least %zu", __func__, descLen, sizeof(EndpointDesc)),
-        HCCL_E_PARA);
-    // 从memDesc末尾提取EndpointDesc
-    if (memcpy_s(
-            &endpointDesc, sizeof(EndpointDesc), description + descLen - sizeof(EndpointDesc), sizeof(EndpointDesc))
-        != EOK) {
-        HCCL_ERROR(
-            "[UbRegedMemMgr][GetParamsFromMemDesc] [%s] endpointDesc copy error. aim size:[%llu]", __func__,
-            sizeof(EndpointDesc));
-        return HCCL_E_INTERNAL;
-    }
-
-    // 反序列化
-    std::vector<char> tempDesc{};
-    tempDesc.resize(TRANSPORT_EMD_ESC_SIZE);
-    tempDesc.assign(description, description + descLen - sizeof(EndpointDesc));
-    Hccl::BinaryStream remoteUbRmaBufferStream(tempDesc);
-    dto.Deserialize(remoteUbRmaBufferStream);
-    return HCCL_SUCCESS;
-}
-
-HcclResult UbRegedMemMgr::MemoryImport(const void* memDesc, uint32_t descLen, HcommMem* outMem)
-{
-    HCCL_INFO("[%s] Begin", __FUNCTION__);
-    CHK_PTR_NULL(memDesc);
-    CHK_PTR_NULL(outMem);
-    std::lock_guard<std::mutex> lock(memMtx_);
-
-    EndpointDesc endpointDesc;
-    Hccl::ExchangeUbBufferDto dto;
-    CHK_RET(GetParamsFromMemDesc(memDesc, descLen, endpointDesc, dto));
-
-    // 构造RemoteUbRmaBuffer
-    std::shared_ptr<Hccl::RemoteUbRmaBuffer> remoteUbRmaBuffer;
-    EXCEPTION_CATCH(remoteUbRmaBuffer = std::make_shared<Hccl::RemoteUbRmaBuffer>(rdmaHandle_, dto),
-                    return HCCL_E_PTR;);
-    CHK_SMART_PTR_NULL(remoteUbRmaBuffer);
-
-    // 放到RemoteUbRmaBufferMgr_
-    hccl::BufferKey<uintptr_t, u64> tempKey(static_cast<uintptr_t>(dto.addr), dto.size);
-    if (remoteUbRmaBufferMgrs_.find(endpointDesc) == remoteUbRmaBufferMgrs_.end()) {
-        std::unique_ptr<RemoteUbRmaBufferMgr> remoteUbRmaBufferMgr;
-        EXCEPTION_CATCH((remoteUbRmaBufferMgr = std::make_unique<RemoteUbRmaBufferMgr>()), return HCCL_E_PTR);
-        CHK_SMART_PTR_NULL(remoteUbRmaBufferMgr);
-        remoteUbRmaBufferMgrs_[endpointDesc] = std::move(remoteUbRmaBufferMgr);
-        HCCL_INFO("remoteUbRmaBufferMgrs_ add remoteUbRmaBufferMgr successfully!");
-    }
-
-    auto resultPair = remoteUbRmaBufferMgrs_[endpointDesc]->Add(tempKey, remoteUbRmaBuffer);
-    if (!resultPair.second) {
-        HCCL_ERROR("[UbRegedMemMgr][MemoryImport] This memDesc has already been imported!");
-        return HCCL_E_AGAIN;
-    }
-
-    outMem->addr = ReinterpretAs<void*>(remoteUbRmaBuffer->GetAddr());
-    outMem->size = remoteUbRmaBuffer->GetSize();
-
-    return HCCL_SUCCESS;
-}
-
-HcclResult UbRegedMemMgr::MemoryUnimport(const void* memDesc, uint32_t descLen)
-{
-    HCCL_INFO("[%s] Begin", __FUNCTION__);
-    CHK_PTR_NULL(memDesc);
-    std::lock_guard<std::mutex> lock(memMtx_);
-
-    EndpointDesc endpointDesc;
-    Hccl::ExchangeUbBufferDto dto;
-    CHK_RET(GetParamsFromMemDesc(memDesc, descLen, endpointDesc, dto));
-
-    if (remoteUbRmaBufferMgrs_.find(endpointDesc) == remoteUbRmaBufferMgrs_.end()) {
-        HCCL_ERROR("[UrmaRegedMemMgr][MemoryUnimport] Remote buffer manager Not Found.");
-        return HCCL_E_NOT_FOUND;
-    }
-
-    // 删除RemoteUbRmaBuffer
-    HCCL_INFO("[MemoryUnimport][Ub] MemoryUnimport");
-    hccl::BufferKey<uintptr_t, u64> tempKey(static_cast<uintptr_t>(dto.addr), dto.size);
-
-    bool resultPair = false;
-    EXCEPTION_CATCH(resultPair = remoteUbRmaBufferMgrs_[endpointDesc]->Del(tempKey), return HCCL_E_NOT_FOUND);
-    // 计数器大于1时，返回false，说明框架层有其它设备在使用这段内存，返回HCCL_E_AGAIN
-    if (!resultPair) {
-        HCCL_INFO("[UrmaRegedMemMgr][[MemoryUnimport] Memory reference count is larger than 0"
-                  "(used by other RemoteRank).");
-        return HCCL_E_AGAIN;
-    }
-    if (remoteUbRmaBufferMgrs_[endpointDesc]->size() == 0) {
-        remoteUbRmaBufferMgrs_.erase(endpointDesc);
-    }
     return HCCL_SUCCESS;
 }
 

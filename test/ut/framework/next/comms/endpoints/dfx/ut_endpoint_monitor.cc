@@ -65,7 +65,7 @@ public:
     HcclResult ServerSocketListen(const uint32_t port) { return HCCL_SUCCESS; }
 
     // Endpoint 新增纯虚接口，UtStubEndpoint 提供最小实现
-    RegedMemMgr* GetRegedMemMgr() override { return nullptr; }
+    LocalRegedMemMgr* GetLocalRegMemMgr() override { return nullptr; }
     void* GetRdmaHandle() override { return nullptr; }
     bool IsCtxHandleValid() const override { return false; }
 

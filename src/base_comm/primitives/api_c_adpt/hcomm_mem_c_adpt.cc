@@ -45,7 +45,7 @@ HcommMemReg(EndpointHandle endpointHandle, const char* memTag, const CommMem* me
     CHK_PRT_RET(
         endpoint == nullptr, HCCL_ERROR("[%s] endpoint not found, endpointHandle[%p]", __func__, endpointHandle),
         HCCL_E_NOT_FOUND);
-    auto mgr = endpoint->GetRegedMemMgr();
+    auto mgr = endpoint->GetLocalRegMemMgr();
     CHK_PTR_NULL(mgr);
     CHK_RET(RefreshEndpointContext(endpoint->GetEndpointDesc()));
     return static_cast<HcclResult>(mgr->RegisterMemory(mem, memTag, static_cast<void**>(memHandle)));
@@ -57,7 +57,7 @@ HcommResult HcommMemUnreg(EndpointHandle endpointHandle, HcommMemHandle memHandl
     CHK_PRT_RET(
         endpoint == nullptr, HCCL_ERROR("[%s] endpoint not found, endpointHandle[%p]", __func__, endpointHandle),
         HCCL_E_NOT_FOUND);
-    auto mgr = endpoint->GetRegedMemMgr();
+    auto mgr = endpoint->GetLocalRegMemMgr();
     CHK_PTR_NULL(mgr);
     CHK_RET(RefreshEndpointContext(endpoint->GetEndpointDesc()));
     return static_cast<HcclResult>(mgr->UnregisterMemory(memHandle));
@@ -70,7 +70,7 @@ HcommMemExport(EndpointHandle endpointHandle, HcommMemHandle memHandle, void** m
     CHK_PRT_RET(
         endpoint == nullptr, HCCL_ERROR("[%s] endpoint not found, endpointHandle[%p]", __func__, endpointHandle),
         HCCL_E_NOT_FOUND);
-    auto mgr = endpoint->GetRegedMemMgr();
+    auto mgr = endpoint->GetLocalRegMemMgr();
     CHK_PTR_NULL(mgr);
     CHK_RET(RefreshEndpointContext(endpoint->GetEndpointDesc()));
     return static_cast<HcclResult>(mgr->MemoryExport(endpoint->GetEndpointDesc(), memHandle, memDesc, memDescLen));
@@ -82,10 +82,10 @@ HcommResult HcommMemImport(EndpointHandle endpointHandle, const void* memDesc, u
     CHK_PRT_RET(
         endpoint == nullptr, HCCL_ERROR("[%s] endpoint not found, endpointHandle[%p]", __func__, endpointHandle),
         HCCL_E_NOT_FOUND);
-    auto mgr = endpoint->GetRegedMemMgr();
-    CHK_PTR_NULL(mgr);
+    auto remoteMgr = endpoint->GetRemoteRegMemMgr();
+    CHK_PTR_NULL(remoteMgr);
     CHK_RET(RefreshEndpointContext(endpoint->GetEndpointDesc()));
-    return static_cast<HcclResult>(mgr->MemoryImport(memDesc, descLen, outMem));
+    return static_cast<HcclResult>(remoteMgr->MemoryImport(memDesc, descLen, outMem));
 }
 
 HcommResult HcommMemUnimport(EndpointHandle endpointHandle, const void* memDesc, uint32_t descLen)
@@ -94,10 +94,10 @@ HcommResult HcommMemUnimport(EndpointHandle endpointHandle, const void* memDesc,
     CHK_PRT_RET(
         endpoint == nullptr, HCCL_ERROR("[%s] endpoint not found, endpointHandle[%p]", __func__, endpointHandle),
         HCCL_E_NOT_FOUND);
-    auto mgr = endpoint->GetRegedMemMgr();
-    CHK_PTR_NULL(mgr);
+    auto remoteMgr = endpoint->GetRemoteRegMemMgr();
+    CHK_PTR_NULL(remoteMgr);
     CHK_RET(RefreshEndpointContext(endpoint->GetEndpointDesc()));
-    return static_cast<HcclResult>(mgr->MemoryUnimport(memDesc, descLen));
+    return static_cast<HcclResult>(remoteMgr->MemoryUnimport(memDesc, descLen));
 }
 
 HcommResult HcommMemGrant(EndpointHandle endpointHandle, const HcommMemGrantInfo* remoteGrantInfo)
@@ -109,7 +109,7 @@ HcommResult HcommMemGrant(EndpointHandle endpointHandle, const HcommMemGrantInfo
     CHK_PRT_RET(
         endpoint == nullptr, HCCL_ERROR("[%s] endpoint not found, endpointHandle[0x%llx]", __func__, endpointHandle),
         HCCL_E_NOT_FOUND);
-    auto mgr = endpoint->GetRegedMemMgr();
+    auto mgr = endpoint->GetLocalRegMemMgr();
     CHK_PTR_NULL(mgr);
     // MemoryGrant 由 HccsRegedMemMgr 承载；非 HCCS 类 mgr 无此能力，跳过（与下移前基类默认 SUCCESS 行为一致）
     auto* hccsMgr = dynamic_cast<HccsRegedMemMgr*>(mgr);
@@ -136,7 +136,7 @@ HcommResult HcommMemGetAllMemHandles(EndpointHandle endpointHandle, void** memHa
     CHK_PRT_RET(
         endpoint == nullptr, HCCL_ERROR("[%s] endpoint not found, endpointHandle[0x%llx]", __func__, endpointHandle),
         HCCL_E_NOT_FOUND);
-    auto mgr = endpoint->GetRegedMemMgr();
+    auto mgr = endpoint->GetLocalRegMemMgr();
     CHK_PTR_NULL(mgr);
     CHK_RET(mgr->GetAllMemHandles(memHandles, memHandleNum));
     return HCCL_SUCCESS;

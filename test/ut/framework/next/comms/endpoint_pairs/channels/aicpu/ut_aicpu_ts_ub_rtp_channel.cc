@@ -69,8 +69,8 @@ public:
     FakeParseEndpoint() : Endpoint(MakeUbRtpEndpointDesc()) { ctxHandle_ = reinterpret_cast<void*>(0xDEADBEEF); }
 
     HcclResult Init() override { return HCCL_SUCCESS; }
-    // 内存方法在 RegedMemMgr 上，Endpoint 不再 override
-    RegedMemMgr* GetRegedMemMgr() override { return nullptr; }
+    // 内存方法在 mgr 上，Endpoint 不再承载
+    LocalRegedMemMgr* GetLocalRegMemMgr() override { return nullptr; }
     void* GetRdmaHandle() override { return ctxHandle_; }
     bool IsCtxHandleValid() const override { return ctxHandle_ != nullptr; }
 

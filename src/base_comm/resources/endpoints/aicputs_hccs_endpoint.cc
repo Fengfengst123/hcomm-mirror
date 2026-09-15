@@ -67,6 +67,16 @@ HcclResult AicpuTsHccsEndpoint::Init()
     CHK_RET(hccl::GlobalNetDevMgr::GetInstance(endpointDesc_.loc.device.devPhyId)
                 .RefNetDevCtx(NicType::VNIC_TYPE, devIpAddr_, serverPort_, netDevCtx_));
     EXCEPTION_CATCH(regedMemMgr_ = std::make_shared<HccsRegedMemMgr>(netDevCtx_), return HCCL_E_PARA);
+    // 远端接口经 Forwarder 转发到同一组合 mgr（mgr 本身只继承 LocalRegedMemMgr）
+    EXCEPTION_CATCH(
+        remoteForwarder_ = std::make_shared<RemoteRegedMemMgrForwarder>(
+            [this](const void* memDesc, uint32_t descLen, HcommMem* outMem) {
+                return regedMemMgr_->MemoryImport(memDesc, descLen, outMem);
+            },
+            [this](const void* memDesc, uint32_t descLen) {
+                return regedMemMgr_->MemoryUnimport(memDesc, descLen);
+            }),
+        return HCCL_E_PTR);
     return HCCL_SUCCESS;
 }
 } // namespace hcomm

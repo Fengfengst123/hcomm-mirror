@@ -119,6 +119,18 @@ public:
         return std::make_pair(false, BufferType{}); // 未找到
     }
 
+    // 精确匹配key则引用计数+1并返回buffer，用于重复导入场景复用已有条目；未找到返回{false, 空}
+    std::pair<bool, BufferType> FindAndRef(const KeyType& key)
+    {
+        std::unique_lock<std::shared_mutex> lock(mtx_);
+        auto it = intervalTree_.find(key);
+        if (it == intervalTree_.end()) {
+            return std::make_pair(false, BufferType{});
+        }
+        it->second.ref++;
+        return std::make_pair(true, it->second.buffer);
+    }
+
     // 1.删除成功：输入key是表中某一最相近key的全集。 计数-1且之后为0。  返回true
     // 2.删除引用数-1但未删除：输入key是表中某一最相近key的全集。 计数-1且之后大于0。 返回false
     // 3.删除失败：输入key是表中某一个最相近key的交集、子集、超集、空集。——抛出NOT_FOUND异常

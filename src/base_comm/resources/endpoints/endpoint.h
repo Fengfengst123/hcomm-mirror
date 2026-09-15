@@ -32,7 +32,9 @@ class EndpointMonitor;
 /**
  * @note 职责：通信设备Endpoint的C++纯虚接口类，只承担 endpoint 生命周期与工厂职责。
  *       数据成员仅保留 endpointDesc_/monitorKeepAlive_（各子类无差别），其余全部移至各具体派生类。
- *       内存注册接口由 RegedMemMgr 承载（经 GetRegedMemMgr() 访问）；
+ *       本端内存注册接口由 LocalRegedMemMgr 承载（经 GetLocalRegMemMgr() 访问，直达进程级
+ *       mgr 或组合 mgr）；远端内存导入接口由 RemoteRegedMemMgr 承载（经 GetRemoteRegMemMgr()
+ *       访问，仅 RoCE/Ub 族返回实例级 wrapper，hccs/aicpu_ts 返回组合 mgr，其余返回 nullptr）；
  *       Socket 监听接口由 ServerSocketContext 承载（经 GetServerSocketContext() 访问）；
  *       NIC 插件方法由 PluginEndpointHolder 承载；
  *       RegedMemMgr 缓存管理（AttachCache/ReleaseCache）移至各派生类 private。
@@ -47,9 +49,12 @@ public:
 
     virtual HcclResult Init() = 0;
 
-    // 返回组合持有的 RegedMemMgr（各派生类 override 返回自身成员）
+    // 返回本端内存 mgr（各派生类 override 返回自身成员）
     // 返回裸指针视图：生命周期由宿主 endpoint 保证，调用方不得在 endpoint 存活期外持有
-    virtual RegedMemMgr* GetRegedMemMgr() = 0;
+    virtual LocalRegedMemMgr* GetLocalRegMemMgr() = 0;
+
+    // 返回远端内存 mgr；不支持远端导入的 endpoint 不 override（返回 nullptr）
+    virtual RemoteRegedMemMgr* GetRemoteRegMemMgr() { return nullptr; }
 
     // 返回 RDMA 句柄（各派生类 override 返回自身 ctxHandle_）
     virtual void* GetRdmaHandle() = 0;

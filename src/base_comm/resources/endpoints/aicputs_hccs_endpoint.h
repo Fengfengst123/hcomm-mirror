@@ -35,7 +35,11 @@ public:
 
     HcclResult Init() override;
 
-    RegedMemMgr* GetRegedMemMgr() override { return regedMemMgr_.get(); }
+    // 组合 mgr：本端直达对象；远端经 Forwarder 包装同一对象（避免 mgr 多继承）
+    LocalRegedMemMgr* GetLocalRegMemMgr() override { return regedMemMgr_.get(); }
+    RemoteRegedMemMgr* GetRemoteRegMemMgr() override { return remoteForwarder_.get(); }
+    // 返回具体类型，供 HCCS 通道访问 Grant/P2P/IpcBuffer 等 HCCS 专属能力，避免下行转换
+    HccsRegedMemMgr* GetHccsRegedMemMgr() { return regedMemMgr_.get(); }
     void* GetRdmaHandle() override { return nullptr; }
     bool IsCtxHandleValid() const override { return false; }
 
@@ -47,6 +51,8 @@ public:
 
 private:
     std::shared_ptr<HccsRegedMemMgr> regedMemMgr_{};
+    // 远端接口视图：转发到 regedMemMgr_，Init 构造
+    std::shared_ptr<RemoteRegedMemMgrForwarder> remoteForwarder_{};
     hccl::HcclIpAddress devIpAddr_;
     HcclNetDevCtx netDevCtx_{nullptr};
     u32 serverPort_{AICPU_CHANNEL_DEFAULT_PORT};

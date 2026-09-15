@@ -63,7 +63,8 @@ HcclResult StubHcclSocketAcceptForEp(
     return HCCL_SUCCESS;
 }
 
-// AicpuTsRoceEndpoint::regedMemMgr_ 为 shared_ptr<AicpuTsRoceRegedMemMgr>，mock 需派生自 AicpuTsRoceRegedMemMgr
+// AicpuTsRoceEndpoint::regedMemMgr_ 为 shared_ptr<AicpuTsRoceRegedMemMgr>（组合 mgr），mock 需派生自
+// AicpuTsRoceRegedMemMgr
 class FakeRegedMemMgrForEndpointUt : public AicpuTsRoceRegedMemMgr {
 public:
     FakeRegedMemMgrForEndpointUt() : AicpuTsRoceRegedMemMgr(nullptr, nullptr) {}
@@ -89,6 +90,20 @@ public:
         return HCCL_SUCCESS;
     }
 };
+
+// 注入 fake 组合 mgr 并构造远端转发视图，模拟 Init 中 remoteForwarder_ 的构造路径
+// （测试不走 Init，避免真实网络/RDMA 初始化；lambda 捕获栈上 ep 引用，测试期内有效）
+void InjectFakeMgrWithForwarder(AicpuTsRoceEndpoint& ep)
+{
+    ep.regedMemMgr_ = std::make_shared<FakeRegedMemMgrForEndpointUt>();
+    ep.remoteForwarder_ = std::make_shared<RemoteRegedMemMgrForwarder>(
+        [&ep](const void* memDesc, uint32_t descLen, HcommMem* outMem) {
+            return ep.regedMemMgr_->MemoryImport(memDesc, descLen, outMem);
+        },
+        [&ep](const void* memDesc, uint32_t descLen) {
+            return ep.regedMemMgr_->MemoryUnimport(memDesc, descLen);
+        });
+}
 } // namespace
 
 HcclResult StubHcclNetDevOpenForEp(const HcclNetDevInfos* info, HcclNetDev* netDev)
@@ -167,7 +182,7 @@ TEST_F(AicpuTsRoceEndpointTest, Ut_UnregisterMemory_WhenMemHandleNull_Returns_PT
 
     AicpuTsRoceEndpoint ep(desc);
     ep.regedMemMgr_ = std::make_shared<AicpuTsRoceRegedMemMgr>(nullptr, nullptr);
-    EXPECT_EQ(ep.GetRegedMemMgr()->UnregisterMemory(nullptr), HCCL_E_PTR);
+    EXPECT_EQ(ep.GetLocalRegMemMgr()->UnregisterMemory(nullptr), HCCL_E_PTR);
 }
 
 TEST_F(AicpuTsRoceEndpointTest, Ut_RegisterMemory_WhenMemHandleOutNull_Returns_PTR)
@@ -184,7 +199,7 @@ TEST_F(AicpuTsRoceEndpointTest, Ut_RegisterMemory_WhenMemHandleOutNull_Returns_P
     mem.addr = reinterpret_cast<void*>(0x1000U);
     mem.size = 4096U;
     mem.type = COMM_MEM_TYPE_DEVICE;
-    EXPECT_EQ(ep.GetRegedMemMgr()->RegisterMemory(&mem, "t", nullptr), HCCL_E_PTR);
+    EXPECT_EQ(ep.GetLocalRegMemMgr()->RegisterMemory(&mem, "t", nullptr), HCCL_E_PTR);
 }
 
 TEST_F(AicpuTsRoceEndpointTest, Ut_RegisterMemory_Delegates_Returns_SUCCESS)
@@ -202,7 +217,7 @@ TEST_F(AicpuTsRoceEndpointTest, Ut_RegisterMemory_Delegates_Returns_SUCCESS)
     mem.size = 2048U;
     mem.type = COMM_MEM_TYPE_DEVICE;
     void* handle = nullptr;
-    ASSERT_EQ(ep.GetRegedMemMgr()->RegisterMemory(&mem, "tag", &handle), HCCL_SUCCESS);
+    ASSERT_EQ(ep.GetLocalRegMemMgr()->RegisterMemory(&mem, "tag", &handle), HCCL_SUCCESS);
     EXPECT_EQ(handle, reinterpret_cast<void*>(0x42ULL));
 }
 
@@ -219,7 +234,7 @@ TEST_F(AicpuTsRoceEndpointTest, Ut_MemoryExport_Delegates_Returns_SUCCESS)
     void* memDesc = nullptr;
     uint32_t len = 0U;
     ASSERT_EQ(
-        ep.GetRegedMemMgr()->MemoryExport(ep.GetEndpointDesc(), reinterpret_cast<void*>(0x1), &memDesc, &len),
+        ep.GetLocalRegMemMgr()->MemoryExport(ep.GetEndpointDesc(), reinterpret_cast<void*>(0x1), &memDesc, &len),
         HCCL_SUCCESS);
     EXPECT_NE(memDesc, nullptr);
     EXPECT_EQ(len, 4U);
@@ -237,7 +252,7 @@ TEST_F(AicpuTsRoceEndpointTest, Ut_GetAllMemHandles_Delegates_Returns_SUCCESS)
     ep.regedMemMgr_ = std::make_shared<FakeRegedMemMgrForEndpointUt>();
     void* handles = reinterpret_cast<void*>(0xdeadbeefULL);
     uint32_t n = 99U;
-    ASSERT_EQ(ep.GetRegedMemMgr()->GetAllMemHandles(&handles, &n), HCCL_SUCCESS);
+    ASSERT_EQ(ep.GetLocalRegMemMgr()->GetAllMemHandles(&handles, &n), HCCL_SUCCESS);
     EXPECT_EQ(n, 0U);
     EXPECT_EQ(handles, nullptr);
 }
@@ -273,9 +288,9 @@ TEST_F(AicpuTsRoceEndpointTest, Ut_MemoryImport_Delegates_Returns_SUCCESS)
     desc.commAddr.type = COMM_ADDR_TYPE_IP_V4;
     ASSERT_EQ(inet_pton(AF_INET, "10.10.10.32", &desc.commAddr.addr), 1);
     AicpuTsRoceEndpoint ep(desc);
-    ep.regedMemMgr_ = std::make_shared<FakeRegedMemMgrForEndpointUt>();
+    InjectFakeMgrWithForwarder(ep);
     HcommMem out{};
-    ASSERT_EQ(ep.GetRegedMemMgr()->MemoryImport(nullptr, 0U, &out), HCCL_SUCCESS);
+    ASSERT_EQ(ep.GetRemoteRegMemMgr()->MemoryImport(nullptr, 0U, &out), HCCL_SUCCESS);
 }
 
 TEST_F(AicpuTsRoceEndpointTest, Ut_MemoryUnimport_Delegates_Returns_SUCCESS)
@@ -286,8 +301,8 @@ TEST_F(AicpuTsRoceEndpointTest, Ut_MemoryUnimport_Delegates_Returns_SUCCESS)
     desc.commAddr.type = COMM_ADDR_TYPE_IP_V4;
     ASSERT_EQ(inet_pton(AF_INET, "10.10.10.33", &desc.commAddr.addr), 1);
     AicpuTsRoceEndpoint ep(desc);
-    ep.regedMemMgr_ = std::make_shared<FakeRegedMemMgrForEndpointUt>();
-    ASSERT_EQ(ep.GetRegedMemMgr()->MemoryUnimport(nullptr, 0U), HCCL_SUCCESS);
+    InjectFakeMgrWithForwarder(ep);
+    ASSERT_EQ(ep.GetRemoteRegMemMgr()->MemoryUnimport(nullptr, 0U), HCCL_SUCCESS);
 }
 
 TEST_F(AicpuTsRoceEndpointTest, Ut_UnregisterMemory_Delegates_Returns_SUCCESS)
@@ -299,7 +314,7 @@ TEST_F(AicpuTsRoceEndpointTest, Ut_UnregisterMemory_Delegates_Returns_SUCCESS)
     ASSERT_EQ(inet_pton(AF_INET, "10.10.10.34", &desc.commAddr.addr), 1);
     AicpuTsRoceEndpoint ep(desc);
     ep.regedMemMgr_ = std::make_shared<FakeRegedMemMgrForEndpointUt>();
-    ASSERT_EQ(ep.GetRegedMemMgr()->UnregisterMemory(reinterpret_cast<void*>(0x99ULL)), HCCL_SUCCESS);
+    ASSERT_EQ(ep.GetLocalRegMemMgr()->UnregisterMemory(reinterpret_cast<void*>(0x99ULL)), HCCL_SUCCESS);
 }
 
 TEST_F(AicpuTsRoceEndpointTest, Ut_TwoInitsSameDevicePhyId_ShareOneNetDevSlot)

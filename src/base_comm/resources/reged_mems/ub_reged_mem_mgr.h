@@ -19,19 +19,16 @@
 #include "rma_buffer_mgr.h"
 #include "buffer_key.h"
 #include "local_ub_rma_buffer.h"
-#include "remote_rma_buffer.h"
-#include "exchange_ub_buffer_dto.h"
 
 namespace hcomm {
 /**
- * @note 职责：用于通信设备EndPoint的注册内存信息管理，支持基于RmaBufferMgr类的重叠内存的检测报错等。
+ * @note 职责：进程级注册内存管理（仅本端）；远端内存导入/注销由 Endpoint 实例级
+ *       wrapper（见 endpoint_remote_reged_mem_mgr.h）承载。
  */
-class UbRegedMemMgr : public RegedMemMgr {
+class UbRegedMemMgr : public LocalRegedMemMgr {
 public:
     using LocalUbRmaBufferMgr
         = hcomm::RmaBufferMgr<hccl::BufferKey<uintptr_t, u64>, std::shared_ptr<Hccl::LocalUbRmaBuffer>>;
-    using RemoteUbRmaBufferMgr
-        = hcomm::RmaBufferMgr<hccl::BufferKey<uintptr_t, u64>, std::shared_ptr<Hccl::RemoteUbRmaBuffer>>;
 
     UbRegedMemMgr(RdmaHandle rdmaHandle);
     ~UbRegedMemMgr() override = default;
@@ -40,12 +37,8 @@ public:
     HcclResult UnregisterMemory(void* memHandle) override;
     HcclResult
     MemoryExport(const EndpointDesc& endpointDesc, void* memHandle, void** memDesc, uint32_t* memDescLen) override;
-    HcclResult MemoryImport(const void* memDesc, uint32_t descLen, HcommMem* outMem) override;
-    HcclResult MemoryUnimport(const void* memDesc, uint32_t descLen) override;
     HcclResult GetAllMemHandles(void** memHandles, uint32_t* memHandleNum) override;
     HcclResult GetMemDesc(const EndpointDesc endpointDesc, Hccl::LocalUbRmaBuffer* localUbRmaBuffer) const;
-    HcclResult GetParamsFromMemDesc(
-        const void* memDesc, uint32_t descLen, EndpointDesc& endpointDesc, Hccl::ExchangeUbBufferDto& dto) const;
 
     RdmaHandle GetRdmaHandle() const { return rdmaHandle_; }
 
@@ -55,7 +48,6 @@ private:
     std::unique_ptr<LocalUbRmaBufferMgr> localUbRmaBufferMgr_{};
     std::vector<RegedBufferEntry<Hccl::LocalUbRmaBuffer>> allRegisteredBuffers_;
     std::vector<std::shared_ptr<Hccl::LocalUbRmaBuffer>> handlesRecords_;
-    std::unordered_map<EndpointDesc, std::unique_ptr<RemoteUbRmaBufferMgr>> remoteUbRmaBufferMgrs_;
 };
 } // namespace hcomm
 

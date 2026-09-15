@@ -28,7 +28,7 @@
 using namespace hcomm;
 
 namespace {
-// CpuUrmaEndpoint::regedMemMgr_ 为 shared_ptr<UbRegedMemMgr>，mock 需派生自 UbRegedMemMgr
+// CpuUrmaEndpoint::localMemMgr_ 为 shared_ptr<LocalRegedMemMgr>（进程级 mgr），mock 直接赋基类指针
 class FakeRegedMemMgrForEndpointUt : public UbRegedMemMgr {
 public:
     FakeRegedMemMgrForEndpointUt() : UbRegedMemMgr(nullptr) {}
@@ -39,8 +39,6 @@ public:
     }
     HcclResult UnregisterMemory(void*) override { return HCCL_SUCCESS; }
     HcclResult MemoryExport(const EndpointDesc&, void*, void**, uint32_t*) override { return HCCL_SUCCESS; }
-    HcclResult MemoryImport(const void*, uint32_t, HcommMem*) override { return HCCL_SUCCESS; }
-    HcclResult MemoryUnimport(const void*, uint32_t) override { return HCCL_SUCCESS; }
     HcclResult GetAllMemHandles(void**, uint32_t*) override { return HCCL_SUCCESS; }
 };
 } // namespace
@@ -110,14 +108,14 @@ TEST_F(CpuUrmaEndpointTest, Ut_When_RegisterMemory_Normal_Expect_HCCL_SUCCESS)
     auto endpoint = std::make_unique<CpuUrmaEndpoint>(endpointDesc);
     EXPECT_EQ(endpoint->Init(), HCCL_SUCCESS);
 
-    endpoint->regedMemMgr_ = std::make_shared<FakeRegedMemMgrForEndpointUt>();
+    endpoint->localMemMgr_ = std::make_shared<FakeRegedMemMgrForEndpointUt>();
     HcommMem mem;
     mem.type = COMM_MEM_TYPE_HOST;
     mem.addr = reinterpret_cast<void*>(0x1000U);
     mem.size = 10;
     void* memHandle = nullptr;
-    // RegisterMemory 在 RegedMemMgr 上
-    EXPECT_EQ(endpoint->GetRegedMemMgr()->RegisterMemory(&mem, "test", &memHandle), HCCL_SUCCESS);
+    // RegisterMemory 在 LocalRegedMemMgr 上
+    EXPECT_EQ(endpoint->GetLocalRegMemMgr()->RegisterMemory(&mem, "test", &memHandle), HCCL_SUCCESS);
 }
 
 TEST_F(CpuUrmaEndpointTest, Ut_When_UnregisterMemory_Normal_Expect_HCCL_SUCCESS)
@@ -125,10 +123,10 @@ TEST_F(CpuUrmaEndpointTest, Ut_When_UnregisterMemory_Normal_Expect_HCCL_SUCCESS)
     auto endpoint = std::make_unique<CpuUrmaEndpoint>(endpointDesc);
     EXPECT_EQ(endpoint->Init(), HCCL_SUCCESS);
 
-    endpoint->regedMemMgr_ = std::make_shared<FakeRegedMemMgrForEndpointUt>();
+    endpoint->localMemMgr_ = std::make_shared<FakeRegedMemMgrForEndpointUt>();
     void* memHandle = (void*)0x12345678;
-    // UnregisterMemory 在 RegedMemMgr 上
-    EXPECT_EQ(endpoint->GetRegedMemMgr()->UnregisterMemory(memHandle), HCCL_SUCCESS);
+    // UnregisterMemory 在 LocalRegedMemMgr 上
+    EXPECT_EQ(endpoint->GetLocalRegMemMgr()->UnregisterMemory(memHandle), HCCL_SUCCESS);
 }
 
 TEST_F(CpuUrmaEndpointTest, Ut_When_ServerSocketGetListenPort_Normal_Expect_HCCL_SUCCESS)

@@ -59,19 +59,6 @@ HcclResult UbMemRegedMemMgr::MemoryExport(
     return HCCL_SUCCESS;
 }
 
-HcclResult UbMemRegedMemMgr::MemoryImport(
-    [[maybe_unused]] const void* memDesc, [[maybe_unused]] uint32_t descLen, [[maybe_unused]] HcommMem* outMem)
-{
-    HCCL_INFO("UbMemRegedMemMgr MemoryImport is not supported.");
-    return HCCL_SUCCESS;
-}
-
-HcclResult UbMemRegedMemMgr::MemoryUnimport([[maybe_unused]] const void* memDesc, [[maybe_unused]] uint32_t descLen)
-{
-    HCCL_INFO("UbMemRegedMemMgr MemoryUnimport is not supported.");
-    return HCCL_SUCCESS;
-}
-
 HcclResult
 UbMemRegedMemMgr::GetAllMemHandles([[maybe_unused]] void** memHandles, [[maybe_unused]] uint32_t* memHandleNum)
 {

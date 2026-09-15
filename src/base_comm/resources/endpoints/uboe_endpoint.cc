@@ -12,6 +12,7 @@
 #include "log.h"
 #include "hccl/hccl_res.h"
 #include "ub_reged_mem_mgr.h"
+#include "endpoint_remote_reged_mem_mgr.h"
 #include "proc_reged_mem_mgr_cache.h"
 #include "adapter_rts_common.h"
 #include "rdma_handle_manager.h"
@@ -50,17 +51,18 @@ HcclResult UboeEndpoint::ReleaseEndpointCtx()
 }
 
 HcclResult
-UboeEndpoint::AttachCache(const MemMgrCacheKey& key, const std::function<std::shared_ptr<RegedMemMgr>()>& creator)
+UboeEndpoint::AttachCache(const MemMgrCacheKey& key, const std::function<std::shared_ptr<LocalRegedMemMgr>()>& creator)
 {
     cacheKey_ = key;
     cacheKeepAlive_ = ProcRegedMemMgrCache::GetHolder();
-    // cache key 含 protocol 唯一决定具体 RegedMemMgr 类型，static_pointer_cast 转换安全
-    regedMemMgr_ = std::static_pointer_cast<UbRegedMemMgr>(cacheKeepAlive_->GetOrCreate(cacheKey_, creator));
-    if (regedMemMgr_ == nullptr) {
-        HCCL_ERROR("[UboeEndpoint][%s] regedMemMgr_ is null", __func__);
+    // 进程级 mgr 只管本端内存（跨 endpoint 复用）；远端内存由本实例的 remoteMemMgr_ 自管
+    localMemMgr_ = cacheKeepAlive_->GetOrCreate(cacheKey_, creator);
+    if (localMemMgr_ == nullptr) {
+        HCCL_ERROR("[UboeEndpoint][%s] localMemMgr_ is null", __func__);
         CHK_RET(ReleaseCache());
         return HCCL_E_INTERNAL;
     }
+    remoteMemMgr_ = std::make_shared<EndpointRemoteRegedMemMgr>(ctxHandle_, ParseUbMemDesc, CreateUbRemoteBuffer);
     return HCCL_SUCCESS;
 }
 

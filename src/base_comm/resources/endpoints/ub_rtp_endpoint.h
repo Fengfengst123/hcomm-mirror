@@ -29,7 +29,9 @@ public:
     ~UbRtpEndpoint() noexcept override;
 
     HcclResult Init() override;
-    RegedMemMgr* GetRegedMemMgr() override { return regedMemMgr_.get(); }
+    // 本端走 mgr（ub_rtp 不入进程级缓存，为实例独有），远端走实例级 mgr
+    LocalRegedMemMgr* GetLocalRegMemMgr() override { return localMemMgr_.get(); }
+    RemoteRegedMemMgr* GetRemoteRegMemMgr() override { return remoteMemMgr_.get(); }
     void* GetRdmaHandle() override { return ctxHandle_; }
     bool IsCtxHandleValid() const override;
     CommQueueContext* GetCommQueueContext() override;
@@ -40,7 +42,8 @@ private:
 
     void* ctxHandle_{nullptr};
     std::shared_ptr<EndpointCtx> endpointCtx_{};
-    std::shared_ptr<UbRegedMemMgr> regedMemMgr_{};
+    std::shared_ptr<LocalRegedMemMgr> localMemMgr_{};   // 本端 mgr（实际类型 UbRegedMemMgr，实例独有）
+    std::shared_ptr<RemoteRegedMemMgr> remoteMemMgr_{}; // 实例级远端 mgr（EndpointRemoteRegedMemMgr，Ub 适配）
     UbRtpUboeServerSocketContext serverSocketContext_{}; // no-op 监听语义
     std::unique_ptr<JettyContext> jettyContext_{nullptr};
     std::once_flag jettyContextOnce_;

@@ -9,8 +9,8 @@
  */
 
 // 被测目标: HcommMemReg / HcommMemUnreg / HcommMemExport / HcommMemImport / HcommMemUnimport C API
-//           —— 经 GetEndpointMgr().Get(handle)->GetRegedMemMgr()->xxx() 全局句柄表路径。
-// 适配重构：内存方法从 Endpoint 移至 RegedMemMgr；EndpointMgr 收编 HcommEndpointMap；
+//           —— 经 GetEndpointMgr().Get(handle)->GetLocalRegMemMgr()/GetRemoteRegMemMgr() 全局句柄表路径。
+// 适配重构：内存方法从 Endpoint 移至 Local/Remote mgr；EndpointMgr 收编 HcommEndpointMap；
 //          RoceRegedMemMgr rdmaHandle_ 经构造注入。
 
 #include <cstring>
@@ -26,24 +26,24 @@
 
 namespace {
 
-// FakeEndpoint: 持有外部传入的 RegedMemMgr, GetRegedMemMgr() 返回它。
-// 用于跨 EP 共享 / 不共享 RegedMemMgr 的 C API 层测试。
-// 内存方法已从 Endpoint 移至 RegedMemMgr，故不再在 Endpoint 上 override 内存方法。
+// FakeEndpoint: 持有外部传入的本端 mgr（进程级 LocalRegedMemMgr），GetLocalRegMemMgr() 返回它。
+// 用于跨 EP 共享 / 不共享本端 mgr 的 C API 层测试（注入场景均为 Reg/Unreg 本端操作）。
+// 内存方法已从 Endpoint 移至 mgr，故不再在 Endpoint 上 override 内存方法。
 class FakeEndpoint : public hcomm::Endpoint {
 public:
-    FakeEndpoint(const EndpointDesc& desc, std::shared_ptr<hcomm::RegedMemMgr> mgr)
+    FakeEndpoint(const EndpointDesc& desc, std::shared_ptr<hcomm::LocalRegedMemMgr> mgr)
         : hcomm::Endpoint(desc),
           mgr_(std::move(mgr))
     {}
 
     HcclResult Init() override { return HCCL_SUCCESS; }
 
-    hcomm::RegedMemMgr* GetRegedMemMgr() override { return mgr_.get(); }
+    hcomm::LocalRegedMemMgr* GetLocalRegMemMgr() override { return mgr_.get(); }
     void* GetRdmaHandle() override { return nullptr; }
     bool IsCtxHandleValid() const override { return false; }
 
 private:
-    std::shared_ptr<hcomm::RegedMemMgr> mgr_;
+    std::shared_ptr<hcomm::LocalRegedMemMgr> mgr_;
 };
 
 EndpointDesc MakeHostRoceDesc()
@@ -97,7 +97,7 @@ public:
         TestHcommCAdptBase::TearDown();
     }
 
-    EndpointHandle InjectEndpoint(std::shared_ptr<hcomm::RegedMemMgr> mgr)
+    EndpointHandle InjectEndpoint(std::shared_ptr<hcomm::LocalRegedMemMgr> mgr)
     {
         // handle 语义 = Endpoint 指针（Create 期 reinterpret_cast 注入），
         // C API 经 HcommResMgr::GetInstance().GetEndpointMgr().Get(handle) 全局句柄表校验在册，
@@ -197,8 +197,8 @@ TEST_F(TestHcommMem, Ut_TestHcommMemExport_When_OutputNullptr_Return_HCCL_E_PTR)
     EXPECT_EQ(ret, HCCL_E_PTR);
 }
 
-// 判空下沉：HcommMemImport C-API 不校验 desc 空指针，由 RoceRegedMemMgr::MemoryImport 入口
-// CHK_PTR_NULL(memDesc) 返回 HCCL_E_PTR。
+// 判空下沉：HcommMemImport C-API 不校验 desc 空指针。FakeEndpoint 未 override GetRemoteRegMemMgr()，
+// 基类返回 nullptr，由 C API 层 CHK_PTR_NULL(remoteMgr) 返回 HCCL_E_PTR。
 TEST_F(TestHcommMem, Ut_TestHcommMemImport_When_InvalidDesc_Return_HCCL_E_PTR)
 {
     CreateValidEndpoint();
@@ -207,7 +207,7 @@ TEST_F(TestHcommMem, Ut_TestHcommMemImport_When_InvalidDesc_Return_HCCL_E_PTR)
     EXPECT_EQ(ret, HCCL_E_PTR);
 }
 
-// 判空下沉：HcommMemUnimport 同理经 RegedMemMgr::MemoryUnimport 入口判空返回 HCCL_E_PTR
+// 判空下沉：HcommMemUnimport 同理由 C API 层 CHK_PTR_NULL(remoteMgr) 返回 HCCL_E_PTR
 TEST_F(TestHcommMem, Ut_TestHcommMemUnimport_When_InvalidParams_Return_HCCL_E_PTR)
 {
     CreateValidEndpoint();
@@ -230,9 +230,9 @@ TEST_F(TestHcommMem, Ut_TestHcommMemGetAllMemHandles_When_Nullptr_Return_HCCL_E_
     EXPECT_EQ(ret, HCCL_E_PTR);
 }
 
-// ============ 内存注册/注销/导入导出 经 RegedMemMgr 路径 ============
+// ============ 内存注册/注销/导入导出 经 mgr 路径 ============
 
-// TC-HcommMemReg-001 / TC-HcommMemReg-007: 经 GetRegedMemMgr()->RegisterMemory 路径
+// TC-HcommMemReg-001 / TC-HcommMemReg-007: 经 GetLocalRegMemMgr()->RegisterMemory 路径
 // 用例1: 单 EP 同 buffer 多次注册, 第二次走 alias 复用
 TEST_F(TestHcommMem, MemReg_When_SingleEP_SameBufferTwice_Expect_BothSuccessAndHandlesDiffer)
 {

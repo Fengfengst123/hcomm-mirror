@@ -248,7 +248,7 @@ void AicpuTsHccsChannel::TransportDeInit()
 HcclResult AicpuTsHccsChannel::EnableP2P()
 {
     CHK_PTR_NULL(localEpPtr_);
-    auto* mgr = static_cast<HccsRegedMemMgr*>(localEpPtr_->GetRegedMemMgr());
+    auto* mgr = localEpPtr_->GetHccsRegedMemMgr();
     CHK_PTR_NULL(mgr);
     CHK_RET(mgr->MemoryEnableP2P(localEpPtr_->GetEndpointDesc(), remoteEp_));
     HCCL_INFO("[AicpuTsHccsChannel][%s] finish EnableP2P", __func__);
@@ -258,7 +258,7 @@ HcclResult AicpuTsHccsChannel::EnableP2P()
 void AicpuTsHccsChannel::DisableP2P()
 {
     if (localEpPtr_ != nullptr) {
-        auto* mgr = static_cast<HccsRegedMemMgr*>(localEpPtr_->GetRegedMemMgr());
+        auto* mgr = localEpPtr_->GetHccsRegedMemMgr();
         if (mgr != nullptr) {
             (void)mgr->MemoryDisableP2P(localEpPtr_->GetEndpointDesc(), remoteEp_);
         }
@@ -282,8 +282,7 @@ HcclResult AicpuTsHccsChannel::EnableMemAccess()
         CHK_RET(socket_->Recv(&remoteGrantInfo, sizeof(HcommMemGrantInfo)));
     }
     CHK_PTR_NULL(localEpPtr_);
-    // MemoryGrant 由 HccsRegedMemMgr 承载；本 channel 只服务 HCCS endpoint，直接 static_cast
-    auto* mgr = static_cast<HccsRegedMemMgr*>(localEpPtr_->GetRegedMemMgr());
+    auto* mgr = localEpPtr_->GetHccsRegedMemMgr();
     CHK_PTR_NULL(mgr);
     CHK_RET(mgr->MemoryGrant(&remoteGrantInfo));
     // need to wait peer grant for me end, not need to check value, just make sure grant process end
@@ -304,7 +303,7 @@ HcclResult AicpuTsHccsChannel::EnableMemAccess()
 void AicpuTsHccsChannel::DisableMemAccess() const
 {
     if (localEpPtr_ != nullptr) {
-        auto* mgr = static_cast<HccsRegedMemMgr*>(localEpPtr_->GetRegedMemMgr());
+        auto* mgr = localEpPtr_->GetHccsRegedMemMgr();
         if (mgr != nullptr) {
             (void)mgr->MemoryCloseRemoteIpc();
         }
@@ -346,7 +345,7 @@ HcclResult AicpuTsHccsChannel::Init()
 HcclResult AicpuTsHccsChannel::GetRemoteMems(uint32_t* memNum, CommMem** remoteMem, [[maybe_unused]] char*** memInfos)
 {
     remoteIpcRmaBufferVec_.clear();
-    auto* mgr = static_cast<HccsRegedMemMgr*>(localEpPtr_->GetRegedMemMgr());
+    auto* mgr = localEpPtr_->GetHccsRegedMemMgr();
     CHK_PTR_NULL(mgr);
     CHK_RET(mgr->GetRemoteIpcRmaBuffer(remoteIpcRmaBufferVec_));
     *remoteMem = remoteIpcRmaBufferVec_.data();
@@ -401,7 +400,7 @@ HcclResult AicpuTsHccsChannel::BuildHcclChannelHccsRes(HcclChannelHccsRes& chann
     CHK_RET(hrtGetDeviceIndexByPhyId(localEp_.loc.device.devPhyId, deviceLogicId));
     channelHccsRes.localDeviceLogicId = static_cast<s32>(deviceLogicId);
 
-    auto* mgr = static_cast<HccsRegedMemMgr*>(localEpPtr_->GetRegedMemMgr());
+    auto* mgr = localEpPtr_->GetHccsRegedMemMgr();
     CHK_PTR_NULL(mgr);
 
     remoteIpcRmaBufferVecEx_.clear();

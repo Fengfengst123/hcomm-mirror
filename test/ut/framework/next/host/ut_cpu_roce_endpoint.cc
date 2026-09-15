@@ -189,8 +189,8 @@ TEST_F(CpuRoceEndpointTest, Ut_When_Register_Memory_Fail_Expect_Return_HCCL_E_PT
     mem.type = COMM_MEM_TYPE_DEVICE;
     mem.addr = malloc(10);
     mem.size = 10;
-    // 内存方法从 Endpoint 移至 RegedMemMgr；经 GetRegedMemMgr()->RegisterMemory 路径访问。
-    auto* regedMemMgr = endpoint->GetRegedMemMgr();
+    // 内存方法从 Endpoint 移至 mgr；本端操作经 GetLocalRegMemMgr()->RegisterMemory 路径访问。
+    auto* regedMemMgr = endpoint->GetLocalRegMemMgr();
     ASSERT_NE(regedMemMgr, nullptr);
     ret = regedMemMgr->RegisterMemory(&mem, "HcclBuffer", nullptr);
     EXPECT_EQ(ret, HCCL_E_PTR);
@@ -229,8 +229,8 @@ TEST_F(CpuRoceEndpointTest, Ut_When_Unregister_Memory_Fail_Expect_Return_HCCL_E_
     mem.size = 10;
     void* memHandle{nullptr};
     void* mrHandle{nullptr};
-    // UnregisterMemory 在 RegedMemMgr 上
-    auto* regedMemMgr = endpoint->GetRegedMemMgr();
+    // UnregisterMemory 在 LocalRegedMemMgr 上
+    auto* regedMemMgr = endpoint->GetLocalRegMemMgr();
     ASSERT_NE(regedMemMgr, nullptr);
     ret = regedMemMgr->UnregisterMemory(memHandle);
     EXPECT_EQ(ret, HCCL_E_PTR);

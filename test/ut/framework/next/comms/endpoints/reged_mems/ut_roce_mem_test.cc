@@ -75,19 +75,6 @@ static uint64_t GetAllocRef(RoceRegedMemMgr& mgr, const RoceRegedMemMgr::MemKey&
     return it == mgr.allocToMrMap_.end() ? 0u : it->second.ref;
 }
 
-TEST_F(RoceRegedMemMgrTest, Ut_GetParamsFromMemDesc_When_DescLenTooSmall_Expect_Return_Error)
-{
-    std::shared_ptr<RoceRegedMemMgr> roceRegedMemMgrPtr = std::make_shared<RoceRegedMemMgr>(nullptr);
-    EndpointDesc endpointDesc;
-    Hccl::ExchangeRdmaBufferDto dto;
-
-    char buffer[10];
-    uint32_t descLen = 10;
-
-    HcclResult ret = roceRegedMemMgrPtr->GetParamsFromMemDesc(buffer, descLen, endpointDesc, dto);
-    EXPECT_EQ(HCCL_E_INTERNAL, ret);
-}
-
 // 父+子集注册 → 先解注册子(alias) → 再解注册父（靠 AddressRange 归一到同一 alloc）
 TEST_F(RoceRegedMemMgrTest, ut_RoceRegedMemMgr_When_ParentChild_Expect_UnregisterChildFirst)
 {
@@ -192,21 +179,6 @@ TEST_F(RoceRegedMemMgrTest, Ut_MemoryExport_When_MemHandleUnregistered_Expect_No
     EXPECT_EQ(roceRegedMemMgr.MemoryExport(endpointDesc, memHandle, &memDesc, &memDescLen), HCCL_E_NOT_FOUND);
     EXPECT_EQ(memDesc, nullptr);
     EXPECT_EQ(memDescLen, 0U);
-}
-
-TEST_F(RoceRegedMemMgrTest, Ut_GetParamsFromMemDesc_When_DescLenEqualSize_Expect_Return_Success)
-{
-    std::shared_ptr<RoceRegedMemMgr> roceRegedMemMgrPtr = std::make_shared<RoceRegedMemMgr>(nullptr);
-    EndpointDesc endpointDesc;
-    Hccl::ExchangeRdmaBufferDto dto;
-
-    char buffer[sizeof(EndpointDesc)];
-    uint32_t descLen = sizeof(EndpointDesc);
-
-    MOCKER_CPP_VIRTUAL(dto, &Hccl::ExchangeRdmaBufferDto::Deserialize).stubs();
-
-    HcclResult ret = roceRegedMemMgrPtr->GetParamsFromMemDesc(buffer, descLen, endpointDesc, dto);
-    EXPECT_EQ(HCCL_SUCCESS, ret);
 }
 
 // 父+子集注册 → 先解注册父（本 handle 直接删账）→ 再解注册子
