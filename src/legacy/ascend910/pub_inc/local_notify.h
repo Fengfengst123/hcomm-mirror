@@ -40,7 +40,7 @@ public:
     HcclResult SetNotifyData(HcclSignalInfo& notifyInfo);
 
     // 使用时需判空
-    inline HcclRtNotify ptr() { return notifyPtr; }
+    inline HcclRtNotify ptr() const { return notifyPtr; }
 
     // 获取offset
     HcclResult GetNotifyOffset(u64& notifyOffset);

@@ -768,7 +768,7 @@ HcclResult ThreadMgr::HcclDedicatedThreadAcquire(
     return HCCL_SUCCESS;
 }
 
-HcclResult ThreadMgr::ResetLocalNotify(LocalNotify* notify, uint32_t notifyIdx, uint64_t threadHandle)
+HcclResult ThreadMgr::ResetLocalNotify(const LocalNotify* notify, uint32_t notifyIdx, uint64_t threadHandle)
 {
     if (notify == nullptr) {
         return HCCL_SUCCESS;

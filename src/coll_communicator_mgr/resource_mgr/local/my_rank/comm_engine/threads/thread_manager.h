@@ -86,7 +86,7 @@ private:
     HcclUnfoldThreadAcquire(HcclDedicatedThreadType useType, uint32_t notifyNumPerThread, ThreadHandle* thread);
     HcclResult
     HcclDeviceOrderThreadCreate(HcclDedicatedThreadType useType, uint32_t notifyNumPerThread, ThreadHandle* thread);
-    HcclResult ResetLocalNotify(LocalNotify* notify, uint32_t notifyIdx, uint64_t threadHandle);
+    HcclResult ResetLocalNotify(const LocalNotify* notify, uint32_t notifyIdx, uint64_t threadHandle);
     HcclResult ResetNotifiesInThread(Thread* thread);
     HcclResult ResetThreadPoolLocalNotifies();        // 普通线程池 threads_
     HcclResult ResetMainThreadLocalNotifies();        // 主线程 mainThread_
