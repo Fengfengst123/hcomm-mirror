@@ -130,6 +130,20 @@ MyRank::MyRank(
 MyRank::~MyRank()
 {
     HCCL_INFO("[MyRank][~MyRank] MyRank deinit, rankId_[%u], devLogicId_[%d]", rankId_, devLogicId_);
+    bool isDiffDevId = false;
+    int32_t threadDevId = INVALID_INT;
+    if (HcclDeviceRefresh(threadDevId) != HCCL_SUCCESS) {
+        HCCL_ERROR("[%s] HcclDeviceRefresh failed, cleanup in current device context", __func__);
+    } else {
+        HCCL_INFO("[%s] curDeviceLogicId[%d], threadDevId[%d]", __func__, devLogicId_, threadDevId);
+        if (devLogicId_ != threadDevId) {
+            if (hrtSetDevice(devLogicId_) == HCCL_SUCCESS) {
+                isDiffDevId = true;
+            } else {
+                HCCL_ERROR("[%s] hrtSetDevice(%d) failed", __func__, devLogicId_);
+            }
+        }
+    }
     // 共享 Jetty Channel 不归 rankPairMgr_ 管理，需在 rankPairMgr_ 析构前独立清理
     (void)SharedJettyChannelPool::GetInstance().DestroyAllByMyRank(this);
     // 先清空反查索引，避免 rankPairMgr_ 析构 EndpointPair 时仍持有指向其的裸指针；
@@ -165,16 +179,6 @@ MyRank::~MyRank()
     } cleanupGuard(*this);
 
     if (ccuInsHandle_ != 0 || assignedCcuInsHandle_ != 0) { // 内部清理CCU资源，关闭CCU通道
-        // 刷新并获取当前线程的 DeviceId
-        int32_t threadDevId = INVALID_INT;
-        CHK_RET_NULL(HcclDeviceRefresh(threadDevId));
-        HCCL_INFO("[%s] curDeviceLogicId[%d], threadDevId[%d]", __func__, devLogicId_, threadDevId);
-        // 先切换为目标 curDeviceLogicId
-        bool isDiffDevId = false;
-        if (devLogicId_ != threadDevId) {
-            CHK_RET_NULL(hrtSetDevice(devLogicId_));
-            isDiffDevId = true;
-        }
         // 销毁通信域自有的 ccuInstance（QueryCcuIns 创建）
         if (ccuInsHandle_ != 0) {
             CHK_PRT(static_cast<HcclResult>(HcommCcuInsDestroy(ccuInsHandle_)));
@@ -183,11 +187,11 @@ MyRank::~MyRank()
         if (assignedCcuInsHandle_ != 0 && assignedCcuInsHandle_ != ccuInsHandle_) {
             CHK_PRT(static_cast<HcclResult>(HcommCcuInsDestroy(assignedCcuInsHandle_)));
         }
-        // 切换回原来的 DeviceId
-        if (isDiffDevId) {
-            CHK_RET_NULL(hrtSetDevice(threadDevId));
-            CHK_PRT(HcclDeviceRefresh(threadDevId));
-        }
+    }
+    // 切换回原来的 DeviceId
+    if (isDiffDevId) {
+        CHK_PRT(hrtSetDevice(threadDevId));
+        CHK_PRT(HcclDeviceRefresh(threadDevId));
     }
 }
 
