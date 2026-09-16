@@ -18,16 +18,21 @@
 extern "C" {
 #endif
 
+struct AsyncReqResult {
+    int reqResult;
+    unsigned int interfaceOpcode;
+};
+
 /**
  * @ingroup libcommon
  * @brief check if async request is done, will free req_handle if it done
- * @param req_handle [IN] async request handle
- * @param req_result [OUT] async request return value
+ * @param reqHandle [IN] async request handle
+ * @param reqResult [OUT] async request result, see struct AsyncReqResult
  * @retval #zero Success
  * @retval #OTHERS_EAGAIN try again
  * @retval #non-zero Failure(exclude OTHERS_EAGAIN)
  */
-HCCP_ATTRI_VISI_DEF int RaGetAsyncReqResult(void *reqHandle, int *reqResult);
+HCCP_ATTRI_VISI_DEF int RaGetAsyncReqResult(void *reqHandle, struct AsyncReqResult *reqResult);
 
 /**
  * @ingroup libsocket

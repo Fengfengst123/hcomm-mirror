@@ -29,9 +29,9 @@ int RaCtxQpImport(void* ctx_handle, struct QpImportInfoT* qp_info, void** rem_qp
 
 int RaCtxQpUnimport(void* ctx_handle, void* rem_qp_handle) { return 0; }
 
-int RaGetAsyncReqResult(void* reqHandle, int* reqResult)
+int RaGetAsyncReqResult(void* reqHandle, struct AsyncReqResult* reqResult)
 {
-    *reqResult = 0;
+    reqResult->reqResult = 0;
     return 0;
 }
 

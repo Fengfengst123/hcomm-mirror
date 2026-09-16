@@ -1556,3 +1556,5 @@ void TcRaSetDebugConfig()
 
     return;
 }
+
+void TcHccpOpCtxQpCreateSync() { EXPECT_INT_EQ(HCCP_OP_CTX_QP_CREATE, RA_RS_CTX_QP_CREATE); }

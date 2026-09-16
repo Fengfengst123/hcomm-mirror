@@ -290,7 +290,7 @@ HcclResult DlRaFunction::DlRaFunctionSocketInit()
     if (dlRaSocketRecvAsync == nullptr) {
         HCCL_WARNING("dlRaSocketRecvAsync is nullptr, can not use RaSocketRecvAsync");
     }
-    dlRaGetAsyncReqResult = (int (*)(void*, int*))HcclDlsym(handle_, "RaGetAsyncReqResult");
+    dlRaGetAsyncReqResult = (int (*)(void*, struct AsyncReqResult*))HcclDlsym(handle_, "RaGetAsyncReqResult");
     if (dlRaGetAsyncReqResult == nullptr) {
         HCCL_WARNING("dlRaGetAsyncReqResult is nullptr, can not use RaGetAsyncReqResult");
     }

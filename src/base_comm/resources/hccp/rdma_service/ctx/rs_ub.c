@@ -1647,6 +1647,7 @@ STATIC int RsUbCtxDrvJettyCreate(struct RsCtxJettyCb *jettyCb, struct RsCtxJfcCb
 {
     urma_jetty_cfg_t jettyInitCfg = {0};
     urma_jfs_cfg_t jfsCfg = {0};
+    int ret = 0;
 
     jettyInitCfg.id = jettyCb->jettyId;
     jettyInitCfg.flag = jettyCb->flag;
@@ -1658,15 +1659,11 @@ STATIC int RsUbCtxDrvJettyCreate(struct RsCtxJettyCb *jettyCb, struct RsCtxJfcCb
 
     if (jettyCb->jettyMode == JETTY_MODE_URMA_NORMAL) {
         jettyCb->jetty = RsUrmaCreateJetty(jettyCb->devCb->urmaCtx, &jettyInitCfg);
-        if (jettyCb->jetty == NULL) {
-            hccp_err("rs_urma_create_jetty failed, errno=%d", errno);
-        }
+        RS_URMA_PTR_TO_ERRNO(jettyCb->jetty, ret);
+        CHK_PRT_RETURN(ret != 0, hccp_err("rs_urma_create_jetty failed, errno=%d", errno), ret);
     } else {
-        RsUbCtxExtJettyCreate(jettyCb, &jettyInitCfg);
-    }
-
-    if (jettyCb->jetty == NULL) {
-        return -ENOMEM;
+        ret = RsUbCtxExtJettyCreate(jettyCb, &jettyInitCfg);
+        CHK_PRT_RETURN(jettyCb->jetty == NULL, hccp_err("RsUbCtxExtJettyCreate failed, ret=%d", ret), ret);
     }
 
     jettyCb->state = RS_JETTY_STATE_CREATED;

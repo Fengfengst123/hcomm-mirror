@@ -15,7 +15,7 @@
 #include "ra_hdc_async.h"
 #include "hccp_async.h"
 
-HCCP_ATTRI_VISI_DEF int RaGetAsyncReqResult(void *reqHandle, int *reqResult)
+HCCP_ATTRI_VISI_DEF int RaGetAsyncReqResult(void *reqHandle, struct AsyncReqResult *reqResult)
 {
     struct RaRequestHandle *reqHandleTmp = NULL;
 
@@ -27,7 +27,8 @@ HCCP_ATTRI_VISI_DEF int RaGetAsyncReqResult(void *reqHandle, int *reqResult)
         return ConverReturnCode(OTHERS, -EAGAIN);
     }
 
-    *reqResult = ConverReturnCode(reqHandleTmp->opHandle->opModule, reqHandleTmp->opRet);
+    reqResult->reqResult = ConverReturnCode(reqHandleTmp->opHandle->opModule, reqHandleTmp->opRet);
+    reqResult->interfaceOpcode = (unsigned int)reqHandleTmp->opHandle->opcode;
     HdcAsyncDelResponse(reqHandleTmp);
     return 0;
 }

@@ -16,6 +16,7 @@
 #include "dl_hal_function.h"
 #include "ra_rs_comm.h"
 #include "hccp_common.h"
+#include "hccp_async.h"
 #include "ra_async.h"
 #include "ra.h"
 #include "ra_hdc.h"
@@ -36,7 +37,7 @@ extern int RaSocketSendAsync(
     const void* fdHandle, const void* data, unsigned long long size, unsigned long long* sentSize, void** reqHandle);
 extern int RaSocketRecvAsync(
     const void* fdHandle, void* data, unsigned long long size, unsigned long long* receivedSize, void** reqHandle);
-extern int RaGetAsyncReqResult(void* reqHandle, int* reqResult);
+extern int RaGetAsyncReqResult(void* reqHandle, struct AsyncReqResult* reqResult);
 extern int RaSocketBatchConnectAsync(struct SocketConnectInfoT conn[], unsigned int num, void** reqHandle);
 extern int RaSocketListenStartAsync(struct SocketListenInfoT conn[], unsigned int num, void** reqHandle);
 extern int RaSocketListenStopAsync(struct SocketListenInfoT conn[], unsigned int num, void** reqHandle);
@@ -248,7 +249,7 @@ void TcRaGetAsyncReqResult()
 {
     struct RaRequestHandle* reqHandle = malloc(sizeof(struct RaRequestHandle));
     struct RaAsyncOpHandle opHandle = {0};
-    int reqResult = 0;
+    struct AsyncReqResult reqResult = {0, 0};
 
     reqHandle->isDone = 1;
     reqHandle->phyId = 0;

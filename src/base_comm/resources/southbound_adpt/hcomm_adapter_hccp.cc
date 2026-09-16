@@ -9,6 +9,7 @@
  */
 
 #include "cast_utils.h"
+#include "adapter_error_manager_pub.h"
 #include "hcomm_adapter_hccp.h"
 
 #include <algorithm>
@@ -116,7 +117,7 @@ RequestResult HccpGetAsyncReqResult(RequestHandle& reqHandle)
         return RequestResult::INVALID_PARA;
     }
 
-    int reqResult = 0;
+    struct AsyncReqResult reqResult = {0, 0};
     int32_t ret = RaGetAsyncReqResult(ReinterpretAs<void*>(reqHandle), &reqResult);
     // 返回 OTHERS_EAGAIN 代表查询到异步任务未完成，需要重新查询，此时保留handle
     if (ret == OTHERS_EAGAIN) {
@@ -135,15 +136,19 @@ RequestResult HccpGetAsyncReqResult(RequestHandle& reqHandle)
     RequestHandle tmpReqHandle = reqHandle;
     // 返回码为 0 时，reqResult为异步任务完成结果，0代表成功，其他值代表失败
     // SOCK_EAGAIN 为 socket 类执行结果，代表 socket 接口失败需要重试
-    if (reqResult == SOCK_EAGAIN) {
+    if (reqResult.reqResult == SOCK_EAGAIN) {
         return RequestResult::SOCK_E_AGAIN;
     }
 
-    if (reqResult != 0) {
+    if (reqResult.reqResult != 0) {
+        RPT_ENV_ERR(
+            reqResult.interfaceOpcode == HCCP_OP_CTX_QP_CREATE && IS_JETTY_RESOURCE_EXHAUSTED(reqResult.reqResult),
+            "EI0007", std::vector<std::string>({"resource_type", "resource_info"}),
+            std::vector<std::string>({"jetty", "CreateJettyAsync"}));
         HCCL_ERROR(
             "[%s] failed, the asynchronous request "
             "error[%d], reqhandle[%llx].",
-            __func__, reqResult, tmpReqHandle);
+            __func__, reqResult.reqResult, tmpReqHandle);
         return RequestResult::ASYNC_REQUEST_FAILED;
     }
 
@@ -235,6 +240,9 @@ HccpUbCreateJetty(const CtxHandle ctxhandle, const HrtRaUbCreateJettyParam& in, 
             "sqDepth[%u] sq.buffVa[%llx] sq.buffSize[%u].",
             __func__, ctxhandle, attr.ub.jettyId, in.jettyMode.Describe().c_str(), attr.sqDepth,
             attr.ub.extMode.sq.buffVa, attr.ub.extMode.sq.buffSize);
+        RPT_ENV_ERR(
+            IS_JETTY_RESOURCE_EXHAUSTED(ret), "EI0007", std::vector<std::string>({"resource_type", "resource_info"}),
+            std::vector<std::string>({"jetty", "CreateJetty"}));
         return HcclResult::HCCL_E_NETWORK;
     }
 

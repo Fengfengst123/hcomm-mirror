@@ -426,7 +426,7 @@ int RaGetDevBaseAttr(void* ctx_handle, struct DevBaseAttr* attr) { return 0; }
 
 int RaCtxUpdateCi(void* qp_handle, uint16_t ci) { return 0; }
 
-int RaGetAsyncReqResult(void* req_handle, int* req_result) { return 0; }
+int RaGetAsyncReqResult(void* req_handle, struct AsyncReqResult* req_result) { return 0; }
 
 int RaSocketBatchConnectAsync(struct SocketConnectInfoT conn[], unsigned int num, void** req_handle)
 {

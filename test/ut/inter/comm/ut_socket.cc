@@ -31,9 +31,9 @@
 using namespace std;
 using namespace hccl;
 
-int stub_SocketRaGetAsyncReqResult(void* reqHandle, int* reqResult)
+int stub_SocketRaGetAsyncReqResult(void* reqHandle, struct AsyncReqResult* reqResult)
 {
-    *reqResult = 0;
+    reqResult->reqResult = 0;
     return 0;
 }
 
@@ -124,10 +124,10 @@ TEST_F(SocketTest, Ut_SendAsync_When_RaSocketSuccess_Expect_Success)
     ret = tempSocket.SendAsync(data, 2, &sentSize, &handle);
     EXPECT_EQ(ret, HCCL_SUCCESS);
 
-    int sendResultOut = SOCK_EAGAIN;
+    struct AsyncReqResult sendResultOut = {SOCK_EAGAIN, 0};
     MOCKER(stub_SocketRaGetAsyncReqResult)
         .stubs()
-        .with(mockcpp::any(), outBoundP(&sendResultOut))
+        .with(mockcpp::any(), outBoundP(&sendResultOut, sizeof(sendResultOut)))
         .will(returnValue(OTHERS_EAGAIN))
         .then(returnValue(0));
 
@@ -195,10 +195,10 @@ TEST_F(SocketTest, Ut_RecvAsync_When_RaSocketSuccess_Expect_Success)
     ret = tempSocket.RecvAsync(data, 2, &recvSize, &handle);
     EXPECT_EQ(ret, HCCL_SUCCESS);
 
-    int recvResultOut = SOCK_EAGAIN;
+    struct AsyncReqResult recvResultOut = {SOCK_EAGAIN, 0};
     MOCKER(stub_SocketRaGetAsyncReqResult)
         .stubs()
-        .with(mockcpp::any(), outBoundP(&recvResultOut))
+        .with(mockcpp::any(), outBoundP(&recvResultOut, sizeof(recvResultOut)))
         .will(returnValue(OTHERS_EAGAIN))
         .then(returnValue(0));
 

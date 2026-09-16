@@ -19,6 +19,7 @@
 #include "hccl/base.h"
 #include "network/hccp.h"
 #include "network/hccp_ping.h"
+#include "network/hccp_async.h"
 #include "private_types.h"
 #include "hccl_common.h"
 
@@ -92,7 +93,7 @@ public:
         const FdHandle fdHandle, void* data, unsigned long long size, unsigned long long* receivedSize,
         void** reqHandle)>
         dlRaSocketRecvAsync;
-    std::function<int(void* reqHandle, int* reqResult)> dlRaGetAsyncReqResult;
+    std::function<int(void* reqHandle, struct AsyncReqResult* reqResult)> dlRaGetAsyncReqResult;
 
     std::function<int(unsigned int enable)> dlRaSocketSetWhiteListStatus;
     std::function<int(unsigned int* enable)> dlRaSocketGetWhiteListStatus;

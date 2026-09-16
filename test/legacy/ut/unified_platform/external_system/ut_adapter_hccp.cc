@@ -813,8 +813,11 @@ TEST_F(AdapterHccpTest, RaGetAsyncReqResult_return_error)
 
 TEST_F(AdapterHccpTest, RaGetAsyncReqResult_return_zero_result_error)
 {
-    int fakeResult = 12345;
-    MOCKER(RaGetAsyncReqResult).stubs().with(mockcpp::any(), outBoundP(&fakeResult)).will(returnValue(0));
+    struct AsyncReqResult fakeResult = {12345, 0};
+    MOCKER(RaGetAsyncReqResult)
+        .stubs()
+        .with(mockcpp::any(), outBoundP(&fakeResult, sizeof(fakeResult)))
+        .will(returnValue(0));
     RequestHandle reqHandle = 12;
     EXPECT_THROW(HrtRaGetAsyncReqResult(reqHandle), NetworkApiException);
     GlobalMockObject::verify();
@@ -1242,7 +1245,7 @@ TEST_F(AdapterHccpTest, ut_HrtRaUbCreateJetty_When_QosSet_Expect_PriorityMapped)
 
 TEST_F(AdapterHccpTest, ut_HrtRaSetTpAttrAsync_When_RaSetOk_Expect_Success)
 {
-    int reqResult = 0;
+    struct AsyncReqResult reqResult = {0, 0};
     MOCKER(RaGetAsyncReqResult)
         .stubs()
         .with(mockcpp::any(), outBoundP(&reqResult, sizeof(reqResult)))
@@ -1267,7 +1270,7 @@ TEST_F(AdapterHccpTest, ut_HrtRaSetTpAttrAsync_When_RaSetFails_Expect_Throw)
 
 TEST_F(AdapterHccpTest, ut_HrtRaSetTpAttrAsync_When_AsyncUnexpected_Expect_Internal)
 {
-    int reqResult = SOCK_EAGAIN;
+    struct AsyncReqResult reqResult = {SOCK_EAGAIN, 0};
     MOCKER(RaGetAsyncReqResult)
         .stubs()
         .with(mockcpp::any(), outBoundP(&reqResult, sizeof(reqResult)))
@@ -1287,7 +1290,7 @@ TEST_F(AdapterHccpTest, ut_HrtRaGetTpAttrAsync_When_VersionOk_Expect_Success)
         .stubs()
         .with(mockcpp::any(), mockcpp::any(), outBoundP(&tpAttrVersion, sizeof(tpAttrVersion)))
         .will(returnValue(0));
-    int reqResult = 0;
+    struct AsyncReqResult reqResult = {0, 0};
     MOCKER(RaGetAsyncReqResult)
         .stubs()
         .with(mockcpp::any(), outBoundP(&reqResult, sizeof(reqResult)))

@@ -24,7 +24,7 @@ static inline bool RsIsCcuJetty(int jettyMode)
     return (jettyMode == JETTY_MODE_CCU) || (jettyMode == JETTY_MODE_CCU_TA_CACHE);
 }
 
-void RsUbCtxExtJettyCreate(struct RsCtxJettyCb *jettyCb, urma_jetty_cfg_t *jettyCfg);
+int RsUbCtxExtJettyCreate(struct RsCtxJettyCb *jettyCb, urma_jetty_cfg_t *jettyCfg);
 void RsUbCtxExtJettyDelete(struct RsCtxJettyCb *jettyCb);
 void RsUbVaMunmapBatch(struct RsCtxJettyCb **jettyCbArr, unsigned int num);
 void RsUbFreeJettyIdBatch(struct RsCtxJettyCb **jettyCbArr, unsigned int num);

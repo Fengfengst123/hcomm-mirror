@@ -61,7 +61,7 @@ extern void RsUrmaFreeDeviceList(urma_device_t** deviceList);
 extern void RsUrmaFreeEidList(urma_eid_info_t* eidList);
 extern int RsUrmaGetEidByIp(const urma_context_t* ctx, const urma_net_addr_t* netAddr, urma_eid_t* eid);
 extern int RsUrmaGetIpByEid(const urma_context_t* ctx, const urma_eid_t* eid, urma_net_addr_t* netAddr);
-extern void RsUbCtxExtJettyCreate(struct RsCtxJettyCb* jettyCb, urma_jetty_cfg_t* jettyCfg);
+extern int RsUbCtxExtJettyCreate(struct RsCtxJettyCb* jettyCb, urma_jetty_cfg_t* jettyCfg);
 extern void RsUbCtxExtJettyDelete(struct RsCtxJettyCb* jettyCb);
 extern int RsUbCtxRegJettyDb(struct RsCtxJettyCb* jettyCb, struct udma_u_jetty_info* jettyInfo);
 extern int RsInitRscbCfg(struct rs_cb* rscb, struct RsInitConfig* cfg);

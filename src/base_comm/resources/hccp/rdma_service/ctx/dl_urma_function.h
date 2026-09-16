@@ -11,14 +11,31 @@
 #ifndef DL_URMA_FUNCTION_H
 #define DL_URMA_FUNCTION_H
 
+#include <errno.h>
 #include <ccan/list.h>
 #include <urma_types.h>
+#include <urma_opcode.h>
+#include "ra_rs_err.h"
 
 #ifdef CA_CONFIG_LLT
 #define STATIC
 #else
 #define STATIC static
 #endif
+
+#define RS_URMA_RET_TO_ERRNO(ret)                                                                                      \
+    do {                                                                                                               \
+        if ((ret) == -URMA_FAIL) {                                                                                     \
+            (ret) = (errno != 0) ? -errno : -EOPENSRC;                                                                 \
+        }                                                                                                              \
+    } while (0)
+
+#define RS_URMA_PTR_TO_ERRNO(ptr, ret)                                                                                 \
+    do {                                                                                                               \
+        if ((ptr) == NULL) {                                                                                           \
+            (ret) = (errno != 0) ? -errno : -EOPENSRC;                                                                 \
+        }                                                                                                              \
+    } while (0)
 
 struct RsUrmaOps {
     urma_status_t (*rsUrmaInit)(urma_init_attr_t *conf);

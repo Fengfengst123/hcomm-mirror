@@ -1914,11 +1914,16 @@ s32 hrtRaSocketRecvAsync(const FdHandle fdHandle, void* data, u64 size, u64* rec
 
 s32 hrtRaSocketGetAsyncReqResult(void* reqHandle, s32* reqResult)
 {
+    struct AsyncReqResult asyncReqResult = {0, 0};
+    s32 ret = 0;
+
     if (DlRaFunction::GetInstance().dlRaGetAsyncReqResult == nullptr) {
         HCCL_WARNING("this package does not support hrtRaSocketGetAsyncReqResult, please change new package");
         return OTHERS_ENOTSUPP;
     }
-    return DlRaFunction::GetInstance().dlRaGetAsyncReqResult(reqHandle, reqResult);
+    ret = DlRaFunction::GetInstance().dlRaGetAsyncReqResult(reqHandle, &asyncReqResult);
+    *reqResult = asyncReqResult.reqResult;
+    return ret;
 }
 
 HcclResult hrtGetHostIf(vector<pair<string, HcclIpAddress>>& hostIfs, u32 devPhyId)

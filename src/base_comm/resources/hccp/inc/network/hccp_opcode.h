@@ -31,6 +31,8 @@ extern "C" {
 #define ROCE_EAGAIN 128101   /* EAGAIN: try again */
 #define ROCE_EINVAL 128103   /* EINVAL: invalid argument */
 #define ROCE_ENOENT 228100   /* ENOENT: means mr async not success right now, revoke the function again */
+#define ROCE_ENOSPC 228103   /* ENOSPC: roce module has ENOSPC error */
+#define ROCE_ENOSR 228106    /* ENOSR: roce module has ENOSR error */
 #define ROCE_ENOMEM 328100   /* ENOMEM: roce module has ENOMEM error */
 #define ROCE_EOPENSRC 528101 /* EOPENSRC: open source verbs error */
 #define ROCE_ENOTSUPP 528102 /* ENOTSUPP: operation not supported */
@@ -54,6 +56,10 @@ extern "C" {
 #define OTHERS_EAGAIN 128301 /* EAGAIN: try again */
 #define OTHERS_EUSERS 128308
 #define OTHERS_ENOTSUPP 528302 /* ENOTSUPP: operation not supported */
+
+#define HCCP_OP_CTX_QP_CREATE 60
+
+#define IS_JETTY_RESOURCE_EXHAUSTED(ret) ((ret) == ROCE_ENOMEM || (ret) == ROCE_ENOSPC || (ret) == ROCE_ENOSR)
 
 enum HccnCfgKey {
     HCCN_CFG_UDP_PORT_MODE = 0,

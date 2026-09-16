@@ -206,6 +206,7 @@ struct ErrcodeInfo gErrcodeInfoList[] = {
     {-ENOSPC, 2, 3},
     {-EPROTONOSUPPORT, 2, 4},
     {-EFILEOPER, 2, 5},
+    {-ENOSR, 2, 6},
     {-ENOMEM, 3, 0},
     {-EFAULT, 3, 1},
     {-EEXIST, 3, 2},

@@ -242,6 +242,7 @@ TEST_M(RdmaAgent, TcRaGetQpLbValue);
 TEST_M(RdmaAgent, TcRaGetQpHyperFeature);
 TEST_M(RdmaAgent, TcRaPeerGetQpHyperFeature);
 TEST_M(RdmaAgent, TcRaSetDebugConfig);
+TEST_M(RdmaAgent, TcHccpOpCtxQpCreateSync);
 TEST_M(RdmaAgent, TcRaHdcRecvHandleSendPktUnsuccess);
 TEST_M(RdmaAgent, TcRaHdcGetEidByIp);
 TEST_M(RdmaAgent, TcRaRsGetEidByIp);

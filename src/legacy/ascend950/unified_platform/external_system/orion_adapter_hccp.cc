@@ -1857,6 +1857,9 @@ HrtRaUbJettyCreatedOutParam HrtRaUbCreateJetty(RdmaHandle handle, const HrtRaUbC
     void* qpHandle = nullptr;
     s32 ret = RaCtxQpCreate(handle, &attr, &info, &qpHandle);
     if (ret != 0) {
+        RPT_ENV_ERR(
+            IS_JETTY_RESOURCE_EXHAUSTED(ret), "EI0007", std::vector<std::string>({"resource_type", "resource_info"}),
+            std::vector<std::string>({"jetty", "CreateJetty"}));
         string msg = StringFormat("ubCreateJetty failed, rdmaHandle=%p,", handle);
         MACRO_THROW(NetworkApiException, msg);
     }
@@ -2255,7 +2258,7 @@ ReqHandleResult HrtRaGetAsyncReqResult(RequestHandle& reqHandle)
         return ReqHandleResult::INVALID_PARA;
     }
 
-    int reqResult = 0;
+    struct AsyncReqResult reqResult = {0, 0};
     s32 ret = RaGetAsyncReqResult(ReinterpretAs<void*>(reqHandle), &reqResult);
     // 返回 OTHERS_EAGAIN 代表查询到异步任务未完成，需要重新查询，此时保留handle
     if (ret == OTHERS_EAGAIN) {
@@ -2275,16 +2278,20 @@ ReqHandleResult HrtRaGetAsyncReqResult(RequestHandle& reqHandle)
     reqHandle = 0;
     // 返回码为 0 时，reqResult为异步任务完成结果，0代表成功，其他值代表失败
     // SOCK_EAGAIN 为 socket 类执行结果，代表 socket 接口失败需要重试
-    if (reqResult == SOCK_EAGAIN) {
+    if (reqResult.reqResult == SOCK_EAGAIN) {
         return ReqHandleResult::SOCK_E_AGAIN;
     }
 
-    if (reqResult != 0) {
+    if (reqResult.reqResult != 0) {
+        RPT_ENV_ERR(
+            reqResult.interfaceOpcode == HCCP_OP_CTX_QP_CREATE && IS_JETTY_RESOURCE_EXHAUSTED(reqResult.reqResult),
+            "EI0007", std::vector<std::string>({"resource_type", "resource_info"}),
+            std::vector<std::string>({"jetty", "CreateJettyAsync"}));
         MACRO_THROW(
             NetworkApiException, StringFormat(
                                      "[%s] failed, the asynchronous request "
                                      "error[%d], reqhandle[%llu].",
-                                     __func__, reqResult, tmpReqHandle));
+                                     __func__, reqResult.reqResult, tmpReqHandle));
     }
 
     return ReqHandleResult::COMPLETED;

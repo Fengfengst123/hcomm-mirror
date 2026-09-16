@@ -23,6 +23,7 @@
 #include "acl/acl_rt.h"
 #include "sim_log.h"
 #include "hccp_common.h"
+#include "hccp_async.h"
 #include "sim_ip_address.h"
 #include "runtime/base.h"
 #include "store_sim_comm_memory_manager.h"
@@ -522,7 +523,7 @@ int RaSetTcpRecvCallback(const void* socketHandle, const void* callback)
 }
 
 /////////////////////////////////async/////////////////////////////
-int RaGetAsyncReqResult(void* reqHandle, int* reqResult)
+int RaGetAsyncReqResult(void* reqHandle, struct AsyncReqResult* reqResult)
 {
     (void)reqHandle;
     (void)reqResult;
