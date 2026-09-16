@@ -235,7 +235,7 @@ void EnvRdmaConfig::ParseMultiQpSrcPortConfig()
 
 HcclResult EnvRdmaConfig::ParseLineToIpPairAndPortPart(
     const std::string& lineInfo, u32 lineCnt, const std::string& lineAvator, std::string& ipPairKey,
-    std::string& portPart)
+    std::string& portPart) const
 {
     auto eqPos = lineInfo.find('=');
     CHK_PRT_RET(
@@ -287,7 +287,7 @@ HcclResult EnvRdmaConfig::ParseLineToIpPairAndPortPart(
 }
 
 HcclResult EnvRdmaConfig::ParseSrcPortsFromPortPart(
-    const std::string& portPart, u32 lineCnt, const std::string& lineAvator, std::vector<std::uint16_t>& ports)
+    const std::string& portPart, u32 lineCnt, const std::string& lineAvator, std::vector<std::uint16_t>& ports) const
 {
     std::size_t start = 0;
     while (true) {

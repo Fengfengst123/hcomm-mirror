@@ -3671,7 +3671,7 @@ CommunicatorImpl::AllocAndRegKFCWorkSpace(uint64_t size, const std::string& memT
     return HCCL_SUCCESS;
 }
 
-HcclResult CommunicatorImpl::CleanupKFCWorkSpaceOnFailure(DpuShmem& shmem, HcclResult ret)
+HcclResult CommunicatorImpl::CleanupKFCWorkSpaceOnFailure(DpuShmem& shmem, HcclResult ret) const
 {
     HCCL_ERROR(
         "[CommunicatorImpl::%s] HrtHalHostRegister failed, ret: %d, connect type: %ld", __func__, ret,

@@ -223,7 +223,6 @@ public:
     HcclResult GetDevMemWorkSpace(const std::string& memTag, uint64_t* size, void** addr, bool* newCreated);
     HcclResult CreateWorkspaceBuf(const char* memTag, uint64_t* size, bool* newCreated);
     HcclResult AllocAndRegKFCWorkSpace(uint64_t size, const std::string& memTag);
-    HcclResult CleanupKFCWorkSpaceOnFailure(DpuShmem& shmem, HcclResult ret);
     HcclResult GetKFCWorkSpaceVA(const std::string& memTag, const uint64_t* size, void** addr, bool* newCreated);
     HcclResult DestroyKFCWorkSpaceVA();
 
@@ -537,6 +536,7 @@ private:
     HcclResult InitAndLaunchDpuKernel();
     HcclResult InitAndLaunchAicpuKernel(); // 保存dpu taskexception共享内存到aicpu全局map中
     HcclResult DestroyDpuTaskexpShmemInDevice();
+    HcclResult CleanupKFCWorkSpaceOnFailure(DpuShmem& shmem, HcclResult ret) const;
 
     HcclResult Init(const CommParams& commParams, std::unique_ptr<RankGraph>& inputRankGraph, DevId inputDevLogicId);
     HcclResult Init(

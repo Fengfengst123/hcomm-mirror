@@ -162,9 +162,10 @@ private:
     HcclResult ParseConfigContent(std::ifstream& inFile, MultiQpSrcPortConfig& config);
     HcclResult ParseLineToIpPairAndPortPart(
         const std::string& lineInfo, u32 lineCnt, const std::string& lineAvator, std::string& ipPairKey,
-        std::string& portPart);
+        std::string& portPart) const;
     HcclResult ParseSrcPortsFromPortPart(
-        const std::string& portPart, u32 lineCnt, const std::string& lineAvator, std::vector<std::uint16_t>& ports);
+        const std::string& portPart, u32 lineCnt, const std::string& lineAvator,
+        std::vector<std::uint16_t>& ports) const;
     void LogMultiQpSrcPortConfig() const;
     CfgField<std::string> qpPortConfigPath{
         "HCCL_RDMA_QP_PORT_CONFIG_PATH", "", Str2T<std::string>, CheckFilePath, SetRealPath};

@@ -1162,7 +1162,7 @@ static HcclResult CreateSharedJettyChannelsForGroup(
 }
 
 static HcclResult AcquireSharedJettyGroupChannels(
-    const HcclComm comm, CommEngine engine, const std::vector<HcclChannelDesc>& channelDescs,
+    const HcclComm comm, const CommEngine engine, const std::vector<HcclChannelDesc>& channelDescs,
     const SharedJettyRemoteGroup& group, const EndpointHandle epHandle, const std::string& commTag,
     const std::string& sharedTag, hccl::MyRank* myRank, const EndpointDesc& localEp, ChannelHandle* channels,
     std::vector<bool>* outIsNewChannel)
