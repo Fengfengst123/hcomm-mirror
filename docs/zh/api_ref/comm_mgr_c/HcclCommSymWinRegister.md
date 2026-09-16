@@ -27,8 +27,13 @@
 当前对称内存支持如下场景：
 
 <!-- npu="950" id6 -->
-- Ascend 950PR/Ascend 950DT的URMA场景：用户将已申请的Device内存注册为对称内存窗口。该场景下，HcclCommSymWinRegister仅完成本端对称内存窗口登记；跨rank的内存注册、memHandle交换和远端内存信息更新在相关UB/URMA通信通道创建时完成。使用集合通信接口时，该流程由集合通信算子内部触发。在远端内存信息更新完成前，不应调用[HcclSymWinGetRemoteAddr](HcclSymWinGetRemoteAddr.md)获取远端地址。
-- Ascend 950PR/Ascend 950DT的UB Memory场景：用户在申请虚拟内存和物理内存并完成映射后，将虚拟内存注册为对称内存。底层以addr所属的完整allocation建立共享映射，对外窗口范围仍为用户传入的[addr, addr+size)，并通过提前预留相同大小、相同布局的虚拟地址来实现对称内存。
+- 针对Ascend 950PR/Ascend 950DT：
+
+  - 通信引擎为AIV，通信协议为URMA：用户将已申请的Device内存注册为对称内存窗口，该场景需要配合[HcclTeamCreate](../comm_opdev/control_plane_api/comms_domain_resource_mgmt/HcclTeamCreate.md)接口使用。
+
+  - 通信引擎为AICPU，通信协议为URMA：用户将已申请的Device内存注册为对称内存窗口。该场景下，[HcclCommSymWinRegister](HcclCommSymWinRegister.md)仅完成本端对称内存窗口登记；跨rank的内存注册、memHandle交换和远端内存信息更新在相关UB/URMA通信通道创建时完成。使用集合通信接口时，该流程由集合通信算子内部触发。在远端内存信息更新完成前，不应调用[HcclSymWinGetRemoteAddr](HcclSymWinGetRemoteAddr.md)获取远端地址。
+
+  - 通信引擎为AIV，通信协议为UB Memory：用户在申请虚拟内存和物理内存并完成映射后，将虚拟内存注册为对称内存。该场景通过提前预留相同大小、相同布局的虚拟地址来实现对称内存。
 <!-- end id6 -->
 <!-- npu="A3" id7 -->
 - Atlas A3 训练系列产品/Atlas A3 推理系列产品的HCCS场景：用户在申请虚拟内存和物理内存并完成映射后，将虚拟内存注册为对称内存。该场景通过提前预留相同大小、相同布局的虚拟地址来实现对称内存。
@@ -74,7 +79,7 @@ HcclResult HcclCommSymWinRegister(HcclComm comm, void *addr, uint64_t size, Hccl
 ### addr说明
 
 <!-- npu="950" id15 -->
-- Ascend 950PR/Ascend 950DT的URMA场景下，该地址为已申请的Device内存地址，内存需要在调用[HcclCommSymWinDeregister](HcclCommSymWinDeregister.md)解注册前保持有效。
+- Ascend 950PR/Ascend 950DT的URMA场景下，该地址需为预留虚拟地址并完成物理内存映射的Device内存地址，建议通过[HcommMemAlloc](HcommMemAlloc.md)接口申请。内存需要在调用[HcclCommSymWinDeregister](HcclCommSymWinDeregister.md)解注册前保持有效。
 - Ascend 950PR/Ascend 950DT的UB Memory场景下，该地址为预留并完成物理内存映射的虚拟地址。
 <!-- end id15 -->
 <!-- npu="A3" id16 -->
@@ -85,7 +90,7 @@ HcclResult HcclCommSymWinRegister(HcclComm comm, void *addr, uint64_t size, Hccl
 
 <!-- npu="950" id17 -->
 - Ascend 950PR/Ascend 950DT的URMA场景下，size需要大于0，且所有rank调用该接口时输入的size需要保持一致。
-- Ascend 950PR/Ascend 950DT的UB Memory场景下，size需要大于0，且size不能超过addr所属allocation的大小。实际注册的对称内存窗口大小等于addr所属allocation的大小。
+- Ascend 950PR/Ascend 950DT的UB Memory场景下，size需要大于0，且`[addr, addr+size)`必须完整位于已映射的物理内存范围内。
 <!-- end id17 -->
 <!-- npu="A3" id18 -->
 - Atlas A3 训练系列产品/Atlas A3 推理系列产品的HCCS场景下，0 < size <= HcclCommConfig.hcclSymWinMaxMemSizePerRank，并且size不能超过“与addr做映射的物理内存”大小（即调用aclrtMallocPhysical接口申请的Device物理内存）。对称内存注册按物理内存的大小对齐，实际注册的对称内存窗口大小等于“与addr做映射的物理内存”的大小。
@@ -99,10 +104,12 @@ HcclResult HcclCommSymWinRegister(HcclComm comm, void *addr, uint64_t size, Hccl
 
 <!-- npu="950" id11 -->
 - 针对Ascend 950PR/Ascend 950DT：
-  - 支持URMA和UB Memory场景。
-  - URMA场景当前支持以下集合通信算子：ReduceScatter、AllReduce、AllGather、Broadcast、AlltoAll、AlltoAllVC，依赖集合通信算子内部创建UB/URMA通信通道完成对称内存资源注册和交换，且不要求对称组网。
-  - UB Memory场景底层以addr所属的完整allocation建立共享映射，对外窗口范围为[addr, addr+size)。同一通信域内所有LSA WorldTeam成员调用本接口时，各成员的注册调用次序及每次注册对应的allocation大小必须保持一致（例如所有成员的第1次调用注册相同大小的allocation、第2次调用同样注册相同大小的allocation，依此类推），否则注册失败。
-  - UB Memory场景的注册包含LSA WorldTeam成员间的集合操作，若集合操作完成后成员本地执行失败（如本地映射失败、资源不足），本通信域的UB Memory对称内存将进入不可用状态，后续注册直接返回错误；此时需解注册已注册的窗口并销毁重建通信域。
+  - 通信引擎为AIV时，仅支持URMA场景和UB Memory场景。
+  - 通信引擎为AICPU时，仅支持URMA场景。
+  - 通信引擎为AICPU的URMA场景下，仅支持集合通信算子ReduceScatter、AllReduce、AllGather、Broadcast、AlltoAll、AlltoAllVC。
+  - URMA场景不要求对称组网，所有参与rank输入的size参数需要保持一致。
+  - UB Memory场景下，需确保同一通信域内所有LSA WorldTeam成员同时调用本接口。各成员的注册调用次序及每次注册的输入地址所映射的物理内存大小必须保持一致，否则注册失败。
+  - UB Memory场景的注册包含LSA WorldTeam成员间的集合操作。若集合操作完成后成员本地执行失败（如本地映射失败、资源不足），本通信域的UB Memory对称内存将进入不可用状态，后续注册直接返回错误；此时需解注册已注册的窗口并销毁、重建通信域。
 <!-- end id11 -->
 <!-- npu="A3" id12 -->
 - 针对Atlas A3 训练系列产品/Atlas A3 推理系列产品：
@@ -110,11 +117,10 @@ HcclResult HcclCommSymWinRegister(HcclComm comm, void *addr, uint64_t size, Hccl
   - 仅支持对称组网，即每个Server内卡数相同的场景。
   - 仅支持超节点内AI Server间使用HCCS链路进行SDMA通信的场景，不支持使用RoCE进行RDMA通信的场景（即不支持设置环境变量HCCL_INTER_HCCS_DISABLE为"TRUE"，单机场景该环境变量无效）。
   - 仅支持集合通信算子AllGather、ReduceScatter、AllReduce、AlltoAll。
+  - 仅支持集合通信算子。
+  - 需确保通信域中的所有rank同时调用本接口。
   - 所有rank的输入地址映射的物理内存大小一致（对称内存注册按物理内存的大小对齐）。
 <!-- end id12 -->
-- 该接口仅支持通信算子展开模式为AI CPU的场景。
-- 需确保通信域中的所有rank同时调用该注册接口。
-- 所有rank调用该接口时，URMA场景下输入的size参数需要保持一致；UB Memory场景下各rank对应次序注册的allocation大小需要保持一致。
 - 使用对称内存功能时，算子的输入、输出内存必须调用此接口注册为对称内存。
 - 调用该接口注册的内存需要使用[HcclCommSymWinDeregister](HcclCommSymWinDeregister.md)接口解注册。
 
@@ -123,7 +129,13 @@ HcclResult HcclCommSymWinRegister(HcclComm comm, void *addr, uint64_t size, Hccl
 <!-- npu="950" id9 -->
 ### Ascend 950PR/Ascend 950DT URMA场景
 
+如需根据本地地址查询窗口及偏移，请参见[HcclCommSymWinGet](HcclCommSymWinGet.md)；如需在URMA场景下显式获取远端地址，请参见[HcclSymWinGetRemoteAddr](HcclSymWinGetRemoteAddr.md)。
+
 ```c
+// 返回值检查宏
+#define HCCLCHECK(cmd) do { HcclResult ret = (cmd); if (ret != HCCL_SUCCESS) { return ret; } } while (0)
+#define ACLCHECK(cmd) do { aclError ret = (cmd); if (ret != ACL_SUCCESS) { return (HcclResult)ret; } } while (0)
+
 // 创建并初始化通信域配置项
 HcclCommConfig config;
 HcclCommConfigInit(&config);
@@ -148,19 +160,18 @@ size_t memSize = sendBytes + recvBytes;
 
 // 申请Device内存
 void *devPtr = nullptr;
-ACLCHECK(aclrtMalloc(&devPtr, memSize, ACL_MEM_MALLOC_HUGE_FIRST));
+HCCLCHECK(static_cast<HcclResult>(HcommMemAlloc(&devPtr, memSize)));
 
 HcclCommSymWindow symWin;
-// 注册对称内存
+// 注册对称内存。返回的symWin用于标识该窗口，并在使用完成后进行解注册
 HCCLCHECK(HcclCommSymWinRegister(hcclComm, devPtr, memSize, &symWin, 1));
 
 // 使用对称内存
 void *sendBuff = devPtr;
 void *recvBuff = static_cast<char*>(sendBuff) + sendBytes;
 
-// 调用集合通信算子。
-// Ascend 950PR/Ascend 950DT的URMA场景下，HcclCommSymWinRegister仅完成对称内存窗口登记；
-// HcclAllGather内部创建UB/URMA通信通道时，会通过HcclChannelAcquire相关流程完成内存注册、memHandle交换和远端内存信息更新。
+// 集合通信算子通过sendBuff和recvBuff自动查找对应的对称内存窗口及窗口内偏移，
+// 并在内部使用对端内存信息，用户无需显式调用HcclCommSymWinGet或HcclSymWinGetRemoteAddr
 HCCLCHECK(HcclAllGather(sendBuff, recvBuff, sendBytes, HCCL_DATA_TYPE_INT8, hcclComm, stream));
 
 // 阻塞等待任务流中的集合通信任务执行完成
@@ -170,7 +181,7 @@ ACLCHECK(aclrtSynchronizeStream(stream));
 HCCLCHECK(HcclCommSymWinDeregister(symWin));
 
 // 释放内存
-ACLCHECK(aclrtFree(devPtr));
+HCCLCHECK(static_cast<HcclResult>(HcommMemFree(devPtr)));
 
 // 销毁任务流
 ACLCHECK(aclrtDestroyStream(stream));
@@ -184,6 +195,10 @@ HCCLCHECK(HcclCommDestroy(hcclComm));
 ### Atlas A3 训练系列产品/Atlas A3 推理系列产品HCCS场景
 
 ```c
+// 返回值检查宏
+#define HCCLCHECK(cmd) do { HcclResult ret = (cmd); if (ret != HCCL_SUCCESS) { return ret; } } while (0)
+#define ACLCHECK(cmd) do { aclError ret = (cmd); if (ret != ACL_SUCCESS) { return (HcclResult)ret; } } while (0)
+
 // 创建并初始化通信域配置项
 HcclCommConfig config;
 HcclCommConfigInit(&config);
