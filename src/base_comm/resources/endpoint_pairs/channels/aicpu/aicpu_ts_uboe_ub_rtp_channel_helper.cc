@@ -36,8 +36,8 @@ AicpuTsUboeUbRtpChannelHelper::AicpuTsUboeUbRtpChannelHelper(
 
 AicpuTsUboeUbRtpChannelHelper::~AicpuTsUboeUbRtpChannelHelper()
 {
-    if (channelDesc_.socket == nullptr && socket_ != nullptr) {
-        SocketMgr::GetInstance(devicePhyId_).PutSocket(socketConfig_, socket_);
+    if (channelDesc_.socket == nullptr && socket_ != nullptr && socketConfig_ != nullptr) {
+        SocketMgr::GetInstance(devicePhyId_).DestroySocket(*socketConfig_);
         socket_ = nullptr;
     }
 }
@@ -168,7 +168,8 @@ HcclResult AicpuTsUboeUbRtpChannelHelper::BuildSocket()
         = (channelDesc_.channelName != nullptr) ? std::string(channelDesc_.channelName) : "AUTOMATIC_SOCKET_TAG";
     bool noRankId = true;
     Hccl::SocketConfig socketConfig = Hccl::SocketConfig(linkData, socketTag, noRankId);
-    CHK_RET(SocketMgr::GetInstance(devicePhyId_).GetSocket(socketConfig, socket_));
+    SaveSocketConfig(socketConfig);
+    CHK_RET(SocketMgr::GetInstance(devicePhyId_).GetSocket(*socketConfig_, socket_));
     isRecvFirst_ = socket_->GetRole() == Hccl::SocketRole::CLIENT ? true : false;
 
     return HCCL_SUCCESS;

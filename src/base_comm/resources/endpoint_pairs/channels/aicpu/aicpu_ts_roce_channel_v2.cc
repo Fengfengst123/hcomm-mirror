@@ -206,8 +206,8 @@ AicpuTsRoceChannelV2::AicpuTsRoceChannelV2(
 AicpuTsRoceChannelV2::~AicpuTsRoceChannelV2()
 {
     FreeDeviceMemories();
-    if (channelDesc_.socket == nullptr && socket_ != nullptr) {
-        SocketMgr::GetInstance(devicePhyId_).PutSocket(socketConfig_, socket_);
+    if (channelDesc_.socket == nullptr && socket_ != nullptr && socketConfig_ != nullptr) {
+        SocketMgr::GetInstance(devicePhyId_).DestroySocket(*socketConfig_);
         socket_ = nullptr;
     }
 }
@@ -267,7 +267,8 @@ HcclResult AicpuTsRoceChannelV2::BuildSocket()
         = (channelDesc_.role != HCOMM_SOCKET_ROLE_RESERVED) ?
               Hccl::SocketConfig(linkData, port, socketTag, channelDesc_.role == HCOMM_SOCKET_ROLE_SERVER) :
               Hccl::SocketConfig(linkData, port, socketTag);
-    CHK_RET(SocketMgr::GetInstance(devicePhyId_).GetSocket(socketConfig, socket_));
+    SaveSocketConfig(socketConfig);
+    CHK_RET(SocketMgr::GetInstance(devicePhyId_).GetSocket(*socketConfig_, socket_));
     HCCL_INFO("[AicpuTsRoceChannelV2::%s] SUCCESS. port[%u].", __func__, port);
     return HCCL_SUCCESS;
 }

@@ -30,8 +30,8 @@ AicpuTsP2pChannel::AicpuTsP2pChannel(EndpointHandle endpointHandle, const HcommC
 
 AicpuTsP2pChannel::~AicpuTsP2pChannel()
 {
-    if (channelDesc_.socket == nullptr && socket_ != nullptr) {
-        SocketMgr::GetInstance(devicePhyId_).PutSocket(socketConfig_, socket_);
+    if (channelDesc_.socket == nullptr && socket_ != nullptr && socketConfig_ != nullptr) {
+        SocketMgr::GetInstance(devicePhyId_).DestroySocket(*socketConfig_);
         socket_ = nullptr;
     }
 }
@@ -154,7 +154,8 @@ HcclResult AicpuTsP2pChannel::BuildSocket()
         = (channelDesc_.channelName != nullptr) ? std::string(channelDesc_.channelName) : "AUTOMATIC_SOCKET_TAG";
     bool noRankId = true;
     Hccl::SocketConfig socketConfig = Hccl::SocketConfig(linkData, socketTag, noRankId);
-    CHK_RET(SocketMgr::GetInstance(devicePhyId_).GetSocket(socketConfig, socket_));
+    SaveSocketConfig(socketConfig);
+    CHK_RET(SocketMgr::GetInstance(devicePhyId_).GetSocket(*socketConfig_, socket_));
 
     return HCCL_SUCCESS;
 }

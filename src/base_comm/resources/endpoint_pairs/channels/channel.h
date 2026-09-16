@@ -31,6 +31,7 @@
 #include "ip_address.h"
 #include "topo_common_types.h"
 #include "virtual_topo.h"
+#include "socket_config.h"
 
 class AicpuTsChannelHelper;
 
