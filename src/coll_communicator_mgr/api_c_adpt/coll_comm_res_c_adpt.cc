@@ -1360,7 +1360,7 @@ static HcclResult WaitForSharedJettyChannelsReady(
     uint32_t localRank = (collComm != nullptr) ? collComm->GetMyRankId() : 0;
     hccl::MyRank* myRank = (collComm != nullptr) ? collComm->GetMyRank() : nullptr;
 
-    auto printChannelErrors = [&](int64_t elapsed) {
+    auto printChannelErrors = [&channelNum, &channels, &myRank, &channelDescFinals, &localRank](int64_t elapsed) {
         std::vector<int32_t> internalStatus(channelNum, 0);
         (void)hcomm::ChannelProcess::ChannelGetStatus(channels, channelNum, internalStatus.data());
         std::vector<Hccl::TlsStatus> tlsStatusList(channelNum, Hccl::TlsStatus::UNKNOWN);
