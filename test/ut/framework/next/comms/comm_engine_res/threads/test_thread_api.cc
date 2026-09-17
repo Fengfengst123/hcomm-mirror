@@ -390,6 +390,58 @@ TEST_F(TestHcclThread, UT_TestHcommThreadAllocWithStream_When_WithInvalidEngine_
     ThreadHandle thread;
     HcommResult ret = HcommThreadAllocWithStream(COMM_ENGINE_AICPU_TS, rtStream, 3, &thread);
     EXPECT_EQ(ret, HCCL_E_PARA);
+    delete stream;
+}
+
+TEST_F(TestHcclThread, UT_TestHcommThreadAllocWithStream_When_EngineAicpu_expect_return_HCCL_E_PARA)
+{
+    bool isDeviceSide{false};
+    MOCKER(GetRunSideIsDevice).stubs().with(outBound(isDeviceSide)).will(returnValue(HCCL_SUCCESS));
+    Stream* stream = new (std::nothrow) Stream(hccl::StreamType::STREAM_TYPE_ONLINE);
+    void* rtStream = stream->ptr();
+    ThreadHandle thread;
+    HcommResult ret = HcommThreadAllocWithStream(COMM_ENGINE_AICPU, rtStream, 3, &thread);
+    EXPECT_EQ(ret, HCCL_E_PARA);
+    delete stream;
+}
+
+TEST_F(TestHcclThread, UT_TestHcommThreadAllocWithStream_When_EngineAiv_expect_return_HCCL_E_PARA)
+{
+    bool isDeviceSide{false};
+    MOCKER(GetRunSideIsDevice).stubs().with(outBound(isDeviceSide)).will(returnValue(HCCL_SUCCESS));
+    Stream* stream = new (std::nothrow) Stream(hccl::StreamType::STREAM_TYPE_ONLINE);
+    void* rtStream = stream->ptr();
+    ThreadHandle thread;
+    HcommResult ret = HcommThreadAllocWithStream(COMM_ENGINE_AIV, rtStream, 3, &thread);
+    EXPECT_EQ(ret, HCCL_E_PARA);
+    delete stream;
+}
+
+TEST_F(TestHcclThread, UT_TestHcommThreadAllocWithStream_When_EngineCcu_expect_return_HCCL_E_PARA)
+{
+    bool isDeviceSide{false};
+    MOCKER(GetRunSideIsDevice).stubs().with(outBound(isDeviceSide)).will(returnValue(HCCL_SUCCESS));
+    Stream* stream = new (std::nothrow) Stream(hccl::StreamType::STREAM_TYPE_ONLINE);
+    void* rtStream = stream->ptr();
+    ThreadHandle thread;
+    HcommResult ret = HcommThreadAllocWithStream(COMM_ENGINE_CCU, rtStream, 3, &thread);
+    EXPECT_EQ(ret, HCCL_E_PARA);
+    delete stream;
+}
+
+TEST_F(TestHcclThread, UT_TestHcommThreadAllocWithStream_When_EngineCpu_expect_return_HcclSuccess)
+{
+    bool isDeviceSide{false};
+    MOCKER(GetRunSideIsDevice).stubs().with(outBound(isDeviceSide)).will(returnValue(HCCL_SUCCESS));
+    Stream* stream = new (std::nothrow) Stream(hccl::StreamType::STREAM_TYPE_ONLINE);
+    void* rtStream = stream->ptr();
+    ThreadHandle thread;
+    HcommResult ret = HcommThreadAllocWithStream(COMM_ENGINE_CPU, rtStream, 3, &thread);
+    EXPECT_EQ(ret, HCCL_SUCCESS);
+
+    HcommResult freeRet = HcommThreadFreeWithStream(&thread, 1);
+    EXPECT_EQ(freeRet, HCCL_SUCCESS);
+    delete stream;
 }
 
 TEST_F(TestHcclThread, UT_TestHcommThreadAllocWithStream_When_NotifyInitFailed_expect_return_HCCL_E_RUNTIME)

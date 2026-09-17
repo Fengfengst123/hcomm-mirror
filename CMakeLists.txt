@@ -249,6 +249,7 @@ elseif(BUILD_OPEN_PROJECT)
 
     set(HCOMM_PKG_HEAD
         pkg_inc/hcomm/hcomm_primitives_expt.h
+        pkg_inc/hcomm/hcomm_res_expt.h
         pkg_inc/hcomm/hcomm_res_entity_defs.h
         pkg_inc/hcomm/hcomm_team_entity_defs.h
         pkg_inc/hcomm/hcomm_exception.h

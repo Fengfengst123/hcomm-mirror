@@ -402,6 +402,7 @@ global:
     HcommThreadNotifyWaitOnThreadWithDefaultTimeout;
     HcommThreadResAcquireTimeOut;
     HcommThreadResGetInfo;
+    HcommThreadAllocWithStream;
     HcommWriteNbi;
     HcommWriteNbiOnThread;
     HcommWriteOnThread;

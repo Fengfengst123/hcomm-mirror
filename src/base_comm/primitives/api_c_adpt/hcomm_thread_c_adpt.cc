@@ -164,9 +164,18 @@ HcommResult HcommThreadFree(const ThreadHandle* threads, uint32_t threadNum)
     return hccl::FreeThreads(threads, threadNum, AicpuTsChannelHelper::GetBinHandle());
 }
 
-HcommResult HcommThreadAllocWithStream(CommEngine engine, rtStream_t stream, uint32_t notifyNum, ThreadHandle* thread)
+HcommResult HcommThreadAllocWithStream(CommEngine engine, aclrtStream stream, uint32_t notifyNum, ThreadHandle* thread)
 {
     CHK_PTR_NULL(thread);
+
+    // 仅支持 CPU、CPU_TS
+    if (engine != COMM_ENGINE_CPU && engine != COMM_ENGINE_CPU_TS) {
+        HCCL_ERROR(
+            "[%s] commEngine[%s] not supported, only COMM_ENGINE_CPU and COMM_ENGINE_CPU_TS are supported", __func__,
+            GetEnumToString(GetCommEngineStatusStrMap(), engine).c_str());
+        return HCCL_E_PARA;
+    }
+
     hccl::NotifyLoadType notifyLoadType;
     CHK_RET(CommHostEngineToNotifyLoadType(engine, notifyLoadType));
     std::shared_ptr<hccl::Thread> handle;

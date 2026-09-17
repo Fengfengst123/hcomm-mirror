@@ -88,6 +88,7 @@
     </file_info>
     <file_info value="include" copy_type="source" src_path="hcomm/pkg_inc/hcomm" dst_path="$(TARGET_ENV)/pkg_inc/hcomm" install_path="$(TARGET_ENV)/pkg_inc/hcomm" install_type="devel" install_mod="440">
         <file value="hcomm_primitives_expt.h"/>
+        <file value="hcomm_res_expt.h"/>
         <file value="hcomm_res_entity_defs.h"/>
         <file value="hcomm_team_entity_defs.h"/>
         <file value="hcomm_exception.h"/>

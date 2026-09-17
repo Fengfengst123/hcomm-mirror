@@ -12,6 +12,7 @@
 #define HCOMM_C_ADPT_H
 
 #include "hcomm_res.h"
+#include "hcomm/hcomm_res_expt.h"
 #include "mem_host_pub.h"
 #include "hccl_diag.h"
 
@@ -105,8 +106,6 @@ HcommChannelGetRemoteMems(ChannelHandle channelHandle, uint32_t* memNum, CommMem
 HcommResult HcommChannelKernelLaunch(
     ChannelHandle* channelHandles, ChannelHandle* hostChannelHandles, uint32_t listNum, const std::string& commTag,
     aclrtBinHandle binHandle);
-
-HcommResult HcommThreadAllocWithStream(CommEngine engine, rtStream_t stream, uint32_t notifyNum, ThreadHandle* thread);
 
 HcommResult HcommThreadAllocWithConfig(
     CommEngine engine, uint32_t threadNum, ThreadType type, const ThreadConfig* config, ThreadHandle* threads);
