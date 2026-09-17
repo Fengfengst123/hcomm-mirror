@@ -20,6 +20,15 @@
 
 #define MAX_LINE_LEN 4096
 
+/* 解析过程中的共享状态 */
+typedef struct {
+    TagEntry* tags;       /* 标签数组 */
+    unsigned int maxTags; /* 标签数组容量 */
+    unsigned int cnt;     /* 已写入标签数 */
+    unsigned int dropped; /* 因超限被丢弃的标签数 */
+    int dc;               /* 当前嵌套深度 */
+} ParseCtx;
+
 /* ─── 工具函数 ─── */
 
 const char* TagFindAttr(const TagEntry* e, const char* name)
@@ -109,8 +118,8 @@ static void ExtractAttrs(const char* tag, TagEntry* e)
 }
 
 /* ─── 内部辅助：处理一个开标签 ─── */
-/* 返回 tagEnd+1（下一位置），通过指针更新 cnt / dc */
-static char* HandleOpenTag(char* t, char* tagEnd, TagEntry* tags, unsigned int maxTags, unsigned int* cnt, int* dc)
+/* 返回 tagEnd+1（下一位置），通过 ctx 更新解析状态 */
+static char* HandleOpenTag(char* t, char* tagEnd, ParseCtx* ctx)
 {
     char name[MAX_TAG_NAME_LEN];
     GetTagName(t, name, sizeof(name));
@@ -119,30 +128,31 @@ static char* HandleOpenTag(char* t, char* tagEnd, TagEntry* tags, unsigned int m
     }
 
     bool selfClose = IsSelfClose(t, tagEnd);
-    if (*cnt < maxTags) {
-        TagEntry* e = &tags[*cnt];
+    if (ctx->cnt < ctx->maxTags) {
+        TagEntry* e = &ctx->tags[ctx->cnt];
         (void)memset_s(e, sizeof(*e), 0, sizeof(*e));
         if (strcpy_s(e->tagName, sizeof(e->tagName), name) != 0) {
             TOPO_ERR("HandleOpenTag: strcpy_s failed, name=%s", name);
             return NULL;
         }
         e->isSelfClose = selfClose;
-        e->depth = *dc;
+        e->depth = ctx->dc;
         ExtractAttrs(t, e);
-        (*cnt)++;
+        ctx->cnt++;
+    } else {
+        ctx->dropped++;
     }
 
     if (!selfClose) {
-        (*dc)++;
+        ctx->dc++;
     }
     return tagEnd + 1;
 }
 
 /* ─── 逐行解析 XML，识别标签 ─── */
 /* 逐行解析 XML，识别标签 */
-static TopoAddrResult ParseXmlLines(FILE* fp, TagEntry* tags, unsigned int maxTags, unsigned int* cnt)
+static TopoAddrResult ParseXmlLines(FILE* fp, ParseCtx* ctx)
 {
-    int dc = 0;
     char line[MAX_LINE_LEN];
     while (fgets(line, sizeof(line), fp) != NULL) {
         char* t = line;
@@ -156,19 +166,20 @@ static TopoAddrResult ParseXmlLines(FILE* fp, TagEntry* tags, unsigned int maxTa
 
             char* tagEnd = strchr(t, '>');
             if (tagEnd == NULL) {
+                TOPO_WARN("ParseXmlLines: invalid line without '>': %s", line);
                 break;
             }
 
             if (t[0] == '<' && t[1] == '/') {
-                if (dc > 0) {
-                    dc--;
+                if (ctx->dc > 0) {
+                    ctx->dc--;
                 }
                 t = tagEnd + 1;
                 continue;
             }
 
             if (t[0] == '<') {
-                t = HandleOpenTag(t, tagEnd, tags, maxTags, cnt, &dc);
+                t = HandleOpenTag(t, tagEnd, ctx);
                 if (t == NULL) {
                     return TOPO_ERR_INTERNAL;
                 }
@@ -176,6 +187,9 @@ static TopoAddrResult ParseXmlLines(FILE* fp, TagEntry* tags, unsigned int maxTa
             }
             break;
         }
+    }
+    if (ctx->dropped > 0) {
+        TOPO_WARN("ParseXmlLines: %u tags dropped in total, exceeds limit %u", ctx->dropped, ctx->maxTags);
     }
     return TOPO_SUCCESS;
 }
@@ -199,15 +213,18 @@ TopoAddrResult ParseXmlTags(const char* xmlPath, TagEntry* tags, unsigned int* t
         return TOPO_ERR_OPEN_FILE;
     }
 
-    unsigned int cnt = 0;
-    if (ParseXmlLines(fp, tags, maxTags, &cnt) != TOPO_SUCCESS) {
+    ParseCtx ctx = {0};
+    ctx.tags = tags;
+    ctx.maxTags = maxTags;
+
+    if (ParseXmlLines(fp, &ctx) != TOPO_SUCCESS) {
         fclose(fp);
         return TOPO_ERR_INTERNAL;
     }
 
     fclose(fp);
-    *tagCount = cnt;
-    if (cnt == 0) {
+    *tagCount = ctx.cnt;
+    if (ctx.cnt == 0) {
         TOPO_ERR("ParseXmlTags: no valid tags found in %s", xmlPath);
         return TOPO_ERR_NOT_FOUND;
     }

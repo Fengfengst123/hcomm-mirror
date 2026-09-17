@@ -13,6 +13,7 @@
 
 #include <arpa/inet.h>
 #include <dirent.h>
+#include <errno.h>
 #include <ifaddrs.h>
 #include <stdlib.h>
 #include <string.h>
@@ -67,10 +68,16 @@ static void BuildNpuBdfTable(char bdfs[MAX_NPU_COUNT][MAX_NAME_LEN])
     for (int phyId = 0; phyId < npuCnt; phyId++) {
         struct dcmi_pcie_info_all pcieInfo;
         if (hal_get_device_pcie_info(phyId, &pcieInfo) == 0) {
-            (void)sprintf_s(
+            int ret = sprintf_s(
                 bdfs[phyId], MAX_NAME_LEN, "%04x:%02x:%02x.%x", pcieInfo.domain, pcieInfo.bdf_busid,
                 pcieInfo.bdf_deviceid, pcieInfo.bdf_funcid);
+            if (ret < 0) {
+                TOPO_ERR("BuildNpuBdfTable: sprintf_s failed for phyId=%d ret=%d", phyId, ret);
+                bdfs[phyId][0] = '\0';
+                continue;
+            }
         } else {
+            TOPO_INFO("BuildNpuBdfTable: hal_get_device_pcie_info failed, phyId=%d", phyId);
             bdfs[phyId][0] = '\0';
         }
     }
@@ -178,15 +185,18 @@ static void HandleNpuTag(const TagEntry* e, GroupCtx* ctx)
     }
     const char* chipId = TagFindAttr(e, "chipphyid");
     if (chipId == NULL) {
+        TOPO_WARN("HandleNpuTag: npu tag without chipphyid");
         return;
     }
     int phyId = atoi(chipId);
     if (phyId < 0 || phyId >= (int)MAX_NPU_COUNT) {
+        TOPO_WARN("HandleNpuTag: invalid chipphyid=%s, phyId=%d", chipId, phyId);
         return;
     }
     /* 跳过当前进程不可见的设备 */
     int userDevId = -1;
     if (hal_get_userdevid_by_phyid(phyId, &userDevId) != 0) {
+        TOPO_INFO("HandleNpuTag: hal_get_userdevid_by_phyid failed, phyId=%d", phyId);
         return;
     }
     XmlInfo* info = ctx->info;
@@ -235,7 +245,9 @@ static TopoAddrResult DedupNetNic(XmlInfo* info, const char* name, unsigned int*
         TOPO_ERR("DedupNetNic: NIC count overflow, name=%s", name);
         return TOPO_ERR_INTERNAL;
     }
-    if (strcpy_s(info->nicNames[idx], sizeof(info->nicNames[0]), name) != 0) {
+    int ret = strcpy_s(info->nicNames[idx], sizeof(info->nicNames[0]), name);
+    if (ret != 0) {
+        TOPO_ERR("DedupNetNic: strcpy_s failed for nic name=%s ret=%d", name, ret);
         return TOPO_ERR_INTERNAL;
     }
     (*nicCount)++;
@@ -250,6 +262,7 @@ static void HandleNetTag(const TagEntry* e, GroupCtx* ctx)
     }
     const char* name = TagFindAttr(e, "name");
     if (name == NULL) {
+        TOPO_WARN("HandleNetTag: net tag without name attr");
         return;
     }
     XmlInfo* info = ctx->info;
@@ -438,7 +451,11 @@ static TopoAddrResult DispatchIpsRoundRobin(
             if (!nicValid[nicIdx] || !info->affined[npuId][nicIdx]) {
                 continue;
             }
-            if (strcpy_s(assignment[npuId], sizeof(assignment[0]), nicIps[nicIdx]) != 0) {
+            int ret = strcpy_s(assignment[npuId], sizeof(assignment[0]), nicIps[nicIdx]);
+            if (ret != 0) {
+                TOPO_ERR(
+                    "DispatchIpsRoundRobin: strcpy_s failed, npuId=%d nicIdx=%u ret=%d nicIps=%s", npuId, nicIdx, ret,
+                    nicIps[nicIdx]);
                 continue;
             }
             cur = (j + 1) % nicCount;
@@ -449,7 +466,14 @@ static TopoAddrResult DispatchIpsRoundRobin(
     LogAssignResult(info, npuCount, nicValid, nicIps, assignment);
 
     if (assignment[phyId][0] != '\0') {
-        return strcpy_s(outIp, outLen, assignment[phyId]);
+        int ret = strcpy_s(outIp, outLen, assignment[phyId]);
+        if (ret != 0) {
+            TOPO_ERR(
+                "DispatchIpsRoundRobin: strcpy_s failed for outIp, phyId=%d ret=%d outLen=%zu ip=%s", phyId, ret,
+                outLen, assignment[phyId]);
+            return TOPO_ERR_INTERNAL;
+        }
+        return TOPO_SUCCESS;
     }
     TOPO_ERR("no IP assigned for phyId=%d", phyId);
     return TOPO_ERR_NOT_FOUND;
@@ -462,6 +486,7 @@ static TopoAddrResult EthToIp(const char* eth, char* ip, size_t ipLen)
 {
     struct ifaddrs* ifaddr = NULL;
     if (getifaddrs(&ifaddr) == -1) {
+        TOPO_ERR("EthToIp: getifaddrs failed, errno=%d(%s)", errno, strerror(errno));
         return TOPO_ERR_SYSCALL;
     }
 
@@ -489,12 +514,15 @@ static TopoAddrResult EthToIp(const char* eth, char* ip, size_t ipLen)
 static TopoAddrResult HcaToIp(const char* hca, char* ip, size_t ipLen)
 {
     char netPath[MAX_PATH_LEN];
-    if (sprintf_s(netPath, sizeof(netPath), HCA_NET_PATH_TEMPLATE, hca) < 0) {
+    int ret = sprintf_s(netPath, sizeof(netPath), HCA_NET_PATH_TEMPLATE, hca);
+    if (ret < 0) {
+        TOPO_ERR("HcaToIp: sprintf_s failed for hca=%s ret=%d", hca, ret);
         return TOPO_ERR_INTERNAL;
     }
 
     DIR* dir = opendir(netPath);
     if (dir == NULL) {
+        TOPO_INFO("HcaToIp: opendir(%s) failed, errno=%d(%s)", netPath, errno, strerror(errno));
         return TOPO_ERR_NOT_FOUND;
     }
 
@@ -510,6 +538,7 @@ static TopoAddrResult HcaToIp(const char* hca, char* ip, size_t ipLen)
     closedir(dir);
 
     if (eth[0] == '\0') {
+        TOPO_INFO("HcaToIp: no net entry under %s", netPath);
         return TOPO_ERR_NOT_FOUND;
     }
 

@@ -25,6 +25,8 @@
 #include "hal.h"
 #include "securec.h"
 #include "topo_addr_info_log.h"
+#include "topo.h"
+#include "xml_parser.h"
 
 static void TestLogRecord(int moduleId, int level, const char* fmt, ...)
 {
@@ -1304,4 +1306,86 @@ TEST_F(NpuNicAffinityTest, Error_GroupWithoutNpu)
       "</pci>\n</cpu>\n</system>\n");
     char ip[64] = {0};
     ASSERT_NE(GetRoceIpFromXml(0, ip, sizeof(ip)), TOPO_SUCCESS);
+}
+
+/* GetTopoFilePathFromFile：正常路径，合法 JSON 应正确提取 topo_file_path 值 */
+TEST_F(NpuNicAffinityTest, GetTopoFilePathFromFile_Success)
+{
+    const char* path = "/tmp/ut_topo_file_success.json";
+    FILE* fp = fopen(path, "w");
+    ASSERT_NE(fp, nullptr);
+    const char* content
+        = "{\n  \"version\": \"2.0\",\n  \"topo_file_path\": \"/usr/local/ascend/driver/topo/950/atlas_950_1.json\"\n}";
+    ASSERT_GT(fprintf(fp, "%s", content), 0);
+    fclose(fp);
+
+    char buf[256] = {0};
+    int ret = GetTopoFilePathFromFile(path, buf, sizeof(buf));
+    EXPECT_EQ(ret, 0);
+    EXPECT_STREQ(buf, "/usr/local/ascend/driver/topo/950/atlas_950_1.json");
+    unlink(path);
+}
+
+/* GetTopoFilePathFromFile：文件不存在应返回 -1 */
+TEST_F(NpuNicAffinityTest, GetTopoFilePathFromFile_FileNotFound)
+{
+    char buf[64] = {0};
+    EXPECT_EQ(GetTopoFilePathFromFile("/tmp/ut_topo_file_not_exist.json", buf, sizeof(buf)), -1);
+}
+
+/* GetTopoFilePathFromFile：JSON 中无 topo_file_path 字段应返回 -1 */
+TEST_F(NpuNicAffinityTest, GetTopoFilePathFromFile_NoField)
+{
+    const char* path = "/tmp/ut_topo_file_nofield.json";
+    FILE* fp = fopen(path, "w");
+    ASSERT_NE(fp, nullptr);
+    ASSERT_GT(fprintf(fp, "%s", "{\n  \"version\": \"2.0\"\n}"), 0);
+    fclose(fp);
+
+    char buf[64] = {0};
+    EXPECT_EQ(GetTopoFilePathFromFile(path, buf, sizeof(buf)), -1);
+    unlink(path);
+}
+
+/* GetTopoFilePathFromFile：strncpy_s 失败（如缓冲区不足）应提前返回 -1，不越界写 */
+TEST_F(NpuNicAffinityTest, GetTopoFilePathFromFile_StrncpyFailed)
+{
+    const char* path = "/tmp/ut_topo_file_strncpy_fail.json";
+    FILE* fp = fopen(path, "w");
+    ASSERT_NE(fp, nullptr);
+    const char* content
+        = "{\n  \"version\": \"2.0\",\n  \"topo_file_path\": \"/usr/local/ascend/driver/topo/950/atlas_950_1.json\"\n}";
+    ASSERT_GT(fprintf(fp, "%s", content), 0);
+    fclose(fp);
+
+    /* 默认 llt_stub_sec.c 的 strncpy_s stub 恒返 0，此处强制注入失败返回值 */
+    MOCKER(strncpy_s).stubs().will(returnValue(1));
+
+    char buf[256] = {0};
+    EXPECT_EQ(GetTopoFilePathFromFile(path, buf, sizeof(buf)), -1);
+    unlink(path);
+}
+
+/* ParseXmlTags：标签数超过 maxTags 时超限标签被丢弃，解析仍成功且 tagCount == maxTags */
+TEST_F(NpuNicAffinityTest, ParseXmlTags_TagsExceedMax_DroppedCounted)
+{
+    const char* path = "/tmp/ut_xml_overflow.xml";
+    FILE* fp = fopen(path, "w");
+    ASSERT_NE(fp, nullptr);
+    /* 构造 5 个 <pci> 标签，maxTags 传入 2 */
+    fputs("<system version=\"1.0\">\n<cpu numaid=\"0\">\n", fp);
+    fputs("<pci busid=\"0000:01:00.0\"/>\n", fp);
+    fputs("<pci busid=\"0000:02:00.0\"/>\n", fp);
+    fputs("<pci busid=\"0000:03:00.0\"/>\n", fp);
+    fputs("<pci busid=\"0000:04:00.0\"/>\n", fp);
+    fputs("<pci busid=\"0000:05:00.0\"/>\n", fp);
+    fputs("</cpu>\n</system>\n", fp);
+    fclose(fp);
+
+    TagEntry tags[2] = {{{0}}};
+    unsigned int tagCount = 0;
+    TopoAddrResult ret = ParseXmlTags(path, tags, &tagCount, 2);
+    EXPECT_EQ(ret, TOPO_SUCCESS); /* 超限丢弃不视为解析失败 */
+    EXPECT_EQ(tagCount, 2U);      /* 写入数应被截断为 maxTags */
+    unlink(path);
 }
