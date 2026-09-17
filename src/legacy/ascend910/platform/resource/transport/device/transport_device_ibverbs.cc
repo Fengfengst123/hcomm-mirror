@@ -506,7 +506,7 @@ HcclResult TransportDeviceIbverbs::TxPayLoad(
     }
 
     dstMemPtr = reinterpret_cast<void*>(reinterpret_cast<char*>(dstMemPtr) + dstOffset);
-    CHK_RET(ConstructPayLoadWqe(dstMemPtr, dstKey, src, srcKey, len, wqeType, aux, wrInfoVec, txSendDataTimes));
+    CHK_RET(ConstructPayLoadWqe(dstMemPtr, dstKey, src, srcKey, len, wqeType, aux, wrInfoVec, txSendDataTimes, false));
 
     return HCCL_SUCCESS;
 }
@@ -987,7 +987,8 @@ HcclResult TransportDeviceIbverbs::TxSendWqe(
     wr.dstAddr = static_cast<u64>(reinterpret_cast<uintptr_t>(dstMemPtr));
     wr.rkey = dstKey;
     wr.op = 0; /* RDMA_WRITE: 0 */
-    wr.sendFlag = fence_ ? (RA_SEND_SIGNALED | RA_SEND_FENCE) : RA_SEND_SIGNALED;
+    bool isNeedSignaled = (wqeType == WqeType::WQE_TYPE_DATA_NOTIFY || wqeType == WqeType::WQE_TYPE_DATA_ACK_NOTIFY);
+    wr.sendFlag = fence_ ? (RA_SEND_SIGNALED | RA_SEND_FENCE) : (isNeedSignaled ? RA_SEND_SIGNALED : 0);
     fence_ = false;
 
     // 获取notify偏移地址，对于发送数据时，偏移地址为0
