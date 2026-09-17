@@ -41,12 +41,6 @@
     fprintf(stderr, "%s, pid(%d), %s(%d): " fmt "\n", __TIME__, getpid(), __func__, __LINE__, ##args)
 #define hccp_dbg(fmt, args...) \
     fprintf(stderr, "%s, pid(%d), %s(%d): " fmt "\n", __TIME__, getpid(), __func__, __LINE__, ##args)
-#define hccp_event(fmt, args...) \
-    fprintf(stderr, "%s, pid(%d), %s(%d): " fmt "\n", __TIME__, getpid(), __func__, __LINE__, ##args)
-#define hccp_event_with_user(fmt, args...)                                                          \
-    fprintf(                                                                                        \
-        stderr, "%s, pid(%d), %s(%d), user(%s): " fmt "\n", __TIME__, getpid(), __func__, __LINE__, \
-        getpwuid(getuid())->pw_name, ##args)
 #define hccp_run_info(fmt, args...) \
     fprintf(stderr, "%s, pid(%d), %s(%d): " fmt "\n", __TIME__, getpid(), __func__, __LINE__, ##args)
 #define hccp_run_warn(fmt, args...) \
@@ -60,8 +54,6 @@
 #define roce_info(fmt, args...) \
     fprintf(stderr, "%s, pid(%d), %s(%d): " fmt "\n", __TIME__, getpid(), __func__, __LINE__, ##args)
 #define roce_dbg(fmt, args...) \
-    fprintf(stderr, "%s, pid(%d), %s(%d): " fmt "\n", __TIME__, getpid(), __func__, __LINE__, ##args)
-#define roce_event(fmt, args...) \
     fprintf(stderr, "%s, pid(%d), %s(%d): " fmt "\n", __TIME__, getpid(), __func__, __LINE__, ##args)
 #define roce_run_info(fmt, args...) \
     fprintf(stderr, "%s, pid(%d), %s(%d): " fmt "\n", __TIME__, getpid(), __func__, __LINE__, ##args)
