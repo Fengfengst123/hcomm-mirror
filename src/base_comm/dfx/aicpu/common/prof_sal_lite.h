@@ -8,15 +8,33 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ENGINE_AICPU_INTERFACE_H
-#define ENGINE_AICPU_INTERFACE_H
+#ifndef PROF_SAL_LITE_H
+#define PROF_SAL_LITE_H
 
+#include <sys/syscall.h>
 #include <cstdint>
 
-extern "C" {
-__attribute__((visibility("default"))) uint32_t RunAicpuThreadInit(void* args);
-__attribute__((visibility("default"))) uint32_t RunAicpuThreadDestroy(void* args);
-__attribute__((visibility("default"))) uint32_t RunAicpuThreadSupplementNotify(void* args);
+namespace Hccl {
+
+inline int32_t SalGetTidLite()
+{
+    thread_local int32_t cachedTid = static_cast<int32_t>(syscall(SYS_gettid));
+    return cachedTid;
 }
 
-#endif // CHANNEL_AICPU_INTERFACE_H
+inline uint64_t ProfGetCurCpuTimestampLite()
+{
+#ifdef CCL_LLT
+    return 0;
+#else
+    uint64_t cntvct = 0;
+#if defined __aarch64__
+    asm volatile("mrs %0, cntvct_el0" : "=r"(cntvct));
+#endif
+    return cntvct;
+#endif
+}
+
+} // namespace Hccl
+
+#endif // PROF_SAL_LITE_H

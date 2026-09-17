@@ -10,7 +10,6 @@
 
 set(device_src_list
     ${CMAKE_CURRENT_SOURCE_DIR}/hcclCommProfilingLite.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/dfx_profiling_handler_lite.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/dfx_profiling_reporter_lite.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/dfx_profiling_command_handle_lite.cc
 )
@@ -21,14 +20,8 @@ if(TARGET ccl_kernel)
     )
     target_include_directories(ccl_kernel PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
+        # reporter_lite.h 向下引用 base_comm/dfx/aicpu 下的 handler_lite.h
+        ${HCOMM_DIR}/src/base_comm/dfx/aicpu
         ${HCOMM_DIR}/src/base_comm/resources/comm_engine_res/threads
-        ${CMAKE_CURRENT_SOURCE_DIR}/../../..
-        ${CMAKE_CURRENT_SOURCE_DIR}/../../../communicator/device
-    )
-endif()
-
-if(TARGET hccl_v2)
-    target_sources(hccl_v2 PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/dfx_profiling_handler_lite.cc
     )
 endif()

@@ -18,11 +18,7 @@
 
 #include "ub_transport_lite_impl.h"
 #include "device/framework/aicpu_hccl_process.h"
-#include "coll_comm_aicpu_mgr.h"
 #include "aicpu_indop_env.h"
-#include "hcclCommDfxLite.h"
-#include "hcclCommProfilingLite.h"
-#include "dfx_profiling_handler_lite.h"
 #include "hcclCommOp.h"
 #include "hcomm_diag.h"
 #include "aicpu_ts_primitives_c_adpt.h"
@@ -40,12 +36,6 @@ thread_local LaunchContext g_threadLaunchCtx;
 bool IsBatchLaunchMode() { return g_threadLaunchCtx.IsBatchLaunchMode(); }
 
 uint32_t GetSqFullTimeOut() { return g_threadLaunchCtx.GetSqFullTimeOut(); }
-
-inline bool GetProfilingEnable()
-{
-    return Hccl::DfxProfilingHandlerLite::GetInstance().GetProfL0State()
-           || Hccl::DfxProfilingHandlerLite::GetInstance().GetProfL1State();
-}
 
 void AddThread(ThreadHandle thread) { g_threadLaunchCtx.AddThread(thread); }
 
@@ -71,58 +61,6 @@ HcclResult HcommThreadGetNotifyId(ThreadHandle thread, uint32_t notifyIdx, uint3
 
     return HCCL_SUCCESS;
 }
-
-namespace {
-// 刷新SQE profiling置位开关：L1开启且设备为960(A6)时推送1，否则推送0。
-// 须先于HcclDfxRegOpInfoByCommId全部提前return执行，否则开关从开到关后无法刷回0，
-// SQE将永久错误置位，故收敛在唯一入口先行调用。
-void RefreshSqeProfilingState()
-{
-    bool isSqeProfEnabled = false;
-    if (Hccl::DfxProfilingHandlerLite::GetInstance().GetProfL1State()) {
-        DevType devType = DevType::DEV_TYPE_COUNT;
-        (void)hrtGetDeviceType(devType);
-        isSqeProfEnabled = (devType == DevType::DEV_TYPE_960);
-    }
-    Hccl::SetSqeProfilingEnabled(isSqeProfEnabled);
-}
-
-HcclResult HcclDfxRegOpInfoByCommIdImpl(char* commId, void* hcclDfxOpInfo);
-} // namespace
-
-HcclResult HcclDfxRegOpInfoByCommId(char* commId, void* hcclDfxOpInfo)
-{
-    RefreshSqeProfilingState();
-
-    return HcclDfxRegOpInfoByCommIdImpl(commId, hcclDfxOpInfo);
-}
-
-namespace {
-HcclResult HcclDfxRegOpInfoByCommIdImpl(char* commId, void* hcclDfxOpInfo)
-{
-    if (!GetProfilingEnable() && !hcomm::GetTaskExceptionEnable()) {
-        return HCCL_SUCCESS;
-    }
-    CHK_PTR_NULL(commId);
-    CHK_PTR_NULL(hcclDfxOpInfo);
-
-    DevType deviceType;
-    CHK_RET(hrtGetDeviceType(deviceType));
-    if (deviceType == DevType::DEV_TYPE_910B) {
-        HCCL_INFO("[%s] is not supported, commId[%s], devType[%d]", __func__, commId, deviceType);
-        return HCCL_SUCCESS;
-    }
-
-    HcclDfxOpInfo* aicpuDfxInfo = ReinterpretAs<HcclDfxOpInfo*>(hcclDfxOpInfo);
-    CHK_RET(HcommThreadGetNotifyId(
-        aicpuDfxInfo->cpuTsThread, aicpuDfxInfo->cpuWaitAicpuNotifyIdx, &aicpuDfxInfo->cpuWaitAicpuNotifyId));
-    CollCommAicpu* currentComm = CollCommAicpuMgr::GetInstance().GetCurrentComm();
-    CHK_PTR_NULL(currentComm);
-    CHK_RET(currentComm->InitDfxOpInfo(aicpuDfxInfo));
-
-    return HCCL_SUCCESS;
-}
-} // namespace
 
 int32_t HcommLocalCopyOnThread(ThreadHandle thread, void* dst, const void* src, uint64_t len)
 {
@@ -1130,23 +1068,6 @@ int32_t HcommBatchModeStart(const char* batchTag) { return HcommSetLaunchMode(ba
 
 int32_t HcommBatchModeEnd(const char* batchTag) { return HcommSetLaunchMode(batchTag, HCOMM_LAUNCH_MODE_EAGER); }
 
-int32_t HcommAcquireComm(const char* commId)
-{
-    CHK_PTR_NULL(commId);
-    DevType deviceType;
-    CHK_RET(hrtGetDeviceType(deviceType));
-    HCCL_INFO("[%s]comId[%s], devType[%d]", __func__, commId, deviceType);
-    if (deviceType != DevType::DEV_TYPE_950 && deviceType != DevType::DEV_TYPE_960) {
-        HcclCommAicpu* hcclComm = AicpuHcclProcess::AicpuGetCommbyGroup(commId);
-        CHK_PRT_RET(!hcclComm, HCCL_ERROR("%s AicpuGetCommbyGroup is null, commId[%s]", __func__, commId), HCCL_E_PTR);
-        CHK_RET(hcclComm->SetDispatcherCtxOnThread());
-    } else {
-        CollCommAicpu* hcclComm = CollCommAicpuMgr::GetInstance().AcquireCommForUse(commId);
-        CHK_PRT_RET(!hcclComm, HCCL_ERROR("%s AcquireCommForUse is null, commId[%s]", __func__, commId), HCCL_E_PTR);
-    }
-    return HCCL_SUCCESS;
-}
-
 int32_t HcommChannelRegisterDfx(
     ChannelHandle channel, [[maybe_unused]] std::function<HcclResult(u32, u32, const Hccl::TaskParam&, u64)> callback)
 {
@@ -1188,20 +1109,6 @@ int32_t HcommNewThreadRegisterGetLatestDfxOpInfo(ThreadHandle thread, std::funct
     CHK_PTR_NULL(tsThread);
     tsThread->SetGetLatestDfxOpInfoCallback(std::move(callback));
     HCCL_INFO("[HcommNewThreadRegisterGetLatestDfxOpInfo] ThreadHandle[0x%llx] Init success", thread);
-    return HCCL_SUCCESS;
-}
-
-int32_t HcommReleaseComm(const char* commId)
-{
-    CHK_PTR_NULL(commId);
-    DevType deviceType;
-    CHK_RET(hrtGetDeviceType(deviceType));
-    HCCL_INFO("[%s]comId[%s], devType[%d]", __func__, commId, deviceType);
-    if (deviceType != DevType::DEV_TYPE_950 && deviceType != DevType::DEV_TYPE_960) {
-        AicpuHcclProcess::AicpuReleaseCommbyGroup(commId);
-    } else {
-        CollCommAicpuMgr::GetInstance().ReleaseComm(commId);
-    }
     return HCCL_SUCCESS;
 }
 
@@ -1321,86 +1228,3 @@ int32_t HcommChannelDrainOnThread(ThreadHandle thread, ChannelHandle channel)
 #ifdef __cplusplus
 }
 #endif // __cplusplus
-
-HcclResult HcommProfilingReportDeviceOp(const char* groupname)
-{
-    if (!GetProfilingEnable()) {
-        return HCCL_SUCCESS;
-    }
-    CHK_PTR_NULL(groupname);
-
-    DevType deviceType;
-    CHK_RET(hrtGetDeviceType(deviceType));
-    if (deviceType != DevType::DEV_TYPE_950 && deviceType != DevType::DEV_TYPE_960) {
-        return HCCL_SUCCESS;
-    }
-
-    CollCommAicpu* currentComm = CollCommAicpuMgr::GetInstance().GetCurrentComm();
-    CHK_PTR_NULL(currentComm);
-    CHK_RET(currentComm->ProfilingReportDeviceOp());
-    return HCCL_SUCCESS;
-}
-
-HcclResult HcommProfilingReportKernelStartTask(uint64_t thread, const char* groupname)
-{
-    if (!GetProfilingEnable()) {
-        return HCCL_SUCCESS;
-    }
-
-    DevType deviceType;
-    CHK_RET(hrtGetDeviceType(deviceType));
-    if (deviceType != DevType::DEV_TYPE_950 && deviceType != DevType::DEV_TYPE_960) {
-        return HCCL_SUCCESS;
-    }
-    CHK_PTR_NULL(groupname);
-    CollCommAicpu* currentComm = CollCommAicpuMgr::GetInstance().GetCurrentComm();
-    CHK_PTR_NULL(currentComm);
-    CHK_RET(currentComm->UpdateTask());
-    Thread* const threadPtr = ReinterpretAs<Thread*>(thread);
-    CHK_PTR_NULL(threadPtr);
-    auto* const streamLitePtr = static_cast<Hccl::StreamLite*>(threadPtr->GetStreamLitePtr());
-    CHK_PTR_NULL(streamLitePtr);
-    Hccl::DfxFlagTaskInfo flagTaskInfo;
-    flagTaskInfo.taskId = streamLitePtr->GetRtsq()->GetTaskId();
-    flagTaskInfo.type = Hccl::DfxMainStreamTaskType::HEAD;
-    Hccl::DfxProfilingHandlerLite::GetInstance().ReportMainStreamTask(flagTaskInfo);
-    HCCL_INFO("[%s] END, thread [%llu], groupname[%s], taskId[%u].", __func__, thread, groupname, flagTaskInfo.taskId);
-    return HCCL_SUCCESS;
-}
-
-HcclResult HcommProfilingReportKernelEndTask(uint64_t thread, const char* groupname)
-{
-    if (!GetProfilingEnable()) {
-        return HCCL_SUCCESS;
-    }
-    CHK_PTR_NULL(groupname);
-    HCCL_INFO("[%s] START. thread [%llu], groupname[%s].", __func__, thread, groupname);
-
-    DevType deviceType;
-    CHK_RET(hrtGetDeviceType(deviceType));
-    if (deviceType != DevType::DEV_TYPE_950 && deviceType != DevType::DEV_TYPE_960) {
-        return HCCL_SUCCESS;
-    }
-
-    Thread* const threadPtr = ReinterpretAs<Thread*>(thread);
-    CHK_PRT_RET(threadPtr == nullptr, HCCL_ERROR("[%s] threadPtr is null", __func__), HCCL_E_PTR);
-    auto* const streamLitePtr = static_cast<Hccl::StreamLite*>(threadPtr->GetStreamLitePtr());
-    CHK_PRT_RET(streamLitePtr == nullptr, HCCL_ERROR("[%s] streamLitePtr is null", __func__), HCCL_E_PTR);
-    // FlagTaskInfo Report
-    Hccl::DfxFlagTaskInfo flagTaskInfo;
-    flagTaskInfo.type = Hccl::DfxMainStreamTaskType::TAIL;
-    auto* rtsq = streamLitePtr->GetRtsq();
-    CHK_PRT_RET(rtsq == nullptr, HCCL_ERROR("[%s] rtsq is null", __func__), HCCL_E_PTR);
-    uint16_t streamId = 0;
-    uint16_t taskId = 0;
-    HcclResult ret = rtsq->GetLastStreamIdAndTaskId(streamId, taskId);
-    CHK_PRT_RET(
-        ret != HCCL_SUCCESS,
-        HCCL_ERROR("[%s] GetLastStreamIdAndTaskId fail, ret[%d], sqId[%u].", __func__, ret, streamLitePtr->GetSqId()),
-        ret);
-    constexpr uint32_t UINT16_BIT_WIDTH = 16U;
-    flagTaskInfo.taskId = (static_cast<uint32_t>(taskId) << UINT16_BIT_WIDTH) | static_cast<uint32_t>(streamId);
-
-    Hccl::DfxProfilingHandlerLite::GetInstance().ReportMainStreamTask(flagTaskInfo);
-    return HCCL_SUCCESS;
-}

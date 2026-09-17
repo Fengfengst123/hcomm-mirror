@@ -14,7 +14,7 @@
 #include "ccu_log.h"
 #include "ccu_res_repo.h"
 #include "ccu_types.h"
-#include "hcom_common.h"
+#include "opbase_adpt.h"
 
 namespace hcomm {
 

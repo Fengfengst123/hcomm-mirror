@@ -9,8 +9,10 @@
  */
 
 #include "dfx/endpoint_monitor.h"
+#include "adapter_rts_common.h"
+#include "sal_pub.h"
+#include "endpoint.h"
 #include "urma_endpoint.h"
-#include "hcom_common.h"
 
 #include <array>
 #include <memory>

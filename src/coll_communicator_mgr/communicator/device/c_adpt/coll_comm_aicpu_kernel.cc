@@ -11,13 +11,66 @@
 #include "coll_comm_aicpu_kernel.h"
 #include "aicpu_init_param.h"
 #include "coll_comm_aicpu_mgr.h"
+#include "coll_comm_aicpu_kernel_adpt.h"
 #include "framework/aicpu_hccl_process.h"
 #include "log.h"
 
 extern "C" {
+__attribute__((visibility("default"))) uint32_t RunAicpuIndOpThreadInit(void* args)
+{
+    CHK_PTR_NULL(args);
+    uint64_t devAddr = *reinterpret_cast<uint64_t*>(args);
+    ThreadMgrAicpuParam* param = reinterpret_cast<ThreadMgrAicpuParam*>(devAddr);
+    CHK_PTR_NULL(param);
+    DevType devType;
+    CHK_RET(hrtGetDeviceType(devType));
+    if (devType == DevType::DEV_TYPE_950 || devType == DevType::DEV_TYPE_960) {
+        HCCL_INFO(
+            "[RunAicpuIndOpThreadInit] group[%s], threadNum[%u], deviceType[%u]", param->hcomId, param->threadNum,
+            devType);
+        return CollCommAicpuKernelAdptInitThreads(param);
+    }
+    return AicpuHcclProcess::AicpuIndOpThreadInit(param);
+}
+
+__attribute__((visibility("default"))) uint32_t RunAicpuIndOpNotify(void* args)
+{
+    CHK_PTR_NULL(args);
+    uint64_t devAddr = *reinterpret_cast<uint64_t*>(args);
+    NotifyMgrAicpuParam* param = reinterpret_cast<NotifyMgrAicpuParam*>(devAddr);
+    CHK_PTR_NULL(param);
+    DevType devType;
+    CHK_RET(hrtGetDeviceType(devType));
+    if (devType == DevType::DEV_TYPE_950 || devType == DevType::DEV_TYPE_960) {
+        HCCL_INFO(
+            "[RunAicpuIndOpNotify] group[%s], notifyNum[%u], deviceType[%u]", param->hcomId, param->notifyNum, devType);
+        return CollCommAicpuKernelAdptInitNotify(param);
+    }
+    return AicpuHcclProcess::AicpuIndOpNotifyInit(param);
+}
+
+__attribute__((visibility("default"))) uint32_t RunAicpuIndOpChannelInitV2(void* args)
+{
+    HCCL_RUN_INFO("RunAicpuIndOpChannelInitV2 start.");
+    CHK_PTR_NULL(args);
+    uint64_t devAddr = *reinterpret_cast<uint64_t*>(args);
+    HcclChannelUrmaRes* commParam = reinterpret_cast<HcclChannelUrmaRes*>(devAddr);
+    CHK_PTR_NULL(commParam);
+    return CollCommAicpuKernelAdptInitChannel(commParam);
+}
+__attribute__((visibility("default"))) uint32_t RunAicpuIndOpChannelUpdateV2(void* args)
+{
+    HCCL_RUN_INFO("RunAicpuIndOpChannelUpdateV2 start.");
+    CHK_PTR_NULL(args);
+    uint64_t devAddr = *reinterpret_cast<uint64_t*>(args);
+    HcclChannelUrmaRes* commParam = reinterpret_cast<HcclChannelUrmaRes*>(devAddr);
+    CHK_PTR_NULL(commParam);
+    return CollCommAicpuKernelAdptUpdateChannel(commParam);
+}
+
 __attribute__((visibility("default"))) uint32_t RunAicpuCommInit(void* args)
 {
-    CHK_PRT_RET(args == nullptr, HCCL_ERROR("[%s]args is null.", __func__), HCCL_E_PARA);
+    CHK_PRT_RET(args == nullptr, HCCL_ERROR("[%s]args is null.", __func__), HCCL_E_PTR);
 
     CommAicpuParam* commAicpuParam = static_cast<CommAicpuParam*>(args);
     DevType devType = static_cast<DevType>(commAicpuParam->deviceType);

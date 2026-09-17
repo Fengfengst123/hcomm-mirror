@@ -33,9 +33,6 @@ struct CommMemInfoEqual {
     bool operator()(const CommMemInfo& lhs, const CommMemInfo& rhs) const { return lhs.mem.addr == rhs.mem.addr; }
 };
 
-CommMemType ConvertHcclToCommMemType(HcclMemType hcclType);
-HcclMemType ConvertCommToHcclMemType(CommMemType commType);
-
 /**
  * @note 职责：集合通信域内MyRank的通信内存管理，包括HCCL Buffer和其他待注册到EndPoint内存
  */

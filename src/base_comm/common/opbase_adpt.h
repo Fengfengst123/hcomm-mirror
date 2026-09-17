@@ -8,15 +8,15 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ENGINE_AICPU_INTERFACE_H
-#define ENGINE_AICPU_INTERFACE_H
+#ifndef HCCL_OPBASE_ADPT_H
+#define HCCL_OPBASE_ADPT_H
 
 #include <cstdint>
+#include "hccl_types.h"
+#include "hccl/base.h"
 
-extern "C" {
-__attribute__((visibility("default"))) uint32_t RunAicpuThreadInit(void* args);
-__attribute__((visibility("default"))) uint32_t RunAicpuThreadDestroy(void* args);
-__attribute__((visibility("default"))) uint32_t RunAicpuThreadSupplementNotify(void* args);
-}
+extern thread_local s32 g_hcclDeviceId;
+s32 HcclGetThreadDeviceId();
+HcclResult HcclDeviceRefresh(s32& deviceLogicId);
 
-#endif // CHANNEL_AICPU_INTERFACE_H
+#endif

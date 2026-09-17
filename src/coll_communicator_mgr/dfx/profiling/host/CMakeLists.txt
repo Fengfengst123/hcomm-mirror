@@ -10,9 +10,7 @@
 
 set(src_list
     ${CMAKE_CURRENT_SOURCE_DIR}/hcclCommProfiling.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/dfx_profiling_handler.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/dfx_profiling_reporter.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/dfx_dlprof_function.cc
 )
 
 if(TARGET hcomm)

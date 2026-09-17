@@ -276,7 +276,7 @@ target_sources(hccl_v2_utest
         ${HCCL_V2_CODE_ROOT}/framework/dfx/aicpu/profiling/profiling_handler_lite.cc
         ${HCCL_V2_CODE_ROOT}/framework/dfx/aicpu/profiling/profiling_command_handle_lite.cc
         ${HCCL_V2_CODE_ROOT}/framework/dfx/aicpu/profiling/profiling_reporter_lite.cc
-        ${HCCL_CODE_ROOT}/src/coll_communicator_mgr/dfx/profiling/aicpu/dfx_profiling_handler_lite.cc
+        ${HCCL_CODE_ROOT}/src/base_comm/dfx/aicpu/dfx_profiling_handler_lite.cc
         ${HCCL_CODE_ROOT}/src/coll_communicator_mgr/dfx/profiling/aicpu/dfx_profiling_command_handle_lite.cc
         ${HCCL_V2_CODE_ROOT}/framework/dfx/profiling/profiling_handler.cc
         ${HCCL_V2_CODE_ROOT}/framework/dfx/profiling/profiling_reporter.cc

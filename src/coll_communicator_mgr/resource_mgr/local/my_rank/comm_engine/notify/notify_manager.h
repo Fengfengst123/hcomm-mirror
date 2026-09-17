@@ -36,9 +36,6 @@ public:
     static HcclResult
     ParseBinNotifys(const std::string& uniqueIdStr, std::vector<std::unique_ptr<LocalNotify>>& newNotifys);
 #ifndef CCL_KERNEL_AICPU
-    static std::string
-    GetBinNotifys(std::vector<std::unique_ptr<LocalNotify>>& newNotifys, const NotifyLoadType notifyType);
-
     HcclResult HcclAllocNotify(
         CommEngine commEngine, ::NotifyType notifyType, uint32_t notifyNum, NotifyHandle** notifyHandleList);
     HcclResult HcommFreeNotify(uint32_t notifyNum, NotifyHandle* notifyHandleList);

@@ -89,7 +89,7 @@ HcclResult CallMsprofReportHostApi(
     return HCCL_SUCCESS;
 }
 
-thread_local s32 g_hcclDeviceId = INVALID_INT;
+extern thread_local s32 g_hcclDeviceId;
 std::mutex g_opHcomOneSideMutex{};
 
 HcclResult HcclGetDeviceId(void)
@@ -108,14 +108,6 @@ HcclResult HcclGetDeviceId(void)
         HCCL_E_INTERNAL);
     HCCL_INFO("[HcclGetDeviceId] deviceLogicId[%d] ", g_hcclDeviceId);
     return HCCL_SUCCESS;
-}
-
-s32 HcclGetThreadDeviceId()
-{
-    CHK_PRT_RET(
-        HcclGetDeviceId() != HCCL_SUCCESS,
-        HCCL_WARNING("[HcclGetThreadDeviceId] get fail deviceLogicId[%d]", g_hcclDeviceId), INVALID_INT);
-    return g_hcclDeviceId;
 }
 
 HcclResult
@@ -5647,20 +5639,6 @@ HcclResult HcclBatchSendRecvInner(HcclSendRecvItem* sendRecvInfo, uint32_t itemN
         CHK_RET_AND_PRINT_IDE(hcclComm->SaveTraceInfo(endInfo), tag.c_str());
     }
 
-    return HCCL_SUCCESS;
-}
-
-HcclResult HcclDeviceRefresh(s32& deviceLogicId)
-{
-    HcclResult ret = hrtGetDeviceRefresh(&g_hcclDeviceId);
-    CHK_PRT_RET(
-        ret != HCCL_SUCCESS,
-        HCCL_ERROR(
-            "[Get][DeviceRefresh]errNo[0x%016llx] g_hcclDeviceId[%d]"
-            "get device refresh error.",
-            ret, g_hcclDeviceId),
-        ret);
-    deviceLogicId = g_hcclDeviceId;
     return HCCL_SUCCESS;
 }
 

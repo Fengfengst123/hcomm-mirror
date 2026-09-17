@@ -11,33 +11,10 @@
 #include "comm_mems.h"
 #include <cstdlib>
 #include <algorithm>
+#include "mem_type_convert.h"
 #include "orion_adapter_rts.h"
 
 namespace hccl {
-
-CommMemType ConvertHcclToCommMemType(HcclMemType hcclType)
-{
-    switch (hcclType) {
-        case HCCL_MEM_TYPE_DEVICE:
-            return COMM_MEM_TYPE_DEVICE;
-        case HCCL_MEM_TYPE_HOST:
-            return COMM_MEM_TYPE_HOST;
-        default:
-            return COMM_MEM_TYPE_INVALID;
-    }
-}
-
-HcclMemType ConvertCommToHcclMemType(CommMemType commType)
-{
-    switch (commType) {
-        case COMM_MEM_TYPE_DEVICE:
-            return HCCL_MEM_TYPE_DEVICE;
-        case COMM_MEM_TYPE_HOST:
-            return HCCL_MEM_TYPE_HOST;
-        default:
-            return HCCL_MEM_TYPE_NUM;
-    }
-}
 
 CommMems::CommMems(uint64_t bufferSize) : bufferSize_(bufferSize)
 {

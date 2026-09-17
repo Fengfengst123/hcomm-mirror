@@ -14,8 +14,6 @@
 #include <cstdint>
 
 extern "C" {
-__attribute__((visibility("default"))) uint32_t RunAicpuIndOpChannelInitV2(void* args);
-__attribute__((visibility("default"))) uint32_t RunAicpuIndOpChannelUpdateV2(void* args);
 __attribute__((visibility("default"))) uint32_t RunAicpuChannelInitV2(void* args);
 __attribute__((visibility("default"))) uint32_t RunAicpuChannelDestroyV2(void* args);
 __attribute__((visibility("default"))) uint32_t RunAicpuChannelInitV3(void* args);

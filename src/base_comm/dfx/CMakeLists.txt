@@ -13,11 +13,15 @@ set(src_list
     exception_callback_mgr.cc
 )
 
-if(TARGET hcomm)
-    target_sources(hcomm PRIVATE
+if(TARGET hcomm_base_obj)
+    target_sources(hcomm_base_obj PRIVATE
+        hcclCommOp.cc
+        channel_profiling_adpt.cc
         prof_cycle_time.cc
+        dfx_dlprof_function.cc
+        dfx_profiling_handler.cc
     )
-    target_include_directories(hcomm PRIVATE
+    target_include_directories(hcomm_base_obj PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
     )
 endif()
@@ -25,8 +29,11 @@ endif()
 if(TARGET ccl_kernel)
     target_sources(ccl_kernel PRIVATE
         ${src_list}
+        hcclCommOp.cc
     )
     target_include_directories(ccl_kernel PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
     )
 endif()
+
+add_subdirectory(aicpu)

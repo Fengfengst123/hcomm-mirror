@@ -56,6 +56,7 @@ target_include_directories(hcomm_base_obj PRIVATE
     # 2. base_comm 内部目录
     # ============================================================
     ${CMAKE_CURRENT_SOURCE_DIR}/
+    ${CMAKE_CURRENT_SOURCE_DIR}/dfx
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/ccu/ccu_device
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/ccu/ccu_device/ccu_comp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/ccu/ccu_device/ccu_comp/ccu_channel
@@ -141,6 +142,8 @@ target_include_directories(hcomm_base_obj PRIVATE
     ${HCOMM_DIR}/src/legacy/ascend950/framework/resource_manager/stream
     ${HCOMM_DIR}/src/legacy/ascend950/framework/topo
     ${HCOMM_DIR}/src/legacy/ascend950/framework/topo/new_topo_builder/common
+    ${HCOMM_DIR}/src/legacy/ascend950/framework/topo/new_topo_builder/rank_graph
+    ${HCOMM_DIR}/src/legacy/ascend950/framework/topo/new_topo_builder/rank_table_info
     ${HCOMM_DIR}/src/legacy/ascend950/interface
     ${HCOMM_DIR}/src/legacy/ascend950/service/collective
     ${HCOMM_DIR}/src/legacy/ascend950/service/collective/primitive
@@ -184,27 +187,6 @@ target_include_directories(hcomm_base_obj PRIVATE
     ${HCOMM_DIR}/src/legacy/ascend950/unified_platform/resource/task
     ${HCOMM_DIR}/src/legacy/ascend950/unified_platform/resource/transport
     ${HCOMM_DIR}/src/legacy/ascend950/unified_platform/resource/transport/aicpu
-
-    # ============================================================
-    # 5. coll_communicator_mgr 目录 (临时依赖，后续消除)
-    # ============================================================
-    ${HCOMM_DIR}/src/coll_communicator_mgr/common
-    ${HCOMM_DIR}/src/coll_communicator_mgr/communicator
-    ${HCOMM_DIR}/src/coll_communicator_mgr/communicator/device
-    ${HCOMM_DIR}/src/coll_communicator_mgr/communicator/group_schedule_mgr
-    ${HCOMM_DIR}/src/coll_communicator_mgr/dfx
-    ${HCOMM_DIR}/src/coll_communicator_mgr/dfx/profiling/aicpu
-    ${HCOMM_DIR}/src/coll_communicator_mgr/dfx/profiling/host
-    ${HCOMM_DIR}/src/coll_communicator_mgr/rank_graph
-    ${HCOMM_DIR}/src/coll_communicator_mgr/rank_graph/rank_table_info
-    ${HCOMM_DIR}/src/coll_communicator_mgr/resource_mgr/local/my_rank
-    ${HCOMM_DIR}/src/coll_communicator_mgr/resource_mgr/local/my_rank/comm_engine
-    ${HCOMM_DIR}/src/coll_communicator_mgr/resource_mgr/local/my_rank/comm_engine/notify
-    ${HCOMM_DIR}/src/coll_communicator_mgr/resource_mgr/local/my_rank/comm_engine/threads
-    ${HCOMM_DIR}/src/coll_communicator_mgr/resource_mgr/local/my_rank/comm_engine/engine_ctxs
-    ${HCOMM_DIR}/src/coll_communicator_mgr/resource_mgr/local/my_rank/comm_mems
-    ${HCOMM_DIR}/src/coll_communicator_mgr/resource_mgr/local/my_rank/endpoints
-    ${HCOMM_DIR}/src/coll_communicator_mgr/resource_mgr/remote/rank_pairs
 
     # ============================================================
     # 6. 三方件头文件

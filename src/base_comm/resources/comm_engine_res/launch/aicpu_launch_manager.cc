@@ -11,7 +11,6 @@
 #include "aicpu_launch_manager.h"
 #include "adapter_rts_common.h"
 #include "mem_device_pub.h"
-#include "notify_manager.h"
 #include "launch_aicpu.h"
 #include "comm_configer.h"
 #include <iomanip>
@@ -315,7 +314,7 @@ HcclResult AicpuLaunchMgr::NotifyKernelLaunchAlloc(
 
     NotifyMgrAicpuParam opParam;
     CHK_RET(PrepareAicpuNotifyParam(opParam, commId, newNotifys.size(), false, deviceHandle.ptr()));
-    std::string uid = NotifyManager::GetBinNotifys(newNotifys, NotifyLoadType::DEVICE_NOTIFY);
+    std::string uid = GetBinNotifys(newNotifys, NotifyLoadType::DEVICE_NOTIFY);
     if (UNLIKELY(uid.empty())) {
         HCCL_ERROR("[AicpuLaunchMgr][%s] uid is empty.", __func__, HCCL_E_MEMORY);
         return HCCL_E_MEMORY;
@@ -371,4 +370,36 @@ HcclResult AicpuLaunchMgr::NotifyKernelLaunchFree(
         aicpuNotifys.size());
     return HCCL_SUCCESS;
 }
+
+#ifndef CCL_KERNEL_AICPU
+std::string
+AicpuLaunchMgr::GetBinNotifys(std::vector<std::unique_ptr<LocalNotify>>& newNotifys, const NotifyLoadType notifyType)
+{
+    std::string uniqueIdStr;
+    std::ostringstream oss;
+    size_t notifyNum = newNotifys.size();
+    oss.write(reinterpret_cast<const char_t*>(&notifyType), sizeof(notifyType));
+    oss.write(reinterpret_cast<const char_t*>(&notifyNum), sizeof(notifyNum));
+    HcclResult ret = HCCL_SUCCESS;
+    for (u32 idx = 0; idx < notifyNum; idx++) {
+        HcclSignalInfo notifyInfo;
+        ret = newNotifys[idx]->GetNotifyData(notifyInfo);
+        if (ret != HCCL_SUCCESS) {
+            HCCL_ERROR("[AicpuLaunchMgr][%s] GetNotifyData failed, ret[%d]", __func__, ret);
+            std::string temp = std::string();
+            return temp;
+        }
+        HCCL_INFO(
+            "[AicpuLaunchMgr][%s] get local notify data success, resId[%u], tsId:%d, devId[%u]", __func__,
+            notifyInfo.resId, notifyInfo.tsId, notifyInfo.devId);
+        oss.write(reinterpret_cast<const char_t*>(&notifyInfo), sizeof(notifyInfo));
+    }
+    HCCL_RUN_INFO(
+        "[AicpuLaunchMgr][%s] GetUniqueId success, notifyNum[%zu], notifyType[%u], uniqueId[%s]", __func__, notifyNum,
+        notifyType, oss.str().c_str());
+    uniqueIdStr = oss.str();
+    return uniqueIdStr;
+}
+#endif
+
 } // namespace hccl

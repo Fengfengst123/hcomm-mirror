@@ -14,7 +14,7 @@
 bool IsBatchLaunchMode();
 uint32_t GetSqFullTimeOut();
 HcclResult HandleDispatchAllStreams();
-
+HcclResult HcommThreadGetNotifyId(ThreadHandle thread, uint32_t notifyIdx, uint32_t* notifyId);
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus

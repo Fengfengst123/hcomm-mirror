@@ -25,7 +25,7 @@
 #include "aicpu_ts_roce_channel_v2.h"
 #include "acl/acl_rt.h"
 #include "launch_aicpu.h"
-#include "hcclCommDfx.h"
+#include "dfx/channel_profiling_adpt.h"
 #include "env_config/env_config_v2.h"
 #include "aicpu_ts_p2p_channel.h"
 #include "aiv_urma_channel.h"
@@ -752,8 +752,16 @@ HcclResult ChannelProcess::LaunchChannelKernelCommon(
     std::vector<u32> remoteRankIdList(listNum);
     // 集合通信场景才能开启
     if (needProfiling) {
+        // coll_comm 注册的回调函数
+        GetChannelRemoteRankIdFunc getRemoteRankIdFunc = GetChannelRemoteRankIdFuncImpl();
+        CHK_PRT_RET(
+            getRemoteRankIdFunc == nullptr,
+            HCCL_WARNING("[%s] profiling callback is not registered, commTag[%s].", __func__, commTag.c_str()),
+            HCCL_E_PARA);
         for (u32 i = 0; i < listNum; ++i) {
-            CHK_RET(hccl::HcclCommDfx::GetChannelRemoteRankId(commTag, hostChannelHandles[i], remoteRankIdList[i]));
+            if (getRemoteRankIdFunc != nullptr) {
+                CHK_RET(getRemoteRankIdFunc(commTag, hostChannelHandles[i], remoteRankIdList[i]));
+            }
         }
         // 通过安全的内存拷贝将主机内存数据传输到设备内存
         CHK_RET(hrtMemSyncCopy(

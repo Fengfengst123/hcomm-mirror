@@ -53,6 +53,9 @@ target_include_directories(hcomm PRIVATE
     ${HCOMM_DIR}/src/base_comm/common
     ${HCOMM_DIR}/src/base_comm/common/debug
     ${HCOMM_DIR}/src/base_comm/primitives
+    ${HCOMM_DIR}/src/base_comm/dfx
+    ${HCOMM_DIR}/src/base_comm/dfx/aicpu
+    ${HCOMM_DIR}/src/base_comm/dfx/aicpu/common
     ${HCOMM_DIR}/src/base_comm/primitives/api_c_adpt
     ${HCOMM_DIR}/src/base_comm/primitives/api_c_adpt/nic_plugin
     ${HCOMM_DIR}/src/base_comm/resources
@@ -290,8 +293,6 @@ target_include_directories(hcomm PRIVATE
     ${HCOMM_DIR}/src/legacy/ascend950/unified_platform/trace
 
     # coll_communicator_mgr dfx 头文件 (stream_lite.h -> res_pub.h)
-    ${HCOMM_DIR}/src/coll_communicator_mgr/dfx/profiling/aicpu
-    ${HCOMM_DIR}/src/coll_communicator_mgr/dfx/profiling/aicpu/common
     ${HCOMM_DIR}/src/coll_communicator_mgr/dfx/profiling/host
 
     # 三方件头文件

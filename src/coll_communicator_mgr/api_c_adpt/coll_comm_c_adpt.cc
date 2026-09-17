@@ -10,6 +10,10 @@
 
 #include "coll_comm_c_adpt.h"
 #include "coll_comm_mgr.h"
+#include "op_base.h"
+#include "dfx_profiling_handler.h"
+#include "dfx_dlprof_function.h"
+#include "exception_handler.h"
 
 using namespace hccl;
 
@@ -25,4 +29,216 @@ HcclResult HcclCommGetStatus(const char* commId, HcclCommStatus* status)
     CHK_RET(HcomGetCommHandleByGroup(commId, &comm));
     CHK_PRT_RET(comm == nullptr, HCCL_ERROR("%s hcclComm is nullptr, commId[%s]", __func__, commId), HCCL_E_PTR);
     return static_cast<hccl::hcclComm*>(comm)->GetCommStatus(*status);
+}
+
+int32_t HcommAcquireComm(const char* commId)
+{
+    CHK_PTR_NULL(commId);
+    std::shared_ptr<hccl::hcclComm> hcclComm;
+    HcclGetCommHandle(commId, hcclComm);
+    CHK_PRT_RET(hcclComm == nullptr, HCCL_ERROR("%s hcclComm is null, commId[%s]", __func__, commId), HCCL_E_PTR);
+    CHK_RET(hcclComm->SetCommDispatcherCtx());
+    return HCCL_SUCCESS;
+}
+
+int32_t HcommReleaseComm(const char* commId)
+{
+    CHK_PTR_NULL(commId);
+    HCCL_INFO("%s not support, commId[%s], do nothing", __func__, commId);
+    return HCCL_SUCCESS;
+}
+
+int32_t HcommFenceOnThread(ThreadHandle thread)
+{
+    HCCL_INFO("[%s] START. thread[0x%llx].", __func__, thread);
+    (void)thread;
+    HcclResult ret = HcommFlushV2();
+    CHK_PRT_RET(ret != HCCL_SUCCESS, HCCL_ERROR("[%s] FAIL. thread[0x%llx].", __func__, thread), ret);
+    HCCL_INFO("[%s] SUCCESS.", __func__);
+    return HCCL_SUCCESS;
+}
+
+#ifdef __cplusplus
+extern "C" {
+#endif // __cplusplus
+int32_t HcommFlush() { return HcommFenceOnThread(0); }
+#ifdef __cplusplus
+}
+#endif // __cplusplus
+
+HcclResult HcclDfxRegOpInfoByCommId(char* commId, void* hcclDfxOpInfo)
+{
+    EXCEPTION_HANDLE_BEGIN
+    CHK_PTR_NULL(commId);
+    HcclComm commHandle = nullptr;
+    CHK_RET(HcomGetCommHandleByGroup(commId, &commHandle));
+    hccl::hcclComm* hcclComm = static_cast<hccl::hcclComm*>(commHandle);
+    CHK_PRT_RET(hcclComm == nullptr, HCCL_ERROR("%s hcclComm is null, commId[%s]", __func__, commId), HCCL_E_PTR);
+    CHK_PRT_RET(hcclDfxOpInfo == nullptr, HCCL_ERROR("[%s] hcclDfxOpInfo is null", __func__), HCCL_E_PTR);
+    HcclDfxOpInfo* dfxOpInfo = static_cast<HcclDfxOpInfo*>(hcclDfxOpInfo);
+    CHK_PTR_NULL(dfxOpInfo);
+    DevType devType;
+    CHK_RET(hrtGetDeviceType(devType));
+    if (!hcclComm->IsCommunicatorV2() && devType == DevType::DEV_TYPE_910B) {
+        return HCCL_SUCCESS;
+    }
+    if (!hcclComm->IsCommunicatorV2()) {
+        HCCL_ERROR("[%s]comm is NOT_SUPPORT", __func__);
+        return HCCL_E_NOT_SUPPORT;
+    }
+    hccl::CollComm* collComm = hcclComm->GetCollComm();
+    CHK_PTR_NULL(collComm);
+
+    dfxOpInfo->beginTime = hrtMsprofSysCycleTime();
+
+    // HcclDfxOpInfo转为DfxOpInfo
+    auto dfxOpInfoOnce = ConvertToDfxOpInfo(*dfxOpInfo);
+    CHK_SMART_PTR_NULL(dfxOpInfoOnce);
+    dfxOpInfoOnce->comm_ = static_cast<void*>(collComm);
+    dfxOpInfoOnce->isIndop_ = true;
+    dfxOpInfoOnce->groupName_ = collComm->GetCommId();
+    dfxOpInfoOnce->opIndex_ = collComm->UpdateIndex();
+    dfxOpInfoOnce->rankSize_ = collComm->GetRankSize();
+    // 单算子模式，暂时覆盖opTag
+    dfxOpInfoOnce->op_.opTag = collComm->GetCommId();
+    dfxOpInfoOnce->op_.myRank = static_cast<Hccl::RankId>(collComm->GetMyRankId());
+    dfxOpInfoOnce->engine = dfxOpInfo->engine;
+    HcclCommDfx* hcclCommDfx = collComm->GetHcclCommDfx();
+    CHK_PTR_NULL(hcclCommDfx);
+    CHK_RET(hcclCommDfx->UpdateProfStat());
+    CHK_RET(hcclCommDfx->SetCurrDfxOpInfo(dfxOpInfoOnce));
+    bool isOpBase
+        = dfxOpInfoOnce->op_.opMode == Hccl::OpMode::OPBASE || dfxOpInfoOnce->op_.opMode == Hccl::OpMode::ACLGRAPH;
+    bool isCached
+        = dfxOpInfoOnce->op_.opMode == Hccl::OpMode::OFFLOAD || dfxOpInfoOnce->op_.opMode == Hccl::OpMode::ACLGRAPH;
+    Hccl::DfxProfilingHandler::GetInstance().SetOpModeFlags(isOpBase, isCached);
+    HCCL_INFO(
+        "[%s] Register DfxOpInfo success, opMode[%d], isOpBase[%d], isCached[%d], DfxOpInfo: %s", __func__,
+        dfxOpInfoOnce->op_.opMode, isOpBase, isCached, dfxOpInfoOnce->Describe().c_str());
+    EXCEPTION_HANDLE_END
+    return HCCL_SUCCESS;
+}
+
+HcclResult HcclProfilingReportOp(HcclComm comm, uint64_t beginTime)
+{
+    HCCL_INFO("[%s] START, comm[%p].", __func__, comm);
+    CHK_PRT_RET(comm == nullptr, HCCL_ERROR("[%s] comm is null", __func__), HCCL_E_PTR);
+    auto* hcclComm = static_cast<hccl::hcclComm*>(comm);
+    CHK_PTR_NULL(hcclComm);
+    DevType devType;
+    CHK_RET(hrtGetDeviceType(devType));
+    if (devType == DevType::DEV_TYPE_910B && !hcclComm->IsCommunicatorV2()) {
+        return HCCL_SUCCESS;
+    }
+    if (!hcclComm->IsCommunicatorV2()) {
+        HCCL_ERROR("[%s] comm is NOT_SUPPORT", __func__);
+        return HCCL_E_NOT_SUPPORT;
+    }
+    hccl::CollComm* collComm = hcclComm->GetCollComm();
+    CHK_PTR_NULL(collComm);
+    HcclCommDfx* hcclCommDfx = collComm->GetHcclCommDfx();
+    CHK_PTR_NULL(hcclCommDfx);
+    HCCL_INFO(
+        "[%s] Report All Tasks Info, comm[%p], hcclCommDfx[%p] GetMirrorTaskManager[%p].", __func__, comm, hcclCommDfx,
+        hcclCommDfx->GetMirrorTaskManager());
+    auto* mirrorTaskMgr = hcclCommDfx->GetMirrorTaskManager();
+    CHK_PTR_NULL(mirrorTaskMgr);
+    if (mirrorTaskMgr->GetCurrDfxOpInfo() == nullptr) {
+        HCCL_INFO("[%s] commId[%s] currDfxOpInfo is null, skip report.", __func__, collComm->GetCommId().c_str());
+        return HCCL_SUCCESS;
+    }
+    // 单算子模式暂时默认true
+    bool isOpBaseMode = false;
+    bool isCached = false;
+    CHK_RET(hcclCommDfx->GetOpModeFlags(isOpBaseMode, isCached));
+    CHK_RET(hcclCommDfx->ReportAllTasks(isCached));
+    CHK_RET(hcclCommDfx->ReportOp(beginTime, isCached, isOpBaseMode));
+    HCCL_INFO("[%s] SUCCESS.", __func__);
+    return HCCL_SUCCESS;
+}
+
+HcclResult HcclReportAicpuKernel(HcclComm comm, uint64_t beginTime, char* kernelName)
+{
+    HCCL_INFO("[%s] START, comm[%p].", __func__, comm);
+    CHK_PRT_RET(comm == nullptr, HCCL_ERROR("[%s] comm is null", __func__), HCCL_E_PTR);
+    CHK_PRT_RET(kernelName == nullptr, HCCL_ERROR("[%s] kernelName is null", __func__), HCCL_E_PTR);
+    // 填入remoteRankId
+    auto hcclComm = static_cast<hccl::hcclComm*>(comm);
+    CHK_PTR_NULL(hcclComm);
+    if (!hcclComm->IsCommunicatorV2()) {
+        return HCCL_SUCCESS;
+    }
+    hccl::CollComm* collComm = hcclComm->GetCollComm();
+    CHK_PTR_NULL(collComm);
+    HcclCommDfx* hcclCommDfx = collComm->GetHcclCommDfx();
+    CHK_PTR_NULL(hcclCommDfx);
+
+    auto* mirrorTaskMgr = hcclCommDfx->GetMirrorTaskManager();
+    CHK_PTR_NULL(mirrorTaskMgr);
+    if (mirrorTaskMgr->GetCurrDfxOpInfo() == nullptr) {
+        HCCL_INFO("[%s] commId[%s] currDfxOpInfo is null, skip report.", __func__, collComm->GetCommId().c_str());
+        return HCCL_SUCCESS;
+    }
+
+    std::string kernelNameStr(kernelName);
+    uint32_t threadId = SalGetTid();
+    bool isOpBaseMode = false;
+    bool isCached = false;
+    CHK_RET(hcclCommDfx->GetOpModeFlags(isOpBaseMode, isCached));
+    CHK_RET(hcclCommDfx->ReportKernel(beginTime, collComm->GetCommId(), kernelNameStr, threadId, isCached));
+
+    Hccl::TaskParam taskParam{};
+    taskParam.beginTime = beginTime;
+    taskParam.taskType = Hccl::TaskParamType::TASK_AICPU_KERNEL;
+    taskParam.endTime = Hccl::DfxDlProfFunction::GetInstance().dlMsprofSysCycleTime();
+    uint32_t taskId = INVALID_UINT;
+    uint32_t streamId = INVALID_UINT;
+    CHK_RET(hrtGetTaskIdAndStreamID(taskId, streamId));
+    HCCL_INFO("[%s] taskId[%u], streamId[%u].", __func__, taskId, streamId);
+    hcclCommDfx->SetAicpuTaskIdAndStreamId(taskId, streamId);
+    CHK_RET(hcclCommDfx->AddTaskInfoCallback(streamId, taskId, taskParam, DFX_INVALID_U64));
+    HCCL_INFO("[HcclReportAicpuKernel] HcclReportAicpuKernel success");
+    return HCCL_SUCCESS;
+}
+
+extern HcclResult HcclReportAivKernel(HcclComm comm, uint64_t beginTime)
+{
+    HCCL_INFO("[%s] START, comm[%p].", __func__, comm);
+    CHK_PRT_RET(comm == nullptr, HCCL_ERROR("[%s] comm is null", __func__), HCCL_E_PTR);
+    auto hcclComm = static_cast<hccl::hcclComm*>(comm);
+    CHK_PTR_NULL(hcclComm);
+    if (!hcclComm->IsCommunicatorV2()) {
+        HCCL_ERROR("[%s] comm is not supported", __func__);
+        return HCCL_E_NOT_SUPPORT;
+    }
+    hccl::CollComm* collComm = hcclComm->GetCollComm();
+    CHK_PTR_NULL(collComm);
+    HcclCommDfx* hcclCommDfx = collComm->GetHcclCommDfx();
+    CHK_PTR_NULL(hcclCommDfx);
+
+    Hccl::TaskParam taskParam{};
+    taskParam.beginTime = beginTime;
+    taskParam.taskType = Hccl::TaskParamType::TASK_AIV;
+    taskParam.endTime = Hccl::DfxDlProfFunction::GetInstance().dlMsprofSysCycleTime();
+    taskParam.isMaster = true;
+    uint32_t taskId = INVALID_UINT;
+    uint32_t streamId = INVALID_UINT;
+    CHK_RET(hrtGetTaskIdAndStreamID(taskId, streamId));
+    CHK_RET(hcclCommDfx->AddTaskInfoCallback(streamId, taskId, taskParam, DFX_INVALID_U64));
+    HCCL_INFO("[HcclReportAivKernel] HcclReportAivKernel success");
+    return HCCL_SUCCESS;
+}
+
+uint64_t HcommGetProfilingSysCycleTime()
+{
+    DevType devType = DevType::DEV_TYPE_COUNT;
+    HcclResult ret = hrtGetDeviceType(devType);
+    if (ret != HCCL_SUCCESS) {
+        HCCL_WARNING("[%s] hrtGetDeviceType failed, ret[%d], return 0.", __func__, ret);
+        return 0;
+    }
+    if (devType != DevType::DEV_TYPE_950 && devType != DevType::DEV_TYPE_960) {
+        return hrtMsprofSysCycleTime();
+    }
+    return Hccl::DfxDlProfFunction::GetInstance().dlMsprofSysCycleTime();
 }

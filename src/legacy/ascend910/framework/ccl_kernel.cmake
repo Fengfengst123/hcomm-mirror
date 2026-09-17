@@ -93,9 +93,9 @@ target_include_directories(ccl_kernel PRIVATE
     ${HCOMM_DIR}/src/coll_communicator_mgr/resource_mgr/local/my_rank
     ${HCOMM_DIR}/src/coll_communicator_mgr/resource_mgr/local/my_rank/comm_engine/engine_ctxs
     ${HCOMM_DIR}/src/coll_communicator_mgr/resource_mgr/remote/rank_pairs
-    ${HCOMM_DIR}/src/coll_communicator_mgr/dfx/profiling/aicpu
-    ${HCOMM_DIR}/src/coll_communicator_mgr/dfx/profiling/aicpu/common
-    ${HCOMM_DIR}/src/coll_communicator_mgr/dfx/profiling/host
+    ${HCOMM_DIR}/src/base_comm/dfx/aicpu
+    ${HCOMM_DIR}/src/base_comm/dfx/aicpu/common
+    ${HCOMM_DIR}/src/base_comm/dfx
 
     # src/platform 头文件 (legacy/ascend910)
     ${HCOMM_DIR}/src/legacy/ascend910/platform/inc

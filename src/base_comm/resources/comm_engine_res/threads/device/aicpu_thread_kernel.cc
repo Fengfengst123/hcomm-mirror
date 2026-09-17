@@ -9,41 +9,9 @@
  */
 
 #include "framework/aicpu_hccl_process.h"
-#include "coll_comm_aicpu_kernel_adpt.h"
 #include "aicpu_thread_process.h"
 
 extern "C" {
-__attribute__((visibility("default"))) uint32_t RunAicpuIndOpThreadInit(void* args)
-{
-    CHK_PTR_NULL(args);
-    uint64_t devAddr = *reinterpret_cast<uint64_t*>(args);
-    ThreadMgrAicpuParam* param = reinterpret_cast<ThreadMgrAicpuParam*>(devAddr);
-    DevType devType;
-    CHK_RET(hrtGetDeviceType(devType));
-    if (devType == DevType::DEV_TYPE_950 || devType == DevType::DEV_TYPE_960) {
-        HCCL_INFO(
-            "[RunAicpuIndOpThreadInit] group[%s], threadNum[%u], deviceType[%u]", param->hcomId, param->threadNum,
-            devType);
-        return CollCommAicpuKernelAdptInitThreads(param);
-    }
-    return AicpuHcclProcess::AicpuIndOpThreadInit(param);
-}
-
-__attribute__((visibility("default"))) uint32_t RunAicpuIndOpNotify(void* args)
-{
-    CHK_PTR_NULL(args);
-    uint64_t devAddr = *reinterpret_cast<uint64_t*>(args);
-    NotifyMgrAicpuParam* param = reinterpret_cast<NotifyMgrAicpuParam*>(devAddr);
-    DevType devType;
-    CHK_RET(hrtGetDeviceType(devType));
-    if (devType == DevType::DEV_TYPE_950 || devType == DevType::DEV_TYPE_960) {
-        HCCL_INFO(
-            "[RunAicpuIndOpNotify] group[%s], notifyNum[%u], deviceType[%u]", param->hcomId, param->notifyNum, devType);
-        return CollCommAicpuKernelAdptInitNotify(param);
-    }
-    return AicpuHcclProcess::AicpuIndOpNotifyInit(param);
-}
-
 __attribute__((visibility("default"))) uint32_t RunAicpuThreadInit(void* args)
 {
     CHK_PTR_NULL(args);

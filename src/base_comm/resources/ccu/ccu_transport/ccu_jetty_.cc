@@ -10,7 +10,7 @@
 
 #include "ccu_jetty_.h"
 
-#include "hcom_common.h"
+#include "opbase_adpt.h"
 
 #include "hccp_ctx.h"
 

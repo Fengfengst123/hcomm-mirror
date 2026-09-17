@@ -12,6 +12,7 @@
 #include "dfx_dlprof_function.h"
 #include "ccu_rep_context_v1.h"
 #include "task_info.h"
+#include "dfx/channel_profiling_adpt.h"
 
 namespace hccl {
 
@@ -229,5 +230,13 @@ u32 HcclCommDfx::GetTaskId(u32 streamId)
 }
 
 void HcclCommDfx::SetDpuStreamId(u32 dpuStreamId) { dpuStreamId_ = dpuStreamId; }
+
+namespace {
+
+    struct ChannelRemoteRankIdRegister {
+        ChannelRemoteRankIdRegister() { hcomm::RegisterGetChannelRemoteRankId(&HcclCommDfx::GetChannelRemoteRankId); }
+    };
+    const ChannelRemoteRankIdRegister g_channelRemoteRankIdRegister;
+} // namespace
 
 } // namespace hccl

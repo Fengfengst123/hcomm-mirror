@@ -51,7 +51,6 @@ file(GLOB_RECURSE BASE_COMM "${HCCL_CODE_ROOT}/src/base_comm/*.cc")
 file(GLOB_RECURSE COLL_COMMUNICATOR_MGR "${HCCL_CODE_ROOT}/src/coll_communicator_mgr/*.cc")
 list(REMOVE_ITEM COLL_COMMUNICATOR_MGR
     "${HCCL_CODE_ROOT}/src/coll_communicator_mgr/rank_graph/rank_graph_builder/detour_service.cc"
-    "${HCCL_CODE_ROOT}/src/coll_communicator_mgr/dfx/profiling/host/dfx_dlprof_function.cc"
     "${HCCL_CODE_ROOT}/src/coll_communicator_mgr/dfx/profiling/host/dfx_profiling_reporter.cc"
 )
 
@@ -98,6 +97,7 @@ list(FILTER BASE_COMM EXCLUDE REGEX ".*src/base_comm/primitives/aicpu/.*")
 list(FILTER BASE_COMM EXCLUDE REGEX "src/base_comm/primitives/api_c_adpt/aicpu_ts_primitives_c_adpt.cc")
 list(FILTER BASE_COMM EXCLUDE REGEX "src/base_comm/primitives/api_c_adpt/aicpu_ts_sync_data_c_adpt.cc")
 list(FILTER BASE_COMM EXCLUDE REGEX "src/base_comm/primitives/api_c_adpt/aicpu_ts_diag_c_adapt.cc")
+list(FILTER BASE_COMM EXCLUDE REGEX "src/base_comm/dfx/dfx_dlprof_function.cc")
 
 list(FILTER FRAMEWORK_HOST_SOURCES EXCLUDE REGEX "src/legacy/ascend910/framework/common/src/topo/topo_device/topoinfo_ranktableParser_device.cc")
 list(FILTER FRAMEWORK_HOST_SOURCES EXCLUDE REGEX "src/legacy/ascend910/framework/common/src/topo/topo_device/.*")
@@ -242,7 +242,8 @@ target_include_directories(hccl_llt  PRIVATE
     ${HCCL_CODE_ROOT}/src/coll_communicator_mgr/rank_graph
     ${HCCL_CODE_ROOT}/src/coll_communicator_mgr/communicator
     ${HCCL_CODE_ROOT}/src/coll_communicator_mgr/dfx/profiling/aicpu
-    ${HCCL_CODE_ROOT}/src/coll_communicator_mgr/dfx/profiling/aicpu/common
+    ${HCCL_CODE_ROOT}/src/base_comm/dfx/aicpu
+    ${HCCL_CODE_ROOT}/src/base_comm/dfx/aicpu/common
     ${HCCL_CODE_ROOT}/src/coll_communicator_mgr/dfx/taskException/common
     ${HCCL_CODE_ROOT}/src/coll_communicator_mgr/config_mgr
     ${HCCL_CODE_ROOT}/src/coll_communicator_mgr/resource_mgr/local/my_rank/comm_engine/threads

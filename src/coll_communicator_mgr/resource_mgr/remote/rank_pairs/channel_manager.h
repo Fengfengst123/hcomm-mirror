@@ -18,7 +18,7 @@
 #include "hccl_mem_defs.h"
 #include "transport_pub.h"
 #include "aicpu_operator_pub.h"
-#include "channel_param.h"
+#include "indop_channel_param.h"
 #include "manager_common.h"
 #include "hccl_independent_common.h"
 

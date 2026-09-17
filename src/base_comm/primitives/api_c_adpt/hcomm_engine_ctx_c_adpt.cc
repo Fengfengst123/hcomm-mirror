@@ -13,7 +13,6 @@
 #include "hcomm_res_defs.h"
 #include "log.h"
 #include "param_check_pub.h"
-#include "hcom_common.h"
 #include "comm_engine_utils.h"
 
 HcommResult HcommEngineCtxCreate(CommEngine engine, uint64_t size, void** ctx)

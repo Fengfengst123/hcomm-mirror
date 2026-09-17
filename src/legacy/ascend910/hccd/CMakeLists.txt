@@ -109,6 +109,7 @@ target_include_directories(hccd PRIVATE
     ${HCOMM_DIR}/src/base_comm/resources/reged_mems
     ${HCOMM_DIR}/src/base_comm/resources/endpoint_pairs
     ${HCOMM_DIR}/src/base_comm/resources/endpoint_pairs/sockets
+    ${HCOMM_DIR}/src/base_comm/resources/endpoint_pairs/channels
     ${HCOMM_DIR}/src/base_comm/resources/comm_engine_res/engine_ctxs
     ${HCOMM_DIR}/src/base_comm/resources/comm_engine_res/launch
     ${HCOMM_DIR}/src/base_comm/resources/comm_engine_res/threads

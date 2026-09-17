@@ -211,8 +211,8 @@ target_include_directories(hccl_v2 PRIVATE
     ${HCOMM_DIR}/src/legacy/ascend950/unified_platform/trace
     # coll_communicator_mgr dfx 头文件 (stream_lite.h -> res_pub.h)
     ${HCOMM_DIR}/src/coll_communicator_mgr/dfx
-    ${HCOMM_DIR}/src/coll_communicator_mgr/dfx/profiling/aicpu
-    ${HCOMM_DIR}/src/coll_communicator_mgr/dfx/profiling/aicpu/common
+    ${HCOMM_DIR}/src/base_comm/dfx/aicpu
+    ${HCOMM_DIR}/src/base_comm/dfx/aicpu/common
     ${HCOMM_DIR}/src/coll_communicator_mgr/dfx/profiling/host
     # 内部头文件
     ${HCOMM_DIR}/include

@@ -15,7 +15,8 @@
 #include "channel_process.h"
 #include "comm_engine_utils.h"
 
-#include "hcom_common.h"
+#include "opbase_adpt.h"
+#include "adapter_rts_common.h"
 #include "exception_handler.h"
 #include "config_plf_log_v2.h"
 

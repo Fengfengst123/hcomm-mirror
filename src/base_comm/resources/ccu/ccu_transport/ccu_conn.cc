@@ -13,7 +13,7 @@
 #include <random>
 #include <sstream>
 
-#include "hcom_common.h"
+#include "opbase_adpt.h"
 #include "exception_handler.h"
 #include "eid_info_mgr.h"
 

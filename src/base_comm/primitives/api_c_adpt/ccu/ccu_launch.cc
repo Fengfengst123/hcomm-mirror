@@ -22,7 +22,8 @@
 
 #include "ccu_log.h"
 
-#include "hcom_common.h"
+#include "opbase_adpt.h"
+#include "dfx_profiling_handler.h"
 
 #include "ccu_kernel_mgr.h"
 #include "ccu_instance_mgr.h"

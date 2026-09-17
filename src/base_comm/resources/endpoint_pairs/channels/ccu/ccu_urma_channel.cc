@@ -15,7 +15,7 @@
 #include "orion_adpt_utils.h"
 
 #include "exception_handler.h"
-#include "comm_mems.h"
+#include "mem_type_convert.h"
 
 #include "config_log.h"
 #include "config_plf_log_v2.h"

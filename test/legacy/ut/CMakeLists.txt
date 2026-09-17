@@ -91,11 +91,10 @@ target_include_directories(hccl_v2_utest PRIVATE
         ${HCCL_CODE_ROOT}/src/base_comm/common/debug/
         ${HCCL_CODE_ROOT}/src/base_comm/primitives/aicpu/task_cache
         ${HCCL_CODE_ROOT}/src/base_comm/primitives/api_c_adpt/
-        ${HCCL_CODE_ROOT}/src/base_comm/resources/comm_engine_res/threads
         ${HCCL_CODE_ROOT}/src/base_comm/dfx/
         ${HCCL_CODE_ROOT}/src/base_comm/resources/comm_engine_res/threads/
-        ${HCCL_CODE_ROOT}/src/coll_communicator_mgr/dfx/profiling/aicpu/
-        ${HCCL_CODE_ROOT}/src/coll_communicator_mgr/dfx/profiling/aicpu/common/
+        ${HCCL_CODE_ROOT}/src/base_comm/dfx/aicpu/
+        ${HCCL_CODE_ROOT}/src/base_comm/dfx/aicpu/common/
 
         ${HCCL_LLT_ROOT}/common/virtual_topo_stub/
         ${HCCL_LLT_ROOT}/ut/framework/topo/ranktable/

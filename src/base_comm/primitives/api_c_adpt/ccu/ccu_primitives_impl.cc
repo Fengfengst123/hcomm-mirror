@@ -11,7 +11,7 @@
 #include "ccu_primitives_impl.h"
 
 #include "ccu_log.h"
-#include "hcom_common.h"
+#include "opbase_adpt.h"
 
 #include "ccu_kernel_mgr.h"
 

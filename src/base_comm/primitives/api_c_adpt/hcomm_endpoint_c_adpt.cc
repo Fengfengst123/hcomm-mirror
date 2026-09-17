@@ -20,7 +20,7 @@
 #include "hcomm_result_defs.h"
 #include "param_check_pub.h"
 #include "exception_handler.h"
-#include "hcom_common.h"
+#include "opbase_adpt.h"
 #include "hcomm_res_defs.h"
 #include "channel_config.h"
 #include "shared_jetty_mgr.h"

@@ -8,15 +8,16 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ENGINE_AICPU_INTERFACE_H
-#define ENGINE_AICPU_INTERFACE_H
+#ifndef HCCL_NOTIFY_HANDLE_H
+#define HCCL_NOTIFY_HANDLE_H
 
-#include <cstdint>
+#include <stdint.h>
 
+#ifdef __cplusplus
 extern "C" {
-__attribute__((visibility("default"))) uint32_t RunAicpuThreadInit(void* args);
-__attribute__((visibility("default"))) uint32_t RunAicpuThreadDestroy(void* args);
-__attribute__((visibility("default"))) uint32_t RunAicpuThreadSupplementNotify(void* args);
+#endif // __cplusplus
+typedef uint64_t NotifyHandle;
+#ifdef __cplusplus
 }
-
-#endif // CHANNEL_AICPU_INTERFACE_H
+#endif // __cplusplus
+#endif // HCCL_NOTIFY_HANDLE_H

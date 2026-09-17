@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2025 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
  * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -8,32 +8,13 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef PROF_SAL_LITE_H
-#define PROF_SAL_LITE_H
+#include <stdio.h>
 
-#include <sys/syscall.h>
-#include <cstdint>
+#include "gtest/gtest.h"
 
-namespace Hccl {
-
-inline int32_t SalGetTidLite()
+GTEST_API_ int main(int argc, char** argv)
 {
-    thread_local int32_t cachedTid = static_cast<int32_t>(syscall(SYS_gettid));
-    return cachedTid;
+    printf("Running base_comm common UT\n");
+    testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
 }
-
-inline uint64_t ProfGetCurCpuTimestampLite()
-{
-#ifndef CCL_LLT
-    uint64_t cntvct = 0;
-#if defined __aarch64__
-    asm volatile("mrs %0, cntvct_el0" : "=r"(cntvct));
-#endif
-    return cntvct;
-#endif
-    return 0;
-}
-
-} // namespace Hccl
-
-#endif // PROF_SAL_LITE_H

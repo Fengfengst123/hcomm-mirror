@@ -318,6 +318,8 @@ set(UT_COMMON_INCLUDE_LIST
     ${HCCL_CODE_ROOT}/src/coll_communicator_mgr/dfx/ns_recovery
     ${HCCL_CODE_ROOT}/src/coll_communicator_mgr/dfx/profiling
     ${HCCL_CODE_ROOT}/src/coll_communicator_mgr/dfx/profiling/aicpu
+    ${HCCL_CODE_ROOT}/src/base_comm/dfx/aicpu
+    ${HCCL_CODE_ROOT}/src/base_comm/dfx/aicpu/common
     ${HCCL_CODE_ROOT}/src/coll_communicator_mgr/dfx/profiling/host
     ${HCCL_CODE_ROOT}/src/coll_communicator_mgr/dfx/taskException
     ${HCCL_CODE_ROOT}/src/coll_communicator_mgr/dfx/taskException/aicpu
@@ -427,5 +429,6 @@ add_subdirectory(dfx)
 add_subdirectory(base_comm/primitives/aicpu/task_cache)
 add_subdirectory(framework/nslbdp)
 add_subdirectory(base_comm/primitives/api_c_adpt/nic_plugin)
+add_subdirectory(base_comm/common)
 add_subdirectory(framework/dpu_npu_sync)
 add_subdirectory(base_comm/common/orion_adpt_utils)

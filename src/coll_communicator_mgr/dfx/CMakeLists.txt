@@ -10,7 +10,6 @@
 
 set(src_list
     ${CMAKE_CURRENT_SOURCE_DIR}/hcclCommDfx.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/hcclCommOp.cc
 )
 
 if(TARGET hcomm)
@@ -31,7 +30,6 @@ endif()
 
 set(device_src_list
     ${CMAKE_CURRENT_SOURCE_DIR}/hcclCommDfxLite.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/hcclCommOp.cc
 )
 
 if(TARGET ccl_kernel)

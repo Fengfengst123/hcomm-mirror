@@ -14,6 +14,10 @@
 #include <cstdint>
 
 extern "C" {
+__attribute__((visibility("default"))) uint32_t RunAicpuIndOpChannelInitV2(void* args);
+__attribute__((visibility("default"))) uint32_t RunAicpuIndOpChannelUpdateV2(void* args);
+__attribute__((visibility("default"))) uint32_t RunAicpuIndOpThreadInit(void* args);
+__attribute__((visibility("default"))) uint32_t RunAicpuIndOpNotify(void* args);
 __attribute__((visibility("default"))) uint32_t RunAicpuCommInit(void* args);
 __attribute__((visibility("default"))) uint32_t RunAicpuDfxInitV2(void* args);
 }

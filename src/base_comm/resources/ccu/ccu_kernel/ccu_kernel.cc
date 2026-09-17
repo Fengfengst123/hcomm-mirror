@@ -33,11 +33,10 @@
 
 #include "ccu_log.h"
 
-#include "hcom_common.h"
+#include "opbase_adpt.h"
 
 // todo: 引入头文件需要检查
 #include "ccu_assist_v1.h"
-#include "hccl_comm_pub.h"
 #include "hccl_types.h"
 #include "task_param.h"
 

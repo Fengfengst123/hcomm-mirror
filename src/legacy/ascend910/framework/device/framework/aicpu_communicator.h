@@ -36,7 +36,7 @@
 #include "aicpu_share_data_manager.h"
 #include <shared_mutex>
 #include "hccl/hccl_res.h"
-#include "channel_param.h"
+#include "indop_channel_param.h"
 #include "aicpu_launch_manager.h"
 #include "aicpu_ts_thread.h"
 #include "new/hccl_dispatcher_ctx.h"

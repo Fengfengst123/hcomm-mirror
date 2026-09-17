@@ -14,7 +14,7 @@
 #include "../../../../endpoint_pairs/channels/ccu/ccu_urma_channel.h"
 #include "ccu_api_exception.h"
 #include "ccu_assist_v1.h"
-#include "hcom_common.h"
+#include "opbase_adpt.h"
 #include "../../../ccu_device/ccu_res_specs.h"
 
 #include <iostream>

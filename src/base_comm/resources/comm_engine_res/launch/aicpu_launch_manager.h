@@ -16,7 +16,7 @@
 #include "aicpu_operator_pub.h"
 #include "thread.h"
 #include "hccl/hccl_res.h"
-#include "hccl_independent_common.h"
+#include "notify_handle.h"
 #include "local_notify.h"
 #include "aicpu_init_param.h"
 
@@ -131,6 +131,10 @@ public:
         aclrtBinHandle binCustomHandle);
     static HcclResult KernelLaunchAicpuCustom(
         uint64_t context, std::string kernelName, rtStream_t aicpuInitStream, aclrtBinHandle binCustomHandle);
+#ifndef CCL_KERNEL_AICPU
+    static std::string
+    GetBinNotifys(std::vector<std::unique_ptr<LocalNotify>>& newNotifys, const NotifyLoadType notifyType);
+#endif
 
 private:
     HcclResult AiCpuStreamAllocAndGet(rtStream_t& aiCpuStream);

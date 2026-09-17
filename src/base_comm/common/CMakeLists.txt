@@ -16,6 +16,7 @@ set(src_list
     tp_mgr.cc
     dlurma_function.cc
     hccl_dl.cc
+    opbase_adpt.cc
 )
 
 if(TARGET hcomm_base_obj)
@@ -25,6 +26,15 @@ if(TARGET hcomm_base_obj)
     target_include_directories(hcomm_base_obj PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/device
+    )
+endif()
+
+if(TARGET ccl_kernel)
+    target_sources(ccl_kernel PRIVATE
+        opbase_adpt.cc
+    )
+    target_include_directories(ccl_kernel PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
     )
 endif()
 

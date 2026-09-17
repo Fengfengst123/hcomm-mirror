@@ -8,19 +8,18 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
-set(hccl_utest_dfx_list
+set(hccl_ut_base_comm_common_list
     main.cc
-    ut_dfx.cc
-    ut_channel_profiling_adpt.cc
+    ut_opbase_adpt.cc
 )
 
-add_executable(hccl_utest_dfx ${hccl_utest_dfx_list})
+add_executable(hccl_ut_base_comm_common ${hccl_ut_base_comm_common_list})
 
-target_include_directories(hccl_utest_dfx PRIVATE
+target_include_directories(hccl_ut_base_comm_common PRIVATE
     ${UT_COMMON_INCLUDE_LIST}
 )
 
-target_compile_definitions(hccl_utest_dfx PRIVATE
+target_compile_definitions(hccl_ut_base_comm_common PRIVATE
     _GLIBCXX_USE_CXX11_ABI=0
     HALF_T=float
     google=ascend_private
@@ -30,7 +29,7 @@ target_compile_definitions(hccl_utest_dfx PRIVATE
     OPEN_BUILD_PROJECT
 )
 
-target_compile_options(hccl_utest_dfx PRIVATE
+target_compile_options(hccl_ut_base_comm_common PRIVATE
     -U_FORTIFY_SOURCE
     -fno-var-tracking-assignments
     -Os
@@ -38,7 +37,7 @@ target_compile_options(hccl_utest_dfx PRIVATE
     $<$<STREQUAL:${ENABLE_ASAN},true>:-fsanitize=address -fsanitize-recover=address,all -fno-omit-frame-pointer>
 )
 
-target_link_libraries(hccl_utest_dfx PRIVATE
+target_link_libraries(hccl_ut_base_comm_common PRIVATE
     $<BUILD_INTERFACE:intf_llt_pub>
     $<BUILD_INTERFACE:rdma_core_headers>
     $<$<STREQUAL:${ENABLE_ASAN},true>:-fsanitize=address>
@@ -50,7 +49,7 @@ target_link_libraries(hccl_utest_dfx PRIVATE
     -lrt
     -ldl
 )
-add_dependencies(hccl_utest_dfx hccl_llt)
+add_dependencies(hccl_ut_base_comm_common hccl_llt)
 
 enable_testing()
-add_test(NAME hccl_utest_dfx COMMAND hccl_utest_dfx)
+add_test(NAME hccl_ut_base_comm_common COMMAND hccl_ut_base_comm_common)

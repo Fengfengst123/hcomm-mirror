@@ -25,12 +25,12 @@ struct DevAicpuCommConfig {
 
 // 自定义算子aicpu通信域公共初始化参数
 struct CommAicpuParam {
-    char hcomId[HCOMID_MAX_SIZE];
-    s32 deviceLogicId;
-    u32 devicePhyId;
-    u32 deviceType;
-    u32 userRankSize;
-    u32 userRank;
+    char hcomId[HCOMID_MAX_SIZE]{};
+    s32 deviceLogicId{0};
+    u32 devicePhyId{0};
+    u32 deviceType{0};
+    u32 userRankSize{0};
+    u32 userRank{0};
     hccl::HDCommunicateParams kfcControlTransferH2DParams;
     hccl::HDCommunicateParams kfcStatusTransferD2HParams;
     DevAicpuCommConfig commConfig; // 收编通信域配置类变量

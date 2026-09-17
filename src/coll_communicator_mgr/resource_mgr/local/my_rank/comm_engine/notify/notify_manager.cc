@@ -65,35 +65,6 @@ NotifyManager::ParseBinNotifys(const std::string& uniqueIdStr, std::vector<std::
 }
 
 #ifndef CCL_KERNEL_AICPU
-std::string
-NotifyManager::GetBinNotifys(std::vector<std::unique_ptr<LocalNotify>>& newNotifys, const NotifyLoadType notifyType)
-{
-    std::string uniqueIdStr;
-    std::ostringstream oss;
-    size_t notifyNum = newNotifys.size();
-    oss.write(reinterpret_cast<const char_t*>(&notifyType), sizeof(notifyType));
-    oss.write(reinterpret_cast<const char_t*>(&notifyNum), sizeof(notifyNum));
-    HcclResult ret = HCCL_SUCCESS;
-    for (u32 idx = 0; idx < notifyNum; idx++) {
-        HcclSignalInfo notifyInfo;
-        ret = newNotifys[idx]->GetNotifyData(notifyInfo);
-        if (ret != HCCL_SUCCESS) {
-            HCCL_ERROR("[NotifyManager][%s] GetNotifyData failed, ret[%d]", __func__, ret);
-            std::string temp = std::string();
-            return temp;
-        }
-        HCCL_INFO(
-            "[NotifyManager][%s] get local notify data success, resId[%u], tsId:%d, devId[%u]", __func__,
-            notifyInfo.resId, notifyInfo.tsId, notifyInfo.devId);
-        oss.write(reinterpret_cast<const char_t*>(&notifyInfo), sizeof(notifyInfo));
-    }
-    HCCL_RUN_INFO(
-        "[NotifyManager][%s] GetUniqueId success, notifyNum[%zu], notifyType[%u], uniqueId[%s]", __func__, notifyNum,
-        notifyType, oss.str().c_str());
-    uniqueIdStr = oss.str();
-    return uniqueIdStr;
-}
-
 HcclResult NotifyManager::NotifyTypeToNotifyLoadType(::NotifyType notifyType, NotifyLoadType& notifyLoadType)
 {
     switch (notifyType) {
