@@ -40,6 +40,7 @@ public:
 
     HcclResult GetNotifyNum(uint32_t* notifyNum) const override;
     HcclResult GetRemoteMems(uint32_t* memNum, CommMem** remoteMem, char*** memInfos) override;
+    HcclResult UpdateMemInfo(HcommMemHandle* memHandles, uint32_t memHandleNum) override;
 
     HcclResult H2DResPack(std::vector<char>& buffer);
     const HcommChannelDesc& GetChannelDesc() const override { return channelDesc_; }
@@ -66,6 +67,8 @@ protected:
     virtual HcclResult BuildConnection() = 0;
     virtual void SendFinish() = 0;
     virtual void RecvFinish() = 0;
+
+    HcclResult CheckSocketStatus(const std::string& socketOperator);
 
     HcclResult ParseInputParam();
     HcclResult BuildNotify();

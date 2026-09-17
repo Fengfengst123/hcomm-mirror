@@ -17,6 +17,7 @@
 #undef protected
 #undef private
 #include "endpoint.h"
+#include "exchange_ub_buffer_dto.h"
 
 #define private public
 #define protected public
@@ -150,6 +151,16 @@ class FakeLocalUbRmaBuffer : public Hccl::LocalUbRmaBuffer {
 public:
     FakeLocalUbRmaBuffer(std::shared_ptr<Hccl::Buffer> b, void* rdma) : LocalUbRmaBuffer(b, rdma) {}
     string Describe() const override { return "hello"; }
+};
+class FakeExchangeLocalRmaBuffer : public Hccl::LocalRmaBuffer {
+public:
+    explicit FakeExchangeLocalRmaBuffer(std::shared_ptr<Hccl::Buffer> b) : LocalRmaBuffer(b, Hccl::RmaType::UB) {}
+    string Describe() const override { return "FakeExchangeLocalRmaBuffer"; }
+    std::unique_ptr<Hccl::Serializable> GetExchangeDto() override
+    {
+        return std::make_unique<Hccl::ExchangeUbBufferDto>(
+            buf->GetAddr(), buf->GetSize(), buf->GetMemType(), buf->GetMemInfo().c_str(), 0, 0, 0);
+    }
 };
 class FakeUbLocalNotify : public Hccl::UbLocalNotify {
 public:
@@ -484,4 +495,119 @@ TEST_F(AicpuTsUbRtpChannelTest, Ut_GetUniqueIdV2_NotReady_Expect_E_INTERNAL)
 
     std::vector<char> uniqueIdV2;
     EXPECT_EQ(ch.GetUniqueIdV2(uniqueIdV2), HcclResult::HCCL_E_INTERNAL);
+}
+
+std::shared_ptr<Hccl::LocalRmaBuffer> MakeUbRtpExchangeLocalBuffer(uintptr_t addr, u64 size, const char* tag)
+{
+    auto buffer = std::make_shared<Hccl::Buffer>(addr, size, HCCL_MEM_TYPE_DEVICE, tag);
+    return std::make_shared<Hccl::FakeExchangeLocalRmaBuffer>(buffer);
+}
+
+static void StubSendAsync(Hccl::Socket* self, const void* sendBuf, u32 size)
+{
+    if (!self || !sendBuf || size == 0) {
+        return;
+    }
+    auto* fs = dynamic_cast<FakeSocket*>(self);
+    if (fs) {
+        auto* p = static_cast<const u8*>(sendBuf);
+        fs->sent_.insert(fs->sent_.end(), p, p + size);
+    }
+}
+
+static void StubRecvAsync(Hccl::Socket* self, u8* recvBuf, u32 size)
+{
+    if (!self || !recvBuf || size == 0) {
+        return;
+    }
+    auto* fs = dynamic_cast<FakeSocket*>(self);
+    if (fs && !fs->sent_.empty()) {
+        u32 copySize = static_cast<u32>(std::min<size_t>(fs->sent_.size(), static_cast<size_t>(size)));
+        memcpy(recvBuf, fs->sent_.data(), copySize);
+        if (copySize < size) {
+            std::memset(recvBuf + copySize, 0, size - copySize);
+        }
+        fs->sent_.erase(fs->sent_.begin(), fs->sent_.begin() + copySize);
+        return;
+    }
+    std::memset(recvBuf, 0, size);
+}
+
+TEST_F(AicpuTsUbRtpChannelTest, UT_UpdateMemInfo_When_MemHandleNumZero_Expect_ReturnHCCL_SUCCESS)
+{
+    HcommChannelDesc desc{};
+    EndpointHandle ep = reinterpret_cast<EndpointHandle>(0x1);
+    AicpuTsUbRtpChannel ch(ep, desc);
+
+    HcclResult ret = ch.UpdateMemInfo(nullptr, 0);
+    EXPECT_EQ(ret, HCCL_SUCCESS);
+
+    GlobalMockObject::verify();
+}
+
+TEST_F(AicpuTsUbRtpChannelTest, UT_UpdateMemInfo_When_NullHandle_Expect_ReturnHCCL_E_PTR)
+{
+    HcommChannelDesc desc{};
+    EndpointHandle ep = reinterpret_cast<EndpointHandle>(0x1);
+    AicpuTsUbRtpChannel ch(ep, desc);
+
+    HcommMemHandle handles[1] = {nullptr};
+    HcclResult ret = ch.UpdateMemInfo(handles, 1);
+    EXPECT_EQ(ret, HCCL_E_PTR);
+
+    GlobalMockObject::verify();
+}
+
+TEST_F(AicpuTsUbRtpChannelTest, UT_UpdateMemInfo_When_SocketNull_Expect_ReturnHCCL_E_PTR)
+{
+    HcommChannelDesc desc{};
+    EndpointHandle ep = reinterpret_cast<EndpointHandle>(0x1);
+    AicpuTsUbRtpChannel ch(ep, desc);
+    ch.socket_ = nullptr;
+
+    auto localBuffer = MakeUbRtpExchangeLocalBuffer(0x650000U, 0x1000U, "ub_rtp_update_socket_null");
+    HcommMemHandle handles[1] = {reinterpret_cast<HcommMemHandle>(localBuffer.get())};
+    HcclResult ret = ch.UpdateMemInfo(handles, 1);
+    EXPECT_EQ(ret, HCCL_E_PTR);
+
+    GlobalMockObject::verify();
+}
+
+TEST_F(AicpuTsUbRtpChannelTest, UT_UpdateMemInfo_When_Normal_Expect_AppendBuffersAndInvalidateCache)
+{
+    HcommChannelDesc desc{};
+    EndpointHandle ep = reinterpret_cast<EndpointHandle>(0x1);
+    AicpuTsUbRtpChannel ch(ep, desc);
+
+    auto fakeSock = new FakeSocket(Hccl::SocketStatus::OK);
+    ch.socket_ = reinterpret_cast<Hccl::Socket*>(fakeSock);
+    ch.rdmaHandle_ = reinterpret_cast<void*>(0xDEADBEEF);
+    ch.cacheValid_ = true;
+
+    MOCKER_CPP(&Hccl::Socket::SendAsync, void(Hccl::Socket::*)(const void*, u32))
+        .stubs()
+        .with(mockcpp::any(), mockcpp::any())
+        .will(invoke(StubSendAsync));
+    MOCKER_CPP(&Hccl::Socket::RecvAsync, void(Hccl::Socket::*)(u8*, u32))
+        .stubs()
+        .with(mockcpp::any(), mockcpp::any())
+        .will(invoke(StubRecvAsync));
+    MOCKER_CPP(
+        &AicpuTsUboeUbRtpChannelHelper::CheckSocketStatus,
+        HcclResult(AicpuTsUboeUbRtpChannelHelper::*)(const std::string&))
+        .stubs()
+        .will(returnValue(HCCL_SUCCESS));
+
+    auto localBuffer = MakeUbRtpExchangeLocalBuffer(0x660000U, 0x1000U, "ub_rtp_update_normal");
+    HcommMemHandle handles[1] = {reinterpret_cast<HcommMemHandle>(localBuffer.get())};
+    HcclResult ret = ch.UpdateMemInfo(handles, 1);
+    EXPECT_EQ(ret, HCCL_SUCCESS);
+    ASSERT_EQ(ch.commonRes_.bufferVec.size(), 1U);
+    EXPECT_EQ(ch.commonRes_.bufferVec[0], localBuffer.get());
+    EXPECT_EQ(ch.rmtBufferVec_.size(), 1U);
+    EXPECT_FALSE(ch.cacheValid_);
+
+    GlobalMockObject::verify();
+    delete fakeSock;
+    ch.socket_ = nullptr;
 }

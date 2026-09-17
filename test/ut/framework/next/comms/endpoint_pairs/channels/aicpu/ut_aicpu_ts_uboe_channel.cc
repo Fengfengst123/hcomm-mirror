@@ -715,7 +715,9 @@ TEST_F(AicpuTsUboeChannelTest, Ut_UpdateMemInfo_When_CheckSocketStatusTimeout_Ex
         .stubs()
         .with(mockcpp::any(), mockcpp::any())
         .will(invoke(StubRecvAsync));
-    MOCKER_CPP(&AicpuTsUboeChannel::CheckSocketStatus, HcclResult(AicpuTsUboeChannel::*)(const std::string&))
+    MOCKER_CPP(
+        &AicpuTsUboeUbRtpChannelHelper::CheckSocketStatus,
+        HcclResult(AicpuTsUboeUbRtpChannelHelper::*)(const std::string&))
         .stubs()
         .will(returnValue(HCCL_E_TIMEOUT));
 
@@ -764,7 +766,9 @@ TEST_F(AicpuTsUboeChannelTest, UT_UpdateMemInfo_When_Normal_Expect_AppendBuffers
         .stubs()
         .with(mockcpp::any(), mockcpp::any())
         .will(invoke(stub_Socket_RecvAsync));
-    MOCKER_CPP(&AicpuTsUboeChannel::CheckSocketStatus, HcclResult(AicpuTsUboeChannel::*)(const std::string&))
+    MOCKER_CPP(
+        &AicpuTsUboeUbRtpChannelHelper::CheckSocketStatus,
+        HcclResult(AicpuTsUboeUbRtpChannelHelper::*)(const std::string&))
         .stubs()
         .will(returnValue(HCCL_SUCCESS));
 

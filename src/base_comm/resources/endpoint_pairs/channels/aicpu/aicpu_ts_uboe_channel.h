@@ -25,8 +25,6 @@ public:
     HcclResult Clean() override;
     HcclResult Resume() override;
 
-    HcclResult UpdateMemInfo(HcommMemHandle* memHandles, uint32_t memHandleNum) override;
-
     HcommChannelKind GetChannelKind() const override { return HcommChannelKind::AICPU_TS_UBOE; }
 
 protected:
@@ -42,8 +40,6 @@ private:
     void RmtEidUnpackProc(Hccl::IpAddress& rmtAddr);
     void HandleProcessData();
     void ProcessUboeState();
-
-    HcclResult CheckSocketStatus(const std::string& socketOperator);
 
     std::vector<char> sendEidData_{};
     std::vector<char> recvEidData_{};

@@ -12,8 +12,6 @@
 #include "aicpu_ts_uboe_channel.h"
 #include "orion_adpt_utils.h"
 #include "hcomm_res_mgr.h"
-#include "env_config/env_config_v2.h"
-#include "makebufs_helper.h"
 #include "endpoint.h"
 
 // Orion
@@ -221,86 +219,6 @@ void AicpuTsUboeChannel::ProcessUboeState()
         default:
             break;
     }
-}
-
-HcclResult AicpuTsUboeChannel::CheckSocketStatus(const std::string& socketOperator)
-{
-    CHK_PTR_NULL(socket_);
-    auto timeout = std::chrono::seconds(Hccl::EnvConfig::GetInstance().GetSocketConfig().GetLinkTimeOut());
-    auto startTime = std::chrono::steady_clock::now();
-    uint32_t retryCount = 0;
-    while (true) {
-        Hccl::SocketStatus socketStatus = socket_->GetAsyncStatus();
-        if (socketStatus == Hccl::SocketStatus::OK) {
-            auto elapsed
-                = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - startTime)
-                      .count();
-            HCCL_INFO(
-                "[AicpuTsUboeChannel][%s] socket operation[%s] success, elapsed[%lld]ms, retryCount[%u]", __func__,
-                socketOperator.c_str(), elapsed, retryCount);
-            break;
-        }
-        if ((std::chrono::steady_clock::now() - startTime) >= timeout || socketStatus == Hccl::SocketStatus::TIMEOUT) {
-            auto elapsed
-                = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - startTime)
-                      .count();
-            HCCL_ERROR(
-                "[AicpuTsUboeChannel][%s] socket operation[%s] timeout, socketStatus[%u], elapsed[%lld]ms, "
-                "retryCount[%u]",
-                __func__, socketOperator.c_str(), static_cast<uint32_t>(socketStatus), elapsed, retryCount);
-            return HCCL_E_TIMEOUT;
-        }
-        retryCount++;
-    }
-    return HCCL_SUCCESS;
-}
-
-HcclResult AicpuTsUboeChannel::UpdateMemInfo(HcommMemHandle* memHandles, uint32_t memHandleNum)
-{
-    std::vector<Hccl::LocalRmaBuffer*> bufferVecTemp;
-    CHK_RET(MakeRmaBufferVecFromMemHandles(memHandles, memHandleNum, bufferVecTemp, "AicpuTsUboeChannel"));
-
-    if (bufferVecTemp.size() == 0) {
-        HCCL_WARNING("[AicpuTsUboeChannel][%s] bufferNum is 0.", __func__);
-        return HCCL_SUCCESS;
-    }
-    CHK_PTR_NULL(socket_);
-    HCCL_INFO("[AicpuTsUboeChannel][%s] bufferNum[%zu]", __func__, bufferVecTemp.size());
-
-    std::vector<char> localSendData;
-    Hccl::BinaryStream sendStream;
-    BufferVecPack(sendStream, bufferVecTemp);
-    sendStream.Dump(localSendData);
-
-    u32 sendSize = localSendData.size();
-    socket_->SendAsync(&sendSize, sizeof(sendSize));
-    HCCL_INFO("[AicpuTsUboeChannel][%s] Send size[%u] of data.", __func__, sendSize);
-    CHK_RET(CheckSocketStatus("SendDataSize"));
-
-    u32 recvSize = 0;
-    socket_->RecvAsync(ReinterpretAs<u8*>(&recvSize), sizeof(recvSize));
-    CHK_RET(CheckSocketStatus("RecvDataSize"));
-    HCCL_INFO("[AicpuTsUboeChannel][%s] Recv size[%u] of data.", __func__, recvSize);
-
-    socket_->SendAsync(localSendData.data(), localSendData.size());
-    HCCL_INFO("[AicpuTsUboeChannel][%s] Send data, size[%zu].", __func__, localSendData.size());
-    CHK_RET(CheckSocketStatus("SendExchangeData"));
-
-    std::vector<char> localRecvData(recvSize);
-    socket_->RecvAsync(ReinterpretAs<u8*>(localRecvData.data()), localRecvData.size());
-    CHK_RET(CheckSocketStatus("RecvExchangeData"));
-    HCCL_INFO("[AicpuTsUboeChannel][%s] Recv data success.", __func__);
-
-    std::vector<std::unique_ptr<Hccl::RemoteUbRmaBuffer>> rmtBufferTemp{};
-    Hccl::BinaryStream recvStream(localRecvData);
-    RmtBufferVecUnpackProc(static_cast<u32>(bufferVecTemp.size()), recvStream, rmtBufferTemp, UboeRmtBufType::BUFFER);
-
-    rmtBufferVec_.insert(
-        rmtBufferVec_.end(), std::make_move_iterator(rmtBufferTemp.begin()),
-        std::make_move_iterator(rmtBufferTemp.end()));
-    commonRes_.bufferVec.insert(commonRes_.bufferVec.end(), bufferVecTemp.begin(), bufferVecTemp.end());
-    cacheValid_ = false;
-    return HCCL_SUCCESS;
 }
 
 HcclResult AicpuTsUboeChannel::Clean()

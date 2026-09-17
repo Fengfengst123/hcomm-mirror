@@ -13,6 +13,7 @@
 #include "endpoint.h"
 #include "../../sockets/socket_mgr.h"
 #include "orion_adpt_utils.h"
+#include "env_config/env_config_v2.h"
 
 // Orion
 #include "virtual_topo.h"
@@ -611,6 +612,7 @@ HcclResult AicpuTsUboeUbRtpChannelHelper::GetUniqueIdV2(std::vector<char>& resul
     auto rmtNotifyUniqueIds = GetRmtBufferUniqueIds(rmtNotifyVec_, UboeRmtBufType::NOTIFY);
     binaryStream << rmtNotifyUniqueIds;
 
+    locBufferVec_.clear();
     for (auto& it : commonRes_.bufferVec) {
         locBufferVec_.emplace_back(ReinterpretAs<Hccl::LocalUbRmaBuffer*>(it));
     }
@@ -629,6 +631,105 @@ HcclResult AicpuTsUboeUbRtpChannelHelper::GetUniqueIdV2(std::vector<char>& resul
 
     binaryStream.Dump(result);
     return HcclResult::HCCL_SUCCESS;
+}
+
+HcclResult AicpuTsUboeUbRtpChannelHelper::CheckSocketStatus(const std::string& socketOperator)
+{
+    CHK_PTR_NULL(socket_);
+    auto timeout = std::chrono::seconds(Hccl::EnvConfig::GetInstance().GetSocketConfig().GetLinkTimeOut());
+    auto startTime = std::chrono::steady_clock::now();
+    uint32_t retryCount = 0;
+    while (true) {
+        Hccl::SocketStatus socketStatus = socket_->GetAsyncStatus();
+        if (socketStatus == Hccl::SocketStatus::OK) {
+            auto elapsed
+                = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - startTime)
+                      .count();
+            HCCL_INFO(
+                "[AicpuTsUboeUbRtpChannelHelper][%s] socket operation[%s] success, elapsed[%lld]ms, retryCount[%u]",
+                __func__, socketOperator.c_str(), elapsed, retryCount);
+            break;
+        }
+        if ((std::chrono::steady_clock::now() - startTime) >= timeout || socketStatus == Hccl::SocketStatus::TIMEOUT) {
+            auto elapsed
+                = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - startTime)
+                      .count();
+            HCCL_ERROR(
+                "[AicpuTsUboeUbRtpChannelHelper][%s] socket operation[%s] timeout, socketStatus[%u], elapsed[%lld]ms, "
+                "retryCount[%u]",
+                __func__, socketOperator.c_str(), static_cast<uint32_t>(socketStatus), elapsed, retryCount);
+            return HCCL_E_TIMEOUT;
+        }
+        retryCount++;
+    }
+    return HCCL_SUCCESS;
+}
+
+HcclResult AicpuTsUboeUbRtpChannelHelper::UpdateMemInfo(HcommMemHandle* memHandles, uint32_t memHandleNum)
+{
+    std::vector<Hccl::LocalRmaBuffer*> bufferVecTemp;
+    CHK_RET(MakeRmaBufferVecFromMemHandles(memHandles, memHandleNum, bufferVecTemp, "AicpuTsUboeUbRtpChannelHelper"));
+
+    if (bufferVecTemp.size() == 0) {
+        HCCL_WARNING("[AicpuTsUboeUbRtpChannelHelper][%s] bufferNum is 0.", __func__);
+        return HCCL_SUCCESS;
+    }
+    CHK_PTR_NULL(socket_);
+    HCCL_INFO("[AicpuTsUboeUbRtpChannelHelper][%s] bufferNum[%zu]", __func__, bufferVecTemp.size());
+
+    uint32_t totalBufferNum = static_cast<uint32_t>(commonRes_.bufferVec.size() + bufferVecTemp.size());
+    if (UNLIKELY(totalBufferNum > MAX_BUFFER_NUM)) {
+        HCCL_ERROR(
+            "[AicpuTsUboeUbRtpChannelHelper][%s] totalBufferNum[%u] exceeds limit[%u]", __func__, totalBufferNum,
+            MAX_BUFFER_NUM);
+        return HCCL_E_PARA;
+    }
+
+    std::vector<char> localSendData;
+    Hccl::BinaryStream sendStream;
+    BufferVecPack(sendStream, bufferVecTemp);
+    sendStream.Dump(localSendData);
+
+    u32 sendSize = localSendData.size();
+    socket_->SendAsync(&sendSize, sizeof(sendSize));
+    HCCL_INFO("[AicpuTsUboeUbRtpChannelHelper][%s] Send size[%u] of data.", __func__, sendSize);
+    CHK_RET(CheckSocketStatus("SendDataSize"));
+
+    u32 recvSize = 0;
+    socket_->RecvAsync(ReinterpretAs<u8*>(&recvSize), sizeof(recvSize));
+    CHK_RET(CheckSocketStatus("RecvDataSize"));
+    HCCL_INFO("[AicpuTsUboeUbRtpChannelHelper][%s] Recv size[%u] of data.", __func__, recvSize);
+
+    socket_->SendAsync(localSendData.data(), localSendData.size());
+    HCCL_INFO("[AicpuTsUboeUbRtpChannelHelper][%s] Send data, size[%zu].", __func__, localSendData.size());
+    CHK_RET(CheckSocketStatus("SendExchangeData"));
+
+    std::vector<char> localRecvData(recvSize);
+    socket_->RecvAsync(ReinterpretAs<u8*>(localRecvData.data()), localRecvData.size());
+    CHK_RET(CheckSocketStatus("RecvExchangeData"));
+    HCCL_INFO("[AicpuTsUboeUbRtpChannelHelper][%s] Recv data success.", __func__);
+
+    std::vector<std::unique_ptr<Hccl::RemoteUbRmaBuffer>> rmtBufferTemp{};
+    Hccl::BinaryStream recvStream(localRecvData);
+    u32 locNum = static_cast<u32>(bufferVecTemp.size());
+    RmtBufferVecUnpackProc(locNum, recvStream, rmtBufferTemp, UboeRmtBufType::BUFFER);
+    if (rmtBufferTemp.size() != locNum) {
+        HCCL_ERROR(
+            "[AicpuTsUboeUbRtpChannelHelper][%s] buffer num mismatch, loc[%u] rmt[%zu]", __func__, locNum,
+            rmtBufferTemp.size());
+        return HCCL_E_INTERNAL;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(remoteMemsMutex_);
+        rmtBufferVec_.insert(
+            rmtBufferVec_.end(), std::make_move_iterator(rmtBufferTemp.begin()),
+            std::make_move_iterator(rmtBufferTemp.end()));
+        commonRes_.bufferVec.insert(commonRes_.bufferVec.end(), bufferVecTemp.begin(), bufferVecTemp.end());
+        cacheValid_ = false;
+        bufferNum_ = static_cast<u32>(commonRes_.bufferVec.size());
+    }
+    return HCCL_SUCCESS;
 }
 
 HcclResult AicpuTsUboeUbRtpChannelHelper::H2DResPack(std::vector<char>& buffer)
