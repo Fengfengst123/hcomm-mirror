@@ -26,12 +26,16 @@ char* AddrToString(const Addr* addr)
     char* buf = (char*)malloc(max_buffer_size);
     int ret = 0;
     if (buf == NULL) {
+        TOPO_ERR("AddrToString: malloc %zu bytes failed", max_buffer_size);
         return NULL;
     }
     (void)memset_s(buf, max_buffer_size, 0, max_buffer_size);
     char ports[MAX_PORTS_STR_LEN] = {0};
     for (int i = 0; i < addr->port_count; i++) {
         if (i > (MAX_PORT_NUM - 1)) {
+            TOPO_ERR(
+                "AddrToString: port_count=%d exceeds MAX_PORT_NUM(%d), ports truncated", addr->port_count,
+                MAX_PORT_NUM);
             break;
         }
         char port[MAX_PORT_LEN] = {0};
@@ -76,6 +80,8 @@ void NetLayerSetNetType(NetLayer* layer, const char* net_type)
 void NetLayerAddAddr(NetLayer* layer, const Addr* addr)
 {
     if (layer->addr_count >= MAX_ADDR_NUM) {
+        TOPO_ERR(
+            "NetLayerAddAddr: addr_count=%d reached MAX_ADDR_NUM(%d), addr dropped", layer->addr_count, MAX_ADDR_NUM);
         return;
     }
     (void)memcpy_s(&layer->rank_addr_list[layer->addr_count], sizeof(Addr), addr, sizeof(Addr));
@@ -85,6 +91,7 @@ void NetLayerAddAddr(NetLayer* layer, const Addr* addr)
 void NetLayerSetAddrAt(NetLayer* layer, const Addr* addr, int index)
 {
     if (index < 0 || index >= MAX_ADDR_NUM) {
+        TOPO_ERR("NetLayerSetAddrAt: invalid index=%d, out of range [0,%d)", index, MAX_ADDR_NUM);
         return;
     }
     (void)memcpy_s(&layer->rank_addr_list[index], sizeof(Addr), addr, sizeof(Addr));
@@ -96,10 +103,12 @@ char* NetLayerToString(const NetLayer* layer)
     const size_t max_buffer_size = 102400;
     char* buf = (char*)malloc(max_buffer_size);
     if (buf == NULL) {
+        TOPO_ERR("NetLayerToString: malloc %zu bytes for buf failed", max_buffer_size);
         return NULL;
     }
     char* addr_list = (char*)malloc(max_buffer_size);
     if (addr_list == NULL) {
+        TOPO_ERR("NetLayerToString: malloc %zu bytes for addr_list failed", max_buffer_size);
         free(buf);
         return NULL;
     }
@@ -108,6 +117,7 @@ char* NetLayerToString(const NetLayer* layer)
     for (int i = 0; i < layer->addr_count; i++) {
         char* addr = AddrToString(&layer->rank_addr_list[i]);
         if (addr == NULL) {
+            TOPO_ERR("NetLayerToString: AddrToString returned NULL for index=%d, addr omitted", i);
             continue;
         }
         if (strcat_s(addr_list, max_buffer_size, addr) != 0) {
@@ -140,13 +150,19 @@ char* RankListToString(const RootInfo* rootinfo)
     const size_t max_buffer_size = 102400;
     char* buf = (char*)malloc(max_buffer_size);
     if (buf == NULL) {
+        TOPO_ERR("RankListToString: malloc %zu bytes failed", max_buffer_size);
         return NULL;
     }
     (void)memset_s(buf, max_buffer_size, 0, max_buffer_size);
     for (int i = 0; i < rootinfo->rank_count; i++) {
         char* rank = RankToString(&rootinfo->ranks[i]);
+        if (rank == NULL) {
+            TOPO_ERR("RankListToString: RankToString returned NULL for rank[%d]", i);
+            break;
+        }
         errno_t ret = strcat_s(buf, max_buffer_size, rank);
         if (ret != 0) {
+            TOPO_ERR("RankListToString: strcat_s failed for rank[%d], ret=%d", i, (int)ret);
             free(rank);
             break;
         }
@@ -172,6 +188,7 @@ void RankInit(Rank* rank, int deviceId, int localId)
 void RankAddNetLayer(Rank* rank, const NetLayer* layer)
 {
     if (rank->level_count >= MAX_NET_LEVEL_NUM) {
+        TOPO_ERR("RankAddNetLayer: level_count=%d reached MAX_NET_LEVEL_NUM, layer dropped", rank->level_count);
         return;
     }
     (void)memcpy_s(&rank->level_list[rank->level_count], sizeof(NetLayer), layer, sizeof(NetLayer));
@@ -183,10 +200,16 @@ char* RootInfoToString(const RootInfo* rootinfo)
     const size_t max_buffer_size = 102400;
     char* buf = (char*)malloc(max_buffer_size);
     if (buf == NULL) {
+        TOPO_ERR("RootInfoToString: malloc %zu bytes failed", max_buffer_size);
         return NULL;
     }
     (void)memset_s(buf, max_buffer_size, 0, max_buffer_size);
     char* rank_list = RankListToString(rootinfo);
+    if (rank_list == NULL) {
+        TOPO_ERR("RootInfoToString: RankListToString returned NULL");
+        free(buf);
+        return NULL;
+    }
     int ret = sprintf_s(
         buf, max_buffer_size,
         "{\"version\": \"%s\", \"topo_file_path\": \"%s\","
@@ -210,6 +233,7 @@ void RootInfoInit(RootInfo* rootinfo)
 void RootInfoAddRank(RootInfo* rootinfo, const Rank* rank)
 {
     if (rootinfo->rank_count >= MAX_RANK_NUM) {
+        TOPO_ERR("RootInfoAddRank: rank_count=%d reached MAX_RANK_NUM, rank dropped", rootinfo->rank_count);
         return;
     }
     (void)memcpy_s(&rootinfo->ranks[rootinfo->rank_count], sizeof(Rank), rank, sizeof(Rank));
@@ -223,6 +247,7 @@ void AddrSetEID(Addr* addr, const dcmi_urma_eid_t* eid)
     for (int i = 0; i < DCMI_URMA_EID_SIZE; i++) {
         int ret = sprintf_s(&addr->addr[i * 2], MAX_NET_ADDR_LEN - (i * 2), "%02x", eid->raw[i]);
         if (ret < 0) {
+            TOPO_ERR("AddrSetEID: sprintf_s failed at byte %d, ret=%d, eid half-built", i, ret);
             return;
         }
     }
@@ -231,7 +256,12 @@ void AddrSetEID(Addr* addr, const dcmi_urma_eid_t* eid)
 
 void AddrSetIP(Addr* addr, const char* ip)
 {
-    (void)strcpy_s(addr->addr, sizeof(addr->addr), ip);
+    int ret = strcpy_s(addr->addr, sizeof(addr->addr), ip);
+    if (ret != 0) {
+        TOPO_ERR(
+            "AddrSetIP: strcpy_s failed, ip discarded, ret=%d, buf size=%u", ret, (unsigned int)sizeof(addr->addr));
+        return;
+    }
     (void)strcpy_s(addr->addr_type, sizeof(addr->addr_type), "IPV4");
 }
 
@@ -243,6 +273,7 @@ void AddrSetPlaneId(Addr* addr, const char* plane_id)
 int AddrAddPort(Addr* addr, const char* port)
 {
     if (addr->port_count >= (MAX_PORT_NUM - 1)) {
+        TOPO_ERR("AddrAddPort: port_count=%d reached limit %d", addr->port_count, MAX_PORT_NUM - 1);
         return -1;
     }
     return strcpy_s(addr->ports[addr->port_count++], MAX_PORT_LEN, port);
@@ -253,18 +284,27 @@ char* RankToString(const Rank* rank)
     const size_t max_buf_size = 102400;
     char* buf = (char*)malloc(max_buf_size);
     if (buf == NULL) {
+        TOPO_ERR("RankToString: malloc %zu bytes for buf failed", max_buf_size);
         return NULL;
     }
     char* level_list = (char*)malloc(max_buf_size);
     if (level_list == NULL) {
+        TOPO_ERR("RankToString: malloc %zu bytes for level_list failed", max_buf_size);
         free(buf);
         return NULL;
     }
     (void)memset_s(buf, max_buf_size, 0, max_buf_size);
     (void)memset_s(level_list, max_buf_size, 0, max_buf_size);
+    int ret = 0;
     for (int i = 0; i < rank->level_count; ++i) {
         char* layer = NetLayerToString(&rank->level_list[i]);
-        if (strcat_s(level_list, max_buf_size, layer) != 0) {
+        if (layer == NULL) {
+            TOPO_ERR("RankToString: NetLayerToString returned NULL for level[%d]", i);
+            break;
+        }
+        ret = strcat_s(level_list, max_buf_size, layer);
+        if (ret != 0) {
+            TOPO_ERR("RankToString: strcat_s failed for level[%d], ret=%d", i, ret);
             free(layer);
             break;
         }
@@ -276,11 +316,12 @@ char* RankToString(const Rank* rank)
         }
         free(layer);
     }
-    int ret = sprintf_s(
+    ret = sprintf_s(
         buf, max_buf_size, "{\"device_id\": %d, \"local_id\": %d, \"level_list\": [%s]}", rank->device_id,
         rank->local_id, level_list);
     free(level_list);
     if (ret < 0) {
+        TOPO_ERR("RankToString: sprintf_s failed, ret=%d", ret);
         free(buf);
         buf = NULL;
     }

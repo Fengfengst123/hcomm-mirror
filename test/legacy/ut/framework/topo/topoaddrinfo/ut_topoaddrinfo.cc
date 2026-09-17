@@ -18,8 +18,14 @@
 #include <stdint.h>
 #include <ctype.h>
 #include <dlfcn.h>
+#include <sys/stat.h>
+#include <stdarg.h>
+#include <vector>
+#include <pthread.h>
 #include "securec.h"
 #include "topo_addr_info.h"
+#include "topo_addr_info_log.h"
+#include "rank_info_types.h"
 #include "hal.h"
 #include "hal.h"
 
@@ -54,16 +60,141 @@ int hex32_to_bin16(const char* hex_str, uint8_t* bin_out)
     return 0;
 }
 
+/* UT 日志回调：截获 TOPO_* 宏输出到全局缓冲，供用例做关键字断言。
+ * 因多线程用例会并发触发日志，对 g_utLogLines 加锁保证线程安全。 */
+static std::vector<std::string> g_utLogLines;
+static pthread_mutex_t g_utLogMutex = PTHREAD_MUTEX_INITIALIZER;
+
+static void UtLogRecord(int moduleId, int level, const char* fmt, ...)
+{
+    char buf[1024] = {0};
+    va_list args;
+    va_start(args, fmt);
+    (void)vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+    printf("[UT_TOPO] %s\n", buf);
+    pthread_mutex_lock(&g_utLogMutex);
+    g_utLogLines.push_back(buf);
+    pthread_mutex_unlock(&g_utLogMutex);
+}
+
+static int UtCheckLogLevel(int moduleId, int logLevel) { return 1; }
+
+static void UtLogReset()
+{
+    pthread_mutex_lock(&g_utLogMutex);
+    g_utLogLines.clear();
+    pthread_mutex_unlock(&g_utLogMutex);
+}
+
+static bool UtLogContains(const std::string& keyword)
+{
+    bool found = false;
+    pthread_mutex_lock(&g_utLogMutex);
+    for (const auto& line : g_utLogLines) {
+        if (line.find(keyword) != std::string::npos) {
+            found = true;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&g_utLogMutex);
+    return found;
+}
+
+/* 文件操作 mock：拦截 fopen/fstat/fread，隔离 /etc/hccl_rootinfo.json。
+ * 默认让该路径 fopen 返回 NULL，使 PassThrough 失败，避免真实文件干扰用例。 */
+static struct {
+    int passthrough_enable;      /* 1: 对 /etc/hccl_rootinfo.json 返回 tmpfile，启用 PassThrough 路径 */
+    int fstat_fail;              /* 1: fstat 返回 -1 */
+    size_t fread_short_read;     /* >0: fread 仅返回该字节数（一次性） */
+    const char* tmpfile_content; /* passthrough 时写入 tmpfile 的内容 */
+} g_fileMock = {0, 0, 0, NULL};
+
+/* __real_* 由链接器 --wrap 选项解析，此处仅提供声明供编译器类型检查 */
+extern "C" FILE* __real_fopen(const char* path, const char* mode);
+extern "C" int __real_fstat(int fd, struct stat* buf);
+extern "C" size_t __real_fread(void* ptr, size_t size, size_t nmemb, FILE* stream);
+extern "C" int __real_stat(const char* path, struct stat* buf);
+
+/* 对 /etc/hccl_rootinfo.json 默认 stat 失败，使 TopoAddrInfoGetSize 走 mainboard_id 路径 */
+extern "C" int __wrap_stat(const char* path, struct stat* buf)
+{
+    if (path != NULL && strcmp(path, "/etc/hccl_rootinfo.json") == 0) {
+        errno = ENOENT;
+        return -1;
+    }
+    return __real_stat(path, buf);
+}
+
+/* 拦截 /etc/hccl_rootinfo.json：默认返回 NULL 让 PassThrough 失败；
+ * passthrough_enable 时返回 tmpfile，由调用方 fclose，不持有引用避免 double free */
+extern "C" FILE* __wrap_fopen(const char* path, const char* mode)
+{
+    if (path != NULL && strcmp(path, "/etc/hccl_rootinfo.json") == 0) {
+        if (!g_fileMock.passthrough_enable) {
+            return NULL;
+        }
+        FILE* fp = tmpfile();
+        if (fp == NULL) {
+            return NULL;
+        }
+        if (g_fileMock.tmpfile_content != NULL) {
+            size_t n = strlen(g_fileMock.tmpfile_content);
+            fwrite(g_fileMock.tmpfile_content, 1, n, fp);
+            rewind(fp);
+        }
+        return fp;
+    }
+    return __real_fopen(path, mode);
+}
+
+extern "C" int __wrap_fstat(int fd, struct stat* buf)
+{
+    if (g_fileMock.fstat_fail) {
+        errno = EIO;
+        return -1;
+    }
+    return __real_fstat(fd, buf);
+}
+
+extern "C" size_t __wrap_fread(void* ptr, size_t size, size_t nmemb, FILE* stream)
+{
+    if (g_fileMock.fread_short_read > 0) {
+        size_t ret = g_fileMock.fread_short_read;
+        g_fileMock.fread_short_read = 0; /* 一次性触发 */
+        return ret;
+    }
+    return __real_fread(ptr, size, nmemb, stream);
+}
+
+static void FileMockReset()
+{
+    g_fileMock.passthrough_enable = 0;
+    g_fileMock.fstat_fail = 0;
+    g_fileMock.fread_short_read = 0;
+    g_fileMock.tmpfile_content = NULL;
+}
+
 class TopoAddrInfoTest : public testing::Test {
 protected:
     static void SetUpTestCase() { std::cout << "TopoAddrInfo tests set up." << std::endl; }
 
     static void TearDownTestCase() { std::cout << "TopoAddrInfo tests tear down." << std::endl; }
 
-    virtual void SetUp() { std::cout << "A Test case in TopoAddrInfoTest SetUP" << std::endl; }
+    virtual void SetUp()
+    {
+        FileMockReset();
+        UtLogReset();
+        g_topo_DlogRecord = UtLogRecord;
+        g_topo_CheckLogLevel = UtCheckLogLevel;
+        std::cout << "A Test case in TopoAddrInfoTest SetUP" << std::endl;
+    }
 
     virtual void TearDown()
     {
+        FileMockReset();
+        g_topo_DlogRecord = NULL;
+        g_topo_CheckLogLevel = NULL;
         GlobalMockObject::verify();
         std::cout << "A Test case in TopoAddrInfoTest TearDown" << std::endl;
     }
@@ -981,4 +1112,129 @@ TEST_F(TopoAddrInfoTest, ut_rootinfo_for_serv_550EL_200)
     EXPECT_TRUE(strstr(buf, "000000000f3f020000100000df07abf9") != NULL);
     EXPECT_TRUE(strstr(buf, "000000000f7f020000100000df07bbf9") != NULL);
     free(buf);
+}
+
+/**
+ * @brief 验证 PassThrough 中 fread 短读时返回错误
+ */
+TEST_F(TopoAddrInfoTest, Ut_PassThrough_FreadShortRead)
+{
+    g_fileMock.passthrough_enable = 1;
+    g_fileMock.tmpfile_content = "0123456789abcdefghij";
+    g_fileMock.fread_short_read = 10; /* 文件 20 字节，fread 仅返回 10，构造短读 */
+
+    /* PassThrough 失败后 TopoAddrInfoGet 回退到 mainboard_id 路径，mock 失败使其快速返回 */
+    unsigned int m = 0;
+    MOCKER(hal_get_mainboard_id).stubs().with(mockcpp::any(), outBoundP(&m)).will(returnValue(-1));
+
+    char buf[4096];
+    memset(buf, 0, sizeof(buf));
+    size_t bufSize = sizeof(buf);
+    int ret = TopoAddrInfoGet(0, buf, &bufSize);
+    EXPECT_NE(ret, 0);
+    EXPECT_TRUE(UtLogContains("short read")) << "应输出 short read 错误日志";
+}
+
+/**
+ * @brief 验证 PassThrough 中 fstat 失败时返回错误
+ */
+TEST_F(TopoAddrInfoTest, Ut_PassThrough_FstatFail)
+{
+    g_fileMock.passthrough_enable = 1;
+    g_fileMock.tmpfile_content = "any_content";
+    g_fileMock.fstat_fail = 1;
+
+    /* PassThrough 失败后 TopoAddrInfoGet 回退到 mainboard_id 路径，mock 失败使其快速返回 */
+    unsigned int m = 0;
+    MOCKER(hal_get_mainboard_id).stubs().with(mockcpp::any(), outBoundP(&m)).will(returnValue(-1));
+
+    char buf[4096];
+    memset(buf, 0, sizeof(buf));
+    size_t bufSize = sizeof(buf);
+    int ret = TopoAddrInfoGet(0, buf, &bufSize);
+    EXPECT_NE(ret, 0);
+    EXPECT_TRUE(UtLogContains("failed to fstat")) << "应输出 fstat 失败日志";
+}
+
+/**
+ * @brief 验证 mainboard_id 未命中时 TopoAddrInfoGet 返回 -1 并输出 WARN
+ */
+TEST_F(TopoAddrInfoTest, Ut_TopoAddrInfoGet_MainboardIdNotFound)
+{
+    /* 0xFF 不在 g_get_rootinfo_func_table 中 */
+    unsigned int m = 0xFF;
+    MOCKER(hal_get_mainboard_id).stubs().with(mockcpp::any(), outBoundP(&m)).will(returnValue(0));
+
+    char buf[4096];
+    memset(buf, 0, sizeof(buf));
+    size_t bufSize = sizeof(buf);
+    int ret = TopoAddrInfoGet(0, buf, &bufSize);
+    EXPECT_EQ(ret, -1);
+    EXPECT_TRUE(UtLogContains("no get_rootinfo func")) << "未命中应输出 WARN 日志";
+}
+
+/**
+ * @brief 验证 get_rootinfo 函数失败时 TopoAddrInfoGet 返回错误并输出 ERR
+ */
+TEST_F(TopoAddrInfoTest, Ut_TopoAddrInfoGet_GetRootinfoFail)
+{
+    unsigned int m = MAIN_BOARD_ID_CARD_2PMESH;
+    char drv_path[256] = "/usr/local/Ascend2";
+    dcmi_urma_eid_info_t eidList[MAX_EID_NUM];
+    hex32_to_bin16("000000000000000000100000dfdf0020", eidList[0].eid.raw);
+    hex32_to_bin16("000000000000000000100000dfdf0028", eidList[1].eid.raw);
+    hex32_to_bin16("000000000000000000100000dfdf0030", eidList[2].eid.raw);
+    hex32_to_bin16("000000000000000000100000dfdf0051", eidList[3].eid.raw);
+    size_t eidNum = 4;
+
+    MOCKER(hal_get_mainboard_id).stubs().with(mockcpp::any(), outBoundP(&m)).will(returnValue(0));
+    MOCKER(hal_get_driver_install_path)
+        .stubs()
+        .with(outBoundP(drv_path, strlen(drv_path)), mockcpp::any())
+        .will(returnValue(0));
+    MOCKER(hal_get_eid_list_by_phy_id)
+        .stubs()
+        .with(mockcpp::any(), outBoundP(eidList, eidNum * sizeof(dcmi_urma_eid_info_t)), outBoundP(&eidNum))
+        .will(returnValue(0));
+
+    /* strcpy_s stub 恒返 0，注入失败返回值使 GetCardRankInfo 写入 rootinfo 失败 */
+    MOCKER(strcpy_s).stubs().will(returnValue(1));
+
+    char buf[4096];
+    memset(buf, 0, sizeof(buf));
+    size_t bufSize = sizeof(buf);
+    int ret = TopoAddrInfoGet(0, buf, &bufSize);
+    EXPECT_NE(ret, 0);
+    EXPECT_TRUE(UtLogContains("get_rootinfo func failed")) << "应输出 get_rootinfo 函数失败 ERR 日志";
+}
+
+/**
+ * @brief 验证 TopoLogInit 多线程并发调用不崩溃（pthread_mutex 保证线程安全）
+ */
+TEST_F(TopoAddrInfoTest, Ut_TopoLogInit_ConcurrentSafe)
+{
+    /* 置空函数指针以触发首次初始化：SetUp 的预设值会使所有线程
+     * 在判空检查处早退，测不到锁内 dlopen/dlsym 的初始化竞争 */
+    g_topo_DlogRecord = NULL;
+    g_topo_CheckLogLevel = NULL;
+
+    /* TopoLogInit 内部 dlopen 真实 libunified_dlog.so，结果不可控，
+     * 只验证并发调用无数据竞争 */
+    constexpr int threadNum = 16;
+    std::vector<std::thread> ts;
+    std::vector<int> results(threadNum, 0);
+    for (int i = 0; i < threadNum; i++) {
+        ts.emplace_back([&results, i] {
+            TopoLogInit();
+            results[i] = 1;
+        });
+    }
+    for (int i = 0; i < threadNum; i++) {
+        ts[i].join();
+        EXPECT_EQ(results[i], 1) << "线程 " << i << " 应正常完成";
+    }
+    /* dlopen 成败不影响两个函数指针的赋值一致性 */
+    bool dlogNull = (g_topo_DlogRecord == NULL);
+    bool chkNull = (g_topo_CheckLogLevel == NULL);
+    EXPECT_EQ(dlogNull, chkNull) << "两个函数指针应保持一致（同为 NULL 或同非 NULL）";
 }

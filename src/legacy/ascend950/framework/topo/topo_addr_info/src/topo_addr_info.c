@@ -9,6 +9,8 @@
  */
 
 #include "topo_addr_info.h"
+#include <errno.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <syslog.h>
@@ -77,7 +79,9 @@ static GetRootinfoFuncTable g_get_rootinfo_func_table[] = {
 
 int TopoAddrInfoGetSize(int phyId, size_t* size)
 {
+    TopoLogInit(); /* 懒初始化日志，全部下游共用 */
     if (size == NULL) {
+        TOPO_ERR("TopoAddrInfoGetSize: size is NULL");
         return -1;
     }
 
@@ -100,7 +104,7 @@ int TopoAddrInfoGetSize(int phyId, size_t* size)
             return g_get_size_func_table[i].get_size_func(size);
         }
     }
-    TOPO_ERR("MainBoardId %d not found in g_get_size_func_table, use default", mainboard_id);
+    TOPO_ERR("TopoAddrInfoGetSize:MainBoardId %d not found in g_get_size_func_table, use default", mainboard_id);
     (*size) = DEFAULT_RANKINFO_SIZE;
     return 0;
 }
@@ -115,7 +119,9 @@ static int PassThroughTopoFilePath(char* filePath, size_t bufSize)
  */
 int TopoAddrInfoGetTopoFilePath(int phyId, char* filePath, size_t bufSize)
 {
+    TopoLogInit(); /* 懒初始化日志，全部下游共用 */
     if (filePath == NULL) {
+        TOPO_ERR("TopoAddrInfoGetTopoFilePath: filePath is NULL");
         return -1;
     }
     // 优先从/etc/hccl_rootinfo.json中读取
@@ -141,16 +147,27 @@ static int PassThrough(char* rankInfo, size_t* bufSize)
 {
     FILE* fp = fopen(DEFAULT_RANKINFO_FILE_PATH, "r");
     if (fp == NULL) {
+        TOPO_INFO("PassThrough: failed to open %s", DEFAULT_RANKINFO_FILE_PATH);
         return -1;
     }
     struct stat stat;
-    fstat(fileno(fp), &stat);
-    if ((size_t)stat.st_size > (*bufSize)) {
+    if (fstat(fileno(fp), &stat) != 0) {
+        TOPO_ERR("PassThrough: failed to fstat %s, errno = %d", DEFAULT_RANKINFO_FILE_PATH, errno);
         fclose(fp);
         return -1;
     }
-    int ret = fread(rankInfo, 1, stat.st_size, fp);
-    if (ret < 0) {
+    if ((size_t)stat.st_size > (*bufSize)) {
+        TOPO_ERR(
+            "PassThrough: file %s size %lld exceeds buffer size %zu", DEFAULT_RANKINFO_FILE_PATH,
+            (long long)stat.st_size, *bufSize);
+        fclose(fp);
+        return -1;
+    }
+    size_t readBytes = fread(rankInfo, 1, (size_t)stat.st_size, fp);
+    if (readBytes != (size_t)stat.st_size) {
+        TOPO_ERR(
+            "PassThrough: short read %s, expected=%lld actual=%zu", DEFAULT_RANKINFO_FILE_PATH, (long long)stat.st_size,
+            readBytes);
         fclose(fp);
         return -1;
     }
@@ -163,6 +180,7 @@ int TopoAddrInfoGet(int phyId, char* rankInfo, size_t* bufSize)
     TopoLogInit(); /* 懒初始化日志，全部下游共用 */
     TOPO_PERF_BEGIN(TopoAddrInfoGet);
     if (rankInfo == NULL || bufSize == NULL) {
+        TOPO_ERR("TopoAddrInfoGet: rankInfo or bufSize is NULL");
         TOPO_PERF_END(TopoAddrInfoGet);
         return -1;
     }
@@ -180,17 +198,25 @@ int TopoAddrInfoGet(int phyId, char* rankInfo, size_t* bufSize)
         return ret;
     }
 
-    ret = -1;
+    bool found = false;
     for (size_t i = 0; i < sizeof(g_get_rootinfo_func_table) / sizeof(GetRootinfoFuncTable); ++i) {
-        if (g_get_rootinfo_func_table[i].mainboard_id == mainboard_id) {
-            ret = g_get_rootinfo_func_table[i].get_rootinfo_func(phyId, mainboard_id, rankInfo, bufSize);
-            if (ret != 0) {
-                TOPO_ERR("Get AddrInfo Failed, NPU phyId %d MainBoardId %d", phyId, mainboard_id);
-            }
-            TOPO_PERF_END(TopoAddrInfoGet);
-            return ret;
+        if (g_get_rootinfo_func_table[i].mainboard_id != mainboard_id) {
+            continue;
         }
+        found = true;
+        int funcRet = g_get_rootinfo_func_table[i].get_rootinfo_func(phyId, mainboard_id, rankInfo, bufSize);
+        if (funcRet != 0) {
+            TOPO_ERR("TopoAddrInfoGet: get_rootinfo func failed for mainboard_id %u, ret=%d", mainboard_id, funcRet);
+            TOPO_PERF_END(TopoAddrInfoGet);
+            return funcRet;
+        }
+        break;
     }
-    TOPO_ERR("MainBoardId %d not found for TopoAddrInfoGet", mainboard_id);
-    return ret;
+    if (!found) {
+        TOPO_ERR("TopoAddrInfoGet: no get_rootinfo func for mainboard_id %u", mainboard_id);
+        TOPO_PERF_END(TopoAddrInfoGet);
+        return -1;
+    }
+    TOPO_PERF_END(TopoAddrInfoGet);
+    return 0;
 }

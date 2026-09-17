@@ -36,8 +36,8 @@ extern int (*g_topo_CheckLogLevel)(int moduleId, int logLevel);
 
 /**
  * 初始化日志：dlopen("libunified_dlog.so") + dlsym
- * 可在进程启动后任一时间调用，失败不会阻塞后续流程。
- * 多次调用安全，只有首次生效。
+ * 线程安全：并发调用时仅一个线程执行初始化，其余等待完成后返回。
+ * 初始化成功后仅首次生效；失败后下次调用重试（日志宏判空兜底，失败不阻塞流程）。
  */
 void TopoLogInit(void);
 

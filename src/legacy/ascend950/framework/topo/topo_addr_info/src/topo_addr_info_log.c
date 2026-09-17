@@ -10,22 +10,29 @@
 
 #include "topo_addr_info_log.h"
 #include <dlfcn.h>
+#include <pthread.h>
 #include <stdio.h>
 
 /* ── 全局函数指针（初始为 NULL，TopoLogInit 填充） ── */
 void (*g_topo_DlogRecord)(int moduleId, int level, const char* fmt, ...) = NULL;
 int (*g_topo_CheckLogLevel)(int moduleId, int logLevel) = NULL;
 
+/* 线程安全懒初始化：锁内判空 + 锁内 dlopen/dlsym */
 void TopoLogInit(void)
 {
-    static int initialized = 0;
-    if (initialized != 0) {
+    static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+    static void* handle = NULL;
+    pthread_mutex_lock(&mutex);
+    if (g_topo_DlogRecord != NULL && g_topo_CheckLogLevel != NULL) {
+        pthread_mutex_unlock(&mutex);
         return;
     }
 
-    void* handle = dlopen("libunified_dlog.so", RTLD_NOW);
     if (handle == NULL) {
-        initialized = -1;
+        handle = dlopen("libunified_dlog.so", RTLD_NOW);
+    }
+    if (handle == NULL) {
+        pthread_mutex_unlock(&mutex);
         return;
     }
 
@@ -35,9 +42,8 @@ void TopoLogInit(void)
     if (g_topo_DlogRecord == NULL || g_topo_CheckLogLevel == NULL) {
         g_topo_DlogRecord = NULL;
         g_topo_CheckLogLevel = NULL;
-        initialized = -1;
-        return;
     }
+    /* handle 不 dlclose：成功时函数指针须指向存活库 */
 
-    initialized = 1;
+    pthread_mutex_unlock(&mutex);
 }

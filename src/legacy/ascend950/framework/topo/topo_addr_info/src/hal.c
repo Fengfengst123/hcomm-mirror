@@ -96,6 +96,28 @@ void* hal_dlopen(const char* filename, int flag) { return dlopen(filename, flag)
 
 void* hal_dlsym(void* handle, const char* symbol) { return dlsym(handle, symbol); }
 
+/* dlopen 失败当场抓取 dlerror（其错误仅保留到下一次调用），并报出具体库名 */
+static void* load_lib(const char* libName)
+{
+    void* handle = hal_dlopen(libName, RTLD_LAZY);
+    if (handle == NULL) {
+        const char* err = dlerror();
+        TOPO_ERR("load_lib: dlopen %s failed, dlerror=%s", libName, err != NULL ? err : "unknown");
+    }
+    return handle;
+}
+
+/* dlsym 失败当场抓取 dlerror（其错误仅保留到下一次调用），并报出具体符号名 */
+static void* load_sym(void* handle, const char* symbol)
+{
+    void* fn = hal_dlsym(handle, symbol);
+    if (fn == NULL) {
+        const char* err = dlerror();
+        TOPO_ERR("load_sym: dlsym %s failed, dlerror=%s", symbol, err != NULL ? err : "unknown");
+    }
+    return fn;
+}
+
 int load_dcmi()
 {
     static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -108,31 +130,33 @@ int load_dcmi()
         return 0;
     }
     if (dcmi == NULL || acl == NULL) {
-        dcmi = hal_dlopen("libdcmi.so", RTLD_LAZY);
-        acl = hal_dlopen("libacl_rt.so", RTLD_LAZY);
+        dcmi = load_lib("libdcmi.so");
+        acl = load_lib("libacl_rt.so");
     }
 
     if (dcmi == NULL || acl == NULL) {
+        TOPO_ERR("load_dcmi: failed to dlopen libdcmi.so or libacl_rt.so");
         pthread_mutex_unlock(&mutex);
         return -1;
     }
-    dcmi_init = hal_dlsym(dcmi, "dcmiv2_init");
-    dcmiv2_get_urma_device_cnt = hal_dlsym(dcmi, "dcmiv2_get_urma_device_cnt");
-    dcmiv2_get_eid_list_by_urma_dev_index = hal_dlsym(dcmi, "dcmiv2_get_eid_list_by_urma_dev_index");
-    dcmiv2_get_device_pcie_info = hal_dlsym(dcmi, "dcmiv2_get_device_pcie_info");
+    dcmi_init = load_sym(dcmi, "dcmiv2_init");
+    dcmiv2_get_urma_device_cnt = load_sym(dcmi, "dcmiv2_get_urma_device_cnt");
+    dcmiv2_get_eid_list_by_urma_dev_index = load_sym(dcmi, "dcmiv2_get_eid_list_by_urma_dev_index");
+    dcmiv2_get_device_pcie_info = load_sym(dcmi, "dcmiv2_get_device_pcie_info");
 
     // 兼容性处理 aclrtGetLogicDevIdByPhyDevId接口语义错误,实际返回的是UserDevId，优先使用新接口
     aclrtGetUserDevIdByPhyDevId = hal_dlsym(acl, "aclrtGetUserDevIdByPhyDevId");
     if (aclrtGetUserDevIdByPhyDevId == NULL) {
-        aclrtGetUserDevIdByPhyDevId = hal_dlsym(acl, "aclrtGetLogicDevIdByPhyDevId");
+        aclrtGetUserDevIdByPhyDevId = load_sym(acl, "aclrtGetLogicDevIdByPhyDevId");
     }
 
-    halGetDeviceInfo = hal_dlsym(acl, "halGetDeviceInfo");
-    aclrtGetLogicDevIdByUserDevId = hal_dlsym(acl, "aclrtGetLogicDevIdByUserDevId");
+    halGetDeviceInfo = load_sym(acl, "halGetDeviceInfo");
+    aclrtGetLogicDevIdByUserDevId = load_sym(acl, "aclrtGetLogicDevIdByUserDevId");
 
     if ((dcmi_init == NULL) || (dcmiv2_get_urma_device_cnt == NULL) || (dcmiv2_get_eid_list_by_urma_dev_index == NULL)
         || (halGetDeviceInfo == NULL) || (dcmiv2_get_device_pcie_info == NULL) || (aclrtGetUserDevIdByPhyDevId == NULL)
         || (aclrtGetLogicDevIdByUserDevId == NULL)) {
+        TOPO_ERR("load_dcmi: failed to dlsym required dcmi/acl symbols");
         pthread_mutex_unlock(&mutex);
         return -1;
     }
@@ -150,9 +174,11 @@ int hal_get_mainboard_id(int phyId, unsigned int* mainboardId)
     }
     int64_t value = 0;
     int ret = halGetDeviceInfo(logicId, MODULE_TYPE_SYSTEM, INFO_TYPE_MAINBOARD_ID, &value);
-    if (ret == 0) {
-        *mainboardId = (unsigned int)value;
+    if (ret != 0) {
+        TOPO_ERR("hal_get_mainboard_id: halGetDeviceInfo failed ret=%d, logicId=%u", ret, logicId);
+        return ret;
     }
+    *mainboardId = (unsigned int)value;
     return ret;
 }
 
@@ -165,12 +191,14 @@ int get_server_id(char* server_id, size_t len)
     int if_count, i;
 
     if ((sock_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+        TOPO_ERR("get_server_id: failed to create socket");
         return -1;
     }
 
     ifc.ifc_len = sizeof(ifr);
     ifc.ifc_buf = (char*)ifr;
     if (ioctl(sock_fd, SIOCGIFCONF, &ifc) < 0) {
+        TOPO_ERR("get_server_id: ioctl SIOCGIFCONF failed");
         close(sock_fd);
         return -1;
     }
@@ -191,6 +219,7 @@ int get_server_id(char* server_id, size_t len)
         close(sock_fd);
         return 0;
     }
+    TOPO_ERR("get_server_id: no ethernet interface found");
     close(sock_fd);
     return -1;
 }
@@ -204,6 +233,7 @@ int hal_get_eid_list_by_phy_id(int phyId, dcmi_urma_eid_info_t* eidList, size_t*
     unsigned int dev_cnt = 0;
     int ret = dcmiv2_get_urma_device_cnt((int)logicId, &dev_cnt);
     if (ret != 0) {
+        TOPO_ERR("hal_get_eid_list_by_phy_id: dcmiv2_get_urma_device_cnt failed ret=%d, logicId=%u", ret, logicId);
         return ret;
     }
     size_t eid_current_cnt = 0;
@@ -233,6 +263,7 @@ int HalGetUBEntityList(int phyId, UEList* ueList)
     }
     int ret = dcmiv2_get_urma_device_cnt((int)logicId, &ueList->ueNum);
     if (ret != 0) {
+        TOPO_ERR("HalGetUBEntityList: dcmiv2_get_urma_device_cnt failed ret=%d, logicId=%u", ret, logicId);
         return ret;
     }
     for (size_t i = 0; i < ueList->ueNum; ++i) {
@@ -252,7 +283,11 @@ int hal_get_device_pcie_info(int phyId, struct dcmi_pcie_info_all* pcieInfo)
     if (hal_get_logicid_from_phyid((unsigned int)phyId, &logicId) != 0) {
         return -1;
     }
-    return dcmiv2_get_device_pcie_info(logicId, pcieInfo);
+    int ret = dcmiv2_get_device_pcie_info(logicId, pcieInfo);
+    if (ret != 0) {
+        TOPO_ERR("hal_get_device_pcie_info: dcmiv2_get_device_pcie_info failed ret=%d, logicId=%u", ret, logicId);
+    }
+    return ret;
 }
 
 int hal_get_spod_info(int phyId, struct dcmi_spod_info* spodInfo)
@@ -270,6 +305,9 @@ int hal_get_spod_info(int phyId, struct dcmi_spod_info* spodInfo)
     int ret3 = halGetDeviceInfo(logicId, MODULE_TYPE_SYSTEM, INFO_TYPE_CHASSI_ID, &chassisId);
     int ret4 = halGetDeviceInfo(logicId, MODULE_TYPE_SYSTEM, INFO_TYPE_SPOD_TYPE, &spodType);
     if (ret1 != 0 || ret2 != 0 || ret3 != 0 || ret4 != 0) {
+        TOPO_ERR(
+            "hal_get_spod_info: halGetDeviceInfo failed ret1=%d ret2=%d ret3=%d ret4=%d, logicId=%u", ret1, ret2, ret3,
+            ret4, logicId);
         return -1;
     }
     spodInfo->super_pod_id = (unsigned int)spodId;
@@ -302,11 +340,14 @@ int hal_get_logicid_from_phyid(unsigned int phyId, unsigned int* logicId)
     int userDevId = -1;
     int ret = aclrtGetUserDevIdByPhyDevId((int)phyId, &userDevId);
     if (ret != 0) {
+        TOPO_ERR("hal_get_logicid_from_phyid: aclrtGetUserDevIdByPhyDevId failed ret=%d, phyId=%u", ret, phyId);
         return -1;
     }
     int value = -1;
     ret = aclrtGetLogicDevIdByUserDevId(userDevId, &value);
     if (ret != 0) {
+        TOPO_ERR(
+            "hal_get_logicid_from_phyid: aclrtGetLogicDevIdByUserDevId failed ret=%d, userDevId=%d", ret, userDevId);
         return -1;
     }
     *logicId = (unsigned int)value;
@@ -318,7 +359,11 @@ int hal_get_userdevid_by_phyid(int phyId, int* userDevId)
     if (load_dcmi() != 0) {
         return -1;
     }
-    return aclrtGetUserDevIdByPhyDevId(phyId, userDevId);
+    int ret = aclrtGetUserDevIdByPhyDevId(phyId, userDevId);
+    if (ret != 0) {
+        TOPO_ERR("hal_get_userdevid_by_phyid: aclrtGetUserDevIdByPhyDevId failed ret=%d, phyId=%d", ret, phyId);
+    }
+    return ret;
 }
 
 // 去除字符串首尾的空白字符
@@ -367,7 +412,9 @@ int hal_get_driver_install_path(char* value_buf, size_t buf_size)
     // 打开文件
     fp = fopen("/etc/ascend_install.info", "r");
     if (fp == NULL) {
+        TOPO_INFO("hal_get_driver_install_path: failed to open /etc/ascend_install.info, use default install path");
         if (strcpy_s(value_buf, buf_size, DRIVER_DRFAULT_INSTALL_PATH) != 0) {
+            TOPO_ERR("hal_get_driver_install_path: strcpy_s failed for default install path, buf_size = %zu", buf_size);
             return -1;
         }
         return 0;
@@ -415,8 +462,11 @@ int hal_get_driver_install_path(char* value_buf, size_t buf_size)
         fclose(fp);
     }
     if (strlen(value_buf) == 0) {
+        TOPO_INFO(
+            "hal_get_driver_install_path: no %s in /etc/ascend_install.info, use default install path", TARGET_KEY);
         // 默认值兜底
         if (strcpy_s(value_buf, buf_size, DRIVER_DRFAULT_INSTALL_PATH) != 0) {
+            TOPO_ERR("hal_get_driver_install_path: strcpy_s failed for default install path, buf_size = %zu", buf_size);
             return -1;
         }
     }

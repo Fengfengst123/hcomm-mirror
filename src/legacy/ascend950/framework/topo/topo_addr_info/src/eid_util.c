@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include "securec.h"
+#include "topo_addr_info_log.h"
 
 #define UE_ID_POS (14)
 #define HEX_BASE (16)
@@ -194,6 +195,7 @@ int UrmaEid2CNA(const dcmi_urma_eid_t* eid, char* cna, size_t cnaSize)
 int UBEntityGetId(const UBEntity* ue)
 {
     if (ue->eidNum == 0) {
+        TOPO_INFO("UBEntityGetId: empty UBEntity, entity id unavailable");
         return -1;
     }
     return UrmaEidGetFeId(&ue->eidList[0].eid);
@@ -202,6 +204,7 @@ int UBEntityGetId(const UBEntity* ue)
 int UBEntityGetDieId(const UBEntity* ue)
 {
     if (ue->eidNum == 0) {
+        TOPO_INFO("UBEntityGetDieId: empty UBEntity, die id unavailable");
         return -1;
     }
     return UrmaEidGetDieId(&ue->eidList[0].eid);
@@ -215,6 +218,7 @@ int UBEntityGetPortGroupIdx(const UBEntity* ue)
         }
     }
     // 没有找到
+    TOPO_INFO("UBEntityGetPortGroupIdx: no portgroup eid found, eidNum=%u", ue->eidNum);
     return -1;
 }
 
@@ -230,6 +234,9 @@ int UBGetMaxEntityId(const UEList* ueList, int dieId)
         if (id > maxId) {
             maxId = id;
         }
+    }
+    if (maxId == -1 && ueList->ueNum > 0) {
+        TOPO_WARN("UBGetMaxEntityId: no matching UBEntity for dieId=%d, ueNum=%u", dieId, ueList->ueNum);
     }
     return maxId;
 }
