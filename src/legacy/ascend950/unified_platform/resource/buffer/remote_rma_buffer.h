@@ -52,9 +52,9 @@ class RemoteIpcRmaBuffer : public RemoteRmaBuffer {
 public:
     RemoteIpcRmaBuffer();
 
-    explicit RemoteIpcRmaBuffer(const Serializable& rmtDto);
+    explicit RemoteIpcRmaBuffer(const Serializable& rmtDto, uint8_t pathMode = 0);
 
-    RemoteIpcRmaBuffer(const Serializable& rmtDto, const std::string tag);
+    RemoteIpcRmaBuffer(const Serializable& rmtDto, const std::string tag, uint8_t pathMode = 0);
 
     ~RemoteIpcRmaBuffer() override;
 
@@ -64,10 +64,10 @@ public:
 
     std::string Describe() const override;
 
-    void SetPathMode(uint8_t pathMode) { pathMode_ = pathMode; }
-
 private:
     void Close() const;
+    bool OpenIpcMemory();
+    bool OpenIpcMemoryLegacy();
 
     uint8_t pathMode_{0};
 

@@ -807,10 +807,15 @@ RemoteUbRmaBuffer::RemoteUbRmaBuffer(RdmaHandle rdmaHandle1, const Serializable&
 
 RemoteIpcRmaBuffer::RemoteIpcRmaBuffer() : RemoteRmaBuffer(RmaType::IPC), isOpened(true) {}
 
-RemoteIpcRmaBuffer::RemoteIpcRmaBuffer(const Serializable& rmtDto) : RemoteRmaBuffer(RmaType::IPC), isOpened(true) {}
-
-RemoteIpcRmaBuffer::RemoteIpcRmaBuffer(const Serializable& rmtDto, const string tag)
+RemoteIpcRmaBuffer::RemoteIpcRmaBuffer(const Serializable& rmtDto, uint8_t pathMode)
     : RemoteRmaBuffer(RmaType::IPC),
+      pathMode_(pathMode),
+      isOpened(true)
+{}
+
+RemoteIpcRmaBuffer::RemoteIpcRmaBuffer(const Serializable& rmtDto, const string tag, uint8_t pathMode)
+    : RemoteRmaBuffer(RmaType::IPC),
+      pathMode_(pathMode),
       isOpened(true)
 {}
 

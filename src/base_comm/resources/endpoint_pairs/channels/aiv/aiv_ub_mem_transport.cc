@@ -244,8 +244,7 @@ void AivUbMemTransport::RmtBufferUnpackProc(Hccl::BinaryStream& binaryStream)
             rmtRmaBufferVec_.push_back(nullptr);
         } else { // size非0，则构造一个remote buffer
             HCCL_INFO("[AivUbMemTransport][RmtBufferUnpackProc] unpack buffer memInfo[%s]", dto.memInfo.c_str());
-            rmtBufferVec_.push_back(std::make_unique<Hccl::RemoteIpcRmaBuffer>(dto));
-            rmtBufferVec_.back()->SetPathMode(channelDesc_.ubMemAttr.pathMode);
+            rmtBufferVec_.push_back(std::make_unique<Hccl::RemoteIpcRmaBuffer>(dto, channelDesc_.ubMemAttr.pathMode));
             rmtRmaBufferVec_.push_back(rmtBufferVec_.back().get());
         }
     }

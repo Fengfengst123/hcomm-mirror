@@ -10,14 +10,22 @@
 
 #include "remote_rma_buffer.h"
 #include "null_ptr_exception.h"
+#include "internal_exception.h"
 #include "exchange_ub_buffer_dto.h"
 #include "exchange_ipc_buffer_dto.h"
 #include "exchange_rdma_buffer_dto.h"
 #include "rdma_handle_manager.h"
+#include "acl/acl.h"
+
+constexpr int32_t ONEPATH_FEATURE_SUPPORT_VERSION = 90200000;
+constexpr int32_t ALPHA = 200; // alpha/内部版本号比正式版本低 200
 namespace Hccl {
 RemoteIpcRmaBuffer::RemoteIpcRmaBuffer() : RemoteRmaBuffer(RmaType::IPC), isOpened(false) {}
 
-RemoteIpcRmaBuffer::RemoteIpcRmaBuffer(const Serializable& rmtDto) : RemoteRmaBuffer(RmaType::IPC), isOpened(false)
+RemoteIpcRmaBuffer::RemoteIpcRmaBuffer(const Serializable& rmtDto, uint8_t pathMode)
+    : RemoteRmaBuffer(RmaType::IPC),
+      pathMode_(pathMode),
+      isOpened(false)
 {
     const auto& dto = dynamic_cast<const ExchangeIpcBufferDto&>(rmtDto);
     remotePid = dto.pid;
@@ -27,8 +35,8 @@ RemoteIpcRmaBuffer::RemoteIpcRmaBuffer(const Serializable& rmtDto) : RemoteRmaBu
     memInfo = dto.memInfo;
     (void)memcpy_s(ipcName, RTS_IPC_MEM_NAME_LEN, dto.name, RTS_IPC_MEM_NAME_LEN);
     HCCL_INFO(
-        "[RemoteIpcRmaBuffer][RemoteIpcRmaBuffer]ipcAddr[%llu] ipcOffset[%llu] ipcName[%s] memInfo[%s]", ipcAddr,
-        ipcOffset, ipcName, memInfo.c_str());
+        "[RemoteIpcRmaBuffer][RemoteIpcRmaBuffer]ipcAddr[%llu] ipcOffset[%llu] ipcName[%s] memInfo[%s]  pathMode[%u]",
+        ipcAddr, ipcOffset, ipcName, memInfo.c_str(), pathMode_);
     myPid = HrtDeviceGetBareTgid();
     if (myPid == remotePid) {
         HCCL_INFO("RemoteIpcRmaBuffer: myPid is equal to remotePid, do not need to open memory");
@@ -36,15 +44,16 @@ RemoteIpcRmaBuffer::RemoteIpcRmaBuffer(const Serializable& rmtDto) : RemoteRmaBu
         addr = ipcAddr + ipcOffset;
     } else {
         HCCL_INFO("RemoteIpcRmaBuffer: open memory.");
-        ipcPtr = HrtIpcOpenMemory(ipcName);
-        addr = reinterpret_cast<uintptr_t>(ipcPtr) + ipcOffset;
-        isOpened = true;
+        if (!OpenIpcMemory()) {
+            THROW<InternalException>("[RemoteIpcRmaBuffer] OpenIpcMemory failed, ipcName[%s].", ipcName);
+        }
     }
 }
 
-RemoteIpcRmaBuffer::RemoteIpcRmaBuffer(const Serializable& rmtDto, const string tag)
+RemoteIpcRmaBuffer::RemoteIpcRmaBuffer(const Serializable& rmtDto, const string tag, uint8_t pathMode)
     : RemoteRmaBuffer(RmaType::IPC),
-      isOpened(true)
+      pathMode_(pathMode),
+      isOpened(false)
 {
     const auto& dto = dynamic_cast<const ExchangeIpcBufferDto&>(rmtDto);
     HCCL_INFO("[RemoteIpcRmaBuffer][RemoteIpcRmaBuffer] dtoName[%s]", dto.name);
@@ -54,11 +63,76 @@ RemoteIpcRmaBuffer::RemoteIpcRmaBuffer(const Serializable& rmtDto, const string 
     memInfo = dto.memInfo;
     (void)memcpy_s(ipcName, RTS_IPC_MEM_NAME_LEN, dto.name, RTS_IPC_MEM_NAME_LEN);
     HCCL_INFO(
-        "[RemoteIpcRmaBuffer][RemoteIpcRmaBuffer] tag[%s] ipcAddr[%llu] ipcOffset[%llu] ipcName[%s] memInfo[%s]",
-        tag.c_str(), ipcAddr, ipcOffset, ipcName, memInfo.c_str());
+        "[RemoteIpcRmaBuffer][RemoteIpcRmaBuffer] tag[%s] ipcAddr[%llu] ipcOffset[%llu] ipcName[%s] memInfo[%s] "
+        "pathMode[%u]",
+        tag.c_str(), ipcAddr, ipcOffset, ipcName, memInfo.c_str(), pathMode_);
+    if (!OpenIpcMemory()) {
+        THROW<InternalException>("[RemoteIpcRmaBuffer] OpenIpcMemory failed, ipcName[%s].", ipcName);
+    }
+}
+
+bool RemoteIpcRmaBuffer::OpenIpcMemory()
+{
+    char rtsPkgName[] = "runtime";
+    int32_t rtsVersion = 0;
+    aclError ret = aclsysGetVersionNum(rtsPkgName, &rtsVersion);
+    if (ret != ACL_SUCCESS) {
+        HCCL_ERROR("[GetRuntimeVersion] aclsysGetVersionNum failed, aclRet[%d].", ret);
+        return false;
+    }
+    HCCL_RUN_INFO("[GetRuntimeVersion] rts version is %d pathMode is %u.", rtsVersion, pathMode_);
+
+    const int32_t rtsVersionThreshold = ONEPATH_FEATURE_SUPPORT_VERSION - ALPHA;
+    if (rtsVersion < rtsVersionThreshold) {
+        return OpenIpcMemoryLegacy();
+    }
+
+    uint64_t attrValue = pathMode_;
+    if (pathMode_ == 0) {
+        attrValue = ACL_RT_IPC_MEM_ATTR_ACCESS_LINK_UB_ONE_PORT_PATH;
+    } else {
+        attrValue += 1; // MC2只会传值0 1 2, hcomm将1转换成2(onepath), 将2转换成3(multipath)
+    }
+    HCCL_INFO("[OpenIpcMemory] pathmode:%llu", attrValue);
+    ret = aclrtIpcMemSetAttr(ipcName, ACL_RT_IPC_MEM_ATTR_ACCESS_LINK, attrValue);
+    if (ret == ACL_ERROR_RT_FEATURE_NOT_SUPPORT) { // 兼容性问题 drv版本不支持aclrtIpcMemSetAttr
+        HCCL_WARNING("[aclrtIpcMemSetAttr] not support ret:%d", ret);
+        return OpenIpcMemoryLegacy();
+    }
+    if (ret == ACL_ERROR_RT_LINK_TYPE_NOT_SUPPORTED && pathMode_ == 0) {
+        attrValue = ACL_RT_IPC_MEM_ATTR_ACCESS_LINK_UB_MULTI_PORT_PATH;
+        HCCL_INFO("[OpenIpcMemory] pathmode:%llu", attrValue);
+        ret = aclrtIpcMemSetAttr(ipcName, ACL_RT_IPC_MEM_ATTR_ACCESS_LINK, attrValue);
+    }
+    if (ret != ACL_SUCCESS && ret != ACL_ERROR_RT_LINK_TYPE_NOT_SUPPORTED) {
+        HCCL_ERROR("RemoteIpcRmaBuffer: aclrtIpcMemSetAttr failed attrValue = %u, ret = %d", attrValue, ret);
+        ipcPtr = NULL;
+        addr = 0;
+        isOpened = false;
+        return false;
+    }
     ipcPtr = HrtIpcOpenMemory(ipcName);
+    if (ipcPtr == nullptr) {
+        HCCL_ERROR("[OpenIpcMemory] HrtIpcOpenMemory failed for ipcName[%s]", ipcName);
+        isOpened = false;
+        return false;
+    }
     addr = reinterpret_cast<uintptr_t>(ipcPtr) + ipcOffset;
     isOpened = true;
+    return true;
+}
+
+bool RemoteIpcRmaBuffer::OpenIpcMemoryLegacy()
+{
+    ipcPtr = HrtIpcOpenMemory(ipcName);
+    if (ipcPtr == nullptr) {
+        HCCL_ERROR("[OpenIpcMemoryLegacy] HrtIpcOpenMemory failed for ipcName[%s]", ipcName);
+        isOpened = false;
+        return false;
+    }
+    addr = reinterpret_cast<uintptr_t>(ipcPtr) + ipcOffset;
+    isOpened = true;
+    return true;
 }
 
 void RemoteIpcRmaBuffer::Close() const

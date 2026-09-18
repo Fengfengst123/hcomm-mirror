@@ -157,8 +157,7 @@ TEST_F(UbMemoryTransportMgrTest, should_return_success_when_calling_GetRmtMemBuf
     std::unique_ptr<UbMemoryTransport> transport
         = make_unique<UbMemoryTransport>(cclBuffer, cclBuffer, cclBuffer, fakeSocket.get(), devLogicId);
 
-    ExchangeIpcBufferDto dto;
-    transport->rmtBufferVec.push_back(make_unique<RemoteIpcRmaBuffer>(dto, "UbMemory"));
+    transport->rmtBufferVec.push_back(make_unique<RemoteIpcRmaBuffer>());
 
     EXPECT_NE(transport->GetRmtMemBuffer(0), nullptr);
 

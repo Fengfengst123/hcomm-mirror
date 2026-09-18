@@ -422,7 +422,7 @@ global:
         "Hccl::RdmaLocalNotify::RdmaLocalNotify(void*, bool)";  # _ZN4Hccl15RdmaLocalNotifyC1EPvb
         "Hccl::RegisterRankGraphBuilderBridge(Hccl::RankGraphBuilderBridge const&)";  # _ZN4Hccl30RegisterRankGraphBuilderBridgeERKNS_22RankGraphBuilderBridgeE
         "Hccl::RegisterRootInfoDetectBridge(Hccl::RootInfoDetectBridge const&)";  # _ZN4Hccl28RegisterRootInfoDetectBridgeERKNS_20RootInfoDetectBridgeE
-        "Hccl::RemoteIpcRmaBuffer::RemoteIpcRmaBuffer(Hccl::Serializable const&)";  # _ZN4Hccl18RemoteIpcRmaBufferC1ERKNS_12SerializableE
+        "Hccl::RemoteIpcRmaBuffer::RemoteIpcRmaBuffer(Hccl::Serializable const&, unsigned char)";  # _ZN4Hccl18RemoteIpcRmaBufferC1ERKNS_12SerializableEh
         "Hccl::RemoteRdmaRmaBuffer::RemoteRdmaRmaBuffer(void*, Hccl::Serializable const&)";  # _ZN4Hccl19RemoteRdmaRmaBufferC1EPvRKNS_12SerializableE
         "Hccl::RemoteUbRmaBuffer::Describe() const";  # _ZNK4Hccl17RemoteUbRmaBuffer8DescribeEv
         "Hccl::RemoteUbRmaBuffer::RemoteUbRmaBuffer(unsigned long, unsigned long long, unsigned int, unsigned int, HcclMemType, std::string const&)";  # _ZN4Hccl17RemoteUbRmaBufferC1Emyjj11HcclMemTypeRKSs
