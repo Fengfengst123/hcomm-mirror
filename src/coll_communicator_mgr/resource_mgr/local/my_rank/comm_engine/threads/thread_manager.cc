@@ -792,7 +792,7 @@ HcclResult ThreadMgr::ResetLocalNotify(const LocalNotify* notify, uint32_t notif
     return HCCL_SUCCESS;
 }
 
-HcclResult ThreadMgr::ResetNotifiesInThread(Thread* thread)
+HcclResult ThreadMgr::ResetNotifiesInThread(const Thread* thread)
 {
     if (thread == nullptr) {
         return HCCL_SUCCESS;
