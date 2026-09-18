@@ -105,6 +105,12 @@
 #include "acl/acl_rt.h"
 
 #include "p2p_transport.h"
+// 本编译单元已通过 op_base.h 链引入 ascend910 的 hccl_common.h，其与 hccl_common_v2.h 存在同名常量定义
+// （INVALID_INT/MAX_MODULE_DEVICE_NUM 等），二者不可共存。p2p_enable_manager.h 仅依赖 hccl_common_v2.h 中的
+// MAX_MODULE_DEVICE_NUM，910 侧已提供同值定义，故预定义其 include guard 跳过，避免重定义冲突
+#define HCCL_COMMON_V2_H
+#include "p2p_enable_manager.h"
+#undef HCCL_COMMON_V2_H
 #include "dev_capability.h"
 #include "p2p_connection.h"
 #include "rts_cnt_notify.h"
@@ -1809,6 +1815,37 @@ u32 HrtStreamGetSqId(const aclrtStream ptr) { return 0; }
 void HrtNotifyRecord(RtNotify_t notifyPtr, aclrtStream streamPtr) { return; }
 
 void HrtNotifyWaitWithTimeOut(RtNotify_t notifyPtr, aclrtStream streamPtr, uint32_t timeOut) { return; }
+
+// AivUbMemTransport 按需 enable p2p 依赖 P2PEnableManager（真实实现 p2p_enable_manager.cc 未编入 stub 库），
+// 此处提供最小桩符号；UT 需要控制行为时可用 MOCKER_CPP 拦截这些成员函数
+P2PEnableManager& P2PEnableManager::GetInstance()
+{
+    static P2PEnableManager instance;
+    return instance;
+}
+
+P2PEnableManager::~P2PEnableManager() {}
+
+HcclResult P2PEnableManager::EnableP2P(std::vector<uint32_t> remoteDevices)
+{
+    (void)remoteDevices;
+    return HCCL_SUCCESS;
+}
+
+HcclResult P2PEnableManager::DisableP2P(uint32_t localDeviceLogicID, std::vector<uint32_t> remoteDevices)
+{
+    (void)localDeviceLogicID;
+    (void)remoteDevices;
+    return HCCL_SUCCESS;
+}
+
+HcclResult P2PEnableManager::WaitP2PEnabled(uint32_t localDeviceLogicID, uint32_t remoteDevicePhysicID, bool& isEnabled)
+{
+    (void)localDeviceLogicID;
+    (void)remoteDevicePhysicID;
+    isEnabled = true;
+    return HCCL_SUCCESS;
+}
 
 P2PTransport::P2PTransport(
     CommonLocRes& commonLocRes, Attribution& attr, const LinkData& linkData, const Socket& socket)

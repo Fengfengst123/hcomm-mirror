@@ -389,6 +389,10 @@ global:
         "Hccl::MirrorTaskManager::SetCurrDfxOpInfo(std::shared_ptr<Hccl::DfxOpInfo>)";  # _ZN4Hccl17MirrorTaskManager16SetCurrDfxOpInfoESt10shared_ptrINS_9DfxOpInfoEE
         "Hccl::MirrorTaskManager::~MirrorTaskManager()";  # _ZN4Hccl17MirrorTaskManagerD1Ev
         "Hccl::P2PConnection::P2PConnection(Hccl::Socket*, std::string const&)";  # _ZN4Hccl13P2PConnectionC1EPNS_6SocketERKSs
+        "Hccl::P2PEnableManager::DisableP2P(unsigned int, std::vector<unsigned int, std::allocator<unsigned int> >)";  # _ZN4Hccl16P2PEnableManager10DisableP2PEjSt6vectorIjSaIjEE
+        "Hccl::P2PEnableManager::EnableP2P(std::vector<unsigned int, std::allocator<unsigned int> >)";  # _ZN4Hccl16P2PEnableManager9EnableP2PESt6vectorIjSaIjEE
+        "Hccl::P2PEnableManager::GetInstance()";  # _ZN4Hccl16P2PEnableManager11GetInstanceEv
+        "Hccl::P2PEnableManager::WaitP2PEnabled(unsigned int, unsigned int, bool&)";  # _ZN4Hccl16P2PEnableManager14WaitP2PEnabledEjjRb
         "Hccl::P2PTransport::GetRemoteMems(unsigned int*, CommMem**, char***)";  # _ZN4Hccl12P2PTransport13GetRemoteMemsEPjPP7CommMemPPPc
         "Hccl::P2PTransport::GetUniqueIdV2(std::vector<char, std::allocator<char> >&)";  # _ZN4Hccl12P2PTransport13GetUniqueIdV2ERSt6vectorIcSaIcEE
         "Hccl::P2PTransport::P2PTransport(Hccl::BaseMemTransport::CommonLocRes&, Hccl::BaseMemTransport::Attribution&, Hccl::LinkData const&, Hccl::Socket const&)";  # _ZN4Hccl12P2PTransportC1ERNS_16BaseMemTransport12CommonLocResERNS1_11AttributionERKNS_8LinkDataERKNS_6SocketE

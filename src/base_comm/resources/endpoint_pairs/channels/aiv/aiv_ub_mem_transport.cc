@@ -13,6 +13,7 @@
 #include "../../../../../../legacy/ascend950/unified_platform/resource/socket/socket.h"
 #include "../../../../../../legacy/ascend950/unified_platform/resource/buffer/exchange_ipc_buffer_dto.h"
 #include "../../../../../../legacy/ascend950/unified_platform/resource/mem/user_remote_mem_getter.h"
+#include "../../../../../../legacy/ascend950/unified_platform/common/p2p_enable_manager.h"
 #include "env_config/env_config_v2.h"
 
 namespace hcomm {
@@ -21,6 +22,16 @@ AivUbMemTransport::AivUbMemTransport(Hccl::Socket* socket, HcommChannelDesc& cha
     : socket_(socket),
       channelDesc_(channelDesc)
 {}
+
+AivUbMemTransport::~AivUbMemTransport()
+{
+    // 与 TriggerEnableP2P 对称：仅对已按需触发过 enable p2p 的链路，析构时对称执行 disable p2p
+    if (!p2pEnableStarted_) {
+        return;
+    }
+    std::vector<uint32_t> remoteDevices{channelDesc_.remoteEndpoint.loc.device.devPhyId};
+    (void)Hccl::P2PEnableManager::GetInstance().DisableP2P(localDeviceLogicId_, remoteDevices);
+}
 
 HcclResult AivUbMemTransport::FillBufferVec(
     HcommMemHandle* memHandles, uint32_t bufferNum, std::vector<Hccl::LocalIpcRmaBuffer*>& bufferVec)
@@ -86,8 +97,45 @@ Hccl::TransportStatus AivUbMemTransport::GetStatus()
 {
     if (baseStatus_ == Hccl::TransportStatus::READY || baseStatus_ == Hccl::TransportStatus::INVALID) {
         return baseStatus_;
-    } else if (baseStatus_ == Hccl::TransportStatus::INIT) {
+    } else if (baseStatus_ == Hccl::TransportStatus::INIT && !p2pEnableStarted_) {
         aivUbStatus_ = AivUbMemTransportStatus::INIT;
+    }
+
+    // p2p 状态机：按需触发 enable p2p 并轮询驱动侧状态。必须在 socket 检查之前：
+    // PCIE 链路 socket 连接走 vinc 通路依赖 p2p 使能，先查 socket 会互等死锁
+    switch (aivUbStatus_) {
+        case AivUbMemTransportStatus::INIT:
+            if (channelDesc_.remoteEndpoint.protocol == COMM_PROTOCOL_PCIE) {
+                HcclResult ret = TriggerEnableP2P();
+                if (ret == HCCL_SUCCESS) {
+                    aivUbStatus_ = AivUbMemTransportStatus::P2P_ENABLING;
+                    break;
+                } else if (ret != HCCL_E_NOT_SUPPORT) {
+                    CheckStatusFuncResult("TriggerEnableP2P", ret);
+                    return baseStatus_;
+                }
+            }
+            // 非 PCIE 协议或自环链路：无需 enable p2p，直接进入 socket 建链
+            aivUbStatus_ = AivUbMemTransportStatus::SOCKET_OK;
+            break;
+        case AivUbMemTransportStatus::P2P_ENABLING: {
+            bool isEnabled = false;
+            HcclResult ret = IsP2PEnabled(isEnabled);
+            if (ret != HCCL_SUCCESS) {
+                CheckStatusFuncResult("IsP2PEnabled", ret);
+                return baseStatus_;
+            }
+            if (!isEnabled) {
+                return baseStatus_; // 驱动侧尚未完成使能，等待下轮轮询
+            }
+            HCCL_INFO(
+                "[AivUbMemTransport][%s] connected p2p success, local logic id:%u, remote physic id:%u.", __func__,
+                localDeviceLogicId_, channelDesc_.remoteEndpoint.loc.device.devPhyId);
+            aivUbStatus_ = AivUbMemTransportStatus::SOCKET_OK;
+            break;
+        }
+        default:
+            break;
     }
 
     bool isReady = false;
@@ -102,17 +150,49 @@ Hccl::TransportStatus AivUbMemTransport::GetStatus()
     return UpdateStatus();
 }
 
+HcclResult AivUbMemTransport::TriggerEnableP2P()
+{
+    localDeviceLogicId_ = Hccl::HrtGetDevice();
+
+    // enable p2p 不支持本设备与自身执行：自环链路无需使能，跳过 enable/wait 全流程
+    uint32_t localDevicePhysicId = Hccl::HrtGetDevicePhyIdByUserDevId(localDeviceLogicId_);
+    uint32_t remoteDevicePhyId = channelDesc_.remoteEndpoint.loc.device.devPhyId;
+    if (remoteDevicePhyId == localDevicePhysicId) {
+        HCCL_INFO(
+            "[AivUbMemTransport][%s] self loop link, skip enable p2p. local physic id:%u, remote physic id:%u.",
+            __func__, localDevicePhysicId, remoteDevicePhyId);
+        return HCCL_E_NOT_SUPPORT;
+    }
+
+    // 按需对当前链路的对端设备执行 enable p2p，不再于通信域初始化阶段全量下发
+    std::vector<uint32_t> remoteDevices{remoteDevicePhyId};
+    HcclResult ret = Hccl::P2PEnableManager::GetInstance().EnableP2P(remoteDevices);
+    if (ret != HCCL_SUCCESS) {
+        HCCL_ERROR(
+            "[AivUbMemTransport][%s] EnableP2P failed, ret:%d, remote physic id:%u.", __func__, ret, remoteDevicePhyId);
+        return ret;
+    }
+    // enable p2p 成功下发后才置位：失败时 manager 引用计数未增加，不置位，
+    // 保证 p2pEnableStarted_ 与引用计数严格对应，析构时仅对已持有的引用执行对称 disable
+    p2pEnableStarted_ = true;
+    return HCCL_SUCCESS;
+}
+
+HcclResult AivUbMemTransport::IsP2PEnabled(bool& isEnabled)
+{
+    // 通过 P2PEnableManager 的非阻塞接口单次查询驱动侧 p2p 状态，未使能时由状态机下轮轮询推进
+    return Hccl::P2PEnableManager::GetInstance().WaitP2PEnabled(
+        localDeviceLogicId_, channelDesc_.remoteEndpoint.loc.device.devPhyId, isEnabled);
+}
+
 Hccl::TransportStatus AivUbMemTransport::UpdateStatus()
 {
     HCCL_INFO(
         "%s aivUbStatus_[%d], baseStatus_[%d] start, aivUbStatus_::SOCKET_OK[%d]", __func__, aivUbStatus_, baseStatus_,
         AivUbMemTransportStatus::SOCKET_OK);
     HcclResult ret;
+    // INIT 已在 GetStatus 的 p2p 状态机中消费（转出为 P2P_ENABLING 或 SOCKET_OK），此处不会收到
     switch (aivUbStatus_) {
-        case AivUbMemTransportStatus::INIT:
-            aivUbStatus_ = AivUbMemTransportStatus::SOCKET_OK;
-            baseStatus_ = Hccl::TransportStatus::SOCKET_OK;
-            break;
         case AivUbMemTransportStatus::SOCKET_OK:
             ret = SendDataSize();
             CheckStatusFuncResult("SendDataSize", ret);

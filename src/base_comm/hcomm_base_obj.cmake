@@ -129,6 +129,7 @@ target_include_directories(hcomm_base_obj PRIVATE
     # ============================================================
     ${HCOMM_DIR}/src/legacy/ascend950
     ${HCOMM_DIR}/src/legacy/ascend950/framework
+    ${HCOMM_DIR}/src/legacy/ascend950/framework/entrance
     ${HCOMM_DIR}/src/legacy/ascend950/common
     ${HCOMM_DIR}/src/legacy/ascend950/common/exception
     ${HCOMM_DIR}/src/legacy/ascend950/common/types

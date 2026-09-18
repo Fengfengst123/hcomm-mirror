@@ -27,10 +27,10 @@ namespace hcomm {
 class AivUbMemTransport {
 public:
     MAKE_ENUM(
-        AivUbMemTransportStatus, INIT, SOCKET_OK, SEND_DATA_SIZE, RECV_DATA_SIZE, SEND_MEM_INFO, RECV_MEM_INFO,
-        RECV_MEM_FIN, CONNECT_FAILED, SOCKET_TIMEOUT, READY);
+        AivUbMemTransportStatus, INIT, P2P_ENABLING, SOCKET_OK, SEND_DATA_SIZE, RECV_DATA_SIZE, SEND_MEM_INFO,
+        RECV_MEM_INFO, RECV_MEM_FIN, CONNECT_FAILED, SOCKET_TIMEOUT, READY);
     AivUbMemTransport(Hccl::Socket* socket, HcommChannelDesc& channelDesc);
-    ~AivUbMemTransport() = default;
+    ~AivUbMemTransport();
     HcclResult
     FillBufferVec(HcommMemHandle* memHandles, uint32_t bufferNum, std::vector<Hccl::LocalIpcRmaBuffer*>& bufferVec);
     HcclResult Init();
@@ -54,12 +54,18 @@ private:
     std::vector<Hccl::RemoteRmaBuffer*> rmtRmaBufferVec_{};
     AivUbMemTransportStatus aivUbStatus_{AivUbMemTransportStatus::INVALID};
     Hccl::TransportStatus baseStatus_{Hccl::TransportStatus::INVALID};
-    std::mutex remoteMemsMutex_; // 远端内存列表互斥锁
+    bool p2pEnableStarted_{false}; // enable p2p 是否已成功下发（与 manager 引用计数对应，失败不置位）
+    uint32_t localDeviceLogicId_{0}; // 触发 enable p2p 时的本地逻辑 device id，供析构对称 disable 使用
+    std::mutex remoteMemsMutex_;     // 远端内存列表互斥锁
 
     std::vector<char> sendData_{};
     std::vector<char> recvData_{};
 
     HcclResult IsSocketReady(bool& isReady);
+    // 按需触发 enable p2p：HCCL_SUCCESS=已触发使能流程, HCCL_E_NOT_SUPPORT=自环链路跳过, 其他=失败
+    HcclResult TriggerEnableP2P();
+    // 非阻塞单次查询驱动侧 p2p 使能状态，未使能时由状态机下轮轮询推进
+    HcclResult IsP2PEnabled(bool& isEnabled);
     HcclResult SendDataSize();
     HcclResult RecvDataSize();
     HcclResult SendMemInfo();

@@ -202,6 +202,7 @@ set(UT_COMMON_INCLUDE_LIST
     ${HCCL_CODE_ROOT}/src/legacy/ascend950/common/types/
     ${HCCL_CODE_ROOT}/src/legacy/ascend950/service/collective/primitive
     ${HCCL_CODE_ROOT}/src/legacy/ascend950/framework/
+    ${HCCL_CODE_ROOT}/src/legacy/ascend950/framework/entrance/
     ${HCCL_CODE_ROOT}/src/legacy/ascend950/framework/resource_manager/socket/
     ${HCCL_CODE_ROOT}/src/legacy/ascend950/framework/resource_manager/connection/
     ${HCCL_CODE_ROOT}/src/legacy/ascend950/framework/communicator/

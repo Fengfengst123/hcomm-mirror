@@ -14,6 +14,7 @@
 #include <mockcpp/mockcpp.hpp>
 #define private public
 #include "channels/aiv/aiv_ub_mem_transport.h"
+#include "p2p_enable_manager.h"
 #include "runtime_api_exception.h"
 #include "socket_exception.h"
 
@@ -31,6 +32,19 @@ static void StubSocketRecvAsyncNoop(Hccl::Socket* self, u8* recvBuf, u32 size)
     (void)self;
     (void)recvBuf;
     (void)size;
+}
+
+// WaitP2PEnabled 的 isEnabled 出参由全局开关控制：false 表示驱动侧尚未完成使能，true 表示已完成。
+// 引用出参必须通过 invoke 桩原生传递，不能使用 outBoundP（指针约束），否则 any_cast 断言崩溃
+static bool g_p2pEnabled = false;
+static HcclResult StubWaitP2PEnabled(
+    Hccl::P2PEnableManager* self, uint32_t localDeviceLogicID, uint32_t remoteDevicePhysicID, bool& isEnabled)
+{
+    (void)self;
+    (void)localDeviceLogicID;
+    (void)remoteDevicePhysicID;
+    isEnabled = g_p2pEnabled;
+    return HCCL_SUCCESS;
 }
 
 class AivUbMemTransportTest : public testing::Test {
@@ -125,4 +139,129 @@ TEST_F(AivUbMemTransportTest, Ut_GetStatus_When_SocketReady_Fail_Expect_Status_I
     MOCKER_CPP(&Hccl::Socket::GetAsyncStatus).stubs().will(throws(Hccl::SocketException("test_fail")));
 
     EXPECT_EQ(aivTransport.GetStatus(), Hccl::TransportStatus::INVALID);
+}
+
+// PCIE 全流程：INIT 首轮触发 enable 一次，未使能时停留 P2P_ENABLING，使能后进入 socket 建链，析构对称 disable 一次
+TEST_F(AivUbMemTransportTest, Ut_GetStatus_When_PCIE_Expect_EnableOnceAndSymmetricDisable)
+{
+    Hccl::Socket* fakeSocket = reinterpret_cast<Hccl::Socket*>(0x1);
+    HcommChannelDesc desc{};
+    desc.remoteEndpoint.protocol = COMM_PROTOCOL_PCIE;
+    desc.remoteEndpoint.loc.device.devPhyId = 20; // stub 环境本地物理 id 固定为 1，非自环
+
+    Hccl::SocketStatus socketStatusInit = Hccl::SocketStatus::INIT;
+    MOCKER_CPP(&Hccl::Socket::GetAsyncStatus).stubs().will(returnValue(socketStatusInit));
+
+    MOCKER_CPP(&Hccl::P2PEnableManager::EnableP2P, HcclResult(Hccl::P2PEnableManager::*)(std::vector<uint32_t>))
+        .expects(once())
+        .will(returnValue(HCCL_SUCCESS)); // INIT 首轮触发一次，后续轮询不重复下发
+    g_p2pEnabled = false;
+    MOCKER_CPP(
+        &Hccl::P2PEnableManager::WaitP2PEnabled, HcclResult(Hccl::P2PEnableManager::*)(uint32_t, uint32_t, bool&))
+        .stubs()
+        .will(invoke(StubWaitP2PEnabled));
+    MOCKER_CPP(
+        &Hccl::P2PEnableManager::DisableP2P, HcclResult(Hccl::P2PEnableManager::*)(uint32_t, std::vector<uint32_t>))
+        .expects(once())
+        .will(returnValue(HCCL_SUCCESS)); // 析构对称 disable 恰好一次
+
+    {
+        AivUbMemTransport aivTransport(fakeSocket, desc);
+        aivTransport.baseStatus_ = Hccl::TransportStatus::INIT;
+        aivTransport.aivUbStatus_ = hcomm::AivUbMemTransport::AivUbMemTransportStatus::INIT;
+
+        // 第 1 轮：触发 enable p2p 后停留 P2P_ENABLING，socket 未就绪
+        EXPECT_EQ(aivTransport.GetStatus(), Hccl::TransportStatus::INIT);
+        EXPECT_EQ(aivTransport.aivUbStatus_, hcomm::AivUbMemTransport::AivUbMemTransportStatus::P2P_ENABLING);
+        EXPECT_TRUE(aivTransport.p2pEnableStarted_);
+
+        // 第 2 轮：驱动侧尚未完成使能，停留 P2P_ENABLING
+        EXPECT_EQ(aivTransport.GetStatus(), Hccl::TransportStatus::INIT);
+        EXPECT_EQ(aivTransport.aivUbStatus_, hcomm::AivUbMemTransport::AivUbMemTransportStatus::P2P_ENABLING);
+
+        // 第 3 轮：p2p 使能完成进入 socket 建链，socket 未就绪停留
+        g_p2pEnabled = true;
+        EXPECT_EQ(aivTransport.GetStatus(), Hccl::TransportStatus::INIT);
+        EXPECT_EQ(aivTransport.aivUbStatus_, hcomm::AivUbMemTransport::AivUbMemTransportStatus::SOCKET_OK);
+    } // 析构：p2pEnableStarted_ 为 true，对称执行 disable 恰好一次
+}
+
+// 非 PCIE（HCCS）链路：不触发 enable p2p，直接进入 socket 建链，析构不执行 disable
+TEST_F(AivUbMemTransportTest, Ut_GetStatus_When_NonPCIE_Expect_SkipEnable)
+{
+    Hccl::Socket* fakeSocket = reinterpret_cast<Hccl::Socket*>(0x1);
+    HcommChannelDesc desc{}; // protocol 默认 0 即 HCCS
+    desc.remoteEndpoint.loc.device.devPhyId = 20;
+
+    Hccl::SocketStatus socketStatusInit = Hccl::SocketStatus::INIT;
+    MOCKER_CPP(&Hccl::Socket::GetAsyncStatus).stubs().will(returnValue(socketStatusInit));
+
+    MOCKER_CPP(&Hccl::P2PEnableManager::EnableP2P, HcclResult(Hccl::P2PEnableManager::*)(std::vector<uint32_t>))
+        .expects(never());
+    MOCKER_CPP(
+        &Hccl::P2PEnableManager::DisableP2P, HcclResult(Hccl::P2PEnableManager::*)(uint32_t, std::vector<uint32_t>))
+        .expects(never());
+
+    {
+        AivUbMemTransport aivTransport(fakeSocket, desc);
+        aivTransport.baseStatus_ = Hccl::TransportStatus::INIT;
+        aivTransport.aivUbStatus_ = hcomm::AivUbMemTransport::AivUbMemTransportStatus::INIT;
+
+        EXPECT_EQ(aivTransport.GetStatus(), Hccl::TransportStatus::INIT);
+        EXPECT_EQ(aivTransport.aivUbStatus_, hcomm::AivUbMemTransport::AivUbMemTransportStatus::SOCKET_OK);
+        EXPECT_FALSE(aivTransport.p2pEnableStarted_);
+    }
+}
+
+// 自环链路（对端物理 id 等于本地物理 id）：不支持 enable p2p，直接跳过
+TEST_F(AivUbMemTransportTest, Ut_GetStatus_When_SelfLoop_Expect_SkipEnable)
+{
+    Hccl::Socket* fakeSocket = reinterpret_cast<Hccl::Socket*>(0x1);
+    HcommChannelDesc desc{};
+    desc.remoteEndpoint.protocol = COMM_PROTOCOL_PCIE;
+    desc.remoteEndpoint.loc.device.devPhyId = 1; // stub 环境本地物理 id 固定为 1，构成自环
+
+    Hccl::SocketStatus socketStatusInit = Hccl::SocketStatus::INIT;
+    MOCKER_CPP(&Hccl::Socket::GetAsyncStatus).stubs().will(returnValue(socketStatusInit));
+
+    MOCKER_CPP(&Hccl::P2PEnableManager::EnableP2P, HcclResult(Hccl::P2PEnableManager::*)(std::vector<uint32_t>))
+        .expects(never());
+    MOCKER_CPP(
+        &Hccl::P2PEnableManager::DisableP2P, HcclResult(Hccl::P2PEnableManager::*)(uint32_t, std::vector<uint32_t>))
+        .expects(never());
+
+    {
+        AivUbMemTransport aivTransport(fakeSocket, desc);
+        aivTransport.baseStatus_ = Hccl::TransportStatus::INIT;
+        aivTransport.aivUbStatus_ = hcomm::AivUbMemTransport::AivUbMemTransportStatus::INIT;
+
+        EXPECT_EQ(aivTransport.GetStatus(), Hccl::TransportStatus::INIT);
+        EXPECT_EQ(aivTransport.aivUbStatus_, hcomm::AivUbMemTransport::AivUbMemTransportStatus::SOCKET_OK);
+        EXPECT_FALSE(aivTransport.p2pEnableStarted_);
+    }
+}
+
+// enable p2p 下发失败：状态置 INVALID，不持有引用，析构不执行 disable
+TEST_F(AivUbMemTransportTest, Ut_GetStatus_When_EnableP2PFail_Expect_Status_Invalid)
+{
+    Hccl::Socket* fakeSocket = reinterpret_cast<Hccl::Socket*>(0x1);
+    HcommChannelDesc desc{};
+    desc.remoteEndpoint.protocol = COMM_PROTOCOL_PCIE;
+    desc.remoteEndpoint.loc.device.devPhyId = 20;
+
+    MOCKER_CPP(&Hccl::P2PEnableManager::EnableP2P, HcclResult(Hccl::P2PEnableManager::*)(std::vector<uint32_t>))
+        .stubs()
+        .will(returnValue(HCCL_E_RUNTIME));
+    MOCKER_CPP(
+        &Hccl::P2PEnableManager::DisableP2P, HcclResult(Hccl::P2PEnableManager::*)(uint32_t, std::vector<uint32_t>))
+        .expects(never()); // enable 失败未增加引用计数，析构不执行 disable
+
+    {
+        AivUbMemTransport aivTransport(fakeSocket, desc);
+        aivTransport.baseStatus_ = Hccl::TransportStatus::INIT;
+        aivTransport.aivUbStatus_ = hcomm::AivUbMemTransport::AivUbMemTransportStatus::INIT;
+
+        EXPECT_EQ(aivTransport.GetStatus(), Hccl::TransportStatus::INVALID);
+        EXPECT_FALSE(aivTransport.p2pEnableStarted_);
+    }
 }
