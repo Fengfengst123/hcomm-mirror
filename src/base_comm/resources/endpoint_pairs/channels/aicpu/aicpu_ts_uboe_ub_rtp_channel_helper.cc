@@ -599,6 +599,7 @@ HcclResult AicpuTsUboeUbRtpChannelHelper::GetUniqueIdV2(std::vector<char>& resul
             "[%s] channel status[%d] is not ready[%d], please check.", __func__, channelStatus, ChannelStatus::READY);
         return HcclResult::HCCL_E_INTERNAL;
     }
+    std::lock_guard<std::mutex> lock(remoteMemsMutex_);
     Hccl::BinaryStream binaryStream;
     binaryStream << type_;
     binaryStream << notifyNum_;
