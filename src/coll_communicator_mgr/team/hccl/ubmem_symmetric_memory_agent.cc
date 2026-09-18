@@ -82,7 +82,7 @@ HcclResult UbMemSymmetricMemoryAgent::GetLink(uint32_t peerRank, CommLink& link)
     return HCCL_E_NOT_FOUND;
 }
 
-HcclResult UbMemSymmetricMemoryAgent::CheckNeighborLinksAvailable()
+HcclResult UbMemSymmetricMemoryAgent::CheckNeighborLinksAvailable() const
 {
     if (lsaTeamSize_ <= 1U) {
         return HCCL_SUCCESS;
@@ -277,7 +277,7 @@ HcclResult UbMemSymmetricMemoryAgent::TransferBuffer(
     return HCCL_SUCCESS;
 }
 
-HcclResult UbMemSymmetricMemoryAgent::ExchangeInfo(void* inputPtr, void* outputPtr, uint64_t inputSize)
+HcclResult UbMemSymmetricMemoryAgent::ExchangeInfo(void* inputPtr, void* outputPtr, uint64_t inputSize) const
 {
     CHK_PTR_NULL(inputPtr);
     CHK_PTR_NULL(outputPtr);
@@ -304,9 +304,11 @@ HcclResult UbMemSymmetricMemoryAgent::ExchangeInfo(void* inputPtr, void* outputP
     // 每轮把左邻居收到的数据继续发往右邻居，完成后输出数组包含全部LSA成员的信息。
     for (uint32_t round = 0; round < lsaTeamSize_ - 1U; ++round) {
         UbmemPacket recvPacket{};
-        CHK_RET(TransferBuffer(
-            reinterpret_cast<const uint8_t*>(&sendPacket), reinterpret_cast<uint8_t*>(&recvPacket), sizeof(UbmemPacket),
-            rightSocket_, leftSocket_));
+        uint8_t sendBuf[sizeof(UbmemPacket)]{};
+        uint8_t recvBuf[sizeof(UbmemPacket)]{};
+        CHK_SAFETY_FUNC_RET(memcpy_s(sendBuf, sizeof(sendBuf), &sendPacket, sizeof(UbmemPacket)));
+        CHK_RET(TransferBuffer(sendBuf, recvBuf, sizeof(UbmemPacket), rightSocket_, leftSocket_));
+        CHK_SAFETY_FUNC_RET(memcpy_s(&recvPacket, sizeof(recvPacket), recvBuf, sizeof(UbmemPacket)));
         CHK_PRT_RET(
             recvPacket.type != UbmemPacketType::DATA || recvPacket.memberId >= lsaTeamSize_,
             HCCL_ERROR(

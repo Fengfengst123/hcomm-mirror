@@ -471,7 +471,7 @@ static HcclResult MergeSymmetricMemHandles(
 }
 
 static HcclResult BuildChannelSymMemHandles(
-    hccl::CollComm* collComm, hccl::MyRank* myRank, const std::vector<HcclChannelDesc>& channelDescFinals,
+    const hccl::CollComm* collComm, const hccl::MyRank* myRank, const std::vector<HcclChannelDesc>& channelDescFinals,
     const std::vector<ChannelHandle>& existingChannelHandles, const std::vector<HcclMemHandle>& registeredSymMemHandles,
     std::vector<std::vector<HcclMemHandle>>& channelSymMemHandles, std::vector<bool>& channelSymMemAppended,
     size_t& appendedChannelCount)

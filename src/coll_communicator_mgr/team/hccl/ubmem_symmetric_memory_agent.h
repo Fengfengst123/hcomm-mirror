@@ -44,12 +44,12 @@ public:
     HcclResult CheckNeighborLinks();
     HcclResult Init();
     void Finalize();
-    HcclResult ExchangeInfo(void* inputPtr, void* outputPtr, uint64_t inputSize);
+    HcclResult ExchangeInfo(void* inputPtr, void* outputPtr, uint64_t inputSize) const;
 
     uint32_t GetNetLayer() const { return netLayer_; }
 
 private:
-    HcclResult CheckNeighborLinksAvailable();
+    HcclResult CheckNeighborLinksAvailable() const;
     HcclResult GetLink(uint32_t peerRank, CommLink& link) const;
     HcclResult CreateNeighborSocket(uint32_t peerRank, const CommLink& link, SocketHandler& socket);
     HcclResult WaitSocketReady(SocketHandler socket) const;
