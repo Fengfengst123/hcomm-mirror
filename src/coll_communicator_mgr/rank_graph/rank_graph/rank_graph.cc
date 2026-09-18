@@ -417,7 +417,7 @@ RankGraph::GetEndpointDesc(uint32_t layer, uint32_t topoInstId, uint32_t* descNu
             std::pair<CommAddr, CommProtocol> endpoint = entry.first;
             const std::shared_ptr<NetInstance::ConnInterface>& mappedIface = entry.second;
 
-            if (mappedIface != iface) {
+            if (mappedIface == nullptr || *mappedIface != *iface) {
                 continue;
             }
 
