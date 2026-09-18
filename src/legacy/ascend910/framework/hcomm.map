@@ -491,6 +491,7 @@ global:
         "Hccl::TopoInfo::GetBinStream(Hccl::BinaryStream&) const";  # _ZNK4Hccl8TopoInfo12GetBinStreamERNS_12BinaryStreamE
         "Hccl::TopoInfo::TopoInfo(Hccl::BinaryStream&)";  # _ZN4Hccl8TopoInfoC1ERNS_12BinaryStreamE
         "HcclResult hccl::HcclCommunicator::GenIbvAiRMAInfo<HcclAiRMAInfo>(unsigned int, std::shared_ptr<hccl::Transport> const&, std::string const&, HcclAiRMAInfo*)";  # _ZN4hccl16HcclCommunicator15GenIbvAiRMAInfoI13HcclAiRMAInfoEE10HcclResultjRKSt10shared_ptrINS_9TransportEERKSsPT_
+        "hcomm::CcuRep::CcuV2::ParseInstrV2(hcomm::CcuRep::CcuInstr const*)";  # _ZN5hcomm6CcuRep5CcuV212ParseInstrV2EPKNS0_8CcuInstrE
         "hcomm::CcuRep::GetTokenInfo(unsigned long, unsigned long)";  # _ZN5hcomm6CcuRep12GetTokenInfoEmm
         "hcomm::CcuRep::ParseInstr(hcomm::CcuRep::CcuInstr const*)";  # _ZN5hcomm6CcuRep10ParseInstrEPKNS0_8CcuInstrE
         "typeinfo for Hccl::NetInstance::Peer";  # _ZTIN4Hccl11NetInstance4PeerE

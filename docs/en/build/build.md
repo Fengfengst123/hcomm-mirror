@@ -231,4 +231,4 @@ When compiling this project, the following third-party open source software depe
 | protobuf | 25.1 | [protobuf-25.1.tar.gz](https://gitcode.com/cann-src-third-party/protobuf/releases/download/v25.1/protobuf-25.1.tar.gz) |
 | rdma-core | v42.7-h1 | [rdma-core-42.7.tar.gz](https://gitcode.com/cann-src-third-party/rdma-core/releases/download/v42.7-h1/rdma-core-42.7.tar.gz) |
 | rdma-core-patch | v42.7-h1 | [rdma-core-42.7.patch](https://gitcode.com/cann-src-third-party/rdma-core/releases/download/v42.7-h1/rdma-core-42.7.patch) |
-| cann-cmake | master-051 | [cmake-master-051.tar.gz](https://raw.gitcode.com/cann/cmake/archive/refs/heads/master-051.tar.gz) |
+| cann-cmake | master-057 | [cmake-master-057.tar.gz](https://raw.gitcode.com/cann/cmake/archive/refs/heads/master-057.tar.gz) |
