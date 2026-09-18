@@ -29,6 +29,9 @@
 #include "hal.h"
 #include "hal.h"
 
+extern "C" int load_dcmi();
+extern "C" void reinit();
+
 /**
  * @brief 将32字符十六进制字符串转为16字节二进制数组
  * @param hex_str  输入：32位十六进制字符串（必须以'\0'结尾）
@@ -1237,4 +1240,16 @@ TEST_F(TopoAddrInfoTest, Ut_TopoLogInit_ConcurrentSafe)
     bool dlogNull = (g_topo_DlogRecord == NULL);
     bool chkNull = (g_topo_CheckLogLevel == NULL);
     EXPECT_EQ(dlogNull, chkNull) << "两个函数指针应保持一致（同为 NULL 或同非 NULL）";
+}
+
+TEST_F(TopoAddrInfoTest, ut_init)
+{
+    int ret = load_dcmi();
+    EXPECT_TRUE(ret == 0); // check already initialized
+    EXPECT_TRUE(ret == 0); // test init
+    MOCKER(hal_dlopen).stubs().with(mockcpp::any(), mockcpp::any()).will(invoke(mock_dlopen));
+    MOCKER(hal_dlsym).stubs().with(mockcpp::any(), mockcpp::any()).will(invoke(mock_dlsym));
+    reinit();
+    ret = load_dcmi();
+    EXPECT_TRUE(ret == 0);
 }
