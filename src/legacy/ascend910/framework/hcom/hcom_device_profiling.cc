@@ -15,6 +15,7 @@
 #include "hccl/hccl_types.h"
 #include "hcom_device_profiling.h"
 #include "stream_pub.h"
+#include "thread.h"
 #ifdef CCL_KERNEL_AICPU
 #include "device/inc/profiling_manager_device.h"
 #endif

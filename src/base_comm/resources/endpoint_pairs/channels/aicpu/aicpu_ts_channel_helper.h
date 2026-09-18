@@ -54,9 +54,6 @@ public:
     static HcclResult PreAllocChannels(
         ChannelHandle* targetChannels, ChannelHandle* userChannels, HcommChannelDesc* channelDescs,
         uint32_t channelNum);
-    static HcclResult EnsureKernelBinLoaded(CommEngine engine);
-    static aclrtBinHandle GetBinHandle() { return g_BinHandle; }
-
     static HcclResult TryFillCtxList(
         ChannelHandle* hostChannelHandles, uint32_t listNum, const hccl::DeviceMem& deviceChannelList,
         void*& outCtxList, bool& isCtxMode);
@@ -67,8 +64,6 @@ private:
         aclrtBinHandle binHandle);
 
     std::shared_ptr<hccl::DeviceMem> ctxMem_;
-    static aclrtBinHandle g_BinHandle;
-    static std::mutex g_BinHandleMtx;
 };
 
 inline HcclResult UnwrapChannelHandle(ChannelHandle& handle)

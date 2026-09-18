@@ -12,6 +12,7 @@
 #include <mockcpp/mockcpp.hpp>
 #include "../../hccl_api_base_test.h"
 #include "order_launch_thread_mgr.h"
+#include "hcomm_thread_c_adpt.h"
 
 using namespace hccl;
 
@@ -90,15 +91,26 @@ public:
 
     void MockHcommThreadFree(HcommResult ret) { MOCKER(HcommThreadFree).stubs().will(returnValue(ret)); }
 
-    void MockHcommThreadFreeWithStream(HcommResult ret)
-    {
-        MOCKER(HcommThreadFreeWithStream).stubs().will(returnValue(ret));
-    }
-
     void MockAclrtGetDeviceInfo(u32 blockNum)
     {
         g_mockCoreNum = static_cast<int64_t>(blockNum);
         MOCKER(aclrtGetDeviceInfo).stubs().will(invoke(StubAclrtGetDeviceInfo));
+    }
+
+    void SetupGeEnvironment()
+    {
+        MockGetCurrentContext(0x100);
+        MockHcommThreadAllocWithStream(HCCL_SUCCESS);
+        MockHcommThreadFree(HCCL_SUCCESS);
+        MockAclrtGetDeviceInfo(1);
+        mgr_->RegisterOrderLaunch("group1");
+        mgr_->RegisterOrderLaunch("group2");
+
+        ThreadHandle warmup = 0;
+        mgr_->EnsureOrderThread(OrderThreadMode::OPBASE, "warmup", 1, warmup);
+
+        void* fakeStream = reinterpret_cast<void*>(0x1234);
+        mgr_->SetAttachedStream("group1", 100, fakeStream);
     }
 
     std::unique_ptr<OrderLaunchThreadMgr> mgr_;
@@ -301,7 +313,6 @@ TEST_F(OrderLaunchThreadMgrTest, Ut_GetHcomAttachedThreadByGroup_When_GroupCount
     MockGetCurrentContext(0x100);
     MockHcommThreadAllocWithStream(HCCL_SUCCESS);
     MockHcommThreadFree(HCCL_SUCCESS);
-    MockHcommThreadFreeWithStream(HCCL_SUCCESS);
     MockAclrtGetDeviceInfo(10);
 
     void* fakeStream = reinterpret_cast<void*>(0x1234);
@@ -314,40 +325,15 @@ TEST_F(OrderLaunchThreadMgrTest, Ut_GetHcomAttachedThreadByGroup_When_GroupCount
 
 TEST_F(OrderLaunchThreadMgrTest, Ut_GetHcomAttachedThreadByGroup_When_Set_Expect_Handle)
 {
-    MockGetCurrentContext(0x100);
-    MockHcommThreadAllocWithStream(HCCL_SUCCESS);
-    MockHcommThreadFree(HCCL_SUCCESS);
-    MockHcommThreadFreeWithStream(HCCL_SUCCESS);
-    MockAclrtGetDeviceInfo(1);
-    mgr_->RegisterOrderLaunch("group1");
-    mgr_->RegisterOrderLaunch("group2");
-
-    ThreadHandle warmup = 0;
-    mgr_->EnsureOrderThread(OrderThreadMode::OPBASE, "warmup", 1, warmup);
-
-    void* fakeStream = reinterpret_cast<void*>(0x1234);
-    HcclResult ret = mgr_->SetAttachedStream("group1", 100, fakeStream);
-    EXPECT_EQ(ret, HCCL_SUCCESS);
-
+    SetupGeEnvironment();
     ThreadHandle handle = mgr_->GetHcomAttachedThreadByGroup("group1");
     EXPECT_NE(handle, static_cast<ThreadHandle>(0));
 }
 
 TEST_F(OrderLaunchThreadMgrTest, Ut_GetHcomAttachedThreadByGroup_When_DifferentGroup_Expect_Zero)
 {
-    MockGetCurrentContext(0x100);
-    MockHcommThreadAllocWithStream(HCCL_SUCCESS);
-    MockHcommThreadFree(HCCL_SUCCESS);
-    MockHcommThreadFreeWithStream(HCCL_SUCCESS);
-    MockAclrtGetDeviceInfo(1);
-    mgr_->RegisterOrderLaunch("group1");
-    mgr_->RegisterOrderLaunch("group2");
-
-    ThreadHandle warmup = 0;
-    mgr_->EnsureOrderThread(OrderThreadMode::OPBASE, "warmup", 1, warmup);
-
+    SetupGeEnvironment();
     void* fakeStream = reinterpret_cast<void*>(0x1234);
-    mgr_->SetAttachedStream("group1", 100, fakeStream);
     mgr_->SetAttachedStream("group2", 200, fakeStream);
 
     ThreadHandle handle = mgr_->GetHcomAttachedThreadByGroup("group3");
@@ -375,7 +361,6 @@ TEST_F(OrderLaunchThreadMgrTest, Ut_SetAttachedStream_When_Overwrite_Expect_Succ
 {
     MockHcommThreadAllocWithStream(HCCL_SUCCESS);
     MockHcommThreadFree(HCCL_SUCCESS);
-    MockHcommThreadFreeWithStream(HCCL_SUCCESS);
 
     void* fakeStream1 = reinterpret_cast<void*>(0x1234);
     mgr_->SetAttachedStream("group1", 100, fakeStream1);
@@ -429,20 +414,7 @@ TEST_F(OrderLaunchThreadMgrTest, Ut_OrderLaunchThreadAcquire_When_Aclgraph_Expec
 
 TEST_F(OrderLaunchThreadMgrTest, Ut_OrderLaunchThreadAcquire_When_Ge_Expect_Success)
 {
-    MockGetCurrentContext(0x100);
-    MockHcommThreadAllocWithStream(HCCL_SUCCESS);
-    MockHcommThreadFree(HCCL_SUCCESS);
-    MockHcommThreadFreeWithStream(HCCL_SUCCESS);
-    MockAclrtGetDeviceInfo(1);
-    mgr_->RegisterOrderLaunch("group1");
-    mgr_->RegisterOrderLaunch("group2");
-
-    ThreadHandle warmup = 0;
-    mgr_->EnsureOrderThread(OrderThreadMode::OPBASE, "warmup", 1, warmup);
-
-    void* fakeStream = reinterpret_cast<void*>(0x1234);
-    mgr_->SetAttachedStream("group1", 100, fakeStream);
-
+    SetupGeEnvironment();
     ThreadHandle thread = 0;
     HcclResult ret
         = mgr_->OrderLaunchThreadAcquire(HCCL_DED_THREAD_TYPE_AICPU_ORDER_LAUNCH_GE, nullptr, "group1", 1, thread);
@@ -517,7 +489,6 @@ TEST_F(OrderLaunchThreadMgrTest, Ut_Destroy_When_HasAttachedStream_Expect_NoCras
 {
     MockHcommThreadAllocWithStream(HCCL_SUCCESS);
     MockHcommThreadFree(HCCL_SUCCESS);
-    MockHcommThreadFreeWithStream(HCCL_SUCCESS);
 
     void* fakeStream = reinterpret_cast<void*>(0x1234);
     mgr_->SetAttachedStream("group1", 100, fakeStream);

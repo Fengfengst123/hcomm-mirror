@@ -16,11 +16,9 @@
 #include "launch_device.h"
 #include "comm_engine_utils.h"
 #include "adapter_rts_common.h"
+#include "../hcomm_res_mgr.h"
 
 using namespace hcomm;
-
-aclrtBinHandle AicpuTsChannelHelper::g_BinHandle = nullptr;
-std::mutex AicpuTsChannelHelper::g_BinHandleMtx;
 
 HcclResult AicpuTsChannelHelper::TryFillCtxList(
     ChannelHandle* hostChannelHandles, uint32_t listNum, const hccl::DeviceMem& deviceChannelList, void*& outCtxList,
@@ -50,28 +48,6 @@ HcclResult AicpuTsChannelHelper::TryFillCtxList(
         return ret;
     }
     outCtxList = deviceChannelList.ptr();
-    return HCCL_SUCCESS;
-}
-
-HcclResult AicpuTsChannelHelper::EnsureKernelBinLoaded(CommEngine engine)
-{
-    if (engine != COMM_ENGINE_AICPU && engine != COMM_ENGINE_AICPU_TS) {
-        HCCL_INFO(
-            "[%s] engine[%s] kernel loading not required", __func__,
-            GetEnumToString(GetCommEngineStatusStrMap(), engine).c_str());
-        return HCCL_SUCCESS;
-    }
-    std::lock_guard<std::mutex> lock(g_BinHandleMtx);
-    if (g_BinHandle != nullptr) {
-        return HCCL_SUCCESS;
-    }
-    std::string jsonPath;
-    CHK_RET(hccl::GetKernelFilePath(jsonPath));
-    jsonPath += "ccl_kernel.json";
-
-    HcclResult ret = hccl::LoadBinaryFromFile(jsonPath.c_str(), ACL_RT_BINARY_LOAD_OPT_CPU_KERNEL_MODE, 0, g_BinHandle);
-    CHK_PRT_RET(
-        ret != HCCL_SUCCESS, HCCL_ERROR("[%s] load aicpu file fail, path[%s]", __func__, jsonPath.c_str()), ret);
     return HCCL_SUCCESS;
 }
 
@@ -139,8 +115,8 @@ HcclResult AicpuTsChannelHelper::HandleStatus(
         }
         return HCCL_SUCCESS;
     }
-    CHK_RET(EnsureKernelBinLoaded(engine));
-    HcclResult kernelRet = LaunchKernel(channelList, listNum, engine, channelDescs, g_BinHandle);
+    CHK_RET(HcommResMgr::EnsureKernelBinLoaded(engine));
+    HcclResult kernelRet = LaunchKernel(channelList, listNum, engine, channelDescs, HcommResMgr::GetBinHandle());
     if (kernelRet != HCCL_SUCCESS) {
         HCCL_ERROR("[%s] LaunchKernel failed, ret[%d]", __func__, kernelRet);
         return HCCL_E_INTERNAL;

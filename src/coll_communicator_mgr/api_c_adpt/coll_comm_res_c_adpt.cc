@@ -41,6 +41,7 @@
 #include "coll_comm_res_c_adpt.h"
 #include "roce_channel_desc_configurator.h"
 #include "common/loggers/channel_logger.h"
+#include "prof_cycle_time.h"
 
 using namespace hccl;
 /**
@@ -772,7 +773,7 @@ HcclResult HcclChannelAcquire(
     HcclComm comm, CommEngine engine, const HcclChannelDesc* channelDescs, uint32_t channelNum, ChannelHandle* channels)
 {
     HcclUs startut = TIME_NOW();
-    u64 beginTime = Hccl::DfxDlProfFunction::GetInstance().dlMsprofSysCycleTime();
+    u64 beginTime = hcomm::GetProfCycleTime();
     EXCEPTION_HANDLE_BEGIN
 
     CHK_RET(CheckChannelResParams(comm, channelDescs, channels, channelNum));
@@ -1493,7 +1494,7 @@ HcclResult HcclChannelAcquireWithConfig(
         return HcclChannelAcquire(comm, engine, channelDescs, channelNum, channels);
     }
 
-    u64 beginTime = Hccl::DfxDlProfFunction::GetInstance().dlMsprofSysCycleTime();
+    u64 beginTime = hcomm::GetProfCycleTime();
     CHK_RET(PrepareV2ChannelAcquire(hcclComm, comm, engine));
 
     // 复用 HcclChannelAcquire 的前置校验（ProcessHcclResPackReq），保证共享/非共享路径校验一致

@@ -15,6 +15,7 @@
 #include "hccl_comm_pub.h"
 #include "independent_op.h"
 #include "llt_hccl_stub_rank_graph.h"
+#include "adapter_hal_pub.h" // GetRunSideIsDevice（UT mock 使用，不依赖传递包含）
 #include <string>
 #include "mockcpp/mockcpp.hpp"
 

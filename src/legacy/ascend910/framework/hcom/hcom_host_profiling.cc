@@ -14,6 +14,7 @@
 #include "hcom_host_profiling.h"
 #include "adapter_prof.h"
 #include "hccl/hccl_types.h"
+#include "thread.h"
 using namespace hccl;
 extern HcclResult HcommProfilingReportKernel(uint64_t beginTime, const char* profName)
 {

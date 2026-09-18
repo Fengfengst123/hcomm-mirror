@@ -10,6 +10,8 @@
 
 #include <gtest/gtest.h>
 #include "hccl/hccl_res.h"
+#include "hcomm_c_adpt.h"
+#include "hcomm_thread_c_adpt.h"
 #include "../../hccl_api_base_test.h"
 #include "hccl_tbe_task.h"
 #include "thread_manager.h"
@@ -29,6 +31,8 @@ static HcclResult StubThreadKernelLaunchForCommDevice(
     }
     return HCCL_SUCCESS;
 }
+void MockGetRunSideIsDevice();
+void MockThreadKernelLaunchForComm();
 
 class ThreadManagerTest : public BaseInit {
 public:
@@ -48,13 +52,29 @@ public:
         callbacks.reportProfilingKernel = [](uint64_t, std::string) {
             return HCCL_SUCCESS;
         };
-        threadManager = std::make_unique<ThreadMgr>(1, 1, "test", nullptr, callbacks);
+        threadManager = std::make_unique<ThreadMgr>(4, 8, "test", callbacks);
     }
     void TearDown() override
     {
         std::cout << "ThreadManagerTest TearDown" << std::endl;
         BaseInit::TearDown();
         GlobalMockObject::verify();
+    }
+
+    // 申请 N 个 CPU 线程（HcclThreadAcquireV2），notifyNum 一致
+    void AcquireCpuThreads(uint32_t threadNum, uint16_t notifyNum, ThreadHandle* out)
+    {
+        MockGetRunSideIsDevice();
+        std::vector<ThreadConfig> config(threadNum);
+        EXPECT_EQ(ThreadConfigInit(config.data(), threadNum), HCCL_SUCCESS);
+        for (uint32_t i = 0; i < threadNum; ++i) {
+            config[i].notifyNumPerThread = notifyNum;
+        }
+        std::vector<uint32_t> threadId;
+        EXPECT_EQ(
+            threadManager->HcclThreadAcquireV2(
+                CommEngine::COMM_ENGINE_CPU, threadNum, ThreadType::THREAD_TYPE_TS, config.data(), out, threadId),
+            HCCL_SUCCESS);
     }
 
 private:
@@ -74,12 +94,12 @@ void MockThreadKernelLaunchForComm()
     MOCKER_CPP(&AicpuLaunchMgr::ThreadKernelLaunchForComm).stubs().will(returnValue(HCCL_SUCCESS));
 }
 
-TEST_F(ThreadManagerTest, Ut_ThreadExportToCommEngineAicpu_When_InvalidThreadHandle_Expect_HCCL_E_PARA)
+TEST_F(ThreadManagerTest, Ut_ThreadExportToCommEngineAicpu_When_InvalidThreadHandle_Expect_HCCL_E_NOT_FOUND)
 {
     CommEngine dstCommEngine = COMM_ENGINE_AICPU_TS;
 
     HcclResult ret = threadManager->HcclThreadExportToCommEngine(threadNum, threads, dstCommEngine, exportedThreads);
-    EXPECT_EQ(ret, HCCL_E_PARA);
+    EXPECT_EQ(ret, HCCL_E_NOT_FOUND);
 }
 
 TEST_F(ThreadManagerTest, Ut_ThreadExportToCommEngineAicpu_When_Normal_Expect_ReturnHCCL_SUCCESS)
@@ -101,13 +121,13 @@ TEST_F(ThreadManagerTest, Ut_ResetThreadLocalNotifies_When_NoThreads_Expect_Succ
     EXPECT_EQ(threadManager->ResetThreadLocalNotifies(), HCCL_SUCCESS);
 }
 
-TEST_F(ThreadManagerTest, Ut_ResetThreadLocalNotifies_When_HrtNotifyResetFailed_Expect_ReturnFailed)
+TEST_F(ThreadManagerTest, Ut_ResetThreadLocalNotifies_When_ResetNotifiesFailed_Expect_ReturnFailed)
 {
     MockGetRunSideIsDevice();
     HcclResult ret = threadManager->HcclThreadAcquireWithStream(CommEngine::COMM_ENGINE_CPU, nullptr, 1, threads);
     ASSERT_EQ(ret, HCCL_SUCCESS);
 
-    MOCKER(hrtNotifyReset).stubs().will(returnValue(HCCL_E_INTERNAL));
+    MOCKER(HcommThreadResetNotifies).stubs().will(returnValue(static_cast<HcommResult>(HCCL_E_INTERNAL)));
     ret = threadManager->ResetThreadLocalNotifies();
     EXPECT_EQ(ret, HCCL_E_INTERNAL);
 }
@@ -186,4 +206,112 @@ TEST_F(ThreadManagerTest, Ut_DedicatedThreadAcquire_When_DeviceKernelLaunchFail_
     HcclResult ret
         = threadManager->HcclDedicatedThreadAcquire(HCCL_DED_THREAD_TYPE_AICPU_ORDER_LAUNCH_DEVICE, 1, &thread);
     EXPECT_NE(ret, HCCL_SUCCESS);
+}
+
+// ============ RFC 0002: L1 ThreadMgr 归一 UT ============
+
+// HcclThreadAcquireV2：CPU 引擎批量分配 + 返回 sqId
+TEST_F(ThreadManagerTest, Ut_HcclThreadAcquireV2_When_CpuBatch_Expect_Success)
+{
+    MockGetRunSideIsDevice();
+    constexpr uint32_t kNum = 2;
+    ThreadConfig config[kNum];
+    ASSERT_EQ(ThreadConfigInit(config, kNum), HCCL_SUCCESS);
+    for (uint32_t i = 0; i < kNum; ++i) {
+        config[i].notifyNumPerThread = static_cast<uint16_t>(2 + i);
+    }
+    ThreadHandle out[kNum] = {0};
+    std::vector<uint32_t> threadId;
+    HcclResult ret = threadManager->HcclThreadAcquireV2(
+        CommEngine::COMM_ENGINE_CPU, kNum, ThreadType::THREAD_TYPE_TS, config, out, threadId);
+    EXPECT_EQ(ret, HCCL_SUCCESS);
+    EXPECT_EQ(threadId.size(), kNum);
+    // 释放（L1 析构不负责，显式 Free）
+    HcommThreadFree(out, kNum);
+}
+
+// HcclThreadAcquireV2：复用池命中 + notify 补充
+TEST_F(ThreadManagerTest, Ut_HcclThreadAcquireV2_When_ReusePoolHit_Expect_SupplementNotify)
+{
+    MockGetRunSideIsDevice();
+    MockThreadKernelLaunchForComm();
+    constexpr uint32_t kNum = 1;
+    ThreadConfig config[kNum];
+    ASSERT_EQ(ThreadConfigInit(config, kNum), HCCL_SUCCESS);
+    config[0].notifyNumPerThread = 2;
+    ThreadHandle out[kNum] = {0};
+    std::vector<uint32_t> threadId;
+    HcclResult ret = threadManager->HcclThreadAcquireV2(
+        CommEngine::COMM_ENGINE_CPU, kNum, ThreadType::THREAD_TYPE_TS, config, out, threadId);
+    ASSERT_EQ(ret, HCCL_SUCCESS);
+    ThreadHandle first = out[0];
+
+    // 第二次：notifyNum 提升到 4，触发 SupplementNotify
+    config[0].notifyNumPerThread = 4;
+    std::vector<uint32_t> threadId2;
+    ret = threadManager->HcclThreadAcquireV2(
+        CommEngine::COMM_ENGINE_CPU, kNum, ThreadType::THREAD_TYPE_TS, config, out, threadId2);
+    EXPECT_EQ(ret, HCCL_SUCCESS);
+    EXPECT_EQ(out[0], first); // 复用同句柄
+    HcommThreadFree(out, kNum);
+}
+
+// HcclThreadAcquire：批量分配 + 返回 sqId
+TEST_F(ThreadManagerTest, Ut_HcclThreadAcquire_When_NonV2Batch_Expect_Success)
+{
+    MockGetRunSideIsDevice();
+    constexpr uint32_t kNum = 2;
+    ThreadConfig config[kNum];
+    ASSERT_EQ(ThreadConfigInit(config, kNum), HCCL_SUCCESS);
+    for (uint32_t i = 0; i < kNum; ++i) {
+        config[i].notifyNumPerThread = 2;
+    }
+    ThreadHandle out[kNum] = {0};
+    std::vector<uint32_t> threadId;
+    HcclResult ret = threadManager->HcclThreadAcquire(
+        CommEngine::COMM_ENGINE_CPU, kNum, ThreadType::THREAD_TYPE_TS, config, out, threadId);
+    EXPECT_EQ(ret, HCCL_SUCCESS);
+    EXPECT_EQ(threadId.size(), kNum);
+    HcommThreadFree(out, kNum);
+}
+
+// HcclGetNotifyNumInThread：L1 反查
+TEST_F(ThreadManagerTest, Ut_HcclGetNotifyNumInThread_When_Normal_Expect_Success)
+{
+    MockGetRunSideIsDevice();
+    constexpr uint32_t kNum = 1;
+    ThreadConfig config[kNum];
+    ASSERT_EQ(ThreadConfigInit(config, kNum), HCCL_SUCCESS);
+    config[0].notifyNumPerThread = 3;
+    ThreadHandle out[kNum] = {0};
+    std::vector<uint32_t> threadId;
+    HcclResult ret = threadManager->HcclThreadAcquireV2(
+        CommEngine::COMM_ENGINE_CPU, kNum, ThreadType::THREAD_TYPE_TS, config, out, threadId);
+    ASSERT_EQ(ret, HCCL_SUCCESS);
+    uint32_t num = 0;
+    ret = threadManager->HcclGetNotifyNumInThread(out[0], &num);
+    EXPECT_EQ(ret, HCCL_SUCCESS);
+    EXPECT_EQ(num, 3U);
+    HcommThreadFree(out, kNum);
+}
+
+TEST_F(ThreadManagerTest, Ut_HcclThreadResGetInfo_When_Stream_Expect_Success)
+{
+    ThreadHandle handle;
+    AcquireCpuThreads(1, 1, &handle);
+    void* info = nullptr;
+    HcclResult ret = threadManager->HcclThreadResGetInfo(
+        handle, ThreadResType::THREAD_RES_TYPE_STREAM, sizeof(ThreadResTypeStream), &info);
+    EXPECT_EQ(ret, HCCL_SUCCESS);
+    EXPECT_NE(info, nullptr);
+    HcommThreadFree(&handle, 1);
+}
+
+// 析构释放：ThreadMgr 析构不泄漏（L1 cache 清空，L0 g_ThreadMap 由 HcommThreadFree 管）
+TEST_F(ThreadManagerTest, Ut_ThreadMgrDestructor_When_NoLeak_Expect_Success)
+{
+    ThreadHandle handle;
+    AcquireCpuThreads(1, 1, &handle);
+    // 显式 Free 后析构 cache 已空
+    EXPECT_EQ(HcommThreadFree(&handle, 1), HCCL_SUCCESS);
 }

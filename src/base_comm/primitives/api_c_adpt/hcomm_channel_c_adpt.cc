@@ -26,6 +26,7 @@
 #include "comm_engine_utils.h"
 #include "channel_process.h"
 #include "aicpu_ts_channel_helper.h"
+#include "hcomm_res_mgr.h"
 #include "channel_config.h"
 #include "shared_jetty_mgr.h"
 #include "endpoint.h"
@@ -618,8 +619,8 @@ static HcclResult DestroyBuiltinChannels(std::vector<ChannelHandle>& builtinChan
     if (builtinChannels.empty()) {
         return builtinRet;
     }
-    builtinRet = ChannelProcess::ChannelDestroy(
-        builtinChannels.data(), builtinChannels.size(), AicpuTsChannelHelper::GetBinHandle());
+    builtinRet
+        = ChannelProcess::ChannelDestroy(builtinChannels.data(), builtinChannels.size(), HcommResMgr::GetBinHandle());
     // 无论 ChannelDestroy 成功与否都注销 SharedJettyMgr 记录：
     // 成功时正常清理；失败时 channel 已不可用，若不注销会永久阻塞 Endpoint 销毁。
     if (builtinRet != HCCL_SUCCESS) {
@@ -706,14 +707,14 @@ static HcclResult CreateAndRegisterSharedQueueBuiltinChannels(
         = ChannelProcess::PrepareUserChannels(targetChannels, channels, channelDescFinals, channelNum, engine);
     if (prepRet != HCCL_SUCCESS) {
         HCCL_ERROR("[%s] PrepareUserChannels failed, ret[%d], destroying created channels.", __func__, prepRet);
-        (void)ChannelProcess::ChannelDestroy(targetChannels, channelNum, AicpuTsChannelHelper::GetBinHandle());
+        (void)ChannelProcess::ChannelDestroy(targetChannels, channelNum, HcommResMgr::GetBinHandle());
         return prepRet;
     }
 
     HcclResult regRet = hcomm::SharedJettyMgr::GetInstance().RegisterChannels(endpointHandle, channels, channelNum);
     if (regRet != HCCL_SUCCESS) {
         HCCL_ERROR("[%s] failed to register shared jetty channels, ret[%d].", __func__, regRet);
-        (void)ChannelProcess::ChannelDestroy(channels, channelNum, AicpuTsChannelHelper::GetBinHandle());
+        (void)ChannelProcess::ChannelDestroy(channels, channelNum, HcommResMgr::GetBinHandle());
         return regRet;
     }
     return HCCL_SUCCESS;

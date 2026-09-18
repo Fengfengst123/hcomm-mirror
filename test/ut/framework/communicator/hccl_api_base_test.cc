@@ -28,6 +28,15 @@ rtError_t rtCloseNetService()
     return ACL_RT_SUCCESS;
 }
 
+// L0 新模型下 HcommResMgr::EnsureKernelBinLoaded 依赖该接口输出 binHandle，
+// 仅返回成功而不赋值会导致 StoreThreadHandles 因 binHandle 为空返回 HCCL_E_PTR
+static HcclResult StubLoadBinaryFromFile(
+    const char* binPath, aclrtBinaryLoadOptionType loadType, uint32_t cpuKernelMode, aclrtBinHandle& binHandle)
+{
+    binHandle = reinterpret_cast<aclrtBinHandle>(0x1);
+    return HCCL_SUCCESS;
+}
+
 void Ut_Clusterinfo_File_Create(const char* filename, nlohmann::json rankTable)
 {
     const char* file_name_t = filename;
@@ -166,7 +175,7 @@ void BaseInit::SetUp()
 
     MOCKER(hrtProfRegisterCtrlCallback).stubs().will(returnValue(HCCL_SUCCESS));
 
-    MOCKER(LoadBinaryFromFile).stubs().will(returnValue(HCCL_SUCCESS));
+    MOCKER(LoadBinaryFromFile).stubs().will(invoke(StubLoadBinaryFromFile));
 
     MOCKER(RptInputErr).stubs().will(returnValue(HCCL_SUCCESS));
 

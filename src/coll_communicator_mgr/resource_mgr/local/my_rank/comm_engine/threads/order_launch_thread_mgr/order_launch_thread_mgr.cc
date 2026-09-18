@@ -14,8 +14,9 @@
 #include "coll_comm.h"
 #include "hcclCommOp.h"
 #include "sal_pub.h"
-#include "dfx_dlprof_function.h"
+#include "prof_cycle_time.h"
 #include "hcomm_c_adpt.h"
+#include "hcomm_thread_c_adpt.h"
 
 namespace hccl {
 
@@ -81,11 +82,11 @@ void OrderLaunchThreadMgr::Destroy()
 
     for (auto& entry : hcomAttachedThreadMap_) {
         if (entry.second != 0) {
-            HcommResult ret = HcommThreadFreeWithStream(&entry.second, 1);
+            HcommResult ret = HcommThreadFree(&entry.second, 1);
             if (ret != HCCL_SUCCESS) {
                 HCCL_WARNING(
-                    "[OrderLaunchThreadMgr] HcommThreadFreeWithStream hcomAttachedThread[0x%llx] failed, ret[%d]",
-                    entry.second, ret);
+                    "[OrderLaunchThreadMgr] HcommThreadFree hcomAttachedThread[0x%llx] failed, ret[%d]", entry.second,
+                    ret);
             }
             entry.second = 0;
         }
@@ -386,7 +387,7 @@ HcclResult OrderLaunchThreadMgr::OrderLaunchThreadAcquire(
         "[%s] begin, useType[%d], group[%s], notifyNumPerThread[%u]", __func__, static_cast<s32>(useType),
         group.c_str(), notifyNumPerThread);
 
-    u64 beginTime = Hccl::DfxDlProfFunction::GetInstance().dlMsprofSysCycleTime();
+    u64 beginTime = hcomm::GetProfCycleTime();
 
     switch (useType) {
         case HCCL_DED_THREAD_TYPE_AICPU_ORDER_LAUNCH_OPBASE: {

@@ -16,7 +16,9 @@
 #include <memory>
 #include "hccl_types.h"
 #include "hccl_common.h"
+#include "res_pub.h"
 #include "hcomm_primitives.h"
+#include "hcomm_res_defs.h"
 #include "local_notify.h"
 #include "stream_pub.h"
 #include "acl/acl_rt.h"
@@ -30,35 +32,9 @@
 
 namespace hccl {
 
-struct ThreadCreateParams {
-    CommEngine engine;             // 通信引擎类型
-    uint32_t threadNum;            // 线程数量
-    uint32_t notifyNumPerThread;   // 每个线程的通知量数量
-    NotifyLoadType notifyLoadType; // 通知量加载类型
-    StreamType streamType;         // 流类型
-
-    // 默认构造函数
-    ThreadCreateParams()
-        : engine(COMM_ENGINE_RESERVED),
-          threadNum(0),
-          notifyNumPerThread(0),
-          notifyLoadType(NotifyLoadType::HOST_NOTIFY),
-          streamType(StreamType::STREAM_TYPE_RESERVED)
-    {}
-
-    // 带参数的构造函数
-    ThreadCreateParams(CommEngine engine, uint32_t tNum, uint32_t nNum, NotifyLoadType nType, StreamType sType)
-        : engine(engine),
-          threadNum(tNum),
-          notifyNumPerThread(nNum),
-          notifyLoadType(nType),
-          streamType(sType)
-    {}
-};
-
 constexpr u32 HCOMM_NOTIFY_MAX_NUM = 64;
-constexpr u32 HCOMM_THREADNUM_MAX_NUM = 1000;
-constexpr u32 HCCL_THREAD_NOTIFY_MAX_NUM = 65536;
+// 常量在 res_pub.h 中定义，此处仅起别名，老代码里 HCCL_ 前缀的写法继续可用
+constexpr u32 HCCL_THREAD_NOTIFY_MAX_NUM = HCOMM_THREAD_NOTIFY_MAX_NUM;
 /**
  * @note 职责：通信引擎的Thread的C++抽象接口类，表达并行资源，内部包含thread间的同步Notify。
  */
@@ -164,15 +140,15 @@ HcclResult GetNotifyLoadType(CommEngine engine, ThreadType threadType, NotifyLoa
 HcclResult GetStreamType(CommEngine engine, ThreadType threadType, StreamType& type);
 HcclResult ValidateThreadParams(uint32_t threadNum, uint32_t notifyNumPerThread);
 HcclResult SaveThreads(const std::vector<std::shared_ptr<hccl::Thread>>& newThreads);
-HcclResult
-CreateAndInitThreads(const ThreadCreateParams& params, std::vector<std::shared_ptr<hccl::Thread>>& outThreads);
+HcclResult FillThreadD2HMap(ThreadHandle* deviceThreadHandles, ThreadHandle* hostThreadHandles, uint32_t listNum);
 HcclResult StoreThreadHandles(
     std::vector<std::shared_ptr<hccl::Thread>>& newThreads, ThreadHandle* threads, CommEngine engine,
     aclrtBinHandle binHandle);
+HcclResult StoreThreadHandles(
+    std::vector<std::shared_ptr<hccl::Thread>>& newThreads, const std::string& commId, ThreadHandle* threads,
+    CommEngine engine, aclrtBinHandle binHandle);
 HcclResult FreeThreads(const ThreadHandle* threads, uint32_t threadNum, aclrtBinHandle binHandle);
 HcclResult SupplementThreadNotify(ThreadHandle handle, uint32_t notifyNum);
-HcclResult
-FillThreadD2HMap(const ThreadHandle* deviceThreadHandles, const ThreadHandle* hostThreadHandles, uint32_t listNum);
 /**
  * @brief 按句柄查全局线程表，获取对应的 shared_ptr<Thread>
  * @param[in] handle 线程句柄

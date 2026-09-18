@@ -27,6 +27,18 @@ static HcclResult StubThreadKernelLaunchForComm(
     return HCCL_SUCCESS;
 }
 
+// stub for AicpuLaunchMgr::ThreadKernelLaunchForBase：commId 为空的 alloc 走该分支，
+// 真实实现的 device->host 句柄回拷在 UT 中是 no-op mock，会导致句柄为 0，需 stub 填充非零值
+static HcclResult StubThreadKernelLaunchForBase(
+    std::vector<std::shared_ptr<hccl::Thread>>& newThreads, std::unique_ptr<ThreadHandle[]>& aicpuHandle,
+    aclrtBinHandle binHandle)
+{
+    for (size_t i = 0; i < newThreads.size(); ++i) {
+        aicpuHandle[i] = static_cast<ThreadHandle>(0x1 + i);
+    }
+    return HCCL_SUCCESS;
+}
+
 // Spy 线程：通过构造/析构计数观测 host 侧线程对象的生命周期，
 // 用于验证 FreeThreads 先销毁 device 侧线程、再释放 host 侧 SQ/CQ 资源的顺序
 class SpyThreadForFree : public hccl::Thread {
@@ -91,6 +103,19 @@ public:
         BaseInit::TearDown();
         GlobalMockObject::verify();
     }
+
+    void AllocCpuTsThreads(uint32_t threadNum, uint32_t notifyNum, ThreadHandle* threads)
+    {
+        bool isDeviceSide{false};
+        MOCKER(GetRunSideIsDevice).stubs().with(outBound(isDeviceSide)).will(returnValue(HCCL_SUCCESS));
+        MOCKER(hrtGetDeviceType).stubs().with(outBound(DevType::DEV_TYPE_950)).will(returnValue(HCCL_SUCCESS));
+        std::vector<uint32_t> notifyNums(threadNum, notifyNum);
+        HcommResult ret = HcommThreadAlloc(COMM_ENGINE_CPU_TS, threadNum, notifyNums.data(), threads);
+        ASSERT_EQ(ret, HCCL_SUCCESS);
+        for (uint32_t i = 0; i < threadNum; ++i) {
+            EXPECT_EQ(reinterpret_cast<Thread*>(threads[i])->GetNotifyNum(), notifyNum);
+        }
+    }
 };
 
 TEST_F(TestHcclThread, Ut_NotifyLoadType_When_AicpuEngine_Expect_HostNotify)
@@ -154,7 +179,8 @@ TEST_F(TestHcclThread, UT_When_DeviceSide_ResourceAllocateFail_expect_return_Hcc
     MOCKER(GetRunSideIsDevice).stubs().with(outBound(isDeviceSide)).will(returnValue(HCCL_SUCCESS));
     MOCKER(hrtGetDeviceType).stubs().with(outBound(DevType::DEV_TYPE_950)).will(returnValue(HCCL_SUCCESS));
     ThreadHandle thread[3];
-    HcommResult ret = HcommThreadAlloc(COMM_ENGINE_AICPU_TS, 2, 3, thread);
+    uint32_t notifyNum[2] = {3, 3};
+    HcommResult ret = HcommThreadAlloc(COMM_ENGINE_AICPU_TS, 2, notifyNum, thread);
     EXPECT_EQ(ret, HCCL_E_INTERNAL);
 }
 
@@ -166,7 +192,8 @@ TEST_F(TestHcclThread, Ut_TestHcommThreadAlloc_When_ThreadIsNullptr_Allocate_exp
     MOCKER(hrtGetDeviceType).stubs().with(outBound(DevType::DEV_TYPE_950)).will(returnValue(HCCL_SUCCESS));
 
     uint64_t* thread = nullptr;
-    HcommResult ret = HcommThreadAlloc(COMM_ENGINE_AICPU_TS, 2, 3, thread);
+    uint32_t notifyNum[2] = {3, 3};
+    HcommResult ret = HcommThreadAlloc(COMM_ENGINE_AICPU_TS, 2, notifyNum, thread);
     EXPECT_EQ(ret, HCCL_E_PTR);
 }
 
@@ -177,7 +204,8 @@ TEST_F(TestHcclThread, Ut_TestHcommThreadAlloc_When_WithUnsupportedEngine_expect
     MOCKER(GetRunSideIsDevice).stubs().with(outBound(isDeviceSide)).will(returnValue(HCCL_SUCCESS));
     MOCKER(hrtGetDeviceType).stubs().with(outBound(DevType::DEV_TYPE_950)).will(returnValue(HCCL_SUCCESS));
     ThreadHandle thread[3];
-    HcommResult ret = HcommThreadAlloc(COMM_ENGINE_AIV, 2, 3, thread);
+    uint32_t notifyNum[2] = {3, 3};
+    HcommResult ret = HcommThreadAlloc(COMM_ENGINE_AIV, 2, notifyNum, thread);
     EXPECT_EQ(ret, HCCL_E_PARA);
 }
 
@@ -188,7 +216,8 @@ TEST_F(TestHcclThread, Ut_TestHcommThreadAlloc_When_Thread_Allocate_0Num_expect_
     MOCKER(GetRunSideIsDevice).stubs().with(outBound(isDeviceSide)).will(returnValue(HCCL_SUCCESS));
     MOCKER(hrtGetDeviceType).stubs().with(outBound(DevType::DEV_TYPE_950)).will(returnValue(HCCL_SUCCESS));
     ThreadHandle thread[3];
-    HcommResult ret = HcommThreadAlloc(COMM_ENGINE_AIV, 0, 3, thread);
+    uint32_t notifyNum[2] = {3, 3};
+    HcommResult ret = HcommThreadAlloc(COMM_ENGINE_AIV, 0, notifyNum, thread);
     EXPECT_EQ(ret, HCCL_E_PARA);
 }
 
@@ -200,7 +229,8 @@ TEST_F(TestHcclThread, Ut_TestHcommThreadAlloc_When_WithNotifyInitFail_expect_re
     MOCKER(hrtGetDeviceType).stubs().with(outBound(DevType::DEV_TYPE_950)).will(returnValue(HCCL_SUCCESS));
     MOCKER(hrtNotifyGetOffset).stubs().will(returnValue(HCCL_E_RUNTIME));
     ThreadHandle thread[3];
-    HcommResult ret = HcommThreadAlloc(COMM_ENGINE_AICPU_TS, 2, 3, thread);
+    uint32_t notifyNum[2] = {3, 3};
+    HcommResult ret = HcommThreadAlloc(COMM_ENGINE_AICPU_TS, 2, notifyNum, thread);
     EXPECT_EQ(ret, HCCL_E_RUNTIME);
 }
 
@@ -211,7 +241,8 @@ TEST_F(TestHcclThread, Ut_TestHcommThreadAlloc_When_CpuTsThread_Allocate_expect_
     MOCKER(GetRunSideIsDevice).stubs().with(outBound(isDeviceSide)).will(returnValue(HCCL_SUCCESS));
     MOCKER(hrtGetDeviceType).stubs().with(outBound(DevType::DEV_TYPE_950)).will(returnValue(HCCL_SUCCESS));
     ThreadHandle thread[3];
-    HcommResult ret = HcommThreadAlloc(COMM_ENGINE_CPU_TS, 2, 3, thread);
+    uint32_t notifyNum[2] = {3, 3};
+    HcommResult ret = HcommThreadAlloc(COMM_ENGINE_CPU_TS, 2, notifyNum, thread);
     EXPECT_EQ(ret, HCCL_SUCCESS);
 
     Thread* threadptr0 = reinterpret_cast<Thread*>(thread[0]);
@@ -230,8 +261,8 @@ TEST_F(TestHcclThread, Ut_TestHcommThreadAlloc_When_Allocate_MAXThreadNum_expect
     MOCKER(GetRunSideIsDevice).stubs().with(outBound(isDeviceSide)).will(returnValue(HCCL_SUCCESS));
     MOCKER(hrtGetDeviceType).stubs().with(outBound(DevType::DEV_TYPE_950)).will(returnValue(HCCL_SUCCESS));
     ThreadHandle thread;
-    HcommResult ret
-        = HcommThreadAlloc(COMM_ENGINE_CPU_TS, hccl::HCOMM_THREADNUM_MAX_NUM + 1, static_cast<uint32_t>(0), &thread);
+    uint32_t notifyNum = 0;
+    HcommResult ret = HcommThreadAlloc(COMM_ENGINE_CPU_TS, HCOMM_THREADNUM_MAX_NUM + 1, &notifyNum, &thread);
     EXPECT_EQ(ret, HCCL_E_PARA);
 }
 
@@ -242,45 +273,24 @@ TEST_F(TestHcclThread, Ut_TestHcommThreadAlloc_When_Allocate_MaxNotifyNum_expect
     MOCKER(GetRunSideIsDevice).stubs().with(outBound(isDeviceSide)).will(returnValue(HCCL_SUCCESS));
     MOCKER(hrtGetDeviceType).stubs().with(outBound(DevType::DEV_TYPE_950)).will(returnValue(HCCL_SUCCESS));
     ThreadHandle thread;
-    HcommResult ret = HcommThreadAlloc(COMM_ENGINE_CPU_TS, 1, hccl::HCOMM_NOTIFY_MAX_NUM + 1, &thread);
+    uint32_t notifyNum = hccl::HCOMM_NOTIFY_MAX_NUM + 1;
+    HcommResult ret = HcommThreadAlloc(COMM_ENGINE_CPU_TS, 1, &notifyNum, &thread);
     EXPECT_EQ(ret, HCCL_E_PARA);
 }
 
 TEST_F(TestHcclThread, Ut_HcommThreadFree_When_expect_Return_HCCL_Success)
 {
-    std::shared_ptr<Thread> Handle;
-    bool isDeviceSide{false};
-    MOCKER(GetRunSideIsDevice).stubs().with(outBound(isDeviceSide)).will(returnValue(HCCL_SUCCESS));
-    MOCKER(hrtGetDeviceType).stubs().with(outBound(DevType::DEV_TYPE_950)).will(returnValue(HCCL_SUCCESS));
     ThreadHandle thread[2];
-    HcommResult ret = HcommThreadAlloc(COMM_ENGINE_CPU_TS, 2, 3, thread);
-    EXPECT_EQ(ret, HCCL_SUCCESS);
-
-    Thread* threadptr0 = reinterpret_cast<Thread*>(thread[0]);
-    Thread* threadptr1 = reinterpret_cast<Thread*>(thread[1]);
-
-    EXPECT_EQ(threadptr0->GetNotifyNum(), 3);
-    EXPECT_EQ(threadptr1->GetNotifyNum(), 3);
-    ret = HcommThreadFree(thread, 2);
+    AllocCpuTsThreads(2, 3, thread);
+    HcommResult ret = HcommThreadFree(thread, 2);
     EXPECT_EQ(ret, HCCL_SUCCESS);
 }
 
 TEST_F(TestHcclThread, Ut_HcommThreadFree_When_ThreadNum_Is_0_expect_Return_HCCL_E_PARA)
 {
-    std::shared_ptr<Thread> Handle;
-    bool isDeviceSide{false};
-    MOCKER(GetRunSideIsDevice).stubs().with(outBound(isDeviceSide)).will(returnValue(HCCL_SUCCESS));
-    MOCKER(hrtGetDeviceType).stubs().with(outBound(DevType::DEV_TYPE_950)).will(returnValue(HCCL_SUCCESS));
     ThreadHandle thread[2];
-    HcommResult ret = HcommThreadAlloc(COMM_ENGINE_CPU_TS, 2, 3, thread);
-    EXPECT_EQ(ret, HCCL_SUCCESS);
-
-    Thread* threadptr0 = reinterpret_cast<Thread*>(thread[0]);
-    Thread* threadptr1 = reinterpret_cast<Thread*>(thread[1]);
-
-    EXPECT_EQ(threadptr0->GetNotifyNum(), 3);
-    EXPECT_EQ(threadptr1->GetNotifyNum(), 3);
-    ret = HcommThreadFree(thread, 0);
+    AllocCpuTsThreads(2, 3, thread);
+    HcommResult ret = HcommThreadFree(thread, 0);
     EXPECT_EQ(ret, HCCL_E_PARA);
 }
 
@@ -341,29 +351,29 @@ TEST_F(TestHcclThread, UT_TestHcommThreadAllocWithStream_When_Allocate_WithStrea
     HcommResult ret = HcommThreadAllocWithStream(COMM_ENGINE_CPU_TS, rtStream, 3, &thread);
     EXPECT_EQ(ret, HCCL_SUCCESS);
 
-    HcommResult freeRet = HcommThreadFreeWithStream(&thread, 1);
+    HcommResult freeRet = HcommThreadFree(&thread, 1);
     EXPECT_EQ(freeRet, HCCL_SUCCESS);
     delete stream;
 }
 
-TEST_F(TestHcclThread, UT_TestHcommThreadFreeWithStream_When_ThreadNumZero_expect_return_HCCL_E_PARA)
+TEST_F(TestHcclThread, UT_TestHcommThreadFree_When_ThreadNumZero_expect_return_HCCL_E_PARA)
 {
     ThreadHandle thread = 0;
-    HcommResult ret = HcommThreadFreeWithStream(&thread, 0);
+    HcommResult ret = HcommThreadFree(&thread, 0);
     EXPECT_EQ(ret, HCCL_E_PARA);
 }
 
-TEST_F(TestHcclThread, UT_TestHcommThreadFreeWithStream_When_Nullptr_expect_return_HCCL_E_PTR)
+TEST_F(TestHcclThread, UT_TestHcommThreadFree_When_Nullptr_expect_return_HCCL_E_PTR)
 {
-    HcommResult ret = HcommThreadFreeWithStream(nullptr, 1);
+    HcommResult ret = HcommThreadFree(nullptr, 1);
     EXPECT_EQ(ret, HCCL_E_PTR);
 }
 
-TEST_F(TestHcclThread, UT_TestHcommThreadFreeWithStream_When_HandleNotFound_expect_return_HCCL_Success)
+TEST_F(TestHcclThread, UT_TestHcommThreadFree_When_HandleNotFound_expect_return_HCCL_E_NOT_FOUND)
 {
     ThreadHandle thread = 0x9999;
-    HcommResult ret = HcommThreadFreeWithStream(&thread, 1);
-    EXPECT_EQ(ret, HCCL_SUCCESS);
+    HcommResult ret = HcommThreadFree(&thread, 1);
+    EXPECT_EQ(ret, HCCL_E_NOT_FOUND);
 }
 
 TEST_F(TestHcclThread, UT_TestHcommThreadAllocWithStream_When_ThreadNullptr_expect_return_HCCL_E_PTR)
@@ -439,7 +449,7 @@ TEST_F(TestHcclThread, UT_TestHcommThreadAllocWithStream_When_EngineCpu_expect_r
     HcommResult ret = HcommThreadAllocWithStream(COMM_ENGINE_CPU, rtStream, 3, &thread);
     EXPECT_EQ(ret, HCCL_SUCCESS);
 
-    HcommResult freeRet = HcommThreadFreeWithStream(&thread, 1);
+    HcommResult freeRet = HcommThreadFree(&thread, 1);
     EXPECT_EQ(freeRet, HCCL_SUCCESS);
     delete stream;
 }
@@ -458,7 +468,7 @@ TEST_F(TestHcclThread, UT_TestHcommThreadAllocWithStream_When_NotifyInitFailed_e
     EXPECT_EQ(ret, HCCL_E_RUNTIME);
 }
 
-/* ======================== HcommThreadResGetInfo ======================== */
+/* =========== HcommThreadResGetInfo (L0 内部 4 参数版) =========== */
 
 TEST_F(TestHcclThread, Ut_HcommThreadResGetInfo_When_Normal_Expect_Return_HCCL_Success)
 {
@@ -466,7 +476,8 @@ TEST_F(TestHcclThread, Ut_HcommThreadResGetInfo_When_Normal_Expect_Return_HCCL_S
     MOCKER(GetRunSideIsDevice).stubs().with(outBound(isDeviceSide)).will(returnValue(HCCL_SUCCESS));
     MOCKER(hrtGetDeviceType).stubs().with(outBound(DevType::DEV_TYPE_950)).will(returnValue(HCCL_SUCCESS));
     ThreadHandle thread;
-    HcommResult ret = HcommThreadAlloc(COMM_ENGINE_CPU_TS, 1, 3, &thread);
+    uint32_t notifyNum = 3;
+    HcommResult ret = HcommThreadAlloc(COMM_ENGINE_CPU_TS, 1, &notifyNum, &thread);
     EXPECT_EQ(ret, HCCL_SUCCESS);
 
     void* info = nullptr;
@@ -483,7 +494,8 @@ TEST_F(TestHcclThread, Ut_HcommThreadResGetInfo_When_InfoNull_Expect_Return_HCCL
     MOCKER(GetRunSideIsDevice).stubs().with(outBound(isDeviceSide)).will(returnValue(HCCL_SUCCESS));
     MOCKER(hrtGetDeviceType).stubs().with(outBound(DevType::DEV_TYPE_950)).will(returnValue(HCCL_SUCCESS));
     ThreadHandle thread;
-    HcommResult ret = HcommThreadAlloc(COMM_ENGINE_CPU_TS, 1, 3, &thread);
+    uint32_t notifyNum = 3;
+    HcommResult ret = HcommThreadAlloc(COMM_ENGINE_CPU_TS, 1, &notifyNum, &thread);
     EXPECT_EQ(ret, HCCL_SUCCESS);
 
     ret = HcommThreadResGetInfo(thread, ThreadResType::THREAD_RES_TYPE_STREAM, sizeof(ThreadResTypeStream), nullptr);
@@ -506,7 +518,8 @@ TEST_F(TestHcclThread, Ut_HcommThreadResGetInfo_When_ResTypeNotSupport_Expect_Re
     MOCKER(GetRunSideIsDevice).stubs().with(outBound(isDeviceSide)).will(returnValue(HCCL_SUCCESS));
     MOCKER(hrtGetDeviceType).stubs().with(outBound(DevType::DEV_TYPE_950)).will(returnValue(HCCL_SUCCESS));
     ThreadHandle thread;
-    HcommResult ret = HcommThreadAlloc(COMM_ENGINE_CPU_TS, 1, 3, &thread);
+    uint32_t notifyNum = 3;
+    HcommResult ret = HcommThreadAlloc(COMM_ENGINE_CPU_TS, 1, &notifyNum, &thread);
     EXPECT_EQ(ret, HCCL_SUCCESS);
 
     void* info = nullptr;
@@ -522,7 +535,8 @@ TEST_F(TestHcclThread, Ut_HcommThreadResGetInfo_When_InfoLenMismatch_Expect_Retu
     MOCKER(GetRunSideIsDevice).stubs().with(outBound(isDeviceSide)).will(returnValue(HCCL_SUCCESS));
     MOCKER(hrtGetDeviceType).stubs().with(outBound(DevType::DEV_TYPE_950)).will(returnValue(HCCL_SUCCESS));
     ThreadHandle thread;
-    HcommResult ret = HcommThreadAlloc(COMM_ENGINE_CPU_TS, 1, 3, &thread);
+    uint32_t notifyNum = 3;
+    HcommResult ret = HcommThreadAlloc(COMM_ENGINE_CPU_TS, 1, &notifyNum, &thread);
     EXPECT_EQ(ret, HCCL_SUCCESS);
 
     void* info = nullptr;
@@ -567,7 +581,11 @@ TEST_F(TestHcclThread, Ut_HcclThreadAcquire_When_Acquire_AicpuTsThread_Return_HC
     bool isDeviceSide{false};
     MOCKER(GetRunSideIsDevice).stubs().with(outBound(isDeviceSide)).will(returnValue(HCCL_SUCCESS));
     MOCKER_CPP(&hcclComm::GetAicpuCommState).stubs().will(returnValue(true));
-    MOCKER_CPP(&AicpuLaunchMgr::ThreadKernelLaunchForComm).stubs().will(returnValue(0));
+    // mock 需填充句柄：L1 SupplementThread 基于句柄查询 stream 信息，不填会拿到 0 导致失败
+    // 用例 commName 为空串，alloc 经 StoreThreadHandles 走 commId == "" 的 ForBase 分支（真实运行时 commId
+    // 非空走 ForComm）；ForComm 保留 stub 防御 export 等路径触发
+    MOCKER_CPP(&AicpuLaunchMgr::ThreadKernelLaunchForComm).stubs().will(invoke(StubThreadKernelLaunchForComm));
+    MOCKER_CPP(&AicpuLaunchMgr::ThreadKernelLaunchForBase).stubs().will(invoke(StubThreadKernelLaunchForBase));
     MOCKER_CPP(&HcclCommProfiling::ReportKernel).stubs().will(returnValue(0));
 
     void* commV2 = (void*)0x2000;
@@ -599,7 +617,11 @@ TEST_F(TestHcclThread, Ut_HcclThreadAcquire_When_Acquire_AicpuTsThread_Reuse_Ret
     bool isDeviceSide{false};
     MOCKER(GetRunSideIsDevice).stubs().with(outBound(isDeviceSide)).will(returnValue(HCCL_SUCCESS));
     MOCKER_CPP(&hcclComm::GetAicpuCommState).stubs().will(returnValue(true));
-    MOCKER_CPP(&AicpuLaunchMgr::ThreadKernelLaunchForComm).stubs().will(returnValue(0));
+    // mock 需填充句柄：L1 SupplementThread 基于句柄查询 stream 信息，不填会拿到 0 导致失败
+    // 用例 commName 为空串，alloc 经 StoreThreadHandles 走 commId == "" 的 ForBase 分支（真实运行时 commId
+    // 非空走 ForComm）；ForComm 保留 stub 防御 export 等路径触发
+    MOCKER_CPP(&AicpuLaunchMgr::ThreadKernelLaunchForComm).stubs().will(invoke(StubThreadKernelLaunchForComm));
+    MOCKER_CPP(&AicpuLaunchMgr::ThreadKernelLaunchForBase).stubs().will(invoke(StubThreadKernelLaunchForBase));
     MOCKER_CPP(&AicpuLaunchMgr::SupplementNotifyKernelLaunch).expects(exactly(2)).will(returnValue(0));
     MOCKER_CPP(&HcclCommProfiling::ReportKernel).stubs().will(returnValue(0));
 
@@ -1688,7 +1710,39 @@ TEST_F(
     EXPECT_EQ(threadPtr2->GetNotifyNum(), 5U);
 }
 
-// HcommThreadAllocWithStream + HcommThreadFreeWithStream
+// ============ RFC 0002: L0 HcommThread* 新接口 UT ============
+
+// HcommThreadAlloc per-thread notifyNum 各异（数组版）
+TEST_F(TestHcclThread, Ut_HcommThreadAlloc_When_PerThreadNotifyNumDistinct_Expect_Success)
+{
+    bool isDeviceSide{false};
+    MOCKER(GetRunSideIsDevice).stubs().with(outBound(isDeviceSide)).will(returnValue(HCCL_SUCCESS));
+    MOCKER(hrtGetDeviceType).stubs().with(outBound(DevType::DEV_TYPE_950)).will(returnValue(HCCL_SUCCESS));
+    ThreadHandle thread[2];
+    uint32_t notifyNums[2] = {2, 4}; // 各异
+    HcommResult ret = HcommThreadAlloc(COMM_ENGINE_CPU_TS, 2, notifyNums, thread);
+    EXPECT_EQ(ret, HCCL_SUCCESS);
+    Thread* t0 = reinterpret_cast<Thread*>(thread[0]);
+    Thread* t1 = reinterpret_cast<Thread*>(thread[1]);
+    EXPECT_EQ(t0->GetNotifyNum(), 2U);
+    EXPECT_EQ(t1->GetNotifyNum(), 4U);
+    ret = HcommThreadFree(thread, 2);
+    EXPECT_EQ(ret, HCCL_SUCCESS);
+}
+
+// HcommThreadAlloc per-thread 校验：单元素越界失败
+TEST_F(TestHcclThread, Ut_HcommThreadAlloc_When_PerThreadNotifyExceedsMax_Expect_HCCL_E_PARA)
+{
+    bool isDeviceSide{false};
+    MOCKER(GetRunSideIsDevice).stubs().with(outBound(isDeviceSide)).will(returnValue(HCCL_SUCCESS));
+    MOCKER(hrtGetDeviceType).stubs().with(outBound(DevType::DEV_TYPE_950)).will(returnValue(HCCL_SUCCESS));
+    ThreadHandle thread[2];
+    uint32_t notifyNums[2] = {2, hccl::HCOMM_NOTIFY_MAX_NUM + 1}; // 第二个越界
+    HcommResult ret = HcommThreadAlloc(COMM_ENGINE_CPU_TS, 2, notifyNums, thread);
+    EXPECT_EQ(ret, HCCL_E_PARA);
+}
+
+// HcommThreadAllocWithStream + HcommThreadFree 无泄漏（AICPU 不支持 stream 入参）
 TEST_F(TestHcclThread, Ut_HcommThreadAllocWithStream_When_AllocThenFree_Expect_Success)
 {
     bool isDeviceSide{false};
@@ -1698,8 +1752,8 @@ TEST_F(TestHcclThread, Ut_HcommThreadAllocWithStream_When_AllocThenFree_Expect_S
     ThreadHandle thread;
     HcommResult ret = HcommThreadAllocWithStream(COMM_ENGINE_CPU_TS, rtStream, 3, &thread);
     EXPECT_EQ(ret, HCCL_SUCCESS);
-    // 进程级 g_ThreadMap 已记，FreeWithStream 后应可 erase
-    ret = HcommThreadFreeWithStream(&thread, 1);
+    // 进程级 g_ThreadMap 已记，Free 后应可 erase
+    ret = HcommThreadFree(&thread, 1);
     EXPECT_EQ(ret, HCCL_SUCCESS);
     delete stream;
 }
@@ -1716,7 +1770,7 @@ TEST_F(TestHcclThread, Ut_HcommThreadSupplementNotify_When_Single_Expect_Success
     EXPECT_EQ(ret, HCCL_SUCCESS);
     ThreadHandle handle = thread;
     uint32_t addNotifyNum = 3; // 补 3（增量）
-    ret = HcommThreadSupplementNotify(CommEngine::COMM_ENGINE_AICPU_TS, &handle, 1, &addNotifyNum);
+    ret = HcommThreadSupplementNotify(&handle, 1, &addNotifyNum);
     EXPECT_EQ(ret, HCCL_SUCCESS);
     Thread* t = reinterpret_cast<Thread*>(handle);
     EXPECT_EQ(t->GetNotifyNum(), 5U);
@@ -1728,7 +1782,7 @@ TEST_F(TestHcclThread, Ut_HcommThreadSupplementNotify_When_Single_Expect_Success
 TEST_F(TestHcclThread, Ut_HcommThreadSupplementNotify_When_NullHandle_Expect_E_PTR)
 {
     uint32_t addNotifyNum = 3;
-    HcommResult ret = HcommThreadSupplementNotify(CommEngine::COMM_ENGINE_AICPU_TS, nullptr, 1, &addNotifyNum);
+    HcommResult ret = HcommThreadSupplementNotify(nullptr, 1, &addNotifyNum);
     EXPECT_EQ(ret, HCCL_E_PTR);
 }
 

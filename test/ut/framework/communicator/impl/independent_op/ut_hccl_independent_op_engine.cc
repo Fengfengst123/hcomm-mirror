@@ -217,13 +217,13 @@ TEST_F(HcclIndependentOpEngineTest, Ut_HcclThreadExportToCommEngine_When_Engine_
 
     // 未知threadHandle
     HcclResult ret = HcclThreadExportToCommEngine(comm, 1, threads, CommEngine::COMM_ENGINE_CPU, exportedThreads);
-    EXPECT_EQ(ret, HCCL_E_PARA);
+    EXPECT_EQ(ret, HCCL_E_NOT_FOUND);
 
     // 添加thread
     hccl::hcclComm* hcclComm = static_cast<hccl::hcclComm*>(comm);
     auto& threadMgr = hcclComm->GetIndependentOp().GetCommEngineResMgr().threadMgr_;
-    threadMgr->threadHandleOthersToCpu_[threads[0]] = exportedThreads[0];
-    ret = HcclThreadExportToCommEngine(comm, 1, threads, CommEngine::COMM_ENGINE_CPU, exportedThreads);
+    FillThreadD2HMap(threads, exportedThreads, 1);
+    ret = threadMgr->HcclThreadExportToCommEngine(1, threads, CommEngine::COMM_ENGINE_CPU, exportedThreads);
     EXPECT_EQ(ret, HCCL_SUCCESS);
 }
 
@@ -232,12 +232,12 @@ TEST_F(HcclIndependentOpEngineTest, Ut_HcclThreadExportToCommEngine_When_Engine_
     ThreadHandle threads[1] = {1};
     ThreadHandle exportedThreads[1] = {2};
 
+    // commInit依赖AicpuAclKernelLaunch，先mock避免真实binHandle缺失导致HCCL_E_PTR
+    MOCKER(AicpuAclKernelLaunch).stubs().will(returnValue(HCCL_SUCCESS));
+
     // 未知threadHandle
     HcclResult ret = HcclThreadExportToCommEngine(comm, 1, threads, CommEngine::COMM_ENGINE_AICPU_TS, exportedThreads);
-    EXPECT_EQ(ret, HCCL_E_PARA);
-
-    // 添加thread
-    MOCKER(AicpuAclKernelLaunch).stubs().will(returnValue(HCCL_SUCCESS));
+    EXPECT_EQ(ret, HCCL_E_NOT_FOUND);
 
     hccl::hcclComm* hcclComm = static_cast<hccl::hcclComm*>(comm);
     auto& threadMgr = hcclComm->GetIndependentOp().GetCommEngineResMgr().threadMgr_;

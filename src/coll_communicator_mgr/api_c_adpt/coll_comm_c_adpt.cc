@@ -14,6 +14,7 @@
 #include "dfx_profiling_handler.h"
 #include "dfx_dlprof_function.h"
 #include "exception_handler.h"
+#include "adapter_prof.h"
 
 using namespace hccl;
 

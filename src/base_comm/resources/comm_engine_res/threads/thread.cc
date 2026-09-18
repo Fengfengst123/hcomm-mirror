@@ -8,6 +8,7 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+#include <shared_mutex>
 #include "thread.h"
 #include "cpu_ts_thread.h"
 #include "aicpu_ts_thread.h"
@@ -41,7 +42,7 @@ struct DeviceThreadKeyHash {
 
 static unordered_map<ThreadHandle, shared_ptr<Thread>> g_ThreadMap;
 static unordered_map<DeviceThreadKey, ThreadHandle, DeviceThreadKeyHash> g_ThreadD2HMap;
-static mutex g_ThreadMapMtx;
+static shared_mutex g_ThreadMapMtx;
 
 HcclResult CreateThread(
     CommEngine engine, StreamType streamType, uint32_t notifyNum, NotifyLoadType loadType,
@@ -58,6 +59,7 @@ HcclResult CreateThread(
         return HCCL_E_NOT_SUPPORT;
     }
 
+    out_thread->SetCommEngine(engine);
     return HCCL_SUCCESS;
 }
 
@@ -191,7 +193,7 @@ HcclResult SaveThreads(const vector<shared_ptr<Thread>>& newThreads)
     int32_t deviceId = 0;
     CHK_RET(hrtGetDevice(&deviceId));
 
-    lock_guard<mutex> lock(g_ThreadMapMtx);
+    lock_guard<shared_mutex> lock(g_ThreadMapMtx);
     for (const auto& threadPtr : newThreads) {
         ThreadHandle handle = reinterpret_cast<ThreadHandle>(threadPtr.get());
 
@@ -213,45 +215,12 @@ HcclResult SaveThreads(const vector<shared_ptr<Thread>>& newThreads)
     return HCCL_SUCCESS;
 }
 
-HcclResult CreateAndInitThreads(const ThreadCreateParams& params, vector<shared_ptr<Thread>>& outThreads)
-{
-    HCCL_INFO(
-        "[%s] Creating threads with params: engine[%s], threadNum[%u], "
-        "notifyNumPerThread[%u], notifyLoadType[%u], streamType[%u]",
-        __func__, GetEnumToString(GetCommEngineStatusStrMap(), params.engine).c_str(), params.threadNum,
-        params.notifyNumPerThread, static_cast<int32_t>(params.notifyLoadType),
-        static_cast<int32_t>(params.streamType));
-    outThreads.reserve(params.threadNum);
-
-    for (uint32_t i = 0; i < params.threadNum; ++i) {
-        shared_ptr<Thread> threadPtr;
-        // 创建线程
-        HcclResult ret = CreateThread(
-            params.engine, params.streamType, params.notifyNumPerThread, params.notifyLoadType, threadPtr);
-        CHK_PRT_RET(
-            ret != HCCL_SUCCESS, HCCL_ERROR("[%s] Failed to create thread at index %u, error: %d", __func__, i, ret),
-            ret);
-
-        // 初始化线程
-        ret = threadPtr->Init();
-        CHK_PRT_RET(
-            ret != HCCL_SUCCESS,
-            HCCL_ERROR("[%s] Failed to initialize thread at index %u, error: %d", __func__, i, ret), ret);
-
-        // 添加到输出列表
-        outThreads.emplace_back(move(threadPtr));
-    }
-    HCCL_INFO("[%s] Successfully created and initialized %u threads", __func__, params.threadNum);
-    return HCCL_SUCCESS;
-}
-
-HcclResult
-FillThreadD2HMap(const ThreadHandle* deviceThreadHandles, const ThreadHandle* hostThreadHandles, uint32_t listNum)
+HcclResult FillThreadD2HMap(ThreadHandle* deviceThreadHandles, ThreadHandle* hostThreadHandles, uint32_t listNum)
 {
     int32_t deviceId = 0;
     CHK_RET(hrtGetDevice(&deviceId));
 
-    lock_guard<mutex> lock(g_ThreadMapMtx);
+    lock_guard<shared_mutex> lock(g_ThreadMapMtx);
     for (uint32_t idx = 0; idx < listNum; idx++) {
         auto deviceThreadHandle = deviceThreadHandles[idx];
         auto hostThreadHandle = hostThreadHandles[idx];
@@ -266,7 +235,8 @@ FillThreadD2HMap(const ThreadHandle* deviceThreadHandles, const ThreadHandle* ho
 }
 
 HcclResult StoreThreadHandles(
-    vector<shared_ptr<Thread>>& newThreads, ThreadHandle* threads, CommEngine engine, aclrtBinHandle binHandle)
+    vector<shared_ptr<Thread>>& newThreads, const std::string& commId, ThreadHandle* threads, CommEngine engine,
+    aclrtBinHandle binHandle)
 {
     CHK_PTR_NULL(threads);
     if (engine == COMM_ENGINE_AICPU || engine == COMM_ENGINE_AICPU_TS) {
@@ -274,7 +244,12 @@ HcclResult StoreThreadHandles(
         unique_ptr<ThreadHandle[]> aicpuHandle;
         EXCEPTION_CATCH(aicpuHandle = make_unique<ThreadHandle[]>(newThreads.size()), return HCCL_E_PTR);
         CHK_PTR_NULL(binHandle);
-        HcclResult ret = AicpuLaunchMgr::ThreadKernelLaunchForBase(newThreads, aicpuHandle, binHandle);
+        HcclResult ret;
+        if (commId == "") {
+            ret = AicpuLaunchMgr::ThreadKernelLaunchForBase(newThreads, aicpuHandle, binHandle);
+        } else {
+            ret = AicpuLaunchMgr::ThreadKernelLaunchForComm(newThreads, commId, aicpuHandle, binHandle);
+        }
 
         CHK_PRT_RET(
             ret != HCCL_SUCCESS,
@@ -303,6 +278,12 @@ HcclResult StoreThreadHandles(
     return HCCL_SUCCESS;
 }
 
+HcclResult StoreThreadHandles(
+    vector<shared_ptr<Thread>>& newThreads, ThreadHandle* threads, CommEngine engine, aclrtBinHandle binHandle)
+{
+    return StoreThreadHandles(newThreads, "", threads, engine, binHandle);
+}
+
 static HcclResult FreeThreadHandlesLocked(
     const ThreadHandle* threads, uint32_t threadNum, vector<ThreadHandle>& deviceHandles,
     vector<shared_ptr<Thread>>& hostThreadsToRelease)
@@ -310,7 +291,7 @@ static HcclResult FreeThreadHandlesLocked(
     int32_t deviceId = 0;
     CHK_RET(hrtGetDevice(&deviceId));
 
-    lock_guard<mutex> lock(g_ThreadMapMtx);
+    lock_guard<shared_mutex> lock(g_ThreadMapMtx);
     for (uint32_t i = 0; i < threadNum; ++i) {
         const ThreadHandle inHandle = threads[i];
 
@@ -381,7 +362,7 @@ HcclResult FreeThreads(const ThreadHandle* threads, uint32_t threadNum, aclrtBin
 
 HcclResult SupplementThreadNotify(ThreadHandle handle, uint32_t notifyNum)
 {
-    lock_guard<mutex> lock(g_ThreadMapMtx);
+    shared_lock<shared_mutex> lock(g_ThreadMapMtx);
     auto it = g_ThreadMap.find(handle);
     CHK_PRT_RET(
         it == g_ThreadMap.end(), HCCL_ERROR("[%s] thread handle[0x%llx] not found in g_ThreadMap.", __func__, handle),
@@ -398,7 +379,7 @@ HcclResult SupplementThreadNotify(ThreadHandle handle, uint32_t notifyNum)
 
 HcclResult LookupThreadByHandle(ThreadHandle handle, std::shared_ptr<Thread>& outThread)
 {
-    lock_guard<mutex> lock(g_ThreadMapMtx);
+    shared_lock<shared_mutex> lock(g_ThreadMapMtx);
     auto it = g_ThreadMap.find(handle);
     if (it == g_ThreadMap.end()) {
         // try find device handle
@@ -425,7 +406,7 @@ HcclResult LookupD2HHandle(ThreadHandle deviceHandle, ThreadHandle& outHostHandl
 {
     int32_t deviceId = 0;
     CHK_RET(hrtGetDevice(&deviceId));
-    lock_guard<mutex> lock(g_ThreadMapMtx);
+    shared_lock<shared_mutex> lock(g_ThreadMapMtx);
     DeviceThreadKey key{deviceId, deviceHandle};
     auto it = g_ThreadD2HMap.find(key);
     CHK_PRT_RET(

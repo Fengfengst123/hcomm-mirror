@@ -24,6 +24,7 @@
 #undef private
 #include "hccl_comm_socket_c_adpt.h"
 #include "base_config_legacy.h"
+#include "adapter_hal_pub.h"
 #include "llt_hccl_stub_rank_graph.h"
 
 using namespace hcomm;

@@ -502,6 +502,7 @@ global:
         "hrtSetDevice(int)";  # _Z12hrtSetDevicei
         "hrtStreamActive(void*, void*)";  # _Z15hrtStreamActivePvS_
         "hrtStreamGetMode(void*, unsigned long*)";  # _Z16hrtStreamGetModePvPm
+        "hrtStreamGetSqid(void*, unsigned int*)";  # _Z16hrtStreamGetSqidPvPj
         "hrtStreamSetMode(void*, unsigned long)";  # _Z16hrtStreamSetModePvm
     };
 local:

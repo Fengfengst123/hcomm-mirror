@@ -26,6 +26,9 @@
 #include "dfx_dlprof_function.h"
 #include "adapter_rts.h"
 #include "hcclCommOp.h"
+#include "hcomm_thread_c_adpt.h"
+#include "res_pub.h"
+#include "prof_cycle_time.h"
 using namespace hccl;
 constexpr u32 MAX_EXPORT_THREAD_NUM = 40U;
 static const std::unordered_set<HcclDedicatedThreadType> ORDER_LAUNCH_TYPES = {
@@ -44,6 +47,7 @@ HcclResult HcclGetNotifyNumInThread(HcclComm comm, ThreadHandle thread, CommEngi
             "[%s] commEngine[%s] is invalid", __func__, GetEnumToString(GetCommEngineStatusStrMap(), engine).c_str()),
         HCCL_E_PARA);
     CHK_PRT_RET(notifyNum == nullptr, HCCL_ERROR("[%s] notifyNum is null", __func__), HCCL_E_PTR);
+    CHK_PRT_RET(thread == 0, HCCL_ERROR("[%s] thread is 0", __func__), HCCL_E_PTR);
 
     auto* hcclComm = static_cast<hccl::hcclComm*>(comm);
     std::string commId = hcclComm->GetIdentifier();
@@ -153,7 +157,7 @@ HcclResult HcclThreadAcquireWithConfig(
     CHK_PRT_RET(threads == nullptr, HCCL_ERROR("[%s] threads is null", __func__), HCCL_E_PTR);
     CHK_RET(ValidateThreadAcquireParams(engine, type, config, threadNum));
 
-    u64 beginTime = Hccl::DfxDlProfFunction::GetInstance().dlMsprofSysCycleTime();
+    u64 beginTime = hcomm::GetProfCycleTime();
     auto* hcclComm = static_cast<hccl::hcclComm*>(comm);
     std::string commId = hcclComm->GetIdentifier();
     HCCL_RUN_INFO(
@@ -213,7 +217,7 @@ static CommEngine ConvertEngineToTsType(CommEngine engine)
 HcclResult HcclThreadAcquire(
     HcclComm comm, CommEngine engine, uint32_t threadNum, uint32_t notifyNumPerThread, ThreadHandle* threads)
 {
-    u64 beginTime = Hccl::DfxDlProfFunction::GetInstance().dlMsprofSysCycleTime();
+    u64 beginTime = hcomm::GetProfCycleTime();
     CHK_PRT_RET(comm == nullptr, HCCL_ERROR("[%s] comm is null", __func__), HCCL_E_PTR);
     CHK_PRT_RET(threads == nullptr, HCCL_ERROR("[%s] threads is null", __func__), HCCL_E_PTR);
     CHK_PRT_RET(
@@ -235,8 +239,8 @@ HcclResult HcclThreadAcquire(
         ThreadConfigInit(config.get(), threadNum) != 0, HCCL_ERROR("[%s] ThreadConfigInit failed", __func__),
         HCCL_E_INTERNAL);
     CHK_PRT_RET(
-        notifyNumPerThread >= HCCL_THREAD_NOTIFY_MAX_NUM,
-        HCCL_ERROR("[%s] notifyNumPerThread[%u] exceeds HCCL_THREAD_NOTIFY_MAX_NUM", __func__, notifyNumPerThread),
+        notifyNumPerThread >= HCOMM_THREAD_NOTIFY_MAX_NUM,
+        HCCL_ERROR("[%s] notifyNumPerThread[%u] exceeds HCOMM_THREAD_NOTIFY_MAX_NUM", __func__, notifyNumPerThread),
         HCCL_E_PARA);
     for (u32 i = 0; i < threadNum; i++) {
         config[i].notifyNumPerThread = static_cast<uint16_t>(notifyNumPerThread);
@@ -291,13 +295,23 @@ HcclResult HcclThreadAcquireWithStreamDfx(
         return HCCL_E_INTERNAL;
     }
     if (engine == CommEngine::COMM_ENGINE_AICPU) {
-        Thread* threadPtr = reinterpret_cast<Thread*>(thread);
-        CHK_PTR_NULL(threadPtr);
-        Stream* threadStream = threadPtr->GetStream();
-        CHK_PTR_NULL(threadStream);
+        uint64_t sqIdVal = 0;
+        ThreadResTypeStream stream = nullptr;
+        uint32_t size = sizeof(ThreadResTypeStream);
+        HcommResult infoRet = HcommThreadResGetInfo(thread, THREAD_RES_TYPE_STREAM, size, (void**)&stream);
+        CHK_PRT_RET(
+            (infoRet != HCCL_SUCCESS) || (stream == nullptr),
+            HCCL_ERROR("[%s] HcommThreadResGetInfo failed, ret[%d] stream[%p]", __func__, infoRet, stream),
+            (HcclResult)infoRet);
+        uint32_t sqId = 0;
+        HcclResult sqIdRet = hrtStreamGetSqid(stream, &sqId);
+        CHK_PRT_RET(
+            sqIdRet != HCCL_SUCCESS,
+            HCCL_ERROR("[%s] hrtStreamGetSqid failed, stream[%p], ret[%d]", __func__, stream, sqIdRet), sqIdRet);
+        sqIdVal = static_cast<uint64_t>(sqId);
         Mc2CommInfo mc2CommInfo;
         mc2CommInfo.FreeStreamId = 0;
-        mc2CommInfo.streamsId.push_back(static_cast<u32>(threadStream->sqId()));
+        mc2CommInfo.streamsId.push_back(sqIdVal);
         mc2CommInfo.groupname = commId;
         mc2CommInfo.myRankId = collComm->GetMyRankId();
         mc2CommInfo.rankSize = collComm->GetRankSize();
