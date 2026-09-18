@@ -14,10 +14,8 @@
 #include <map>
 #include <vector>
 #include <fstream>
-#include <linux/limits.h>
 #include <adapter_error_manager_pub.h>
 #include "log.h"
-#include "exception_util.h"
 #include "data_type.h"
 #include "rank_table_crc_bridge.h"
 

@@ -10,11 +10,7 @@
 
 #include "op_params_checker.h"
 #include <string>
-#include "hccl_params_pub.h"
 #include "data_type.h"
-#include "op_type.h"
-#include "string_util.h"
-#include "exception_util.h"
 #include "adapter_error_manager_pub.h"
 #include "hccl_log_keywords.h"
 

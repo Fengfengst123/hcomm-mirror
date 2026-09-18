@@ -11,24 +11,16 @@
 #include "acl/acl_rt.h"
 #include "rank_info_detect.h"
 #include <thread>
-#include <stdio.h>
 #include "sal.h"
-#include "rank_info_detect_service.h"
 #include "hccp_peer_manager.h"
 #include "hccp_hdc_manager.h"
 #include "internal_exception.h"
-#include "network_api_exception.h"
-#include "null_ptr_exception.h"
-#include "orion_adapter_hccp.h"
 #include "orion_adapter_rts.h"
 #include "whitelist.h"
-#include "socket.h"
 #include "host_socket_handle_manager.h"
 #include "env_config/env_config_v2.h"
-#include "root_handle_v2.h"
 #include "bootstrap_ip.h"
 #include "preempt_port_manager_v2.h"
-#include "adapter_error_manager_pub.h"
 #include "hccl_log_keywords.h"
 
 namespace Hccl {
