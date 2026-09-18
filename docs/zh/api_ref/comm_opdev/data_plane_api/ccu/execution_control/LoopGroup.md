@@ -94,6 +94,7 @@ config-based构造使用的参数结构，字段如下：
 - Group内各Loop的body约束与独立`ccu::Loop`相同（参见[Loop](Loop.md)的约束说明）。
 - `maxLoopNum`必须大于0，为0时构造直接失败（`CCU_E_PARA`）。
 - `maxLoopNum`应 ≥ `loops`列表实际大小（即真正会加入Group的Loop数，含展开复用）；偏小会导致后续加入Loop时因LoopEngine池容量不足而失败（`CCU_E_PARA`）。
+- 通过var-based方式构造`ccu::LoopGroup`时，需要保证`parallelCfg`的值符合运行时预期，其中[47:41]位表示构造时`loops`中包含的`ccu::Loop`个数，该值需要等于`loops`的size；[54:48]位表示需要自动展开Loop ID，该ID的值需要小于等于`ccu::Loop`的个数；[61:55]位表示的展开次数，按照该值将所有需要展开的loop展开后，得到的loop总数需要小于等于`maxLoopNum`值。
 
 ## 调用示例
 
