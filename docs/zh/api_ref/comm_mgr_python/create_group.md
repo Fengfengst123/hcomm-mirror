@@ -3,19 +3,19 @@
 ## 产品支持情况
 
 <!-- npu="950" id1 -->
-- Ascend 950PR/Ascend 950DT：支持
+- Ascend 950PR&950DT系列产品：支持
 <!-- end id1 -->
 <!-- npu="A3" id2 -->
-- Atlas A3 训练系列产品/Atlas A3 推理系列产品：支持
+- Atlas A3系列产品：支持
 <!-- end id2 -->
 <!-- npu="910b" id3 -->
-- Atlas A2 训练系列产品/Atlas A2 推理系列产品：支持
+- Atlas A2系列产品：支持
 <!-- end id3 -->
 <!-- npu="310p" id4 -->
-- Atlas 推理系列产品：支持
+- Atlas推理系列产品：支持
 <!-- end id4 -->
 <!-- npu="910" id5 -->
-- Atlas 训练系列产品：支持
+- Atlas训练系列产品：支持
 <!-- end id5 -->
 
 ## 功能说明
@@ -54,11 +54,11 @@ def create_group(group, rank_num, rank_ids)
 - 针对rank_ids参数，在不同单板类型上，有不同的限制。
 
   <!-- npu="A3" id8 -->
-  **针对Atlas A3 训练系列产品/Atlas A3 推理系列产品**：建议每个超节点中的Server数量一致，每个Server中的rank数量一致，若不一致，会造成性能劣化。
+  **针对Atlas A3系列产品**：建议每个超节点中的Server数量一致，每个Server中的rank数量一致，若不一致，会造成性能劣化。
   <!-- end id8 -->
 
   <!-- npu="910b" id9 -->
-  **针对Atlas A2 训练系列产品/Atlas A2 推理系列产品：**
+  **针对Atlas A2系列产品：**
   - 对于Server单机场景，rank_ids无限制条件。
   - 对于Server集群场景，rank_ids需满足如下条件：
 
@@ -84,7 +84,7 @@ def create_group(group, rank_num, rank_ids)
   <!-- end id9 -->
 
   <!-- npu="910" id6 -->
-  **针对Atlas 训练系列产品：**
+  **针对Atlas训练系列产品：**
   - 对于Server单机场景，rank_ids需满足如下条件：
 
     rank数量必须为1/2/4/8，0-3卡与4-7卡各为一个组网，rank数量为2/4时要求选取的AI处理器同属一个cluster。

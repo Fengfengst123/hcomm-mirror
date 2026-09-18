@@ -3,19 +3,19 @@
 ## 产品支持情况
 
 <!-- npu="950" id1 -->
-- Ascend 950PR/Ascend 950DT：支持
+- Ascend 950PR&950DT系列产品：支持
 <!-- end id1 -->
 <!-- npu="A3" id2 -->
-- Atlas A3 训练系列产品/Atlas A3 推理系列产品：支持
+- Atlas A3系列产品：支持
 <!-- end id2 -->
 <!-- npu="910b" id3 -->
-- Atlas A2 训练系列产品/Atlas A2 推理系列产品：支持
+- Atlas A2系列产品：支持
 <!-- end id3 -->
 <!-- npu="910" id4 -->
-- Atlas 训练系列产品：不支持
+- Atlas训练系列产品：不支持
 <!-- end id4 -->
 <!-- npu="310p" id5 -->
-- Atlas 推理系列产品：不支持
+- Atlas推理系列产品：不支持
 <!-- end id5 -->
 
 ## 功能说明
@@ -48,18 +48,18 @@ HcommResult：接口成功返回0，其他失败。
 - Endpoint对本接口的支持情况与其位置、protocol及芯片型号有关，具体如下。
 
    <!-- npu="950" id6 -->
-   - 针对Ascend 950PR/Ascend 950DT：
+   - 针对Ascend 950PR&950DT系列产品：
      - 当Endpoint位于HOST侧时，支持通信协议为RoCE、UB_CTP的Endpoint。
      - 当Endpoint位于DEVICE侧时，支持通信协议为UB_CTP、UB_MEM、PCIe、UBoE、UB_RTP的Endpoint。
-     - 当`mem->type`为`COMM_MEM_TYPE_CCU`时，表示注册CCU资源空间内存，仅Ascend 950PR/Ascend 950DT支持。CCU类型内存的注册流程与DEVICE一致。详见[CommMemType](../../datatype_definition/CommMemType.md)。
+     - 当`mem->type`为`COMM_MEM_TYPE_CCU`时，表示注册CCU资源空间内存，仅Ascend 950PR&950DT系列产品支持。CCU类型内存的注册流程与DEVICE一致。详见[CommMemType](../../datatype_definition/CommMemType.md)。
    <!-- end id6 -->
 
    <!-- npu="A3" id7 -->
-   - 针对Atlas A3 训练系列产品/Atlas A3 推理系列产品：仅支持Endpoint位于DEVICE侧，支持通信协议为RoCE、HCCS的Endpoint。
+   - 针对Atlas A3系列产品：仅支持Endpoint位于DEVICE侧，支持通信协议为RoCE、HCCS的Endpoint。
    <!-- end id7 -->
 
    <!-- npu="910b" id8 -->
-   - 针对Atlas A2 训练系列产品/Atlas A2 推理系列产品：仅支持Endpoint位于DEVICE侧，支持通信协议为RoCE、HCCS的Endpoint。
+   - 针对Atlas A2系列产品：仅支持Endpoint位于DEVICE侧，支持通信协议为RoCE、HCCS的Endpoint。
    <!-- end id8 -->
 
 ## 调用示例

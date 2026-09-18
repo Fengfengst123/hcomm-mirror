@@ -13,8 +13,8 @@
 
 本样例支持以下产品，组网为单机N卡（N>=2，且为偶数）：
 
-- Ascend 950PR/Ascend 950DT
-- Atlas A3 训练系列产品/Atlas A3 推理系列产品
+- Ascend 950PR&950DT系列产品
+- Atlas A3系列产品
 
 ## 样例介绍
 

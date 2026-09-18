@@ -3,19 +3,19 @@
 ## 产品支持情况
 
 <!-- npu="950" id1 -->
-- Ascend 950PR/Ascend 950DT：支持
+- Ascend 950PR&950DT系列产品：支持
 <!-- end id1 -->
 <!-- npu="A3" id2 -->
-- Atlas A3 训练系列产品/Atlas A3 推理系列产品：支持
+- Atlas A3系列产品：支持
 <!-- end id2 -->
 <!-- npu="910b" id3 -->
-- Atlas A2 训练系列产品/Atlas A2 推理系列产品：不支持
+- Atlas A2系列产品：不支持
 <!-- end id3 -->
 <!-- npu="310p" id4 -->
-- Atlas 推理系列产品：不支持
+- Atlas推理系列产品：不支持
 <!-- end id4 -->
 <!-- npu="910" id5 -->
-- Atlas 训练系列产品：不支持
+- Atlas训练系列产品：不支持
 <!-- end id5 -->
 
 ## 功能说明
@@ -27,7 +27,7 @@
 当前对称内存支持如下场景：
 
 <!-- npu="950" id6 -->
-- 针对Ascend 950PR/Ascend 950DT：
+- 针对Ascend 950PR&950DT系列产品：
 
   - 通信引擎为AIV，通信协议为URMA：用户将已申请的Device内存注册为对称内存窗口，该场景需要配合[HcclTeamCreate](../comm_opdev/control_plane_api/comms_domain_resource_mgmt/HcclTeamCreate.md)接口使用。
 
@@ -36,11 +36,11 @@
   - 通信引擎为AIV，通信协议为UB Memory：用户在申请虚拟内存和物理内存并完成映射后，将虚拟内存注册为对称内存。该场景通过提前预留相同大小、相同布局的虚拟地址来实现对称内存。
 <!-- end id6 -->
 <!-- npu="A3" id7 -->
-- Atlas A3 训练系列产品/Atlas A3 推理系列产品的HCCS场景：用户在申请虚拟内存和物理内存并完成映射后，将虚拟内存注册为对称内存。该场景通过提前预留相同大小、相同布局的虚拟地址来实现对称内存。
+- Atlas A3系列产品的HCCS场景：用户在申请虚拟内存和物理内存并完成映射后，将虚拟内存注册为对称内存。该场景通过提前预留相同大小、相同布局的虚拟地址来实现对称内存。
 <!-- end id7 -->
 
 <!-- npu="A3" id8 -->
-Atlas A3 训练系列产品/Atlas A3 推理系列产品HCCS场景的对称内存基本实现模型如下图所示。
+Atlas A3系列产品HCCS场景的对称内存基本实现模型如下图所示。
 
 ![对称内存实现模型](./figures/symmetric_memory.png)
 
@@ -70,30 +70,30 @@ HcclResult HcclCommSymWinRegister(HcclComm comm, void *addr, uint64_t size, Hccl
 ### comm说明
 
 <!-- npu="950" id13 -->
-- Ascend 950PR/Ascend 950DT的URMA场景下，无需通过hcclSymWinMaxMemSizePerRank配置预留的对称内存大小。
+- Ascend 950PR&950DT系列产品的URMA场景下，无需通过hcclSymWinMaxMemSizePerRank配置预留的对称内存大小。
 <!-- end id13 -->
 <!-- npu="A3" id14 -->
-- Atlas A3 训练系列产品/Atlas A3 推理系列产品的HCCS场景下，建议使用超节点内最大的通信域，即覆盖最大卡数的通信域。初始化通信域时可以通过[HcclCommConfig](./data_type_definition/HcclCommConfig.md)的hcclSymWinMaxMemSizePerRank参数设置每个rank预留的对称内存大小，若不设置hcclSymWinMaxMemSizePerRank，使用默认值16GB。当前通信域预留的总虚拟对称内存大小为：rankSize * HcclCommConfig.hcclSymWinMaxMemSizePerRank。
+- Atlas A3系列产品的HCCS场景下，建议使用超节点内最大的通信域，即覆盖最大卡数的通信域。初始化通信域时可以通过[HcclCommConfig](./data_type_definition/HcclCommConfig.md)的hcclSymWinMaxMemSizePerRank参数设置每个rank预留的对称内存大小，若不设置hcclSymWinMaxMemSizePerRank，使用默认值16GB。当前通信域预留的总虚拟对称内存大小为：rankSize * HcclCommConfig.hcclSymWinMaxMemSizePerRank。
 <!-- end id14 -->
 
 ### addr说明
 
 <!-- npu="950" id15 -->
-- Ascend 950PR/Ascend 950DT的URMA场景下，该地址需为预留虚拟地址并完成物理内存映射的Device内存地址，建议通过[HcommMemAlloc](HcommMemAlloc.md)接口申请。内存需要在调用[HcclCommSymWinDeregister](HcclCommSymWinDeregister.md)解注册前保持有效。
-- Ascend 950PR/Ascend 950DT的UB Memory场景下，该地址为预留并完成物理内存映射的虚拟地址。
+- Ascend 950PR&950DT系列产品的URMA场景下，该地址需为预留虚拟地址并完成物理内存映射的Device内存地址，建议通过[HcommMemAlloc](HcommMemAlloc.md)接口申请。内存需要在调用[HcclCommSymWinDeregister](HcclCommSymWinDeregister.md)解注册前保持有效。
+- Ascend 950PR&950DT系列产品的UB Memory场景下，该地址为预留并完成物理内存映射的虚拟地址。
 <!-- end id15 -->
 <!-- npu="A3" id16 -->
-- Atlas A3 训练系列产品/Atlas A3 推理系列产品的HCCS场景下，该地址为预留的虚拟内存地址，虚拟内存需要调用aclrtReserveMemAddress接口预留。
+- Atlas A3系列产品的HCCS场景下，该地址为预留的虚拟内存地址，虚拟内存需要调用aclrtReserveMemAddress接口预留。
 <!-- end id16 -->
 
 ### size说明
 
 <!-- npu="950" id17 -->
-- Ascend 950PR/Ascend 950DT的URMA场景下，size需要大于0，且所有rank调用该接口时输入的size需要保持一致。
-- Ascend 950PR/Ascend 950DT的UB Memory场景下，size需要大于0，且`[addr, addr+size)`必须完整位于已映射的物理内存范围内。
+- Ascend 950PR&950DT系列产品的URMA场景下，size需要大于0，且所有rank调用该接口时输入的size需要保持一致。
+- Ascend 950PR&950DT系列产品的UB Memory场景下，size需要大于0，且`[addr, addr+size)`必须完整位于已映射的物理内存范围内。
 <!-- end id17 -->
 <!-- npu="A3" id18 -->
-- Atlas A3 训练系列产品/Atlas A3 推理系列产品的HCCS场景下，0 < size <= HcclCommConfig.hcclSymWinMaxMemSizePerRank，并且size不能超过“与addr做映射的物理内存”大小（即调用aclrtMallocPhysical接口申请的Device物理内存）。对称内存注册按物理内存的大小对齐，实际注册的对称内存窗口大小等于“与addr做映射的物理内存”的大小。
+- Atlas A3系列产品的HCCS场景下，0 < size <= HcclCommConfig.hcclSymWinMaxMemSizePerRank，并且size不能超过“与addr做映射的物理内存”大小（即调用aclrtMallocPhysical接口申请的Device物理内存）。对称内存注册按物理内存的大小对齐，实际注册的对称内存窗口大小等于“与addr做映射的物理内存”的大小。
 <!-- end id18 -->
 
 ## 返回值
@@ -103,7 +103,7 @@ HcclResult HcclCommSymWinRegister(HcclComm comm, void *addr, uint64_t size, Hccl
 ## 约束说明
 
 <!-- npu="950" id11 -->
-- 针对Ascend 950PR/Ascend 950DT：
+- 针对Ascend 950PR&950DT系列产品：
   - 通信引擎为AIV时，仅支持URMA场景和UB Memory场景。
   - 通信引擎为AICPU时，仅支持URMA场景。
   - 通信引擎为AICPU的URMA场景下，仅支持集合通信算子ReduceScatter、AllReduce、AllGather、Broadcast、AlltoAll、AlltoAllVC。
@@ -112,7 +112,7 @@ HcclResult HcclCommSymWinRegister(HcclComm comm, void *addr, uint64_t size, Hccl
   - UB Memory场景的注册包含LSA WorldTeam成员间的集合操作。若集合操作完成后成员本地执行失败（如本地映射失败、资源不足），本通信域的UB Memory对称内存将进入不可用状态，后续注册直接返回错误；此时需解注册已注册的窗口并销毁、重建通信域。
 <!-- end id11 -->
 <!-- npu="A3" id12 -->
-- 针对Atlas A3 训练系列产品/Atlas A3 推理系列产品：
+- 针对Atlas A3系列产品：
   - 仅支持HCCS链路通信场景。
   - 仅支持对称组网，即每个Server内卡数相同的场景。
   - 仅支持超节点内AI Server间使用HCCS链路进行SDMA通信的场景，不支持使用RoCE进行RDMA通信的场景（即不支持设置环境变量HCCL_INTER_HCCS_DISABLE为"TRUE"，单机场景该环境变量无效）。
@@ -127,7 +127,7 @@ HcclResult HcclCommSymWinRegister(HcclComm comm, void *addr, uint64_t size, Hccl
 ## 调用示例
 
 <!-- npu="950" id9 -->
-### Ascend 950PR/Ascend 950DT URMA场景
+### Ascend 950PR&950DT系列产品 URMA场景
 
 如需根据本地地址查询窗口及偏移，请参见[HcclCommSymWinGet](HcclCommSymWinGet.md)；如需在URMA场景下显式获取远端地址，请参见[HcclSymWinGetRemoteAddr](HcclSymWinGetRemoteAddr.md)。
 
@@ -192,7 +192,7 @@ HCCLCHECK(HcclCommDestroy(hcclComm));
 <!-- end id9 -->
 
 <!-- npu="A3" id10 -->
-### Atlas A3 训练系列产品/Atlas A3 推理系列产品HCCS场景
+### Atlas A3系列产品HCCS场景
 
 ```c
 // 返回值检查宏

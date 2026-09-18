@@ -3,19 +3,19 @@
 ## 产品支持情况
 
 <!-- npu="950" id1 -->
-- Ascend 950PR/Ascend 950DT：支持
+- Ascend 950PR&950DT系列产品：支持
 <!-- end id1 -->
 <!-- npu="A3" id2 -->
-- Atlas A3 训练系列产品/Atlas A3 推理系列产品：支持
+- Atlas A3系列产品：支持
 <!-- end id2 -->
 <!-- npu="910b" id3 -->
-- Atlas A2 训练系列产品/Atlas A2 推理系列产品：支持
+- Atlas A2系列产品：支持
 <!-- end id3 -->
 <!-- npu="910" id4 -->
-- Atlas 训练系列产品：不支持
+- Atlas训练系列产品：不支持
 <!-- end id4 -->
 <!-- npu="310p" id5 -->
-- Atlas 推理系列产品：不支持
+- Atlas推理系列产品：不支持
 <!-- end id5 -->
 
 ## 功能说明
@@ -43,7 +43,7 @@ int32_t：接口成功返回0，其他失败。
 HcommBatchModeStart和HcommBatchModeEnd必须成对调用，且需要在同一线程中执行。
 
 <!-- npu="950" id6 -->
-仅Ascend 950PR/Ascend 950DT支持批量模式和立即执行模式（不调用批量接口），其他产品必须使用批量模式。
+仅Ascend 950PR&950DT系列产品支持批量模式和立即执行模式（不调用批量接口），其他产品必须使用批量模式。
 <!-- end id6 -->
 
 ## 调用示例

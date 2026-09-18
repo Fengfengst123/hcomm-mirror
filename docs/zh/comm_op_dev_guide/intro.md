@@ -39,8 +39,8 @@ HCCL包含HCCL集合通信库与HCOMM（Huawei Communication）通信基础库�
 
 通信算子自定义开发功能当前支持以下产品：
 
-Ascend 950PR/Ascend 950DT
+Ascend 950PR&950DT系列产品
 
-Atlas A3 训练系列产品/Atlas A3 推理系列产品
+Atlas A3系列产品
 
-Atlas A2 训练系列产品/Atlas A2 推理系列产品（针对Atlas A2 训练系列产品/Atlas A2 推理系列产品，仅支持Atlas 800I A2 推理服务器、Atlas 300I A2 推理卡、A200I A2 Box 异构组件。）
+Atlas A2系列产品（针对Atlas A2系列产品，仅支持Atlas 800I A2 推理服务器、Atlas 300I A2 推理卡、A200I A2 Box 异构组件。）

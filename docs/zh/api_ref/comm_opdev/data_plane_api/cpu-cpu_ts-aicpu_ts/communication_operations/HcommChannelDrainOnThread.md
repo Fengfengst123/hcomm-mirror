@@ -3,19 +3,19 @@
 ## 产品支持情况
 
 <!-- npu="950" id1 -->
-- Ascend 950PR/Ascend 950DT：支持
+- Ascend 950PR&950DT系列产品：支持
 <!-- end id1 -->
 <!-- npu="A3" id2 -->
-- Atlas A3 训练系列产品/Atlas A3 推理系列产品：支持
+- Atlas A3系列产品：支持
 <!-- end id2 -->
 <!-- npu="910b" id3 -->
-- Atlas A2 训练系列产品/Atlas A2 推理系列产品：支持
+- Atlas A2系列产品：支持
 <!-- end id3 -->
 <!-- npu="910" id4 -->
-- Atlas 训练系列产品：不支持
+- Atlas训练系列产品：不支持
 <!-- end id4 -->
 <!-- npu="310p" id5 -->
-- Atlas 推理系列产品：不支持
+- Atlas推理系列产品：不支持
 <!-- end id5 -->
 
 ## 功能说明
@@ -46,14 +46,14 @@ int32_t：接口成功返回0，其他失败。
 <!-- npu="A3,910b" id6 -->
 - 针对如下产品，在AI CPU侧调用此接口时，通信引擎为AICPU_TS，仅支持通信协议RoCE。
     <!-- npu="A3" id7 -->
-    - Atlas A3 训练系列产品/Atlas A3 推理系列产品：支持
+    - Atlas A3系列产品：支持
     <!-- end id7 -->
     <!-- npu="910b" id8 -->
-    - Atlas A2 训练系列产品/Atlas A2 推理系列产品：支持
+    - Atlas A2系列产品：支持
     <!-- end id8 -->
 <!-- end id6 -->
 <!-- npu="950" id9 -->
-- 针对Ascend 950PR/Ascend 950DT，在Host CPU侧调用时，申请入参`channel`使用的通信引擎须为`COMM_ENGINE_CPU`，且`channelDesc.remoteEndpoint.protocol`须为`COMM_PROTOCOL_ROCE`或`COMM_PROTOCOL_UB_CTP`。
+- 针对Ascend 950PR&950DT系列产品，在Host CPU侧调用时，申请入参`channel`使用的通信引擎须为`COMM_ENGINE_CPU`，且`channelDesc.remoteEndpoint.protocol`须为`COMM_PROTOCOL_ROCE`或`COMM_PROTOCOL_UB_CTP`。
 <!-- end id9 -->
 - 同一个`ChannelHandle`不支持多线程并发访问。
 

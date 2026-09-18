@@ -3,19 +3,19 @@
 ## 产品支持情况
 
 <!-- npu="950" id1 -->
-- Ascend 950PR/Ascend 950DT：支持
+- Ascend 950PR&950DT系列产品：支持
 <!-- end id1 -->
 <!-- npu="A3" id2 -->
-- Atlas A3 训练系列产品/Atlas A3 推理系列产品：不支持
+- Atlas A3系列产品：不支持
 <!-- end id2 -->
 <!-- npu="910b" id3 -->
-- Atlas A2 训练系列产品/Atlas A2 推理系列产品：不支持
+- Atlas A2系列产品：不支持
 <!-- end id3 -->
 <!-- npu="910" id4 -->
-- Atlas 训练系列产品：不支持
+- Atlas训练系列产品：不支持
 <!-- end id4 -->
 <!-- npu="310p" id5 -->
-- Atlas 推理系列产品：不支持
+- Atlas推理系列产品：不支持
 <!-- end id5 -->
 
 ## 功能说明
@@ -46,7 +46,7 @@ HcclResult HcclCommAssignCcuIns(HcclComm comm, CcuInsHandle insHandle)
 | `HCCL_SUCCESS` | 绑定成功，`insHandle`的所有权和销毁责任转移给通信域。 |
 | `HCCL_E_PTR` | `comm`为空指针，或通信域内部对象为空。 |
 | `HCCL_E_PARA` | `insHandle`为`0`，或通信域已经绑定CCU实例。 |
-| `HCCL_E_NOT_SUPPORT` | 通信域代际不支持CCU（早于Ascend 950PR/Ascend 950DT）。 |
+| `HCCL_E_NOT_SUPPORT` | 通信域代际不支持CCU（早于Ascend 950PR&950DT系列产品）。 |
 | `HCCL_E_NOT_FOUND` | 当前Device上不存在`insHandle`对应的CCU实例。 |
 | `HCCL_E_INTERNAL` | 发生其他内部错误。 |
 

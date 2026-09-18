@@ -3,19 +3,19 @@
 ## 产品支持情况
 
 <!-- npu="950" id1 -->
-- Ascend 950PR/Ascend 950DT：支持
+- Ascend 950PR&950DT系列产品：支持
 <!-- end id1 -->
 <!-- npu="A3" id2 -->
-- Atlas A3 训练系列产品/Atlas A3 推理系列产品：不支持
+- Atlas A3系列产品：不支持
 <!-- end id2 -->
 <!-- npu="910b" id3 -->
-- Atlas A2 训练系列产品/Atlas A2 推理系列产品：不支持
+- Atlas A2系列产品：不支持
 <!-- end id3 -->
 <!-- npu="910" id4 -->
-- Atlas 训练系列产品：不支持
+- Atlas训练系列产品：不支持
 <!-- end id4 -->
 <!-- npu="310p" id5 -->
-- Atlas 推理系列产品：不支持
+- Atlas推理系列产品：不支持
 <!-- end id5 -->
 
 ## 功能说明
@@ -49,7 +49,7 @@ HcclResult HcclCommQueryCcuIns(HcclComm comm, CcuInsHandle *insHandles, uint32_t
 [HcclResult](../../../comm_mgr_c/data_type_definition/HcclResult.md)：接口成功返回HCCL_SUCCESS，其他失败。
 
 - 当comm、insHandles或insNum为nullptr时，返回HCCL_E_PTR。
-- 当通信域代际不支持CCU（早于Ascend 950PR/Ascend 950DT）时，返回HCCL_E_NOT_SUPPORT。
+- 当通信域代际不支持CCU（早于Ascend 950PR&950DT系列产品）时，返回HCCL_E_NOT_SUPPORT。
 - 当通信域的自有CCU实例句柄为`0`、且算子扩展模式未使能CCU时，返回HCCL_E_UNAVAIL，不创建实例。
 - 当创建CCU实例失败时，返回创建接口的原始错误码（透传CcuResult，如CCU_E_DRV_BUSY、CCU_E_UNAVAIL等）。
 
@@ -59,7 +59,7 @@ HcclResult HcclCommQueryCcuIns(HcclComm comm, CcuInsHandle *insHandles, uint32_t
 
 ## 约束说明
 
-1. CCU特性仅在Ascend 950PR/Ascend 950DT及以上代际支持，在更早代际的通信域上调用返回HCCL_E_NOT_SUPPORT。
+1. CCU特性仅在Ascend 950PR&950DT系列产品及以上代际支持，在更早代际的通信域上调用返回HCCL_E_NOT_SUPPORT。
 2. 需在通信域完成初始化后调用。当通信域的自有CCU实例尚未创建时，本接口会创建；若通信域展开模式未使能CCU，返回HCCL_E_UNAVAIL。
 3. 本接口查询的CCU实例与通过`HcclCommAssignCcuIns`绑定的CCU实例相互独立，二者不会相互覆盖或影响。
 4. 返回的CCU实例句柄仅供借用，所有权仍归通信域所有，由通信域负责释放。调用者不可销毁该实例，否则会造成对同一实例的重复释放，破坏通信域的资源管理。

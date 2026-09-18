@@ -3,19 +3,19 @@
 ## 产品支持情况
 
 <!-- npu="950" id1 -->
-- Ascend 950PR/Ascend 950DT：支持
+- Ascend 950PR&950DT系列产品：支持
 <!-- end id1 -->
 <!-- npu="A3" id2 -->
-- Atlas A3 训练系列产品/Atlas A3 推理系列产品：不支持
+- Atlas A3系列产品：不支持
 <!-- end id2 -->
 <!-- npu="910b" id3 -->
-- Atlas A2 训练系列产品/Atlas A2 推理系列产品：不支持
+- Atlas A2系列产品：不支持
 <!-- end id3 -->
 <!-- npu="910" id4 -->
-- Atlas 训练系列产品：不支持
+- Atlas训练系列产品：不支持
 <!-- end id4 -->
 <!-- npu="310p" id5 -->
-- Atlas 推理系列产品：不支持
+- Atlas推理系列产品：不支持
 <!-- end id5 -->
 
 ## 功能说明
@@ -41,7 +41,7 @@ HcommResult HcommEndpointGetDescNum(int32_t deviceLogicId, uint32_t *descNum)
 
 ## 约束说明
 
-- 当前仅支持Ascend 950PR/Ascend 950DT。
+- 当前仅支持Ascend 950PR&950DT系列产品。
 - 查询范围仅包含网络语义`Endpoint`，支持的通信协议包括`COMM_PROTOCOL_UBC_CTP`、`COMM_PROTOCOL_UBG`和`COMM_PROTOCOL_UBOE`，不返回`COMM_PROTOCOL_UB_MEM`、`COMM_PROTOCOL_HCCS`等内存语义`Endpoint`。
 - `deviceLogicId`必须是有效且在位的NPU设备逻辑ID。
 - NPU设备未配置EID时，接口返回未找到错误，此时`descNum`为`0`。

@@ -4,7 +4,7 @@
 
 ### 系统架构
 
-CCU（Collective Communication Unit，集合通信加速单元）是昇腾NPU中的专用集合通信协处理器，位于IO Die上。下图展示了CCU在Ascend 950PR/Ascend 950DT中的位置：
+CCU（Collective Communication Unit，集合通信加速单元）是昇腾NPU中的专用集合通信协处理器，位于IO Die上。下图展示了CCU在Ascend 950PR&950DT系列产品中的位置：
 
 ![](figures/ccu_in_950.png)
 

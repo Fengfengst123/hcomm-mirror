@@ -3,19 +3,19 @@
 ## 产品支持情况
 
 <!-- npu="950" id1 -->
-- Ascend 950PR/Ascend 950DT：支持
+- Ascend 950PR&950DT系列产品：支持
 <!-- end id1 -->
 <!-- npu="A3" id2 -->
-- Atlas A3 训练系列产品/Atlas A3 推理系列产品：支持
+- Atlas A3系列产品：支持
 <!-- end id2 -->
 <!-- npu="910b" id3 -->
-- Atlas A2 训练系列产品/Atlas A2 推理系列产品：支持
+- Atlas A2系列产品：支持
 <!-- end id3 -->
 <!-- npu="910" id4 -->
-- Atlas 训练系列产品：不支持
+- Atlas训练系列产品：不支持
 <!-- end id4 -->
 <!-- npu="310p" id5 -->
-- Atlas 推理系列产品：不支持
+- Atlas推理系列产品：不支持
 <!-- end id5 -->
 
 ## 功能说明
@@ -53,19 +53,19 @@ HcclResult HcclThreadAcquireWithConfig(HcclComm comm, CommEngine engine, uint32_
 2. 当前各产品形态支持的CommEngine范围：
 
   <!-- npu="950" id6 -->
-  - Ascend 950PR/Ascend 950DT：
+  - Ascend 950PR&950DT系列产品：
     - COMM_ENGINE_CPU
     - COMM_ENGINE_AICPU
   <!-- end id6 -->
 
   <!-- npu="A3" id7 -->
-  - Atlas A3 训练系列产品/Atlas A3 推理系列产品：
+  - Atlas A3系列产品：
     - COMM_ENGINE_CPU
     - COMM_ENGINE_AICPU
   <!-- end id7 -->
 
   <!-- npu="910b" id8 -->
-  - Atlas A2 训练系列产品/Atlas A2 推理系列产品：
+  - Atlas A2系列产品：
     - COMM_ENGINE_CPU
     - COMM_ENGINE_AICPU
   <!-- end id8 -->

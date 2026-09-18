@@ -3,19 +3,19 @@
 ## 产品支持情况
 
 <!-- npu="950" id1 -->
-- Ascend 950PR/Ascend 950DT：支持
+- Ascend 950PR&950DT系列产品：支持
 <!-- end id1 -->
 <!-- npu="A3" id2 -->
-- Atlas A3 训练系列产品/Atlas A3 推理系列产品：支持
+- Atlas A3系列产品：支持
 <!-- end id2 -->
 <!-- npu="910b" id3 -->
-- Atlas A2 训练系列产品/Atlas A2 推理系列产品：支持
+- Atlas A2系列产品：支持
 <!-- end id3 -->
 <!-- npu="910" id4 -->
-- Atlas 训练系列产品：不支持
+- Atlas训练系列产品：不支持
 <!-- end id4 -->
 <!-- npu="310p" id5 -->
-- Atlas 推理系列产品：不支持
+- Atlas推理系列产品：不支持
 <!-- end id5 -->
 
 ## 功能说明
@@ -42,11 +42,11 @@ int32_t HcommChannelNotifyWaitOnThread(ThreadHandle thread, ChannelHandle channe
 
 - thread参数：
 
-  针对Ascend 950PR/Ascend 950DT，CPU引擎RoCE场景下，“thread”参数无作用，传入0即可。CPU_TS/AICPU_TS场景下，“thread”参数为通过[HcclThreadAcquire](../../../control_plane_api/comms_domain_resource_mgmt/HcclThreadAcquire.md)接口获取到的threads。
+  针对Ascend 950PR&950DT系列产品，CPU引擎RoCE场景下，“thread”参数无作用，传入0即可。CPU_TS/AICPU_TS场景下，“thread”参数为通过[HcclThreadAcquire](../../../control_plane_api/comms_domain_resource_mgmt/HcclThreadAcquire.md)接口获取到的threads。
 
 - timeOut参数：
   
-  针对Ascend 950PR/Ascend 950DT的CPU引擎RoCE场景，需配置大于0的超时时间。
+  针对Ascend 950PR&950DT系列产品的CPU引擎RoCE场景，需配置大于0的超时时间。
 <!-- end id7 -->
 
 ## 返回值
@@ -57,9 +57,9 @@ int32_t：接口成功返回0，其他失败。
 
 - 该接口需要配合[HcommChannelNotifyRecordOnThread](HcommChannelNotifyRecordOnThread.md)使用。
 <!-- npu="950" id6 -->
-- 针对Ascend 950PR/Ascend 950DT，支持AICPU_TS场景在Device侧调用，也支持CPU引擎RoCE场景在Host CPU侧调用。
-- 针对Ascend 950PR/Ascend 950DT的CPU引擎RoCE场景，调用[HcclChannelAcquire](../../../control_plane_api/comms_domain_resource_mgmt/HcclChannelAcquire.md)申请入参channel时，需传入`engine = COMM_ENGINE_CPU`，且`channelDesc.remoteEndpoint.protocol = COMM_PROTOCOL_ROCE`。URMA/UBC等协议通道当前不支持该接口。
-- 针对Ascend 950PR/Ascend 950DT的CPU引擎RoCE场景，`localNotifyIdx`必须小于本端通信通道的Notify数量，且通信通道创建时的`notifyNum`需大于0；`timeOut`需大于0。
+- 针对Ascend 950PR&950DT系列产品，支持AICPU_TS场景在Device侧调用，也支持CPU引擎RoCE场景在Host CPU侧调用。
+- 针对Ascend 950PR&950DT系列产品的CPU引擎RoCE场景，调用[HcclChannelAcquire](../../../control_plane_api/comms_domain_resource_mgmt/HcclChannelAcquire.md)申请入参channel时，需传入`engine = COMM_ENGINE_CPU`，且`channelDesc.remoteEndpoint.protocol = COMM_PROTOCOL_ROCE`。URMA/UBC等协议通道当前不支持该接口。
+- 针对Ascend 950PR&950DT系列产品的CPU引擎RoCE场景，`localNotifyIdx`必须小于本端通信通道的Notify数量，且通信通道创建时的`notifyNum`需大于0；`timeOut`需大于0。
 <!-- end id6 -->
 - Host CPU侧调用时，`thread`参数无作用，可传入0。
 
@@ -68,7 +68,7 @@ int32_t：接口成功返回0，其他失败。
 ```c
 // 申请通信线程资源
 CommEngine engine = CommEngine::COMM_ENGINE_CPU_TS;
-// Ascend 950PR/Ascend 950DT时配置
+// Ascend 950PR&950DT系列产品时配置
 // CommEngine engine = CommEngine::COMM_ENGINE_AICPU_TS;
 uint32_t threadNum = 1;
 uint32_t notifyNumPerThread = 1;
@@ -83,7 +83,7 @@ HcclChannelDescInit(&channelDesc, channelNum);
 ChannelHandle channel;
 HcclChannelAcquire(comm, engine, &channelDesc, channelNum, &channel);
 
-// 针对Ascend 950PR/Ascend 950DT，需要在Device侧调用以下接口
+// 针对Ascend 950PR&950DT系列产品，需要在Device侧调用以下接口
 
 // 通知对端
 HcommChannelNotifyRecordOnThread(thread, channel, 0);

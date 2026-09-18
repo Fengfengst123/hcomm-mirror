@@ -13,7 +13,7 @@
 
 零拷贝功能当前存在如下使用限制与约束：
 
-- 仅支持Atlas A3 训练系列产品/Atlas A3 推理系列产品。
+- 仅支持Atlas A3系列产品。
 - 相关接口仅支持TorchNPU插件后端代码调用，其他场景暂不支持。
 - 仅支持通信算子展开模式为AI CPU的场景。
 - 仅支持集合通信算子AllGather、ReduceScatter、Broadcast、AllReduce，其中ReduceScatter、AllReduce算子开启零拷贝功能后会修改用户的输入内存。

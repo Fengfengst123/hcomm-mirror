@@ -12,7 +12,7 @@
 
 本样例支持以下昇腾产品，组网要求为支持UB协议的Mesh互联，N卡（N>=2）：
 
-- Ascend 950PR/Ascend 950DT
+- Ascend 950PR&950DT系列产品
 
 ## 样例介绍
 

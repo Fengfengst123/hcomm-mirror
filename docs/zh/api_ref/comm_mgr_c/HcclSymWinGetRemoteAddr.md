@@ -3,19 +3,19 @@
 ## 产品支持情况
 
 <!-- npu="950" id1 -->
-- Ascend 950PR/Ascend 950DT：支持
+- Ascend 950PR&950DT系列产品：支持
 <!-- end id1 -->
 <!-- npu="A3" id2 -->
-- Atlas A3 训练系列产品/Atlas A3 推理系列产品：不支持
+- Atlas A3系列产品：不支持
 <!-- end id2 -->
 <!-- npu="910b" id3 -->
-- Atlas A2 训练系列产品/Atlas A2 推理系列产品：不支持
+- Atlas A2系列产品：不支持
 <!-- end id3 -->
 <!-- npu="310p" id4 -->
-- Atlas 推理系列产品：不支持
+- Atlas推理系列产品：不支持
 <!-- end id4 -->
 <!-- npu="910" id5 -->
-- Atlas 训练系列产品：不支持
+- Atlas训练系列产品：不支持
 <!-- end id5 -->
 
 ## 功能说明
@@ -23,7 +23,7 @@
 根据对称内存窗口资源句柄和偏移，获取指定rank ID的远端对称内存窗口中该偏移对应的地址指针。
 
 <!-- npu="950" id6 -->
-针对Ascend 950PR/Ascend 950DT，本接口支持URMA场景。
+针对Ascend 950PR&950DT系列产品，本接口支持URMA场景。
 <!-- end id6 -->
 
 ## 函数原型
@@ -48,7 +48,7 @@ HcclResult HcclSymWinGetRemoteAddr(HcclCommSymWindow winHandle, size_t offset, u
 ## 约束说明
 
 <!-- npu="950" id7 -->
-- 针对Ascend 950PR/Ascend 950DT，仅支持URMA场景。该场景下：
+- 针对Ascend 950PR&950DT系列产品，仅支持URMA场景。该场景下：
   - 调用该接口前需确保对称内存窗口已完成注册，且相关URMA通信通道已完成建链和远端内存信息更新。
 
     使用集合通信接口时，相关通道创建和远端内存信息更新由集合通信内部完成；使用独立通信通道资源接口时，需在通道创建成功后再调用该接口。
