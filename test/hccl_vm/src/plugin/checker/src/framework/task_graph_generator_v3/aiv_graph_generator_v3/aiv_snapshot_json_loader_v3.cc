@@ -11,6 +11,7 @@
 #include "aiv_snapshot_json_loader_v3.h"
 
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <limits>
 #include <nlohmann_json/json.hpp>
@@ -25,9 +26,9 @@ namespace TaskGraphGeneratorV3 {
     namespace {
         using Json = nlohmann::json;
 
-        constexpr const char* AIV_RANK_TASK_FILE_PREFIX = "hcclvm_aiv_rank";
-        constexpr const char* AIV_RANK_TASK_FILE_LAUNCH_MARKER = "_launch";
-        constexpr const char* AIV_RANK_TASK_FILE_SUFFIX = "_task.json";
+        constexpr const char* AIV_TASK_FILE_PREFIX = "hcclvm_aiv_device";
+        constexpr const char* AIV_TASK_FILE_LAUNCH_MARKER = "_launch";
+        constexpr const char* AIV_TASK_FILE_SUFFIX = "_task.json";
 
         bool FileExists(const std::string& path)
         {
@@ -37,12 +38,15 @@ namespace TaskGraphGeneratorV3 {
 
         void SetError(std::string& errorMessage, const std::string& message) { errorMessage = message; }
 
-        std::string ResolveAivTaskFilePath(RankId rankId, uint64_t launchIndex)
+        std::string ResolveAivTaskFilePath(DeviceId deviceId, uint64_t launchIndex)
         {
-            const std::string dataRelPath = std::string("data/") + AIV_RANK_TASK_FILE_PREFIX + std::to_string(rankId)
-                                            + AIV_RANK_TASK_FILE_LAUNCH_MARKER + std::to_string(launchIndex)
-                                            + AIV_RANK_TASK_FILE_SUFFIX;
-            return InstallPath::ResolveToInstallRoot(dataRelPath);
+            namespace fs = std::filesystem;
+            const fs::path dataDir = InstallPath::ResolveToInstallRoot("data");
+
+            return (dataDir
+                    / (std::string(AIV_TASK_FILE_PREFIX) + std::to_string(deviceId) + AIV_TASK_FILE_LAUNCH_MARKER
+                       + std::to_string(launchIndex) + AIV_TASK_FILE_SUFFIX))
+                .string();
         }
 
         bool CheckObjectField(const Json& json, const char* fieldName, std::string& errorMessage)
@@ -70,9 +74,15 @@ namespace TaskGraphGeneratorV3 {
                 return false;
             }
             const Json& sliceJson = payload[fieldName];
+            if (!sliceJson.contains("offset") || !sliceJson["offset"].is_number_unsigned()) {
+                SetError(errorMessage, std::string("missing logical offset field: ") + fieldName);
+                return false;
+            }
             slice.type = static_cast<AivBufferTypeV3>(
                 sliceJson.value("bufferType", static_cast<uint32_t>(AivBufferTypeV3::INVALID)));
-            slice.offset = sliceJson.value("offset", 0ULL);
+            slice.deviceId = sliceJson.value("deviceId", INVALID_DEVICE_ID);
+            slice.offset = sliceJson["offset"].get<uint64_t>();
+            slice.virtualAddr = sliceJson.value("virtualAddr", 0ULL);
             slice.size = sliceJson.value("size", 0ULL);
             return true;
         }
@@ -105,6 +115,8 @@ namespace TaskGraphGeneratorV3 {
             task.rankId = taskJson.value("rankId", INVALID_RANK_ID);
             task.blockId = taskJson.value("blockId", std::numeric_limits<uint32_t>::max());
             task.curPipe = taskJson.value("curPipe", std::numeric_limits<uint32_t>::max());
+            task.deviceId = taskJson.value("deviceId", INVALID_DEVICE_ID);
+            task.commId = taskJson.value("commId", 0ULL);
 
             const Json payload = taskJson.value("payload", Json::object());
             switch (task.taskType) {
@@ -113,16 +125,12 @@ namespace TaskGraphGeneratorV3 {
                         || !ParseDataSlice(payload, "dst", task.dst, errorMessage)) {
                         return false;
                     }
-                    task.srcRank = payload.value("srcRank", INVALID_RANK_ID);
-                    task.dstRank = payload.value("dstRank", INVALID_RANK_ID);
                     return true;
                 case AivRuntimeTaskTypeV3::REDUCE:
                     if (!ParseDataSlice(payload, "src", task.src, errorMessage)
                         || !ParseDataSlice(payload, "dst", task.dst, errorMessage)) {
                         return false;
                     }
-                    task.srcRank = payload.value("srcRank", INVALID_RANK_ID);
-                    task.dstRank = payload.value("dstRank", INVALID_RANK_ID);
                     task.dataType = payload.value("dataType", 0U);
                     task.reduceOp = payload.value("reduceOp", 0U);
                     return true;
@@ -140,14 +148,18 @@ namespace TaskGraphGeneratorV3 {
                     task.syncRound = payload.value("syncRound", std::numeric_limits<uint32_t>::max());
                     return true;
                 case AivRuntimeTaskTypeV3::SEND_FLAG:
-                    task.flagOwnerRank = payload.value("rank", INVALID_RANK_ID);
-                    task.commInfoOffset = payload.value("commInfoOffset", 0ULL);
+                    if (!ParseDataSlice(payload, "flagBuffer", task.flagBuffer, errorMessage)) {
+                        return false;
+                    }
+                    task.targetRank = payload.value("targetRank", INVALID_RANK_ID);
                     task.flagValue = payload.value("flagValue", 0);
                     return true;
                 case AivRuntimeTaskTypeV3::RECV_FLAG:
-                    task.flagOwnerRank = payload.value("rank", INVALID_RANK_ID);
-                    task.commInfoOffset = payload.value("commInfoOffset", 0ULL);
-                    task.flagValue = payload.value("targetValue", 0);
+                    if (!ParseDataSlice(payload, "flagBuffer", task.flagBuffer, errorMessage)) {
+                        return false;
+                    }
+                    task.targetRank = payload.value("targetRank", INVALID_RANK_ID);
+                    task.flagValue = payload.value("flagValue", 0);
                     return true;
                 default:
                     SetError(
@@ -186,6 +198,8 @@ namespace TaskGraphGeneratorV3 {
             }
 
             snapshot.rankId = rankJson.value("rank", INVALID_RANK_ID);
+            snapshot.deviceId = rankJson.value("deviceId", INVALID_DEVICE_ID);
+            snapshot.commId = rankJson.value("commId", 0ULL);
             snapshot.launchIndex = rankJson.value("launchIndex", 0ULL);
             snapshot.rankSize = rankJson.value("rankSize", 0U);
             snapshot.inBufferSize = rankJson.value("inBufferSize", 0ULL);
@@ -215,11 +229,11 @@ namespace TaskGraphGeneratorV3 {
         }
     } // namespace
 
-    HcclResult AivSnapshotJsonLoaderV3::LoadByRankAndLaunch(
-        RankId rankId, uint64_t launchIndex, AivRuntimeTaskSnapshotV3& snapshot, std::string& errorMessage) const
+    HcclResult AivSnapshotJsonLoaderV3::LoadByDeviceAndLaunch(
+        DeviceId deviceId, uint64_t launchIndex, AivRuntimeTaskSnapshotV3& snapshot, std::string& errorMessage) const
     {
         snapshot = AivRuntimeTaskSnapshotV3{};
-        const std::string filePath = ResolveAivTaskFilePath(rankId, launchIndex);
+        const std::string filePath = ResolveAivTaskFilePath(deviceId, launchIndex);
         if (!FileExists(filePath)) {
             SetError(errorMessage, "AIV task json file does not exist: " + filePath);
             return HCCL_E_NOT_FOUND;
@@ -243,22 +257,23 @@ namespace TaskGraphGeneratorV3 {
         }
         snapshot.filePath = filePath;
 
-        if (snapshot.rankId != rankId) {
-            SetError(
-                errorMessage, "rank id mismatch in AIV task json, file=" + filePath + ", expected="
-                                  + std::to_string(rankId) + ", actual=" + std::to_string(snapshot.rankId));
-            return HCCL_E_PARA;
-        }
         if (snapshot.launchIndex != launchIndex) {
             SetError(
                 errorMessage, "launchIndex mismatch in AIV task json, file=" + filePath + ", expected="
                                   + std::to_string(launchIndex) + ", actual=" + std::to_string(snapshot.launchIndex));
             return HCCL_E_PARA;
         }
+        if (snapshot.deviceId != deviceId) {
+            SetError(
+                errorMessage, "device id mismatch in AIV task json, file=" + filePath + ", expected="
+                                  + std::to_string(deviceId) + ", actual=" + std::to_string(snapshot.deviceId));
+            return HCCL_E_PARA;
+        }
 
         HCCL_VM_INFO(
-            "Loaded AIV snapshot, rankId={}, launchIndex={}, blockCount={}, file={}", rankId, launchIndex,
-            snapshot.blocks.size(), filePath);
+            "Loaded AIV snapshot, deviceId={}, logicalRankId={}, "
+            "launchIndex={}, blockCount={}, file={}",
+            deviceId, snapshot.rankId, launchIndex, snapshot.blocks.size(), filePath);
         return HCCL_SUCCESS;
     }
 

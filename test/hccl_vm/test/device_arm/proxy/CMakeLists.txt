@@ -12,7 +12,8 @@ cmake_minimum_required(VERSION 3.14)
 
 set(COMMON_INCLUDE_DIRS
     ${CMAKE_SOURCE_DIR}/src/device_arm
-    ${CMAKE_SOURCE_DIR}/src/device_arm/proxy
+    ${CMAKE_SOURCE_DIR}/src/device_arm/common
+    ${CMAKE_SOURCE_DIR}/src/device_arm/level2/proxy
     ${CMAKE_SOURCE_DIR}/src/common
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/include/store
@@ -39,7 +40,7 @@ set(COMMON_INCLUDE_DIRS
 
 set(COMMON_SOURCES
     ${CMAKE_SOURCE_DIR}/src/utils/sim_log.cc
-    ${CMAKE_SOURCE_DIR}/src/proxy/log_stub.cc
+    ${CMAKE_SOURCE_DIR}/src/proxy/level2/log_stub.cc
 )
 
 set(COMMON_LIBS
@@ -57,9 +58,9 @@ set(COMMON_LIBS
 add_executable(test_device_sqe_parse_stub device_sqe_parse_stub_test.cc)
 
 target_sources(test_device_sqe_parse_stub PRIVATE
-    ${CMAKE_SOURCE_DIR}/src/device_arm/proxy/device_sqe_parse_stub.cc
-    ${CMAKE_SOURCE_DIR}/src/device_arm/hccl_device_pub.cc
-    ${CMAKE_SOURCE_DIR}/src/device_arm/hccl_task_collection.cc
+    ${CMAKE_SOURCE_DIR}/src/device_arm/level2/proxy/device_sqe_parse_stub.cc
+    ${CMAKE_SOURCE_DIR}/src/device_arm/common/hccl_device_pub.cc
+    ${CMAKE_SOURCE_DIR}/src/device_arm/common/hccl_task_collection.cc
     ${CMAKE_SOURCE_DIR}/src/common/sim_pipe_io.cc
     ${CMAKE_SOURCE_DIR}/src/store/store_sim_memory_manager.cc
     ${CMAKE_SOURCE_DIR}/src/runnerdb/tracedb/db_sim_sqlite_db.cc
@@ -82,10 +83,10 @@ target_compile_options(test_device_sqe_parse_stub PRIVATE
 add_executable(test_ascend_hal_stub ascend_hal_stub_test.cc)
 
 target_sources(test_ascend_hal_stub PRIVATE
-    ${CMAKE_SOURCE_DIR}/src/device_arm/proxy/ascend_hal_stub.cc
-    ${CMAKE_SOURCE_DIR}/src/device_arm/proxy/device_sqe_parse_stub.cc
-    ${CMAKE_SOURCE_DIR}/src/device_arm/hccl_device_pub.cc
-    ${CMAKE_SOURCE_DIR}/src/device_arm/hccl_task_collection.cc
+    ${CMAKE_SOURCE_DIR}/src/device_arm/level2/proxy/ascend_hal_stub.cc
+    ${CMAKE_SOURCE_DIR}/src/device_arm/level2/proxy/device_sqe_parse_stub.cc
+    ${CMAKE_SOURCE_DIR}/src/device_arm/common/hccl_device_pub.cc
+    ${CMAKE_SOURCE_DIR}/src/device_arm/common/hccl_task_collection.cc
     ${CMAKE_SOURCE_DIR}/src/common/sim_pipe_io.cc
     ${CMAKE_SOURCE_DIR}/src/store/store_sim_memory_manager.cc
     ${CMAKE_SOURCE_DIR}/src/runnerdb/tracedb/db_sim_sqlite_db.cc

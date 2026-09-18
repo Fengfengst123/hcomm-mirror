@@ -11,9 +11,9 @@
 #include <string>
 
 #include "cmd_table_utils.h"
+#include "runtime_state/db_sim_runner_ops.h"
 #include "sim_common_defs.h"
 #include "sim_log.h"
-#include "db_sim_runner_db.h"
 #include "subcmd_table.h"
 
 namespace HcclSim {
@@ -26,8 +26,12 @@ void TableCommand::Setup(CLI::App& app)
     showCmd->add_option("name", showStr, "show table all")->required();
     showCmd->callback([this]() {
         if (showStr == "all") {
+            // 表清单由 Runner 业务目录派生（新增表无需修改本命令或任何清单）。
             std::vector<std::string> tables;
-            tables = RunnerDB::GetAllTableName();
+            const auto& runnerDatabase = HcclSim::Storage::Ddl::kRunnerDatabase;
+            for (std::size_t i = 0; i < runnerDatabase.tableCount; ++i) {
+                tables.emplace_back(runnerDatabase.tables[i].tableId);
+            }
             for (auto& tbl : tables) {
                 HCCL_VM_INFO("{}", tbl);
             }

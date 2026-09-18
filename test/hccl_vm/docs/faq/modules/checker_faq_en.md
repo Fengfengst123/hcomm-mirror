@@ -13,22 +13,19 @@
 **Title:** Graph generation translation failure
 
 **Error Code:**
-
-```text
+```
 GRAPH_TRANSLATE_FAILED (101)
 ```
 
 **Key Log:**
-
-```text
+```
 [GenGraph] [ErrorCode: 101] Failed to convert one task into a graph node, taskIndex=128, ret=1, taskMeta=taskType=0, rankId=3, streamId=7, srcRankId=3, dstRankId=4, src=[0x0,0x400), dst=[0x1000,0x1400), protocol=1
 ```
 
 **Problem Description:** The graph generation phase cannot translate the input task meta into an internal graph node. This issue commonly occurs when the task type lacks support or the field combination does not satisfy translation conditions.
 
 **Troubleshooting Guide:**
-
-```text
+```
 [Possible Causes]
 1. The `taskType` has no corresponding translation implementation.
 2. Fields such as `rankId`, `streamId`, offset, or length are abnormal.
@@ -38,7 +35,6 @@ GRAPH_TRANSLATE_FAILED (101)
 Typical error points:
 1. A normal task meta cannot translate into a graph node: locate the task by `taskIndex` in the original task list; then confirm the root cause based on the specific task information.
 ```
-
 ---
 
 #### FAQ-CHK102
@@ -46,22 +42,19 @@ Typical error points:
 **Title:** Graph generation phase deadlock
 
 **Error Code:**
-
-```text
+```
 GRAPH_DEADLOCK (102)
 ```
 
 **Key Log:**
-
-```text
+```
 [GenGraph] [ErrorCode: 102] Local Record/Wait matching is stuck on this rank. Some Wait tasks are still blocked, but no new local Record task can unblock them, rankId=0, firstBlockedWaitNode=[TaskWaitAICPU] node=143, rank=0, stream=3, protocol=SDMA, notify={recordRank=0, waitRank=0, notifyId=17}, blockedWaitNodeCount=5
 ```
 
 **Problem Description:** The synchronization pairing process stalls during the graph generation phase. Wait nodes remain waiting, but no new Record nodes can pair with the Wait nodes.
 
 **Troubleshooting Guide:**
-
-```text
+```
 [Possible Causes]
 1. The Wait count exceeds the Record count, or Record tasks cannot participate in pairing due to unresolved dependencies.
 2. The `notifyId` is incorrect. The `notifyId` values of Wait and Record do not match, so pairing cannot complete.
@@ -71,7 +64,6 @@ GRAPH_DEADLOCK (102)
 1. Read the `notifyId`, `recordRank`, and `waitRank` of `firstBlockedWaitNode` in the log. Confirm which task should theoretically unlock this Wait.
 2. Check whether a matching Record exists on the same rank or the corresponding peer rank. If one exists, confirm whether the two can pair correctly.
 ```
-
 ---
 
 #### FAQ-CHK103
@@ -79,30 +71,26 @@ GRAPH_DEADLOCK (102)
 **Title:** Unconsumed synchronization pairs remain
 
 **Error Code:**
-
-```text
+```
 GRAPH_UNMATCHED (103)
 ```
 
 **Key Log:**
-
-```text
+```
 [GenGraph] [ErrorCode: 103] Found cross-rank Record tasks that were never consumed by any matching Wait task, recordRankId=0, waitRankId=3, notifyId=21, firstUnconsumedRecordNode=[TaskRecordAICPU] node=77, rank=0, stream=1, protocol=RDMA, notify={recordRank=0, waitRank=3, notifyId=21}, unconsumedRecordCount=2
 ```
 
 **Problem Description:** Unconsumed synchronization nodes remain after the synchronization pairing process ends. This issue typically manifests as Record nodes without corresponding Wait nodes.
 
 **Troubleshooting Guide:**
-
-```text
+```
 [Possible Causes]
 1. The Record count and Wait count do not match.
 2. The `notifyId` in use is incorrect.
 
 [Troubleshooting Steps]
-1. Check whether `recordRankId`, `waitRankId`, and `notifyId` match expectations.
+1. Check whether `recordRankId`, `waitRankId`, and `notifyId` meet expectations.
 ```
-
 ---
 
 #### FAQ-CHK104
@@ -110,8 +98,7 @@ GRAPH_UNMATCHED (103)
 **Title:** AIV group member missing
 
 **Error Code:**
-
-```text
+```
 GRAPH_MEMBER_MISSING (104)
 ```
 
@@ -124,22 +111,19 @@ GRAPH_MEMBER_MISSING (104)
 **Title:** Illegal graph structure
 
 **Error Code:**
-
-```text
+```
 GRAPH_STRUCTURE_INVALID (105)
 ```
 
 **Key Log:**
-
-```text
+```
 [GenGraph] [ErrorCode: 105] Failed to remove one graph edge because the parent or child node does not exist, parentNodeId=91, childNodeId=123, parentNode=[TaskTransMem] node=91, rank=2, stream=0, protocol=SDMA, src=rank 2 INPUT [0x0,0x400), dst=rank 2 CCL [0x1000,0x1400), childNode=null
 ```
 
 **Problem Description:** Graph edge relationships do not satisfy graph construction prerequisites. For example, the parent node or child node does not exist during edge removal or reconnection.
 
 **Troubleshooting Guide:**
-
-```text
+```
 [Possible Causes]
 1. This issue is typically not an algorithm orchestration problem.
 
@@ -147,7 +131,6 @@ GRAPH_STRUCTURE_INVALID (105)
 1. Confirm whether task nodes have been generated in `Checker`.
 2. Contact tool support personnel for assistance.
 ```
-
 ---
 
 #### FAQ-CHK106
@@ -155,8 +138,7 @@ GRAPH_STRUCTURE_INVALID (105)
 **Title:** AIV snapshot inconsistency
 
 **Error Code:**
-
-```text
+```
 GRAPH_SNAPSHOT_MISMATCH (106)
 ```
 
@@ -169,8 +151,7 @@ GRAPH_SNAPSHOT_MISMATCH (106)
 **Title:** Graph generation resource missing
 
 **Error Code:**
-
-```text
+```
 GRAPH_RESOURCE_NOT_FOUND (107)
 ```
 
@@ -183,14 +164,12 @@ GRAPH_RESOURCE_NOT_FOUND (107)
 **Title:** Register or HBM not initialized
 
 **Error Code:**
-
-```text
+```
 GRAPH_REGISTER_UNINITIALIZED (108)
 ```
 
 **Key Log:**
-
-```text
+```
 [GenGraphCCU] [ErrorCode: 108] Failed to read XN register before it was initialized, rankId=2, dieId=0, instrId=73, xnId=11
 
 [GenGraphCCU] [ErrorCode: 108] Failed to read HBM content before it was initialized, rankId=2, dieId=0, instrId=73, hbmAddr=0x1000
@@ -199,8 +178,7 @@ GRAPH_REGISTER_UNINITIALIZED (108)
 **Problem Description:** The current instruction reads a register or HBM content but finds no corresponding initialized data. This issue typically indicates that the preceding write chain was not correctly established.
 
 **Troubleshooting Guide:**
-
-```text
+```
 [Possible Causes]
 1. The prerequisite Load / Set / Store instruction was not executed.
 2. The queue responsible for initialization was blocked by Wait or other dependencies and could not advance.
@@ -224,8 +202,7 @@ GRAPH_OUT_OF_RANGE (109)
 ```
 
 **Key Log:**
-
-```text
+```
 [GenGraphCCU] [ErrorCode: 109] dieId is out of range when converting address to MS id, dieId=4, maxDieId=1
 
 [GenGraphCCU] [ErrorCode: 109] Xn register id is out of the valid range, xnId=37, validMin=0, validMax=31
@@ -234,8 +211,7 @@ GRAPH_OUT_OF_RANGE (109)
 **Problem Description:** An ID, index, or address ownership field exceeds the current resource or instruction constraint range. This issue commonly occurs with `dieId`, register IDs, or intermediate address parsing results that go out of range.
 
 **Troubleshooting Guide:**
-
-```text
+```
 [Possible Causes]
 1. The resource pool size does not match the task data. For example, only a subset of dies was loaded.
 2. Address ownership parsing is incorrect. A local address was mapped to a nonexistent resource ID.
@@ -246,7 +222,6 @@ GRAPH_OUT_OF_RANGE (109)
 1. If the log provides `dieId/maxDieId`, verify whether the die count in the current resource file matches the task data.
 2. If the log provides `xnId/validMin/validMax`, trace back to the original instruction fields. Confirm whether the register ID was incorrectly parsed or calculated.
 ```
-
 ---
 
 #### FAQ-CHK110
@@ -254,14 +229,12 @@ GRAPH_OUT_OF_RANGE (109)
 **Title:** Illegal address or unmet alignment constraint
 
 **Error Code:**
-
-```text
+```
 GRAPH_ADDRESS_INVALID (110)
 ```
 
 **Key Log:**
-
-```text
+```
 [GenGraphCCU] [ErrorCode: 110] Address does not fall into any known MS address range, localMsAddr=0x27f0000, rawAddr=0x82ff000
 
 [GenGraphCCU] [ErrorCode: 110] Load source address must be 8-byte aligned, sourceAddress=0x1003
@@ -270,8 +243,7 @@ GRAPH_ADDRESS_INVALID (110)
 **Problem Description:** The address cannot map to any resource range known to the Checker. Alternatively, Load/Store addresses or lengths do not satisfy the alignment constraints of the current instruction.
 
 **Troubleshooting Guide:**
-
-```text
+```
 [Possible Causes]
 1. The base address table does not match.
 2. The upstream incorrectly wrote the original address. This causes an abnormal value.
@@ -282,7 +254,6 @@ GRAPH_ADDRESS_INVALID (110)
 1. If the log provides `rawAddr/localMsAddr` or `addr/dieBaseAddr`, determine which resource range the address should theoretically fall into.
 2. If the log provides `sourceAddress`, `hbmAddr`, or `dataLengthBytes`, verify whether the 8-byte or 64-byte granularity constraint is satisfied.
 ```
-
 ---
 
 #### FAQ-CHK111
@@ -290,14 +261,12 @@ GRAPH_ADDRESS_INVALID (110)
 **Title:** Unsupported task or instruction
 
 **Error Code:**
-
-```text
+```
 GRAPH_UNSUPPORTED (111)
 ```
 
 **Key Log:**
-
-```text
+```
 [GenGraph] [ErrorCode: 111] This task type is not supported for CheckerV3 graph generation, taskIndex=128, taskMeta=taskType=9, rankId=3, streamId=7
 
 [GenGraphCCU] [ErrorCode: 111] This CCU instruction type is not supported by CheckerV3 graph expansion, rankId=2, queueId=1, instructionHeader=0xf431
@@ -306,8 +275,7 @@ GRAPH_UNSUPPORTED (111)
 **Problem Description:** A feature not yet supported by the Checker is in use.
 
 **Troubleshooting Guide:**
-
-```text
+```
 [Possible Causes]
 1. The Checker does not yet support this feature.
 
@@ -315,7 +283,6 @@ GRAPH_UNSUPPORTED (111)
 1. Check the corresponding fields in the log. Confirm whether they match expectations.
 2. Contact tool support personnel for assistance.
 ```
-
 ---
 
 #### FAQ-CHK112
@@ -323,22 +290,19 @@ GRAPH_UNSUPPORTED (111)
 **Title:** Remote rank derivation inconsistency
 
 **Error Code:**
-
-```text
-GRAPH_REMOTE_RANK_MISMATCH (112)
+```
+GRAPH_CHANNEL_RANK_MISMATCH (112)
 ```
 
 **Key Log:**
-
-```text
+```
 [GenGraphCCU] [ErrorCode: 112] Remote address resolves to a different rank than the selected channel, instruction=TransLocMemToRmtMem, rankId=2, dieId=0, queueId=1, instrId=73, channelId=7, expectedRemoteRankId=5, actualRemoteRankId=6, remoteAddr=140737488363520
 ```
 
 **Problem Description:** The remote rank derived from the channel or remote address is inconsistent.
 
 **Troubleshooting Guide:**
-
-```text
+```
 [Possible Causes]
 1. The channel table is incorrect.
 2. The remote address is incorrectly encoded.
@@ -346,7 +310,6 @@ GRAPH_REMOTE_RANK_MISMATCH (112)
 [Troubleshooting Steps]
 1. Verify which rank the `channelId` and `remoteAddr` belong to. Confirm whether the result matches expectations.
 ```
-
 ---
 
 #### FAQ-CHK113
@@ -354,14 +317,12 @@ GRAPH_REMOTE_RANK_MISMATCH (112)
 **Title:** Merged Loop emission failure
 
 **Error Code:**
-
-```text
+```
 GRAPH_LOOP_MERGE_ERROR (113)
 ```
 
 **Key Log:**
-
-```text
+```
 [GenGraphCCU] [ErrorCode: 113] Failed to emit one merged loop instruction because the merged instruction entry is null, rankId=2, queueId=1
 
 [GenGraphCCU] [ErrorCode: 113] Failed to emit one merged loop transfer task, rankId=2, queueId=1, mergedLoopInstr={rankId=2, dieId=0, instrId=73, srcs=4, dsts=4, waitOps=1, setOps=1}
@@ -370,8 +331,7 @@ GRAPH_LOOP_MERGE_ERROR (113)
 **Problem Description:** Loop merging fails in CCU mode.
 
 **Troubleshooting Guide:**
-
-```text
+```
 [Possible Causes]
 1. Resource conflicts occur during serial or parallel loop expansion (memory addresses, CKE, and so on).
 Note: The system attempts normal expansion after loop merge failure. This may affect performance.
@@ -379,7 +339,6 @@ Note: The system attempts normal expansion after loop merge failure. This may af
 [Troubleshooting Steps]
 1. Confirm that the loop body instruction template design meets expectations.
 ```
-
 ---
 
 ### Submodule: Single Task and Slave Stream Validation
@@ -391,14 +350,12 @@ Note: The system attempts normal expansion after loop merge failure. This may af
 **Title:** Invalid Memory Slice
 
 **Error Code:**
-
-```text
+```
 SINGLETASK_SLICE_INVALID (201)
 ```
 
 **Error Function:**
-
-```text
+```
 task_graph_single_task_check_v3.cc::CheckMemorySlice()
 task_graph_single_task_check_v3.cc::CheckBatchTrans()
 task_graph_mem_conflict_v3.cc
@@ -406,8 +363,7 @@ task_graph_semantic_check_v3.cc
 ```
 
 **Key Log:**
-
-```text
+```
 [MemConflict] [ErrorCode: 201] One memory slice is missing a valid rank or memory type, task=[TaskTransMem] node=42, rank=0, stream=2, protocol=SDMA, src=rank 0 INPUT [0x0,0x400), dst=rank 0 CCL [0x1000,0x1400), rankId=invalid, memType=invalid, offset=0x0, length=0x400
     
 
@@ -426,8 +382,7 @@ task_graph_semantic_check_v3.cc
 **Problem Description:** The memory slice itself is invalid, or slices within the same group overlap. This issue may occur during single task validation, memory conflict checking, or semantic simulation.
 
 **Troubleshooting Guide:**
-
-```text
+```
 [Possible Causes]
 1. The slice fields are incomplete.
 2. Memory type conversion failed.
@@ -437,7 +392,6 @@ task_graph_semantic_check_v3.cc
 [Troubleshooting Steps]
 1. Check whether the slice fields `rankId/memType/offset/length` in the log match expectations.
 ```
-
 ---
 
 #### FAQ-CHK202
@@ -559,14 +513,12 @@ MEMCONFLICT_DAG_INVALID (301)
 **Title:** Real memory conflict detected
 
 **Error Code:**
-
-```text
+```
 MEMCONFLICT_DETECTED (302)
 ```
 
 **Key Log:**
-
-```text
+```
 [MemConflict] [ErrorCode: 302] Two tasks may access the same memory range in parallel, and at least one access is a write.
   Conflict memory : rank 0 OUTPUT
   Overlap range    : [0x1000,0x1400)
@@ -583,8 +535,7 @@ MEMCONFLICT_DETECTED (302)
 **Problem Description:** A real memory concurrency conflict is detected. Two tasks access the same memory range, and at least one access is a write.
 
 **Troubleshooting Guide:**
-
-```text
+```
 [Possible Causes]
 1. The two streams lack synchronization constraints.
 2. Tasks that should be serial are incorrectly built as parallel-capable.
@@ -594,7 +545,6 @@ Note: The system only validates `read-write` / `write-write` conflicts. `read-re
 [Troubleshooting Steps]
 1. Check the log to identify which two tasks conflict at which address range. Verify whether the task arrangement and synchronization signal design match expectations.
 ```
-
 ---
 
 ### Submodule: Semantic Validation
@@ -606,22 +556,19 @@ Note: The system only validates `read-write` / `write-write` conflicts. `read-re
 **Title:** No semantic source for target range
 
 **Error Code:**
-
-```text
+```
 SEMANTIC_BUFFER_EMPTY (401)
 ```
 
 **Key Log:**
-
-```text
+```
 [SemanticCheck] [ErrorCode: 401] No source/output information was found for the target memory range, startAddr=0x0, size=0x1000
 ```
 
 **Problem Description:** The semantic check finds no available source data or output semantics for the target range.
 
 **Troubleshooting Guide:**
-
-```text
+```
 [Possible Causes]
 1. The related write tasks have not been executed yet.
 2. Earlier semantic construction already failed due to other errors.
@@ -658,14 +605,12 @@ flowchart TB
 **Title:** Semantic result range discontinuity
 
 **Error Code:**
-
-```text
+```
 SEMANTIC_GAP (402)
 ```
 
 **Key Log:**
-
-```text
+```
 [SemanticCheck] [ErrorCode: 402] Output data does not start from the expected address; the beginning is missing, expectedStart=0x0, actualStart=0x400
     
 
@@ -678,8 +623,7 @@ SEMANTIC_GAP (402)
 **Problem Description:** The semantic result range is discontinuous. Common manifestations include a missing beginning, a middle break, or an incomplete tail coverage.
 
 **Troubleshooting Guide:**
-
-```text
+```
 [Possible Causes]
 1. The related write tasks did not execute completely.
 2. The offset or length calculation does not match expectations.
@@ -717,14 +661,12 @@ gantt
 **Title:** Incorrect Reduce semantics
 
 **Error Code:**
-
-```text
+```
 SEMANTIC_REDUCE_ERROR (403)
 ```
 
 **Key Log:**
-
-```text
+```
 [SemanticCheck] [ErrorCode: 403] Target output range is only partially filled before reduce continues, dataMapping={operation=reduce, sourceMemorySlice={rankId=3, memoryType=CCL, offset=0x800, length=0x400}, targetMemorySlice={rankId=1, memoryType=OUTPUT, offset=0x0, length=0x400}, launchIdx=18446744073709551615, blockId=4294967295, pipeId=4294967295, taskId=4294967295, reduceType=HCCL_REDUCE_SUM}, outputRange=[0x0,0x400), pieceCount=1
     
 
@@ -737,8 +679,7 @@ SEMANTIC_REDUCE_ERROR (403)
 **Problem Description:** The reduce semantic chain is incomplete or inconsistent. Common manifestations include continuing reduce before the target range is fully covered, inconsistent reduce types, or missing reduce source data.
 
 **Troubleshooting Guide:**
-
-```text
+```
 [Possible Causes]
 1. The preceding overwrite or transfer did not fully cover the target range or source range.
 2. The reduce execution order is abnormal, or different `reduceOp` values write to the same target range.
@@ -756,22 +697,19 @@ SEMANTIC_REDUCE_ERROR (403)
 **Title:** Missing overwrite source semantics
 
 **Error Code:**
-
-```text
+```
 SEMANTIC_SIMULATE_FAILED (404)
 ```
 
 **Key Log:**
-
-```text
+```
 [SemanticCheck] [ErrorCode: 404] Source data needed by this overwrite is missing, dataMapping={operation=overwrite, sourceMemorySlice={rankId=1, memoryType=INPUT, offset=0x0, length=0x800}, targetMemorySlice={rankId=1, memoryType=OUTPUT, offset=0x0, length=0x800}, launchIdx=18446744073709551615, blockId=4294967295, pipeId=4294967295, taskId=4294967295}
 ```
 
 **Problem Description:** The source range semantics for the overwrite is incomplete. The current semantic implementation continues simulation but warns that this overwrite is not "complete memcpy semantics". Subsequent semantic analysis results may be affected.
 
 **Troubleshooting Guide:**
-
-```text
+```
 [Possible Causes]
 1. The source range of the overwrite was not fully initialized beforehand. Only partial source semantics were established.
 2. The source address or length configuration of preceding transfer or slice tasks is incorrect. This causes the overwrite to read from empty ranges without established semantics.
@@ -782,7 +720,6 @@ SEMANTIC_SIMULATE_FAILED (404)
 2. Check the transfer, slice, and reduce tasks before the overwrite. Confirm that address ranges are continuous, lengths match, and no intermediate gaps exist.
 3. If this is expected behavior, confirm whether subsequent analysis allows "partial source semantics" to propagate. Otherwise, complete the preceding data chain.
 ```
-
 ---
 
 #### FAQ-CHK405
@@ -790,22 +727,19 @@ SEMANTIC_SIMULATE_FAILED (404)
 **Title:** Final output validation prerequisites not met
 
 **Error Code:**
-
-```text
+```
 SEMANTIC_FINAL_CHECK_FAILED (405)
 ```
 
 **Key Log:**
-
-```text
+```
 [SemanticCheck] [ErrorCode: 405] Send/Recv final output validation supports exactly 2 ranks, but got expectedRankSize=2, actualRankSize=3, sourceRank=1, targetRank=5
 ```
 
 **Problem Description:** The prerequisites for final output validation are not met. For example, the rank count for the Send/Recv scenario is not 2.
 
 **Troubleshooting Guide:**
-
-```text
+```
 [Possible Causes]
 1. The input rank count configuration is incorrect.
 2. Ranks from different Send/Recv operations are mixed together.
@@ -813,7 +747,6 @@ SEMANTIC_FINAL_CHECK_FAILED (405)
 [Troubleshooting Steps]
 1. Confirm whether this round of Send/Recv validation should theoretically contain only two ranks.
 ```
-
 ---
 
 #### FAQ-CHK406
@@ -821,14 +754,12 @@ SEMANTIC_FINAL_CHECK_FAILED (405)
 **Title:** Missing final output
 
 **Error Code:**
-
-```text
+```
 SEMANTIC_FINAL_MISSING (406)
 ```
 
 **Key Log:**
-
-```text
+```
 [SemanticCheck] [ErrorCode: 406] AllGatherV produced no result data for rank 3, but this rank is expected to receive data from all 8 participating ranks with an expected total result size of 0x1c00 bytes.
     
 
@@ -845,8 +776,7 @@ SEMANTIC_FINAL_MISSING (406)
 **Problem Description:** The final output has missing data. Common manifestations include a rank with no result at all, an incorrect result start address, or an incompletely filled result tail.
 
 **Troubleshooting Guide:**
-
-```text
+```
 [Possible Causes]
 1. The result write chain did not execute completely.
 2. The memory transfer process has gaps or abnormal offsets.
@@ -856,7 +786,6 @@ SEMANTIC_FINAL_MISSING (406)
 1. Determine which result segment is missing based on `expectedStartAddr/actualStartAddr` or `expectedSize/checkedSize`.
 2. Trace back from the memory transfer tasks of the corresponding rank. Confirm whether each memory transfer task matches expectations.
 ```
-
 ---
 
 #### FAQ-CHK407
@@ -864,14 +793,12 @@ SEMANTIC_FINAL_MISSING (406)
 **Title:** Incorrect final output source attributes
 
 **Error Code:**
-
-```text
+```
 SEMANTIC_FINAL_SRC_ERROR (407)
 ```
 
 **Key Log:**
-
-```text
+```
 [SemanticCheck] [ErrorCode: 407] AllGatherV output range [0x1000,0x1400) for rank 3 should come from rank 4, but it actually comes from rank 5.
     Current result range detail:
       range=[0x1000,0x1400), size=0x400, sourceCount=1
@@ -903,8 +830,7 @@ SEMANTIC_FINAL_SRC_ERROR (407)
 **Problem Description:** The source attributes of the final output are incorrect. The source rank, source buffer type, or source address does not match expectations.
 
 **Troubleshooting Guide:**
-
-```text
+```
 [Possible Causes]
 1. The result concatenation order or rank semantic marking is incorrect.
 2. An intermediate buffer is incorrectly used as the final source.
@@ -914,7 +840,6 @@ SEMANTIC_FINAL_SRC_ERROR (407)
 1. Observe `actualSourceRank`, `actualSourceBufferType`, `expectedAddr`, and `actualAddr` to determine the problem type.
 2. Check the corresponding memory transfer tasks. Confirm whether each memory transfer task matches expectations.
 ```
-
 ---
 
 #### FAQ-CHK408
@@ -922,14 +847,12 @@ SEMANTIC_FINAL_SRC_ERROR (407)
 **Title:** Excessive data from a single source
 
 **Error Code:**
-
-```text
+```
 SEMANTIC_FINAL_SIZE_ERROR (408)
 ```
 
 **Key Log:**
-
-```text
+```
 [SemanticCheck] [ErrorCode: 408] AllGatherV data collected from rank 4 for rank 3 becomes larger than expected after outputRange [0x1000,0x1600). The accumulated size is 0x600, but the expected size from this source rank is 0x400.
     Current result range detail:
       range=[0x1000,0x1600), size=0x600, sourceCount=1
@@ -940,8 +863,7 @@ SEMANTIC_FINAL_SIZE_ERROR (408)
 **Problem Description:** The data contribution from a source rank in the final output exceeds the range allowed by the operator semantics.
 
 **Troubleshooting Guide:**
-
-```text
+```
 [Possible Causes]
 1. The length configuration for this source rank is incorrect.
 2. The same data segment is concatenated repeatedly.
@@ -949,7 +871,6 @@ SEMANTIC_FINAL_SIZE_ERROR (408)
 [Troubleshooting Steps]
 1. Check the counts/displs configuration corresponding to `expectedSize`. Then confirm whether the result from this source rank is concatenated repeatedly.
 ```
-
 ---
 
 #### FAQ-CHK409
@@ -957,14 +878,12 @@ SEMANTIC_FINAL_SIZE_ERROR (408)
 **Title:** Incorrect final output Reduce semantics
 
 **Error Code:**
-
-```text
+```
 SEMANTIC_FINAL_REDUCE_ERROR (409)
 ```
 
 **Key Log:**
-
-```text
+```
 [SemanticCheck] [ErrorCode: 409] Send/Recv output range [0x0,0x400) for rank 5 should come from exactly one source, but it actually comes from 2 sources.
     Current result range detail:
       range=[0x0,0x400), size=0x400, sourceCount=2
@@ -1002,8 +921,7 @@ SEMANTIC_FINAL_REDUCE_ERROR (409)
 **Problem Description:** The reduce semantics of the final output are incorrect. Possible manifestations include multiple sources for a single-source operator, a `reduceType` mismatch, or an insufficient source rank count.
 
 **Troubleshooting Guide:**
-
-```text
+```
 [Possible Causes]
 1. The overwrite / reduce merging logic does not match expectations.
 2. The `reduceOp` is inconsistent, or intermediate semantics are polluted.
@@ -1013,7 +931,6 @@ SEMANTIC_FINAL_REDUCE_ERROR (409)
 1. Observe `sourceCount`, `expectedSourceCount`, `actualReduceType`, and the `sources` list. Determine whether the issue is multiple sources, type inconsistency, or missing sources.
 2. Check the corresponding memory transfer and Reduce tasks. Confirm whether each memory operation matches expectations.
 ```
-
 ---
 
 ### Submodule: Dump Output
@@ -1025,16 +942,14 @@ SEMANTIC_FINAL_REDUCE_ERROR (409)
 **Title:** Dump output failure
 
 **Error Code:**
-
-```text
+```
 DUMP_FAILED (501)
 ```
 
 **Problem Description:** The dump manager initialization, file writing, or serialization process fails. This prevents validation results from being written to disk.
 
 **Troubleshooting Guide:**
-
-```text
+```
 [Possible Causes]
 1. The output directory or target path is not writable.
 2. Disk space is insufficient, or the dump path is not prepared.
@@ -1044,7 +959,6 @@ DUMP_FAILED (501)
 1. Check the dump output directory, permissions, and disk space.
 2. Contact tool support personnel for assistance.
 ```
-
 ---
 
 ### Submodule: Main Process and Configuration
@@ -1056,14 +970,12 @@ DUMP_FAILED (501)
 **Title:** General runtime error
 
 **Error Code:**
-
-```text
+```
 CHECKER_RUNTIME_ERROR (901)
 ```
 
 **Key Log:**
-
-```text
+```
 [Main] [ErrorCode: 901] Failed to load instruction data for this rank, rankId=3
     
 
@@ -1079,8 +991,7 @@ CHECKER_RUNTIME_ERROR (901)
 **Problem Description:** A general exception occurs during main process runtime.
 
 **Troubleshooting Guide:**
-
-```text
+```
 [Possible Causes]
 1. This issue is typically an internal Checker problem.
 
@@ -1088,7 +999,6 @@ CHECKER_RUNTIME_ERROR (901)
 1. Identify the error type first. If the type is `Unsupported` or similar, check whether the data meets Checker requirements.
 2. Contact tool support personnel for assistance.
 ```
-
 ---
 
 #### FAQ-CHK902
@@ -1096,22 +1006,19 @@ CHECKER_RUNTIME_ERROR (901)
 **Title:** Configuration or runtime strategy warning
 
 **Error Code:**
-
-```text
+```
 SETTING_WARNING (902)
 ```
 
 **Key Log:**
-
-```text
+```
 [Main] [ErrorCode: 902] This op is skipped because both the new checker and the old checker are disabled, opIndex=47, newCheckerEnabled=0, oldCheckerEnabled=0
 ```
 
 **Problem Description:** Configuration switches or runtime strategies do not meet the execution conditions for the current operation. For example, both the new checker and the old checker are disabled simultaneously.
 
 **Troubleshooting Guide:**
-
-```text
+```
 [Possible Causes]
 1. The manifest.json or runtime parameters disabled the checker.
 

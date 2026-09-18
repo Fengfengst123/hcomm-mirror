@@ -11,8 +11,8 @@
 #ifndef ALG_PARAM_H
 #define ALG_PARAM_H
 
-#include <cstdint>
 #include <cstddef>
+#include <cstdint>
 
 struct AlgParam {
     uint32_t algType;

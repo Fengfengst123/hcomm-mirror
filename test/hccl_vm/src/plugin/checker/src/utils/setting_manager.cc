@@ -23,7 +23,6 @@ static const std::string MANIFEST_FILE_NAME = "manifest.json";
 static const std::string SETTING_KEY_ENABLE_INSIGHT_DUMP = "enable_insight_dump";
 static const std::string SETTING_KEY_ENABLE_MEMORY_SNAPSHOT_DUMP = "enable_memory_snapshot_dump";
 static const std::string SETTING_KEY_ENABLE_NEW_CHECKER = "enable_new_checker";
-static const std::string SETTING_KEY_ENABLE_OLD_CHECKER = "enable_old_checker";
 static const std::string SETTING_KEY_ENABLE_BIG_GRAPH_CHECKER = "enable_big_graph_checker";
 
 } // namespace
@@ -63,7 +62,6 @@ HcclResult SettingManager::Refresh()
         newSettings.enableInsightDump = settings.value(SETTING_KEY_ENABLE_INSIGHT_DUMP, false);
         newSettings.enableMemorySnapshotDump = settings.value(SETTING_KEY_ENABLE_MEMORY_SNAPSHOT_DUMP, true);
         newSettings.enableNewChecker = settings.value(SETTING_KEY_ENABLE_NEW_CHECKER, true);
-        newSettings.enableOldChecker = settings.value(SETTING_KEY_ENABLE_OLD_CHECKER, true);
         newSettings.enableBigGraphChecker = settings.value(SETTING_KEY_ENABLE_BIG_GRAPH_CHECKER, false);
     } catch (const std::exception& ex) {
         HCCL_VM_ERROR("parse manifest failed: {}", ex.what());
@@ -79,9 +77,9 @@ HcclResult SettingManager::Refresh()
 
     HCCL_VM_INFO(
         "settings refreshed: insight_dump={}, memory_snapshot_dump={}, "
-        "new_checker={}, old_checker={}, big_graph_checker={}",
+        "new_checker={}, big_graph_checker={}",
         newSettings.enableInsightDump, newSettings.enableMemorySnapshotDump, newSettings.enableNewChecker,
-        newSettings.enableOldChecker, newSettings.enableBigGraphChecker);
+        newSettings.enableBigGraphChecker);
     return HcclResult::HCCL_SUCCESS;
 }
 
@@ -115,12 +113,6 @@ bool SettingManager::IsNewCheckerEnabled() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     return m_settings.enableNewChecker;
-}
-
-bool SettingManager::IsOldCheckerEnabled() const
-{
-    std::lock_guard<std::mutex> lock(m_mutex);
-    return m_settings.enableOldChecker;
 }
 
 bool SettingManager::IsBigGraphCheckerEnabled() const

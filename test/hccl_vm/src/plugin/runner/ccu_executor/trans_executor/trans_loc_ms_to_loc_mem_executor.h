@@ -8,6 +8,12 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: ccu executor -- trans locms to
+ * locmem Author: caiyifan
+ */
+
 #ifndef HCCL_SIM_TRANS_LOCMS_TO_LOCMEM_EXECUTOR_H
 #define HCCL_SIM_TRANS_LOCMS_TO_LOCMEM_EXECUTOR_H
 

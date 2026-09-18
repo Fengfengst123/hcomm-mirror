@@ -10,5 +10,4 @@
 
 target_sources(checker PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/checker.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/hccl_verifier.cc
 )

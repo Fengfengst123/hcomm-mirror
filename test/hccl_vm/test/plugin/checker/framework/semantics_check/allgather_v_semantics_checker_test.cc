@@ -11,7 +11,6 @@
 #include <cstdint>
 #include <gtest/gtest.h>
 #include <map>
-#include <set>
 #include <vector>
 
 #include "allgather_v_semantics_checker.h"
@@ -27,7 +26,7 @@ protected:
 
     // Helper function to create valid AllGatherV semantics
     void CreateValidAllGatherVSemantics(
-        std::map<RankId, RankMemorySemantics>& allRankMemSemantics, VDataDesTagInner& vDataDes, u32 rankSize,
+        std::map<DeviceId, RankMemorySemantics>& allRankMemSemantics, VDataDesTagInner& vDataDes, u32 rankSize,
         const std::vector<uint64_t>& counts)
     {
         vDataDes.dataType = HcclDataType::HCCL_DATA_TYPE_INT32;
@@ -38,7 +37,7 @@ protected:
 
         for (RankId rankId = 0; rankId < rankSize; rankId++) {
             RankMemorySemantics rankMemSemantics;
-            std::set<BufferSemantic> outputSemantics;
+            BufferSemanticMap outputSemantics;
 
             u64 totalSize = 0;
             for (RankId srcRank = 0; srcRank < rankSize; srcRank++) {
@@ -49,7 +48,7 @@ protected:
 
                 BufferSemantic bufSem(totalSize, curDataSize);
                 bufSem.srcBufs.insert(SrcBufDes(srcRank, BufferType::INPUT, 0));
-                outputSemantics.insert(bufSem);
+                outputSemantics.emplace(bufSem.startAddr, bufSem);
                 totalSize += curDataSize;
             }
 
@@ -62,77 +61,92 @@ protected:
 // Test normal case: valid AllGatherV semantics with equal counts
 TEST_F(AllGatherVSemanticsCheckerTest, ValidSemantics_EqualCounts)
 {
-    std::map<RankId, RankMemorySemantics> allRankMemSemantics;
+    std::map<DeviceId, RankMemorySemantics> allRankMemSemantics;
     VDataDesTagInner vDataDes;
     u32 rankSize = 4;
     std::vector<uint64_t> counts = {100, 100, 100, 100};
 
     CreateValidAllGatherVSemantics(allRankMemSemantics, vDataDes, rankSize, counts);
 
-    HcclResult result = TaskCheckAllGatherVSemantics(allRankMemSemantics, vDataDes);
+    std::vector<DeviceId> rankToDevice(rankSize);
+    for (DeviceId i = 0; i < rankSize; i++)
+        rankToDevice[i] = i;
+    HcclResult result = TaskCheckAllGatherVSemantics(allRankMemSemantics, vDataDes, rankToDevice);
     EXPECT_EQ(result, HcclResult::HCCL_SUCCESS);
 }
 
 // Test normal case: valid AllGatherV semantics with different counts
 TEST_F(AllGatherVSemanticsCheckerTest, ValidSemantics_DifferentCounts)
 {
-    std::map<RankId, RankMemorySemantics> allRankMemSemantics;
+    std::map<DeviceId, RankMemorySemantics> allRankMemSemantics;
     VDataDesTagInner vDataDes;
     u32 rankSize = 4;
     std::vector<uint64_t> counts = {50, 100, 150, 200};
 
     CreateValidAllGatherVSemantics(allRankMemSemantics, vDataDes, rankSize, counts);
 
-    HcclResult result = TaskCheckAllGatherVSemantics(allRankMemSemantics, vDataDes);
+    std::vector<DeviceId> rankToDevice(rankSize);
+    for (DeviceId i = 0; i < rankSize; i++)
+        rankToDevice[i] = i;
+    HcclResult result = TaskCheckAllGatherVSemantics(allRankMemSemantics, vDataDes, rankToDevice);
     EXPECT_EQ(result, HcclResult::HCCL_SUCCESS);
 }
 
 // Test boundary case: single rank
 TEST_F(AllGatherVSemanticsCheckerTest, ValidSemantics_SingleRank)
 {
-    std::map<RankId, RankMemorySemantics> allRankMemSemantics;
+    std::map<DeviceId, RankMemorySemantics> allRankMemSemantics;
     VDataDesTagInner vDataDes;
     u32 rankSize = 1;
     std::vector<uint64_t> counts = {100};
 
     CreateValidAllGatherVSemantics(allRankMemSemantics, vDataDes, rankSize, counts);
 
-    HcclResult result = TaskCheckAllGatherVSemantics(allRankMemSemantics, vDataDes);
+    std::vector<DeviceId> rankToDevice(rankSize);
+    for (DeviceId i = 0; i < rankSize; i++)
+        rankToDevice[i] = i;
+    HcclResult result = TaskCheckAllGatherVSemantics(allRankMemSemantics, vDataDes, rankToDevice);
     EXPECT_EQ(result, HcclResult::HCCL_SUCCESS);
 }
 
 // Test boundary case: zero counts for some ranks
 TEST_F(AllGatherVSemanticsCheckerTest, ValidSemantics_ZeroCounts)
 {
-    std::map<RankId, RankMemorySemantics> allRankMemSemantics;
+    std::map<DeviceId, RankMemorySemantics> allRankMemSemantics;
     VDataDesTagInner vDataDes;
     u32 rankSize = 4;
     std::vector<uint64_t> counts = {0, 100, 0, 200};
 
     CreateValidAllGatherVSemantics(allRankMemSemantics, vDataDes, rankSize, counts);
 
-    HcclResult result = TaskCheckAllGatherVSemantics(allRankMemSemantics, vDataDes);
+    std::vector<DeviceId> rankToDevice(rankSize);
+    for (DeviceId i = 0; i < rankSize; i++)
+        rankToDevice[i] = i;
+    HcclResult result = TaskCheckAllGatherVSemantics(allRankMemSemantics, vDataDes, rankToDevice);
     EXPECT_EQ(result, HcclResult::HCCL_SUCCESS);
 }
 
 // Test boundary case: all zero counts
 TEST_F(AllGatherVSemanticsCheckerTest, ValidSemantics_AllZeroCounts)
 {
-    std::map<RankId, RankMemorySemantics> allRankMemSemantics;
+    std::map<DeviceId, RankMemorySemantics> allRankMemSemantics;
     VDataDesTagInner vDataDes;
     u32 rankSize = 4;
     std::vector<uint64_t> counts = {0, 0, 0, 0};
 
     CreateValidAllGatherVSemantics(allRankMemSemantics, vDataDes, rankSize, counts);
 
-    HcclResult result = TaskCheckAllGatherVSemantics(allRankMemSemantics, vDataDes);
+    std::vector<DeviceId> rankToDevice(rankSize);
+    for (DeviceId i = 0; i < rankSize; i++)
+        rankToDevice[i] = i;
+    HcclResult result = TaskCheckAllGatherVSemantics(allRankMemSemantics, vDataDes, rankToDevice);
     EXPECT_EQ(result, HcclResult::HCCL_SUCCESS);
 }
 
 // Test abnormal case: missing rank
 TEST_F(AllGatherVSemanticsCheckerTest, Abnormal_MissingRank)
 {
-    std::map<RankId, RankMemorySemantics> allRankMemSemantics;
+    std::map<DeviceId, RankMemorySemantics> allRankMemSemantics;
     VDataDesTagInner vDataDes;
     u32 rankSize = 2;
     std::vector<uint64_t> counts = {100, 100};
@@ -142,29 +156,32 @@ TEST_F(AllGatherVSemanticsCheckerTest, Abnormal_MissingRank)
 
     // Only add rank 0, missing rank 1
     RankMemorySemantics rankMemSemantics;
-    std::set<BufferSemantic> outputSemantics;
+    BufferSemanticMap outputSemantics;
 
     u64 dataSize = counts[0] * CHECK_SIZE_TABLE[vDataDes.dataType];
     BufferSemantic bufSem0(0, dataSize);
     bufSem0.srcBufs.insert(SrcBufDes(0, BufferType::INPUT, 0));
-    outputSemantics.insert(bufSem0);
+    outputSemantics.emplace(bufSem0.startAddr, bufSem0);
 
     dataSize = counts[1] * CHECK_SIZE_TABLE[vDataDes.dataType];
     BufferSemantic bufSem1(400, dataSize);
     bufSem1.srcBufs.insert(SrcBufDes(1, BufferType::INPUT, 0));
-    outputSemantics.insert(bufSem1);
+    outputSemantics.emplace(bufSem1.startAddr, bufSem1);
 
     rankMemSemantics[BufferType::OUTPUT] = outputSemantics;
     allRankMemSemantics[0] = rankMemSemantics;
 
-    HcclResult result = TaskCheckAllGatherVSemantics(allRankMemSemantics, vDataDes);
+    std::vector<DeviceId> rankToDevice(rankSize);
+    for (DeviceId i = 0; i < rankSize; i++)
+        rankToDevice[i] = i;
+    HcclResult result = TaskCheckAllGatherVSemantics(allRankMemSemantics, vDataDes, rankToDevice);
     EXPECT_EQ(result, HcclResult::HCCL_E_PARA);
 }
 
 // Test abnormal case: wrong start addr
 TEST_F(AllGatherVSemanticsCheckerTest, Abnormal_WrongStartAddr)
 {
-    std::map<RankId, RankMemorySemantics> allRankMemSemantics;
+    std::map<DeviceId, RankMemorySemantics> allRankMemSemantics;
     VDataDesTagInner vDataDes;
     u32 rankSize = 2;
     std::vector<uint64_t> counts = {100, 100};
@@ -173,30 +190,33 @@ TEST_F(AllGatherVSemanticsCheckerTest, Abnormal_WrongStartAddr)
     vDataDes.counts = counts;
 
     RankMemorySemantics rankMemSemantics;
-    std::set<BufferSemantic> outputSemantics;
+    BufferSemanticMap outputSemantics;
 
     u64 dataSize = counts[0] * CHECK_SIZE_TABLE[vDataDes.dataType];
     BufferSemantic bufSem0(100, dataSize); // Wrong start addr
     bufSem0.srcBufs.insert(SrcBufDes(0, BufferType::INPUT, 0));
-    outputSemantics.insert(bufSem0);
+    outputSemantics.emplace(bufSem0.startAddr, bufSem0);
 
     dataSize = counts[1] * CHECK_SIZE_TABLE[vDataDes.dataType];
     BufferSemantic bufSem1(500, dataSize);
     bufSem1.srcBufs.insert(SrcBufDes(1, BufferType::INPUT, 0));
-    outputSemantics.insert(bufSem1);
+    outputSemantics.emplace(bufSem1.startAddr, bufSem1);
 
     rankMemSemantics[BufferType::OUTPUT] = outputSemantics;
     allRankMemSemantics[0] = rankMemSemantics;
     allRankMemSemantics[1] = rankMemSemantics;
 
-    HcclResult result = TaskCheckAllGatherVSemantics(allRankMemSemantics, vDataDes);
+    std::vector<DeviceId> rankToDevice(rankSize);
+    for (DeviceId i = 0; i < rankSize; i++)
+        rankToDevice[i] = i;
+    HcclResult result = TaskCheckAllGatherVSemantics(allRankMemSemantics, vDataDes, rankToDevice);
     EXPECT_EQ(result, HcclResult::HCCL_E_PARA);
 }
 
 // Test abnormal case: wrong source rank
 TEST_F(AllGatherVSemanticsCheckerTest, Abnormal_WrongSourceRank)
 {
-    std::map<RankId, RankMemorySemantics> allRankMemSemantics;
+    std::map<DeviceId, RankMemorySemantics> allRankMemSemantics;
     VDataDesTagInner vDataDes;
     u32 rankSize = 2;
     std::vector<uint64_t> counts = {100, 100};
@@ -205,30 +225,33 @@ TEST_F(AllGatherVSemanticsCheckerTest, Abnormal_WrongSourceRank)
     vDataDes.counts = counts;
 
     RankMemorySemantics rankMemSemantics;
-    std::set<BufferSemantic> outputSemantics;
+    BufferSemanticMap outputSemantics;
 
     u64 dataSize = counts[0] * CHECK_SIZE_TABLE[vDataDes.dataType];
     BufferSemantic bufSem0(0, dataSize);
     bufSem0.srcBufs.insert(SrcBufDes(1, BufferType::INPUT, 0)); // Wrong source rank
-    outputSemantics.insert(bufSem0);
+    outputSemantics.emplace(bufSem0.startAddr, bufSem0);
 
     dataSize = counts[1] * CHECK_SIZE_TABLE[vDataDes.dataType];
     BufferSemantic bufSem1(400, dataSize);
     bufSem1.srcBufs.insert(SrcBufDes(0, BufferType::INPUT, 0)); // Wrong source rank
-    outputSemantics.insert(bufSem1);
+    outputSemantics.emplace(bufSem1.startAddr, bufSem1);
 
     rankMemSemantics[BufferType::OUTPUT] = outputSemantics;
     allRankMemSemantics[0] = rankMemSemantics;
     allRankMemSemantics[1] = rankMemSemantics;
 
-    HcclResult result = TaskCheckAllGatherVSemantics(allRankMemSemantics, vDataDes);
+    std::vector<DeviceId> rankToDevice(rankSize);
+    for (DeviceId i = 0; i < rankSize; i++)
+        rankToDevice[i] = i;
+    HcclResult result = TaskCheckAllGatherVSemantics(allRankMemSemantics, vDataDes, rankToDevice);
     EXPECT_EQ(result, HcclResult::HCCL_E_PARA);
 }
 
 // Test abnormal case: incomplete total size
 TEST_F(AllGatherVSemanticsCheckerTest, Abnormal_IncompleteTotalSize)
 {
-    std::map<RankId, RankMemorySemantics> allRankMemSemantics;
+    std::map<DeviceId, RankMemorySemantics> allRankMemSemantics;
     VDataDesTagInner vDataDes;
     u32 rankSize = 2;
     std::vector<uint64_t> counts = {100, 100};
@@ -237,26 +260,29 @@ TEST_F(AllGatherVSemanticsCheckerTest, Abnormal_IncompleteTotalSize)
     vDataDes.counts = counts;
 
     RankMemorySemantics rankMemSemantics;
-    std::set<BufferSemantic> outputSemantics;
+    BufferSemanticMap outputSemantics;
 
     // Only add one buffer, missing the second
     u64 dataSize = counts[0] * CHECK_SIZE_TABLE[vDataDes.dataType];
     BufferSemantic bufSem0(0, dataSize);
     bufSem0.srcBufs.insert(SrcBufDes(0, BufferType::INPUT, 0));
-    outputSemantics.insert(bufSem0);
+    outputSemantics.emplace(bufSem0.startAddr, bufSem0);
 
     rankMemSemantics[BufferType::OUTPUT] = outputSemantics;
     allRankMemSemantics[0] = rankMemSemantics;
     allRankMemSemantics[1] = rankMemSemantics;
 
-    HcclResult result = TaskCheckAllGatherVSemantics(allRankMemSemantics, vDataDes);
+    std::vector<DeviceId> rankToDevice(rankSize);
+    for (DeviceId i = 0; i < rankSize; i++)
+        rankToDevice[i] = i;
+    HcclResult result = TaskCheckAllGatherVSemantics(allRankMemSemantics, vDataDes, rankToDevice);
     EXPECT_EQ(result, HcclResult::HCCL_E_PARA);
 }
 
 // Test boundary case: different data types
 TEST_F(AllGatherVSemanticsCheckerTest, ValidSemantics_DifferentDataTypes)
 {
-    std::map<RankId, RankMemorySemantics> allRankMemSemantics;
+    std::map<DeviceId, RankMemorySemantics> allRankMemSemantics;
     VDataDesTagInner vDataDes;
     u32 rankSize = 2;
     std::vector<uint64_t> counts = {100, 200};
@@ -266,7 +292,7 @@ TEST_F(AllGatherVSemanticsCheckerTest, ValidSemantics_DifferentDataTypes)
 
     for (RankId rankId = 0; rankId < rankSize; rankId++) {
         RankMemorySemantics rankMemSemantics;
-        std::set<BufferSemantic> outputSemantics;
+        BufferSemanticMap outputSemantics;
 
         u64 totalSize = 0;
         for (RankId srcRank = 0; srcRank < rankSize; srcRank++) {
@@ -274,7 +300,7 @@ TEST_F(AllGatherVSemanticsCheckerTest, ValidSemantics_DifferentDataTypes)
 
             BufferSemantic bufSem(totalSize, curDataSize);
             bufSem.srcBufs.insert(SrcBufDes(srcRank, BufferType::INPUT, 0));
-            outputSemantics.insert(bufSem);
+            outputSemantics.emplace(bufSem.startAddr, bufSem);
             totalSize += curDataSize;
         }
 
@@ -282,21 +308,27 @@ TEST_F(AllGatherVSemanticsCheckerTest, ValidSemantics_DifferentDataTypes)
         allRankMemSemantics[rankId] = rankMemSemantics;
     }
 
-    HcclResult result = TaskCheckAllGatherVSemantics(allRankMemSemantics, vDataDes);
+    std::vector<DeviceId> rankToDevice(rankSize);
+    for (DeviceId i = 0; i < rankSize; i++)
+        rankToDevice[i] = i;
+    HcclResult result = TaskCheckAllGatherVSemantics(allRankMemSemantics, vDataDes, rankToDevice);
     EXPECT_EQ(result, HcclResult::HCCL_SUCCESS);
 }
 
 // Test boundary case: large counts
 TEST_F(AllGatherVSemanticsCheckerTest, ValidSemantics_LargeCounts)
 {
-    std::map<RankId, RankMemorySemantics> allRankMemSemantics;
+    std::map<DeviceId, RankMemorySemantics> allRankMemSemantics;
     VDataDesTagInner vDataDes;
     u32 rankSize = 4;
     std::vector<uint64_t> counts = {1000000, 2000000, 3000000, 4000000};
 
     CreateValidAllGatherVSemantics(allRankMemSemantics, vDataDes, rankSize, counts);
 
-    HcclResult result = TaskCheckAllGatherVSemantics(allRankMemSemantics, vDataDes);
+    std::vector<DeviceId> rankToDevice(rankSize);
+    for (DeviceId i = 0; i < rankSize; i++)
+        rankToDevice[i] = i;
+    HcclResult result = TaskCheckAllGatherVSemantics(allRankMemSemantics, vDataDes, rankToDevice);
     EXPECT_EQ(result, HcclResult::HCCL_SUCCESS);
 }
 } // namespace HcclSim

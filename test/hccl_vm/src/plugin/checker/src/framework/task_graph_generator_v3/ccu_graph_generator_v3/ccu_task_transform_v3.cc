@@ -1,11 +1,17 @@
 /**
- * Copyright (c) 2026 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
  * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
  * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
  * See LICENSE in the root of the software repository for the full text of the License.
+ */
+
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: ccu instruction transform to
+ * checker task Author: huangweihao Create: 2025-06-19
  */
 
 #include "ccu_task_transform_v3.h"
@@ -20,6 +26,7 @@
 #include <vector>
 
 #include "ccu_all_rank_param_recorder_v3.h"
+#include "ccu_convert_config_generator_v3.h"
 #include "sim_log.h"
 #include "storage_manager.h"
 #include "utils/error_codes.h"
@@ -44,7 +51,7 @@ namespace TaskGraphGeneratorV3 {
     // 作用：按 wait mask 生成本地/远端 wait 节点，并补齐 post 到 wait 的依赖边。
     void GenWaitNode(CcuGraphStateV3* curCcuTask, uint32_t queId, uint16_t waitCKEId, uint16_t waitCKEMask)
     {
-        RankId rankId = curCcuTask->GetRankId();
+        DeviceId deviceId = curCcuTask->GetDeviceId();
         uint32_t dieId;
         curCcuTask->GetDieId(queId, dieId);
 
@@ -53,9 +60,9 @@ namespace TaskGraphGeneratorV3 {
         TaskNode* localWaitNode = nullptr;
         TaskNode* remoteWaitNode = nullptr;
 
-        // 只有目标 CKE bit 全部就绪后才真正生成 wait 节点；此时会把待消费的 CKE mask bit
-        // 反查回它实际依赖的那些 post 节点。
-        std::set<TaskNode*>& seenPosts = AllRankParamRecorder::Global()->seenPost[rankId][dieId][waitCKEId];
+        // 只有目标 CKE bit 全部就绪后才真正生成 wait 节点；此时会把待消费的 CKE
+        // mask bit 反查回它实际依赖的那些 post 节点。
+        std::set<TaskNode*>& seenPosts = AllRankParamRecorder::Global()->seenPost[deviceId][dieId][waitCKEId];
         std::vector<TaskNode*> localPosts;
         for (auto* post : seenPosts) {
             u32 remainingCkeMask = GetPostRemainingCkeMask(post);
@@ -74,11 +81,11 @@ namespace TaskGraphGeneratorV3 {
         }
 
         if (remoteWaitMask != 0) {
-            remoteWaitNode = AddWait(rankId, queId, curCcuTask, dieId, waitCKEId, remoteWaitMask);
+            remoteWaitNode = AddWait(deviceId, queId, curCcuTask, dieId, waitCKEId, remoteWaitMask);
         }
 
         if (localWaitMask != 0) {
-            localWaitNode = AddLocalWait(rankId, queId, curCcuTask, dieId, waitCKEId, localWaitMask);
+            localWaitNode = AddLocalWait(deviceId, queId, curCcuTask, dieId, waitCKEId, localWaitMask);
             for (auto* locPost : localPosts) {
                 curCcuTask->localPostWaitPairs_[locPost] = localWaitNode;
             }
@@ -98,9 +105,9 @@ namespace TaskGraphGeneratorV3 {
             } else {
                 AddNodeRelation(post, remoteWaitNode);
                 if (postMeta != nullptr) {
-                    curCcuTask->SetNodePeerRank(remoteWaitNode, postMeta->recordRankId);
+                    curCcuTask->SetNodePeerDeviceId(remoteWaitNode, postMeta->recordDeviceId);
                 } else {
-                    curCcuTask->SetNodePeerRank(remoteWaitNode, post->GetPosition().rankId);
+                    curCcuTask->SetNodePeerDeviceId(remoteWaitNode, post->GetPosition().deviceId);
                 }
                 (void)CollectBilateralWaitInfo(curCcuTask, queId, remoteWaitNode);
             }
@@ -114,25 +121,30 @@ namespace TaskGraphGeneratorV3 {
         }
     }
 
-    // 作用：检查当前 wait 条件是否满足，满足时生成 wait 节点，不满足时暂停当前 queue。
+    // 作用：检查当前 wait 条件是否满足，满足时生成 wait 节点，不满足时暂停当前
+    // queue。
     HcclResult ProcessWaitMask(
-        RankId rankId, uint32_t dieId, CcuGraphStateV3* curCcuTask, uint32_t queId, uint16_t waitCKEId,
+        DeviceId deviceId, uint32_t dieId, CcuGraphStateV3* curCcuTask, uint32_t queId, uint16_t waitCKEId,
         uint16_t waitCKEMask, bool& isContinue)
     {
         HCCL_VM_DEBUG(
-            "Evaluate CCU wait condition, rankId={}, dieId={}, queueId={}, waitCkeId={}, "
+            "Evaluate CCU wait condition, deviceId={}, dieId={}, "
+            "queueId={}, waitCkeId={}, "
             "requiredMask=0x{:04x}",
-            rankId, static_cast<uint32_t>(dieId), queId, waitCKEId, waitCKEMask);
+            deviceId, static_cast<uint32_t>(dieId), queId, waitCKEId, waitCKEMask);
         if (waitCKEMask != 0x0000) {
             uint16_t ckeValue = 0;
-            CHK_RET(AllRankParamRecorder::Global()->GetCKE(rankId, dieId, waitCKEId, ckeValue));
+            CHK_RET(AllRankParamRecorder::Global()->GetCKE(deviceId, dieId, waitCKEId, ckeValue));
             if ((ckeValue & waitCKEMask) != waitCKEMask) {
-                // 当前 queue 在这里暂停，直到生产侧把所需的 wait bit 全部 post 完成。
+                // 当前 queue 在这里暂停，直到生产侧把所需的 wait bit 全部 post
+                // 完成。
                 isContinue = false;
                 HCCL_VM_DEBUG(
-                    "Pause this CCU queue because the wait condition is not satisfied yet, "
-                    "rankId={}, dieId={}, queueId={}, waitCkeId={}, currentCkeValue=0x{:04x}, requiredMask=0x{:04x}",
-                    rankId, static_cast<uint32_t>(dieId), queId, waitCKEId, ckeValue, waitCKEMask);
+                    "Pause this CCU queue because the wait condition is "
+                    "not satisfied yet, "
+                    "deviceId={}, dieId={}, queueId={}, waitCkeId={}, "
+                    "currentCkeValue=0x{:04x}, requiredMask=0x{:04x}",
+                    deviceId, static_cast<uint32_t>(dieId), queId, waitCKEId, ckeValue, waitCKEMask);
                 return HCCL_SUCCESS;
             }
             GenWaitNode(curCcuTask, queId, waitCKEId, waitCKEMask);
@@ -146,18 +158,20 @@ namespace TaskGraphGeneratorV3 {
     {
         if (g_instrMap == nullptr) {
             HCCL_VM_ERROR(
-                "{} Failed to create the CCU instruction translator, rankId={}, queueId={}",
+                "{} Failed to create the CCU instruction translator, deviceId={}, "
+                "queueId={}",
                 MakeErrorCodeText(ErrorCode::CHECKER_RUNTIME_ERROR).c_str(),
-                curCcuTask == nullptr ? std::string("null") : std::to_string(curCcuTask->GetRankId()), queId);
+                curCcuTask == nullptr ? std::string("null") : std::to_string(curCcuTask->GetDeviceId()), queId);
             return HCCL_E_INTERNAL;
         }
         const uint16_t instructionHeader = static_cast<uint16_t>(instr->header.header);
         if (!g_instrMap->IsSupported(instructionHeader)) {
             HCCL_VM_ERROR(
-                "{} This CCU instruction type is not supported by CheckerV3 graph expansion, "
-                "rankId={}, queueId={}, instructionHeader=0x{:04x}",
+                "{} This CCU instruction type is not supported by "
+                "CheckerV3 graph expansion, "
+                "deviceId={}, queueId={}, instructionHeader=0x{:04x}",
                 MakeErrorCodeText(ErrorCode::GRAPH_UNSUPPORTED).c_str(),
-                curCcuTask == nullptr ? std::string("null") : std::to_string(curCcuTask->GetRankId()), queId,
+                curCcuTask == nullptr ? std::string("null") : std::to_string(curCcuTask->GetDeviceId()), queId,
                 instructionHeader);
             return HCCL_E_INTERNAL;
         }
@@ -170,10 +184,8 @@ namespace TaskGraphGeneratorV3 {
         DevType devType = AllRankParamRecorder::Global()->GetDevType();
         if (devType == DevType::DEV_TYPE_950) {
             return CcuInstrVersion::VERSION_A5;
-#ifdef BUILD_A6_CCU_INSTR
         } else if (devType == DevType::DEV_TYPE_960) {
             return CcuInstrVersion::VERSION_A6;
-#endif
         }
         return CcuInstrVersion::VERSION_A5;
     }
@@ -190,7 +202,8 @@ namespace TaskGraphGeneratorV3 {
         hcomm::CcuRep::CcuInstrInfo& microCodeQue = curCcuTask->instrInfo[queId];
         auto endInstrId = curCcuTask->GetMissionEndInstrId(queId);
         u32& pos = curCcuTask->microCodePosInQue[queId];
-        // 单个 queue 严格按指令顺序推进；跨 queue 的协同只通过生成出来的 wait/post 边表达。
+        // 单个 queue 严格按指令顺序推进；跨 queue 的协同只通过生成出来的 wait/post
+        // 边表达。
         while (pos < endInstrId) {
             u32 prePos = pos;
             const uint32_t instrId = curCcuTask->startInstrIdInQue[queId] + pos;
@@ -202,9 +215,11 @@ namespace TaskGraphGeneratorV3 {
             HcclResult ret = TransformInstr(&microCodeQue.instrVec[pos], curCcuTask, queId, isContinue);
             if (ret != HCCL_SUCCESS) {
                 HCCL_VM_ERROR(
-                    "{} Failed to translate one CCU instruction, rankId={}, queueId={}, "
-                    "instructionId={}, instructionHeader=0x{:04x}, ret={}, graph={}",
-                    MakeErrorCodeText(ErrorCode::GRAPH_TRANSLATE_FAILED).c_str(), curCcuTask->GetRankId(), queId,
+                    "{} Failed to translate one CCU instruction, deviceId={}, "
+                    "queueId={}, "
+                    "instructionId={}, instructionHeader=0x{:04x}, ret={}, "
+                    "graph={}",
+                    MakeErrorCodeText(ErrorCode::GRAPH_TRANSLATE_FAILED).c_str(), curCcuTask->GetDeviceId(), queId,
                     instrId, instructionHeader, static_cast<uint32_t>(ret), curCcuTask->Describe().c_str());
                 return ret;
             }
@@ -222,7 +237,7 @@ namespace TaskGraphGeneratorV3 {
                   return b;
               });
 
-        HCCL_VM_DEBUG("Finished translating one CCU queue, rankId={}, queueId={}", curCcuTask->GetRankId(), queId);
+        HCCL_VM_DEBUG("Finished translating one CCU queue, deviceId={}, queueId={}", curCcuTask->GetDeviceId(), queId);
         return HCCL_SUCCESS;
     }
 
@@ -230,12 +245,11 @@ namespace TaskGraphGeneratorV3 {
     HcclResult ProcessCcuNode(TaskNode* node, CcuGraphStateV3* curCcuTask)
     {
         curCcuTask->queueNum_ = static_cast<uint32_t>(curCcuTask->instrInfo.size());
-        uint32_t rankSize = curCcuTask->GetStorageManager().GetRankSize();
         curCcuTask->bilateralPart1_.resize(curCcuTask->queueNum_);
         curCcuTask->bilateralPart2_.resize(curCcuTask->queueNum_);
         curCcuTask->bilateralNodes_.resize(curCcuTask->queueNum_);
-        curCcuTask->waitInfoTmp_.resize(rankSize);
-        curCcuTask->postInfoTmp_.resize(rankSize);
+        curCcuTask->waitInfoTmp_.resize(MAX_DEV_NUM);
+        curCcuTask->postInfoTmp_.resize(MAX_DEV_NUM);
         // raw 成图阶段会轮流推进每个 queue，这样被阻塞的 queue 可以等待，
         // 其他 queue 则继续前进并发布所需的 post bit。
         for (uint32_t queId = 0; queId < curCcuTask->queueNum_; queId++) {
@@ -263,7 +277,8 @@ namespace TaskGraphGeneratorV3 {
             QueueReuseUnitKindV3 kind{QueueReuseUnitKindV3::LOOP};
             TaskNode* head{nullptr};
             TaskNode* tail{nullptr};
-            // 保存该并行单元改造前由 tail 直接连接的外部后继，出口重连只能使用这组节点。
+            // 保存该并行单元改造前由 tail
+            // 直接连接的外部后继，出口重连只能使用这组节点。
             std::vector<TaskNode*> afterNodes;
             NodeId startNodeId{INVALID_NODE_ID};
             NodeId endNodeId{INVALID_NODE_ID};
@@ -392,7 +407,8 @@ namespace TaskGraphGeneratorV3 {
                    || role == CcuNodeRoleV3::WRITE_REDUCE;
         }
 
-        // 作用：根据 CCU 通知参数判断 RECORD 是否对应 WAIT；这里只判断同步语义，不负责判断图上是否已有边。
+        // 作用：根据 CCU 通知参数判断 RECORD 是否对应
+        // WAIT；这里只判断同步语义，不负责判断图上是否已有边。
         bool IsCcuRecordWaitPairV3(const TaskNode* recordNode, const TaskNode* waitNode)
         {
             if (recordNode == nullptr || waitNode == nullptr || recordNode->GetType() != TaskType::RECORD
@@ -408,11 +424,12 @@ namespace TaskGraphGeneratorV3 {
 
             const CcuNotify& recordNotify = record->GetNotify();
             const CcuNotify& waitNotify = wait->GetNotify();
-            return recordNotify.waitRankId == waitNotify.waitRankId && recordNotify.dieId == waitNotify.dieId
+            return recordNotify.waitDeviceId == waitNotify.waitDeviceId && recordNotify.dieId == waitNotify.dieId
                    && recordNotify.ckeId == waitNotify.ckeId && (recordNotify.ckeMask & waitNotify.ckeMask) != 0;
         }
 
-        // 作用：确认原始图中确实存在 parent -> child，避免仅凭通知参数凭空恢复一条新边。
+        // 作用：确认原始图中确实存在 parent ->
+        // child，避免仅凭通知参数凭空恢复一条新边。
         bool HasNodeEdgeV3(const TaskNode* parentNode, const TaskNode* childNode)
         {
             if (parentNode == nullptr || childNode == nullptr) {
@@ -598,7 +615,8 @@ namespace TaskGraphGeneratorV3 {
             }
         }
 
-        // 作用：获取当前 loop group 的入口边界。若前序 group 已被压缩成边，则沿用压缩后的等价边界。
+        // 作用：获取当前 loop group 的入口边界。若前序 group
+        // 已被压缩成边，则沿用压缩后的等价边界。
         std::vector<TaskNode*> GetLoopBeforeNodesV3(
             TaskNode* firstHead, QueueId originalQueueId, const CompressedLoopBoundaryV3& compressedBoundary)
         {
@@ -625,13 +643,14 @@ namespace TaskGraphGeneratorV3 {
             }
 
             group.originalQueueId = originalQueueId;
-            // 老 checker 按 loopGroupInfo_ 顺序边改图边处理；这里用压缩边界承接前序 group
-            // 本该通过 localWaitTail 表达的真实流前沿。
+            // 老 checker 按 loopGroupInfo_ 顺序边改图边处理；这里用压缩边界承接前序
+            // group 本该通过 localWaitTail 表达的真实流前沿。
             group.beforeNodes = GetLoopBeforeNodesV3(loopGroup.front().loopStart, originalQueueId, compressedBoundary);
             group.afterNodes = GetSameQueueChildrenV3(loopGroup.back().loopEnd, originalQueueId);
             if (group.beforeNodes.empty() || group.afterNodes.empty()) {
                 HCCL_VM_ERROR(
-                    "{} Failed to split one CCU loop-parallel group because its entry or exit "
+                    "{} Failed to split one CCU loop-parallel group because its entry "
+                    "or exit "
                     "boundary could not be determined.",
                     MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID).c_str());
                 return HCCL_E_INTERNAL;
@@ -692,7 +711,8 @@ namespace TaskGraphGeneratorV3 {
                         }),
                     unit.afterNodes.end());
             }
-            // 分组级 afterNodes 用于原 queue 前后节点之间的桥接边，以及 queue 释放时机计算。
+            // 分组级 afterNodes 用于原 queue 前后节点之间的桥接边，以及 queue
+            // 释放时机计算。
             group.afterNodes = GetChildrenOutsideNodesV3(group.units.back().tail, groupNodes);
             group.afterNodes.erase(
                 std::remove_if(
@@ -943,9 +963,10 @@ namespace TaskGraphGeneratorV3 {
         RewireAsyncParallelGroupsV3(TaskGraphGeneratorV3& graph, const std::vector<AsyncParallelGroupV3>& groups)
         {
             for (const auto& group : groups) {
-                // async 单元原本共享同一条串行 queue；重新分配 queue 后，它们会从同一批外部前驱出发，
-                // 再汇合回同一批外部后继。与此同时，原 queue 上被“挖空”后留下的前后节点之间
-                // 也要补一条直连桥接边，保证原 queue 的串行流仍然连通。
+                // async 单元原本共享同一条串行 queue；重新分配 queue
+                // 后，它们会从同一批外部前驱出发， 再汇合回同一批外部后继。与此同时，原
+                // queue 上被“挖空”后留下的前后节点之间 也要补一条直连桥接边，保证原
+                // queue 的串行流仍然连通。
                 for (size_t index = 1; index < group.units.size(); ++index) {
                     if (group.units[index - 1].tail == nullptr || group.units[index].head == nullptr) {
                         continue;
@@ -982,13 +1003,15 @@ namespace TaskGraphGeneratorV3 {
                         }
                         if (!hasMatchingWaitNode) {
                             HCCL_VM_ERROR(
-                                "{} Async parallel tail RECORD has no matching wait node, tail={}",
+                                "{} Async parallel tail RECORD has no matching wait "
+                                "node, tail={}",
                                 MakeErrorCodeText(ErrorCode::GRAPH_UNMATCHED).c_str(), tailNode->Describe());
                             return HCCL_E_INTERNAL;
                         }
                     } else {
                         HCCL_VM_WARN(
-                            "Skip async parallel exit edge because the tail node is not a RECORD, "
+                            "Skip async parallel exit edge because the tail "
+                            "node is not a RECORD, "
                             "tail={}",
                             tailNode->Describe());
                     }
@@ -997,7 +1020,8 @@ namespace TaskGraphGeneratorV3 {
                         if (afterNode == nullptr) {
                             continue;
                         }
-                        // afterNodes 是改造前的快照；如果原边已被前面的重连步骤移除，不能再次处理。
+                        // afterNodes
+                        // 是改造前的快照；如果原边已被前面的重连步骤移除，不能再次处理。
                         if (!HasNodeEdgeV3(tailNode, afterNode)) {
                             continue;
                         }
@@ -1007,7 +1031,8 @@ namespace TaskGraphGeneratorV3 {
                             continue;
                         }
 
-                        // 只有原本存在且确认属于 RECORD/WAIT 的边才恢复；普通 queue 顺序边保持删除。
+                        // 只有原本存在且确认属于 RECORD/WAIT 的边才恢复；普通 queue
+                        // 顺序边保持删除。
                         CHK_RET(graph.AddEdge(tailNode->GetNodeId(), afterNode->GetNodeId()));
                     }
                 }
@@ -1069,7 +1094,8 @@ namespace TaskGraphGeneratorV3 {
                 if (hasSameQueueChild) {
                     continue;
                 }
-                // 某个 queue 中没有同 queue 子节点的最新节点，会被视为该 queue 的 tail。
+                // 某个 queue 中没有同 queue 子节点的最新节点，会被视为该 queue 的
+                // tail。
                 if (state.tailNodes[queueId] == nullptr
                     || state.tailNodes[queueId]->GetNodeId() < curNode->GetNodeId()) {
                     state.tailNodes[queueId] = curNode;
@@ -1083,7 +1109,8 @@ namespace TaskGraphGeneratorV3 {
             const uint32_t baseQueueCount = state.queueNum_;
             QueueId nextTempQueueId = baseQueueCount;
             CompressedLoopBoundaryV3 compressedLoopBoundary;
-            // loop 必须按 loopGroupInfo_ 顺序边改图边处理，才能复刻老 checker 的真实流壳链语义。
+            // loop 必须按 loopGroupInfo_ 顺序边改图边处理，才能复刻老 checker
+            // 的真实流壳链语义。
             for (const auto& loopGroupInfo : state.loopGroupInfo_) {
                 LoopParallelGroupV3 group;
                 CHK_RET(BuildLoopParallelGroupV3(loopGroupInfo, compressedLoopBoundary, group));
@@ -1106,8 +1133,8 @@ namespace TaskGraphGeneratorV3 {
                 return HCCL_SUCCESS;
             }
 
-            // loop queue 已经按改造顺序固定占用；async 只能从 loop 占用后的 queueId 继续复用分配，
-            // 避免跨原始 queue 的并行 loop 被最终压缩到同一个 queue 上。
+            // loop queue 已经按改造顺序固定占用；async 只能从 loop 占用后的 queueId
+            // 继续复用分配， 避免跨原始 queue 的并行 loop 被最终压缩到同一个 queue 上。
             QueueIdReuseAllocatorV3 allocator(nextTempQueueId);
             AssignQueueIdsWithReuseV3(asyncUnits, allocator);
             ApplyQueueReuseUnitsV3(asyncUnits);
@@ -1204,10 +1231,12 @@ namespace TaskGraphGeneratorV3 {
                 }
                 if (unmatchedCnt > state.queueNum_) {
                     HCCL_VM_ERROR(
-                        "{} CCU raw graph generation is stuck inside one graph. All queues are "
-                        "blocked and no instruction can advance, rankId={}, queueCount={}, nextInstructionByQueue={}, "
+                        "{} CCU raw graph generation is stuck inside one graph. All "
+                        "queues are "
+                        "blocked and no instruction can advance, deviceId={}, "
+                        "queueCount={}, nextInstructionByQueue={}, "
                         "blockedGraphSummary={}",
-                        MakeErrorCodeText(ErrorCode::GRAPH_DEADLOCK).c_str(), state.GetRankId(), state.queueNum_,
+                        MakeErrorCodeText(ErrorCode::GRAPH_DEADLOCK).c_str(), state.GetDeviceId(), state.queueNum_,
                         state.DescribeNextInstructionByQueue().c_str(), state.Describe().c_str());
                     return HCCL_E_INTERNAL;
                 }
@@ -1234,24 +1263,25 @@ namespace TaskGraphGeneratorV3 {
                     if (lhs == nullptr || rhs == nullptr) {
                         return lhs < rhs;
                     }
-                    const RankId lhsRankId = lhs->ccuGraph->GetRankId();
-                    const RankId rhsRankId = rhs->ccuGraph->GetRankId();
-                    if (lhsRankId != rhsRankId) {
-                        return lhsRankId < rhsRankId;
+                    const DeviceId lhsDeviceId = lhs->ccuGraph->GetDeviceId();
+                    const DeviceId rhsDeviceId = rhs->ccuGraph->GetDeviceId();
+                    if (lhsDeviceId != rhsDeviceId) {
+                        return lhsDeviceId < rhsDeviceId;
                     }
                     return lhs->ccuGraph->GetNodeId() < rhs->ccuGraph->GetNodeId();
                 });
 
             HCCL_VM_INFO(
-                "Printing all generated CCU graphs before queue parallelization, graphCount={}",
+                "Printing all generated CCU graphs before queue "
+                "parallelization, graphCount={}",
                 orderedRuntimes.size());
             for (const CcuGraphRuntimeV3* runtime : orderedRuntimes) {
                 if (runtime == nullptr || runtime->state == nullptr) {
                     continue;
                 }
                 HCCL_VM_INFO(
-                    "CCU graph detail, ccuGraphNodeId={}, rankId={}", runtime->ccuGraph->GetNodeId(),
-                    runtime->ccuGraph->GetRankId());
+                    "CCU graph detail, ccuGraphNodeId={}, deviceId={}", runtime->ccuGraph->GetNodeId(),
+                    runtime->ccuGraph->GetDeviceId());
                 PrintCcuGraph(runtime->state->ccuHeadTaskNode);
             }
         }
@@ -1346,14 +1376,15 @@ namespace TaskGraphGeneratorV3 {
                         blockedRuntime = runtimeIter->second;
                     }
                     HCCL_VM_ERROR(
-                        "{} CCU multi-graph raw generation is stuck. Some CCU graphs are still "
-                        "blocked by dependencies, but no graph can advance, blockedGraphCount={}, rankId={}, "
-                        "queueCount={}, "
+                        "{} CCU multi-graph raw generation is stuck. Some CCU graphs "
+                        "are still "
+                        "blocked by dependencies, but no graph can advance, "
+                        "blockedGraphCount={}, deviceId={}, queueCount={}, "
                         "nextInstructionByQueue={}, firstBlockedGraph={}",
                         MakeErrorCodeText(ErrorCode::GRAPH_DEADLOCK).c_str(), candNode.size(),
                         blockedRuntime == nullptr || blockedRuntime->state == nullptr ?
                             std::string("null") :
-                            std::to_string(blockedRuntime->state->GetRankId()),
+                            std::to_string(blockedRuntime->state->GetDeviceId()),
                         blockedRuntime == nullptr || blockedRuntime->state == nullptr ?
                             0U :
                             blockedRuntime->state->queueNum_,
@@ -1436,8 +1467,10 @@ namespace TaskGraphGeneratorV3 {
                     }
                 }
                 HCCL_VM_ERROR(
-                    "{} CCU raw graph generation ended before all CCU graphs were finished, "
-                    "generatedGraphCount={}, totalGraphCount={}, firstUnfinishedGraph={}",
+                    "{} CCU raw graph generation ended before all CCU graphs were "
+                    "finished, "
+                    "generatedGraphCount={}, totalGraphCount={}, "
+                    "firstUnfinishedGraph={}",
                     MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID).c_str(), generatedCount,
                     input.ccuGraphs.size(),
                     firstUnfinishedRuntime == nullptr || firstUnfinishedRuntime->ccuGraph == nullptr ?
@@ -1470,8 +1503,10 @@ namespace TaskGraphGeneratorV3 {
                     }
                 }
                 HCCL_VM_ERROR(
-                    "{} CCU graph finalization ended before all generated graphs were attached back "
-                    "to the main graph, finalizedGraphCount={}, totalGraphCount={}, firstUnfinishedGraph={}",
+                    "{} CCU graph finalization ended before all generated graphs were "
+                    "attached back "
+                    "to the main graph, finalizedGraphCount={}, totalGraphCount={}, "
+                    "firstUnfinishedGraph={}",
                     MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID).c_str(), finalizedCount, runtimes.size(),
                     firstUnfinishedRuntime == nullptr || firstUnfinishedRuntime->ccuGraph == nullptr ?
                         "node=null" :
@@ -1507,6 +1542,7 @@ namespace TaskGraphGeneratorV3 {
         // 第二阶段负责重连 queue，并把每个展开后的子图重新挂回主图。
         CHK_RET(FinalizeGeneratedCcuGraphsV3(*input.graph, runtimes, output));
         CHK_RET(AllRankParamRecorder::Global()->CheckAllPostMatch());
+        CHK_RET(DumpConvertConfig());
         return HCCL_SUCCESS;
     }
 
@@ -1516,10 +1552,8 @@ namespace TaskGraphGeneratorV3 {
         switch (version) {
             case CcuInstrVersion::VERSION_A5:
                 return std::make_unique<InstructMapA5>();
-#ifdef BUILD_A6_CCU_INSTR
             case CcuInstrVersion::VERSION_A6:
                 return std::make_unique<InstructMapA6>();
-#endif
             default:
                 return nullptr;
         }

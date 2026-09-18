@@ -1,0 +1,10 @@
+{
+    "server_count": 1,
+    "server_ip_list": [
+        {
+            "addr": "0x00000000000000000000000001010000",
+            "soc_version": "Ascend950"
+        }
+    ],
+    "version": "2.0"
+}

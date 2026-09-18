@@ -19,17 +19,31 @@
 using namespace HcclSim;
 
 namespace sim {
+
+typedef struct {
+    uint64_t id;         // PK
+    char file_name[128]; // topo_meta yaml文件名(不含.yaml后缀);
+                         // "ranktable"表示ranktable.json模式
+} TopoMetaConfig;
+
 typedef struct {
     uint64_t id; // PK
     uint64_t pod_id;
     uint32_t server_id;
+    uint32_t used_dev_num;
     char version[16];
+    char hardware_type[128];
 } Server;
 
 typedef struct {
     uint64_t id;  // PK
     uint8_t mode; // 0=normal,1=check-only
 } RunModeConfig;
+
+typedef struct {
+    uint64_t id; // PK
+    char tag[64];
+} Plugin;
 
 typedef struct {
     uint64_t id; // PK
@@ -46,6 +60,40 @@ typedef struct {
     uint64_t timeout_config_ms;
     uint64_t current_ctx_id; // FK
 } Runner;
+
+// Communicator.status: 通信域成员销毁状态(level0 销毁同步使用)
+enum CommStatus : uint8_t {
+    COMM_STATUS_ACTIVE = 0,    // 未销毁
+    COMM_STATUS_DESTROYED = 1, // 已调用 HcclCommDestroy
+};
+
+typedef struct {
+    uint64_t id;        // PK（通信域锚点成员：同一 (comm_id, comm_hash) 下 id
+                        // 最小者作为通信域标识）
+    char comm_id[128];  // 通信域名称，与 comm_hash 共同唯一标识通信域
+    uint32_t rank_size; // 通信域总 Rank 数
+    uint32_t rank_id;   // 当前线程在通信域中的 Rank
+    uint64_t device_id; // FK -> Device.id
+    uint64_t comm_hash; // 通信域成员hash值，用于区分同名多通信域
+    // Level1 control-plane state is kept on the same communicator member row.
+    uint32_t deterministic;
+    uint8_t op_expansion_mode;
+    uint32_t rdma_traffic_class;
+    uint32_t rdma_service_level;
+    uint64_t sym_win_addr;
+    uint64_t sym_win_size;
+    uint8_t sym_win_registered;
+    uint8_t status; // CommStatus: 销毁同步状态
+} Communicator;
+
+// level 1 专用通信域清理同步机制
+typedef struct {
+    uint64_t id;
+    char comm_id[128];
+    uint64_t comm_hash;
+    uint32_t rank_size;
+    uint32_t rank_id;
+} CommunicatorDestroySync;
 
 typedef struct {
     uint64_t id;        // PK
@@ -98,7 +146,8 @@ typedef struct {
 typedef struct {
     uint64_t id;            // PK
     uint64_t device_id;     // FK
-    uint64_t resource_addr; // ccu资源地址，区分不同die的资源：die0: 0x123123123; die1: 0x456456456
+    uint64_t resource_addr; // ccu资源地址，区分不同die的资源：die0:
+                            // 0x123123123; die1: 0x456456456
     uint8_t die_id;
     uint8_t status;
 } Ccu;
@@ -203,7 +252,7 @@ typedef struct {
 
 typedef struct {
     uint64_t id; // PK
-    uint64_t excute_time_ms;
+    uint64_t execute_time_ms;
     uint64_t finish_time_ms;
     uint32_t op_timeout_s;
 } EventSyncTask;
@@ -264,6 +313,7 @@ typedef struct {
     uint64_t start_ptr;      // 按照卡分配的虚拟编址的地址
     uint64_t dev_mapped_ptr; // device进程打开共享内存后的地址
     uint8_t is_dev_access;   // 0: dev不可直接访问, 1: dev可以直接访问
+    uint64_t host_ptr{0};    // host进程打开共享内存后的地址
     uint64_t size;
     uint64_t ctx_id;
     uint64_t device_id; // Device表主键
@@ -272,7 +322,6 @@ typedef struct {
     uint64_t owner_pid; // host查找根据pid
     uint8_t src_type;   // 0: host, 1: device
     uint8_t policy;
-    uint8_t is_freed; // 0: using, 1: freed
 } VirtualMemBlock;
 
 typedef struct {
@@ -309,6 +358,7 @@ typedef struct {
     uint8_t role;         // 0:server,1:client
     uint8_t state;        // 0: inited 1:listened
     uint64_t endpoint_id; // ip id
+    uint32_t slot_idx;    // 槽位索引
 } RaSocket;
 
 typedef struct {
@@ -319,6 +369,7 @@ typedef struct {
     uint32_t port;
     uint64_t tag_hash;
     uint8_t buf_status; // 0: buffer pending, 1: buffer ready
+    uint32_t slot_idx;  // 槽位索引
 } RaSocketPair;
 
 // todo: 数据建模？
@@ -337,7 +388,7 @@ struct VDataDesTagInner {
     uint16_t dataType;   // 数据类型
     uint32_t count{0};   // rank size
     uint64_t displs[64]; // 每个rank的数据在sendBuf中的偏移量（单位为dataType）
-    uint64_t counts[64]; // 每个rank在sendBuf中的数据size，第i个元素表示需要向rank i发送/接受的数据量
+    uint64_t counts[64];
 };
 
 struct All2AllDataDesTagInner {
@@ -346,7 +397,8 @@ struct All2AllDataDesTagInner {
     uint64_t sendCount;             // 发送数据量 (All2All)
     uint64_t recvCount;             // 接收数据量 (All2All)
     uint32_t count{0};              // count = rankSize * rankSize
-    uint64_t sendCountMatrix[4096]; // (All2AllVC) sendCountMatrix[i * ranksize + j] 代表rank i发送到rank j的count参数
+    uint64_t sendCountMatrix[4096]; // (All2AllVC) sendCountMatrix[i * ranksize
+                                    // + j] 代表rank i发送到rank j的count参数
 };
 
 enum SimOpExpansionMode {
@@ -374,13 +426,6 @@ typedef struct {
     VDataDesTagInner vDataDes;
     All2AllDataDesTagInner all2AllDataDes;
 } SimModelData;
-
-typedef struct {
-    uint64_t id; // PK
-    uint32_t rank_id;
-    uint64_t device_id; // FK
-    uint16_t state{0};
-} Rank;
 
 typedef struct {
     uint64_t id; // PK
@@ -485,10 +530,11 @@ typedef struct {
     uint64_t send_cq_handle;
     uint64_t recv_cq_handle;
     uint32_t sqDepth;
-    uint64_t sqBuffer; // jetty下发wqe对应的buffer地址
     uint32_t rqDepth;
+    uint64_t sqBuffer; // jetty下发wqe对应的buffer地址
+    uint8_t sqBufType;
     uint8_t type;
-    uint32_t jetty_id;
+    uint32_t jetty_id; // 仅ccu使用, aicpu使用id
     uint32_t dieId;
     uint8_t state; // 0: RESET, 1: INIT, 2: RTR, 3:RTS
     uint32_t mode; // jetty mode 0: URMA, 2: CCU, 3: Normal
@@ -518,5 +564,114 @@ typedef struct {
     uint64_t id; // PK
     uint32_t physical_id;
 } RaTlv;
+
+// 北向打桩接口——HCCL_BUFFER表
+typedef struct {
+    uint64_t id;     // buffer的ID，PK
+    uint64_t commId; // 所属的通信域FK
+    uint64_t addr;   // 内存地址
+    uint64_t size;   // 内存的大小
+} HcclBuffer;
+
+// 北向打桩接口——HCCL_Thread表
+typedef struct {
+    uint64_t id;           // thread的ID，PK
+    uint64_t commId;       // 所属的通信域FK
+    uint8_t engine;        // 通信引起engine
+    uint16_t notifyNum;    // Notify的数量
+    uint32_t notifyId[40]; // 对应的NofifyId
+    uint64_t streamId;     // 关联的流id
+} HcclThread;
+
+// 北向打桩接口——HCCL_Channel表
+typedef struct {
+    uint64_t id;           // channel的ID，PK
+    uint64_t commId;       // 所属的通信域FK
+    uint64_t endpoint_id;  // 所属的北向 HcommEndpoint 逻辑外键，0 表示未绑定
+    uint8_t engine;        // 通信引起engine
+    uint64_t remoteRankId; // 对端rankId
+    uint16_t notifyNum;    // Notify的数量
+    uint64_t notifyId[64]; // 对应的NofifyId
+    bool status;           // 连接状态
+} HcclChannel;
+
+// 北向打桩接口——HComm Endpoint 与南向拓扑 Endpoint 的绑定状态
+enum HcommEndpointBindState : uint8_t {
+    HCOMM_ENDPOINT_UNRESOLVED = 0,     // 尚未找到唯一的南向 Endpoint
+    HCOMM_ENDPOINT_BOUND = 1,          // 已绑定唯一的南向 Endpoint
+    HCOMM_ENDPOINT_NOT_APPLICABLE = 2, // 当前位置或协议不需要南向 Endpoint
+};
+
+// 北向打桩接口——HComm Endpoint 表
+typedef struct {
+    uint64_t id;                // EndpointHandle 对应的主键
+    uint64_t runner_id;         // 创建该 Endpoint 的 Runner 逻辑外键
+    uint64_t south_endpoint_id; // 南向 sim::EndPoint 逻辑外键，0 表示未绑定或不适用
+    int32_t protocol;           // CommProtocol
+    int32_t addr_type;          // CommAddrType
+    uint8_t addr[36];           // CommAddr 中的原始地址内容
+    int32_t loc_type;           // EndpointLocType
+    uint8_t loc[60];            // EndpointLoc 中的原始位置内容
+    uint8_t extension[52];      // EndpointDesc 预留扩展内容
+    uint8_t bind_state;         // HcommEndpointBindState
+} HcommEndpoint;
+
+// 北向打桩接口——HComm 内存记录类型
+enum HcommMemRecordKind : uint8_t {
+    HCOMM_MEM_LOCAL_REGISTERED = 0, // HcommMemReg 创建的本地注册内存
+    HCOMM_MEM_REMOTE_IMPORTED = 1,  // HcommMemImport 创建的远端导入内存
+};
+
+// 北向打桩接口——HComm 内存资源表
+typedef struct {
+    uint64_t id;                 // HcommMemHandle 对应的主键
+    uint64_t endpoint_id;        // 所属的北向 HcommEndpoint 逻辑外键
+    uint64_t runner_id;          // 创建该记录的 Runner 逻辑外键
+    uint64_t source_endpoint_id; // 导入记录的源端 HcommEndpoint 主键，本地记录为 0
+    uint64_t source_mem_id;      // 导入记录的源端本地内存主键，本地记录为 0
+    uint64_t descriptor_key;     // 导出描述符的稳定校验键
+    uint64_t addr;               // CommMem.addr 的整数形式
+    uint64_t size;               // CommMem.size
+    int32_t mem_type;            // CommMemType
+    uint8_t record_kind;         // HcommMemRecordKind
+    char mem_tag[255];           // 本地注册内存标签，导入记录为空
+} HcommMemReg;
+
+// 北向打桩接口——HCCL_EngineCtx表
+typedef struct {
+    uint64_t id;     // engineCtx的ID，PK
+    uint64_t commId; // 所属的通信域FK
+    uint64_t ctxTag; //
+    uint64_t engine; // 对端rankId
+    uint64_t size;   // 大小
+    uint64_t addr;   // 地址
+} HcclEngineCtx;
+
+// 北向打桩接口——HCCLMem表
+typedef struct {
+    uint64_t id;           // engineCtx的ID，PK
+    uint64_t commId;       // 所属的通信域FK
+    uint64_t memTag;       // 标签哈希值，用于快速查找
+    uint64_t memType;      // 内存类型 CommMemType
+    uint64_t addr;         // 地址
+    uint64_t size;         // 大小
+    char mem_tag_str[255]; // 原始标签字符串，供 GetRemoteMems 返回
+} HcclMem;
+
+typedef struct {
+    uint64_t id;        // PK
+    uint32_t device_id; // NPU-DPU 交互所属设备
+    uint64_t stream_id; // NPU-DPU 交互的流
+} DpuDeviceInfo;
+
+typedef struct {
+    uint64_t id{0};
+    uint32_t dstDeviceId{0};
+    uint64_t notifyId{0};
+    uint32_t srcDeviceId{0};
+    uint32_t immData{0};
+    uint8_t consumed{0}; // 0: 未被消费, 1: 已被消费
+} DpuPendingNotify;
+
 } // namespace sim
 #endif

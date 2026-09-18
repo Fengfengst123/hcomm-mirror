@@ -256,7 +256,7 @@ const svgContentHeight = computed(() => {
 const hostIp = computed(() => {
   const sp = props.superPodId
   const srv = props.serverId
-  return `${192 + sp}.${srv + 1}.5.5`
+  return `${sp + 1}.${srv + 1}.0.0`
 })
 
 const selectedDevicePortMap = computed(() => {

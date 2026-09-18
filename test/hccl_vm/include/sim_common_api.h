@@ -11,8 +11,12 @@
 #ifndef SIM_COMMON_API_H
 #define SIM_COMMON_API_H
 
-#include <string>
 #include "hccl/hccl_types.h"
+#include <string>
+#if !defined(NO_YAML_CONFIG) && defined(HAVE_YAML_CPP)
+#include "yaml-cpp/yaml.h"
+#endif
+#include "sim_common_defs.h"
 
 class InstallPath {
 public:
@@ -30,5 +34,9 @@ public:
 std::string GetDataTypeStr(HcclDataType type);
 
 std::string GetReduceOpStr(HcclReduceOp op);
+
+#if !defined(NO_YAML_CONFIG) && defined(HAVE_YAML_CPP)
+bool ParseTopoMetaYaml(const std::string& fileName, TopoMeta& topo);
+#endif
 
 #endif // SIM_COMMON_API_H

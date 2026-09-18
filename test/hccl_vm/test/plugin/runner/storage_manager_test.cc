@@ -25,20 +25,13 @@ protected:
     void SetUp() override
     {
         StorageManager::GetInstance().SetDataId("");
-        StorageManager::GetInstance().m_synData = HcclVmSynData{};
-        StorageManager::GetInstance().m_allRankChannelInfo.clear();
-        StorageManager::GetInstance().m_allRankTaskQueues.clear();
-        StorageManager::GetInstance().m_instrData = HcclVmInstrData{};
-        StorageManager::GetInstance().m_allPhyMem.clear();
-        StorageManager::GetInstance().devType_ = DevType::DEV_TYPE_COUNT;
-        StorageManager::GetInstance().m_checker_param = CheckerParam{};
-        StorageManager::GetInstance().ResetAivResource();
+        StorageManager::GetInstance().Reset();
     }
 
     void TearDown() override
     {
         StorageManager::GetInstance().SetDataId("");
-        StorageManager::GetInstance().ResetAivResource();
+        StorageManager::GetInstance().Reset();
         unsetenv("HCCLVM_ENABLE_DUMP_DATA");
     }
 
@@ -204,16 +197,16 @@ TEST_F(StorageManagerTest, ConvertTaskQueue_EmptyTaskMeta_ReturnsSuccess)
 TEST_F(StorageManagerTest, LoadHcclVmSynthesisData_EmptyDataId_ReturnsError)
 {
     StorageManager::GetInstance().SetDataId("");
-    sim::OpDetailTab detail{};
-    std::vector<sim::CcuChannelTab> channels;
+    sim::operation::OpDetailTab detail{};
+    std::vector<sim::operation::CcuChannelTab> channels;
     auto ret = StorageManager::GetInstance().LoadHcclVmSynthesisData(detail, channels);
-    EXPECT_EQ(ret, HcclVmResult::HCCL_SIM_SUCCESS);
+    EXPECT_EQ(ret, HcclVmResult::HCCL_SIM_E_INTERNAL);
 }
 
 TEST_F(StorageManagerTest, LoadHcclVmInstrData_EmptyDataId_ReturnsError)
 {
     StorageManager::GetInstance().SetDataId("");
-    std::vector<sim::CcuInstrResTab> instrRes;
+    std::vector<sim::operation::CcuInstrResTab> instrRes;
     auto ret = StorageManager::GetInstance().LoadHcclVmInstrData(instrRes);
     EXPECT_EQ(ret, HcclVmResult::HCCL_SIM_SUCCESS);
 }
@@ -221,7 +214,7 @@ TEST_F(StorageManagerTest, LoadHcclVmInstrData_EmptyDataId_ReturnsError)
 TEST_F(StorageManagerTest, LoadHcclVmTaskMetaData_EmptyDataId_ReturnsError)
 {
     StorageManager::GetInstance().SetDataId("");
-    std::vector<sim::OpTaskTab> tasks;
+    std::vector<sim::operation::OpTaskTab> tasks;
     auto ret = StorageManager::GetInstance().LoadHcclVmTaskMetaData(tasks);
     EXPECT_EQ(ret, HcclVmResult::HCCL_SIM_SUCCESS);
 }
@@ -241,28 +234,11 @@ TEST_F(StorageManagerTest, DumpHcclVmFlagData_EmptyDataId_ReturnsError)
     EXPECT_EQ(ret, HcclVmResult::HCCL_SIM_E_INTERNAL);
 }
 
-TEST_F(StorageManagerTest, InitAivResourceFromCompositeOpDetail_RankSizeZero_ReturnsError)
-{
-    sim::CompositeOpDetail opDetail{};
-    auto ret = StorageManager::GetInstance().InitAivResourceFromCompositeOpDetail(opDetail);
-    EXPECT_EQ(ret, HcclVmResult::HCCL_SIM_E_PARA);
-}
-
-TEST_F(StorageManagerTest, InitAivResourceFromCompositeOpDetail_EmptyMemInfo_ReturnsSuccess)
-{
-    auto& mgr = StorageManager::GetInstance();
-    mgr.m_checker_param.rankSize = 2;
-    sim::CompositeOpDetail opDetail{};
-    opDetail.rankId = 0;
-    auto ret = mgr.InitAivResourceFromCompositeOpDetail(opDetail);
-    EXPECT_EQ(ret, HcclVmResult::HCCL_SIM_SUCCESS);
-}
-
 TEST_F(StorageManagerTest, InitCcuResource_InvalidDevType_ReturnsError)
 {
-    std::vector<sim::CcuInstrResTab> instrRes;
+    std::vector<sim::operation::CcuInstrResTab> instrRes;
     auto ret = StorageManager::GetInstance().InitCcuResource(instrRes);
-    EXPECT_EQ(ret, HcclVmResult::HCCL_SIM_SUCCESS);
+    EXPECT_EQ(ret, HcclVmResult::HCCL_SIM_E_INTERNAL);
 }
 
 TEST_F(StorageManagerTest, ReleasePhyMem_NoAllocatedMemory_Safe)
@@ -272,13 +248,13 @@ TEST_F(StorageManagerTest, ReleasePhyMem_NoAllocatedMemory_Safe)
 
 TEST_F(StorageManagerTest, DumpAllRankInputOutput_Disabled_Safe)
 {
-    std::vector<std::map<uint32_t, sim::CompositeOpDetail>> emptyData;
+    std::vector<std::map<uint32_t, sim::operation::CompositeOpDetail>> emptyData;
     EXPECT_NO_THROW(StorageManager::GetInstance().DumpAllRankInputOutput(emptyData));
 }
 
 TEST_F(StorageManagerTest, Trans2CheckerParam_EmptySynData_ReturnsSuccess)
 {
-    sim::OpDetailTab detailTab{};
+    sim::operation::OpDetailTab detailTab{};
     ::OpDetails detail{};
     auto ret = StorageManager::GetInstance().Trans2CheckerParam(detailTab, detail);
     EXPECT_EQ(ret, HcclVmResult::HCCL_SIM_SUCCESS);
@@ -287,7 +263,7 @@ TEST_F(StorageManagerTest, Trans2CheckerParam_EmptySynData_ReturnsSuccess)
 TEST_F(StorageManagerTest, Trans2CheckerParam_WithPopulatedSynData)
 {
     SetupSynDataForTrans();
-    sim::OpDetailTab detailTab{};
+    sim::operation::OpDetailTab detailTab{};
     detailTab.rankSize = 2;
     detailTab.srcRank = 0;
     detailTab.dstRank = 1;
@@ -312,7 +288,7 @@ TEST_F(StorageManagerTest, Trans2CheckerParam_All2AllDataDes)
     mgr.m_synData.model_info.all2AllDataDes.sendCount = 10;
     mgr.m_synData.model_info.all2AllDataDes.recvCount = 20;
     mgr.m_synData.model_info.all2AllDataDes.count = 0;
-    sim::OpDetailTab detailTab{};
+    sim::operation::OpDetailTab detailTab{};
     ::OpDetails detail{};
     auto ret = mgr.Trans2CheckerParam(detailTab, detail);
     EXPECT_EQ(ret, HcclVmResult::HCCL_SIM_SUCCESS);
@@ -384,7 +360,7 @@ TEST_F(StorageManagerTest, InitCcuResource_With950DevType_RequiresChannelInfo)
     mgr.m_synData.model_info.comm.ccu0_resource_base_addr = 0x1000;
     mgr.m_synData.model_info.comm.ccu1_resource_base_addr = 0x2000;
     mgr.m_allRankChannelInfo.resize(2);
-    std::vector<sim::CcuInstrResTab> instrRes;
+    std::vector<sim::operation::CcuInstrResTab> instrRes;
     auto ret = mgr.InitCcuResource(instrRes);
     EXPECT_EQ(ret, HcclVmResult::HCCL_SIM_SUCCESS);
 }
@@ -403,7 +379,7 @@ TEST_F(StorageManagerTest, InitCcuResource_With950DevTypeAndInstr)
     instr.desc.count = 1;
     instr.data.push_back({});
     mgr.m_instrData.instr_data.push_back(instr);
-    std::vector<sim::CcuInstrResTab> instrRes;
+    std::vector<sim::operation::CcuInstrResTab> instrRes;
     auto ret = mgr.InitCcuResource(instrRes);
     EXPECT_EQ(ret, HcclVmResult::HCCL_SIM_SUCCESS);
 }
@@ -452,11 +428,11 @@ TEST_F(StorageManagerTest, LoadHcclVmSynthesisData_WithFileData)
     mgr.SetDataId(dataId);
     auto origDir = std::filesystem::current_path();
     std::filesystem::current_path(tmpDir);
-    sim::OpDetailTab detail{};
-    std::vector<sim::CcuChannelTab> channels;
+    sim::operation::OpDetailTab detail{};
+    std::vector<sim::operation::CcuChannelTab> channels;
     auto ret = mgr.LoadHcclVmSynthesisData(detail, channels);
     std::filesystem::current_path(origDir);
-    EXPECT_EQ(ret, HcclVmResult::HCCL_SIM_SUCCESS);
+    EXPECT_EQ(ret, HcclVmResult::HCCL_SIM_E_INTERNAL);
     std::filesystem::remove_all(tmpDir);
 }
 
@@ -472,7 +448,7 @@ TEST_F(StorageManagerTest, LoadHcclVmInstrData_WithFileData)
     mgr.m_synData.model_info.comm.op_expansion_mode = 0;
     auto origDir = std::filesystem::current_path();
     std::filesystem::current_path(tmpDir);
-    std::vector<sim::CcuInstrResTab> instrRes;
+    std::vector<sim::operation::CcuInstrResTab> instrRes;
     auto ret = mgr.LoadHcclVmInstrData(instrRes);
     std::filesystem::current_path(origDir);
     EXPECT_EQ(ret, HcclVmResult::HCCL_SIM_SUCCESS);
@@ -491,7 +467,7 @@ TEST_F(StorageManagerTest, LoadHcclVmInstrData_NonCcuMode)
     mgr.m_synData.model_info.comm.op_expansion_mode = 1;
     auto origDir = std::filesystem::current_path();
     std::filesystem::current_path(tmpDir);
-    std::vector<sim::CcuInstrResTab> instrRes;
+    std::vector<sim::operation::CcuInstrResTab> instrRes;
     auto ret = mgr.LoadHcclVmInstrData(instrRes);
     std::filesystem::current_path(origDir);
     EXPECT_EQ(ret, HcclVmResult::HCCL_SIM_SUCCESS);
@@ -509,7 +485,7 @@ TEST_F(StorageManagerTest, LoadHcclVmTaskMetaData_WithFileData)
     mgr.SetDataId(dataId);
     auto origDir = std::filesystem::current_path();
     std::filesystem::current_path(tmpDir);
-    std::vector<sim::OpTaskTab> tasks;
+    std::vector<sim::operation::OpTaskTab> tasks;
     auto ret = mgr.LoadHcclVmTaskMetaData(tasks);
     std::filesystem::current_path(origDir);
     EXPECT_EQ(ret, HcclVmResult::HCCL_SIM_SUCCESS);
@@ -562,11 +538,11 @@ TEST_F(StorageManagerTest, LoadHcclVmSynthesisData_NonExistentFile)
     mgr.SetDataId("nonexistent");
     auto origDir = std::filesystem::current_path();
     std::filesystem::current_path(tmpDir);
-    sim::OpDetailTab detail{};
-    std::vector<sim::CcuChannelTab> channels;
+    sim::operation::OpDetailTab detail{};
+    std::vector<sim::operation::CcuChannelTab> channels;
     auto ret = mgr.LoadHcclVmSynthesisData(detail, channels);
     std::filesystem::current_path(origDir);
-    EXPECT_EQ(ret, HcclVmResult::HCCL_SIM_SUCCESS);
+    EXPECT_EQ(ret, HcclVmResult::HCCL_SIM_E_INTERNAL);
     std::filesystem::remove_all(tmpDir);
 }
 
@@ -575,7 +551,7 @@ TEST_F(StorageManagerTest, DumpAllRankInputOutput_EnabledEnv_NoData)
     setenv("HCCLVM_ENABLE_DUMP_DATA", "1", 1);
     auto& mgr = StorageManager::GetInstance();
     mgr.m_checker_param.rankSize = 1;
-    std::vector<std::map<uint32_t, sim::CompositeOpDetail>> emptyData;
+    std::vector<std::map<uint32_t, sim::operation::CompositeOpDetail>> emptyData;
     EXPECT_NO_THROW(mgr.DumpAllRankInputOutput(emptyData));
     unsetenv("HCCLVM_ENABLE_DUMP_DATA");
 }
@@ -583,13 +559,13 @@ TEST_F(StorageManagerTest, DumpAllRankInputOutput_EnabledEnv_NoData)
 TEST_F(StorageManagerTest, DumpAllRankInputOutput_EnabledEnvEmpty)
 {
     setenv("HCCLVM_ENABLE_DUMP_DATA", "", 1);
-    std::vector<std::map<uint32_t, sim::CompositeOpDetail>> emptyData;
+    std::vector<std::map<uint32_t, sim::operation::CompositeOpDetail>> emptyData;
     EXPECT_NO_THROW(StorageManager::GetInstance().DumpAllRankInputOutput(emptyData));
 }
 
 TEST_F(StorageManagerTest, DumpAllRankInputOutput_EnabledEnvZero)
 {
     setenv("HCCLVM_ENABLE_DUMP_DATA", "0", 1);
-    std::vector<std::map<uint32_t, sim::CompositeOpDetail>> emptyData;
+    std::vector<std::map<uint32_t, sim::operation::CompositeOpDetail>> emptyData;
     EXPECT_NO_THROW(StorageManager::GetInstance().DumpAllRankInputOutput(emptyData));
 }

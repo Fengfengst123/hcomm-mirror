@@ -16,29 +16,24 @@
 #include <unistd.h>
 #include <vector>
 
+#include "store_sim_resource_root.h"
 #include "store_sim_shm_ops.h"
 
 class SimShmOpsTest : public testing::Test {
 protected:
     void SetUp() override
     {
-        // Clean up any existing shared memory
-        shm_unlink("/test_shm_create");
-        shm_unlink("/test_shm_open");
-        shm_unlink("/test_shm_lock");
-        shm_unlink("/test_shm_multi");
-        shm_unlink("/test_shm_refcount");
+        // 初始化 pid 目录（强清重建），保证 shm_open 中间目录存在
+        sim::SimResourceRoot::GetInstance().Init();
     }
 
     void TearDown() override
     {
-        // Clean up shared memory after tests
-        shm_unlink("/test_shm_create");
-        shm_unlink("/test_shm_open");
-        shm_unlink("/test_shm_lock");
-        shm_unlink("/test_shm_multi");
-        shm_unlink("/test_shm_refcount");
+        // 清理 pid 目录，隔离残留
+        sim::SimResourceRoot::GetInstance().Cleanup();
     }
+
+    static std::string FullName(const char* name) { return sim::SimResourceRoot::BuildName(name); }
 };
 
 // ==================== Constants Tests ====================
@@ -52,7 +47,7 @@ TEST_F(SimShmOpsTest, ShmConstants_ValidValues)
 TEST_F(SimShmOpsTest, ShmHead_SizeValid)
 {
     EXPECT_GT(sizeof(ShmHead), 0u);
-    EXPECT_LE(sizeof(ShmHead), 128u); // Should be reasonably small
+    EXPECT_LE(sizeof(ShmHead), 512u); // name[256] 主导, 保持可校验上限
 }
 
 // ==================== ShmCreate Tests ====================
@@ -412,7 +407,7 @@ TEST_F(SimShmOpsTest, ShmCreate_AfterClose_CanRecreate)
 
 TEST_F(SimShmOpsTest, ShmOpen_InvalidMagic_ReturnsNull)
 {
-    int shmFd = shm_open("/test_shm_create", O_CREAT | O_RDWR, 0666);
+    int shmFd = open(FullName("/test_shm_create").c_str(), O_CREAT | O_RDWR, 0666);
     ASSERT_GE(shmFd, 0);
 
     size_t totalSize = sizeof(ShmHead) + 1024;
@@ -435,12 +430,12 @@ TEST_F(SimShmOpsTest, ShmOpen_InvalidMagic_ReturnsNull)
     void* shm = ShmOpen("/test_shm_create", &size);
     EXPECT_EQ(shm, nullptr);
 
-    shm_unlink("/test_shm_create");
+    unlink(FullName("/test_shm_create").c_str());
 }
 
 TEST_F(SimShmOpsTest, ShmOpen_ZeroMagic_ReturnsNull)
 {
-    int shmFd = shm_open("/test_shm_create", O_CREAT | O_RDWR, 0666);
+    int shmFd = open(FullName("/test_shm_create").c_str(), O_CREAT | O_RDWR, 0666);
     ASSERT_GE(shmFd, 0);
 
     size_t totalSize = sizeof(ShmHead) + 1024;
@@ -463,7 +458,7 @@ TEST_F(SimShmOpsTest, ShmOpen_ZeroMagic_ReturnsNull)
     void* shm = ShmOpen("/test_shm_create", &size);
     EXPECT_EQ(shm, nullptr);
 
-    shm_unlink("/test_shm_create");
+    unlink(FullName("/test_shm_create").c_str());
 }
 
 TEST_F(SimShmOpsTest, ShmOpen_AfterLastClose_ReturnsNull)
@@ -484,15 +479,15 @@ TEST_F(SimShmOpsTest, ShmOpen_Concurrent_MultipleThreads)
 
     std::atomic<int> successCount{0};
     std::vector<std::thread> threads;
-    std::vector<void*> openedShms;
+    std::vector<void*> openedShms(4, nullptr);
 
     for (int i = 0; i < 4; ++i) {
-        threads.emplace_back([this, &successCount, &openedShms]() {
+        threads.emplace_back([i, &successCount, &openedShms]() {
             size_t size = 0;
             void* shm = ShmOpen("/test_shm_create", &size);
             if (shm) {
                 successCount.fetch_add(1);
-                openedShms.push_back(shm);
+                openedShms[i] = shm;
             }
         });
     }
@@ -504,7 +499,9 @@ TEST_F(SimShmOpsTest, ShmOpen_Concurrent_MultipleThreads)
     EXPECT_GE(successCount.load(), 1);
 
     for (void* shm : openedShms) {
-        ShmClose(shm);
+        if (shm != nullptr) {
+            ShmClose(shm);
+        }
     }
     ShmClose(shm1);
 }
@@ -533,8 +530,8 @@ TEST_F(SimShmOpsTest, ShmCreate_VariousSizes_AllSucceed)
         }
         // Give OS time to clean up
         if (p) {
-            while (shm_open("/test_shm_create", O_RDWR, 0666) != -1) {
-                shm_unlink("/test_shm_create");
+            while (open(FullName("/test_shm_create").c_str(), O_RDWR, 0666) != -1) {
+                unlink(FullName("/test_shm_create").c_str());
                 usleep(1000);
             }
         }

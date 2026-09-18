@@ -66,8 +66,8 @@ namespace {
         TaskRecordAICPU* AddRecord(uint32_t notifyId)
         {
             AicpuNotify notify;
-            notify.recordRankId = 0;
-            notify.waitRankId = 0;
+            notify.recordDeviceId = 0;
+            notify.waitDeviceId = 0;
             notify.notifyId = notifyId;
             return AddNode(std::make_unique<TaskRecordAICPU>(notify, ProtocolType::SDMA));
         }
@@ -75,8 +75,8 @@ namespace {
         TaskWaitAICPU* AddWait(uint32_t notifyId)
         {
             AicpuNotify notify;
-            notify.recordRankId = 0;
-            notify.waitRankId = 0;
+            notify.recordDeviceId = 0;
+            notify.waitDeviceId = 0;
             notify.notifyId = notifyId;
             return AddNode(std::make_unique<TaskWaitAICPU>(notify, ProtocolType::SDMA));
         }
@@ -94,7 +94,7 @@ namespace {
         TaskRecordCCU* AddCcuRecord(uint16_t mask)
         {
             CcuNotify notify;
-            notify.waitRankId = 0;
+            notify.waitDeviceId = 0;
             notify.dieId = 0;
             notify.ckeId = 1;
             notify.ckeMask = mask;
@@ -104,7 +104,7 @@ namespace {
         TaskWaitCCU* AddCcuWait(uint16_t mask)
         {
             CcuNotify notify;
-            notify.waitRankId = 0;
+            notify.waitDeviceId = 0;
             notify.dieId = 0;
             notify.ckeId = 1;
             notify.ckeMask = mask;
@@ -114,20 +114,17 @@ namespace {
         static AicpuNotify MakeAicpuNotify(uint32_t notifyId)
         {
             AicpuNotify notify;
-            notify.recordRankId = 0;
-            notify.waitRankId = 0;
+            notify.recordDeviceId = 0;
+            notify.waitDeviceId = 0;
             notify.notifyId = notifyId;
             return notify;
         }
 
         static AivPipeEvent MakeEvent(
-            int32_t eventId, RankId rankId = 0, uint64_t launchIdx = 1, uint32_t blockId = 2, uint32_t srcPipe = 3,
-            uint32_t dstPipe = 4)
+            int32_t eventId, RankId /*rankId*/ = 0, uint64_t /*launchIdx*/ = 1, uint32_t /*blockId*/ = 2,
+            uint32_t srcPipe = 3, uint32_t dstPipe = 4)
         {
             AivPipeEvent event;
-            event.rankId = rankId;
-            event.launchIdx = launchIdx;
-            event.blockId = blockId;
             event.srcPipe = srcPipe;
             event.dstPipe = dstPipe;
             event.eventId = eventId;
@@ -135,13 +132,10 @@ namespace {
         }
 
         static AivFlagSync
-        MakeFlag(uint64_t commInfoOffset, RankId flagOwnerRank = 0, uint64_t launchIdx = 1, int32_t value = 0)
+        MakeFlag(uint64_t commInfoOffset, DeviceId flagOwnerDevice = 0, uint64_t /*launchIdx*/ = 1, int32_t value = 0)
         {
             AivFlagSync flag;
-            flag.currentRank = 0;
-            flag.flagOwnerRank = flagOwnerRank;
-            flag.launchIdx = launchIdx;
-            flag.blockId = 2;
+            flag.flagOwnerDevice = flagOwnerDevice;
             flag.commInfoOffset = commInfoOffset;
             flag.value = value;
             return flag;
@@ -568,9 +562,9 @@ namespace {
 
     TEST_F(SyncConflictTest, CcuResourceFieldsCreateIndependentBuckets)
     {
-        auto makeNotify = [](RankId waitRankId, uint32_t dieId, uint16_t ckeId) {
+        auto makeNotify = [](DeviceId waitDeviceId, uint32_t dieId, uint16_t ckeId) {
             CcuNotify notify;
-            notify.waitRankId = waitRankId;
+            notify.waitDeviceId = waitDeviceId;
             notify.dieId = dieId;
             notify.ckeId = ckeId;
             notify.ckeMask = 0x1;
@@ -619,9 +613,6 @@ namespace {
     {
         TaskStart* start = AddMainStart();
         AivPipeEvent event;
-        event.rankId = 0;
-        event.launchIdx = 1;
-        event.blockId = 2;
         event.srcPipe = 3;
         event.dstPipe = 4;
         event.eventId = 5;
@@ -629,10 +620,7 @@ namespace {
         TaskAivWaitFlag* waitFlag = AddNode(std::make_unique<TaskAivWaitFlag>(event));
 
         AivFlagSync flag;
-        flag.currentRank = 0;
-        flag.flagOwnerRank = 0;
-        flag.launchIdx = 1;
-        flag.blockId = 2;
+        flag.flagOwnerDevice = 0;
         flag.commInfoOffset = 0x100;
         TaskAivSendFlag* sendFlag = AddNode(std::make_unique<TaskAivSendFlag>(flag));
         TaskAivRecvFlag* recvFlag = AddNode(std::make_unique<TaskAivRecvFlag>(flag));
@@ -970,9 +958,6 @@ namespace {
     {
         TaskStart* start = AddMainStart();
         AivPipeEvent event;
-        event.rankId = 0;
-        event.launchIdx = 1;
-        event.blockId = 2;
         event.srcPipe = 3;
         event.dstPipe = 4;
         event.eventId = 5;
@@ -995,9 +980,6 @@ namespace {
     {
         TaskStart* start = AddMainStart();
         AivPipeEvent event;
-        event.rankId = 0;
-        event.launchIdx = 1;
-        event.blockId = 2;
         event.srcPipe = 3;
         event.dstPipe = 4;
         TaskAivSetFlag* setFlag = AddNode(std::make_unique<TaskAivSetFlag>(event));
@@ -1015,9 +997,6 @@ namespace {
     {
         TaskStart* start = AddMainStart();
         AivPipeEvent event;
-        event.rankId = 0;
-        event.launchIdx = 1;
-        event.blockId = 2;
         event.srcPipe = 3;
         event.dstPipe = 4;
         TaskAivSetFlag* firstSet = AddNode(std::make_unique<TaskAivSetFlag>(event));
@@ -1037,9 +1016,6 @@ namespace {
     {
         TaskStart* start = AddMainStart();
         AivPipeEvent event;
-        event.rankId = 0;
-        event.launchIdx = 1;
-        event.blockId = 2;
         event.srcPipe = 3;
         event.dstPipe = 4;
         TaskAivSetFlag* firstSet = AddNode(std::make_unique<TaskAivSetFlag>(event));

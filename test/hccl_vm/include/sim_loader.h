@@ -15,15 +15,16 @@
 #include <map>
 #include <set>
 #include <string>
+#include <tuple>
 #include <vector>
 
-#include "sim_op_db_types.h"
+#include "operation_data/operation_data_types.h"
 
 namespace loader {
 using ProxyId = uint32_t;
 
-using OpStage = std::vector<sim::CompositeOpDetail>; // 某一次算子任务
-using OpPipeline = std::map<uint32_t, OpStage>;      // 所有算子任务
+using OpStage = std::vector<sim::operation::CompositeOpDetail>; // 某一次算子任务
+using OpPipeline = std::map<uint32_t, OpStage>;                 // 所有算子任务
 
 class Loader {
 public:
@@ -33,27 +34,43 @@ public:
     // dbPath: 数据库路径
     HcclResult LoadOpTaskFile(const std::string dbPath = "");
 
-    HcclResult GetSyncInfo(std::vector<sim::SyncRecordTab>& syncRecords);
+    HcclResult GetSyncInfo(std::vector<sim::operation::SyncRecordTab>& syncRecords);
 
-    HcclResult GetSyncRecordsByStatus(uint8_t status, std::vector<sim::SyncRecordTab>& syncRecords);
+    HcclResult GetSyncRecordsByStatus(uint8_t status, std::vector<sim::operation::SyncRecordTab>& syncRecords);
+
+    HcclResult LoadOpExecutionKeys(std::vector<sim::operation::OpExecutionKey>& keys);
+    HcclResult
+    LoadOpExecutionByKey(const sim::operation::OpExecutionKey& key, sim::operation::OpExecution& opExecution);
+    HcclResult LoadAllOpExecutions(std::vector<sim::operation::OpExecution>& opExecutions);
+
     // Runner: 每 sync 一次调用一次，outSyncIter: 输出本次加载的 syncIter
     HcclResult LoadRunnerSingleSync(
-        const uint32_t& outSyncIter, std::map<uint32_t, std::vector<sim::CompositeOpDetail>>& compositeDataMap);
+        const uint32_t& outSyncIter,
+        std::map<uint32_t, std::vector<sim::operation::CompositeOpDetail>>& compositeDataMap);
 
     // 根据 syncIter 查询复合算子详情
     HcclResult LoadCompositeOpDetailBySyncIter(
-        uint32_t syncIter, std::map<uint32_t, std::vector<sim::CompositeOpDetail>>& compositeDataMap);
+        uint32_t syncIter, std::map<uint32_t, std::vector<sim::operation::CompositeOpDetail>>& compositeDataMap);
 
-    HcclResult GetCcuChannelInfo(std::vector<sim::CcuChannelTab>& channels);
-    HcclResult GetJettyMapInfo(std::vector<sim::JettyMapTab>& jettyMaps);
-    HcclResult GetInstrResInfo(std::vector<sim::CcuInstrResTab>& instrRes);
+    HcclResult GetCcuChannelInfo(std::vector<sim::operation::CcuChannelTab>& channels);
+    HcclResult GetHalfRTTInfo(std::vector<sim::operation::HalfRTTTab>& halfRTT);
+    HcclResult GetJettyMapInfo(std::vector<sim::operation::JettyMapTab>& jettyMaps);
+    HcclResult GetInstrResInfo(std::vector<sim::operation::CcuInstrResTab>& instrRes);
 
     // 返回内部已组装好的完整 Pipeline 缓存
     const OpPipeline& GetOpTasks() const;
 
+    HcclResult LoadAllOpTasks(std::vector<sim::operation::OpTaskTab>& tasks, bool filterDone = false);
+    HcclResult LoadCompositeOpDetailByOpIter(
+        const std::string& commName, uint64_t commHash, uint32_t opIter,
+        std::vector<sim::operation::CompositeOpDetail>& details);
+    HcclResult FinishOpTask(const sim::operation::OpTaskTab& task);
+
 private:
     // 成员变量
     OpPipeline opTaskCache_;
+    using OpExecutionIdentity = std::tuple<std::string, uint64_t, uint32_t>;
+    std::map<OpExecutionIdentity, std::vector<sim::operation::OpExecutionIndexEntry>> opExecutionEntriesByKey_;
 };
 } // namespace loader
 

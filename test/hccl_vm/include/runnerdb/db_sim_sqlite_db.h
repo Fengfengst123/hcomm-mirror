@@ -41,6 +41,8 @@ private:
     sim::SqliteTable<sim::Server> m_serverTbl;
     sim::SqliteTable<sim::Host> m_hostTbl;
     sim::SqliteTable<sim::Runner> m_runnerTbl;
+    sim::SqliteTable<sim::Communicator> m_communicatorTbl;
+    sim::SqliteTable<sim::CommunicatorDestroySync> m_communicatorDestroySyncTbl;
     sim::SqliteTable<sim::Device> m_deviceTbl;
     sim::SqliteTable<sim::DeviceStatus> m_deviceStatusTbl;
     sim::SqliteTable<sim::Context> m_contextTbl;
@@ -75,7 +77,6 @@ private:
     sim::SqliteTable<sim::RaMR> m_raMRTbl;
     sim::SqliteTable<sim::MemoryLayout> m_memoryLayoutTbl;
     sim::SqliteTable<sim::SimModelData> m_simModelDataTbl;
-    sim::SqliteTable<sim::Rank> m_rankTbl;
     sim::SqliteTable<sim::IpcNotify> m_ipcNotifyTbl;
     sim::SqliteTable<sim::IpcNotifyVistorList> m_ipcNotifyVistorListTbl;
     sim::SqliteTable<sim::NotifyRecordTask> m_notifyRecordTaskTbl;
@@ -91,6 +92,17 @@ private:
     sim::SqliteTable<sim::RaCr> m_raCrTbl;
     sim::SqliteTable<sim::RaTlv> m_raTlvTbl;
     sim::SqliteTable<sim::RunModeConfig> m_runModeConfigTbl;
+    sim::SqliteTable<sim::HcclBuffer> m_hcclBufferTbl;
+    sim::SqliteTable<sim::HcclThread> m_hcclThreadTbl;
+    sim::SqliteTable<sim::HcclChannel> m_hcclChannelTbl;
+    sim::SqliteTable<sim::HcommEndpoint> m_hcommEndpointTbl;
+    sim::SqliteTable<sim::HcommMemReg> m_hcommMemRegTbl;
+    sim::SqliteTable<sim::HcclEngineCtx> m_hcclEngineCtxTbl;
+    sim::SqliteTable<sim::HcclMem> m_hcclMemTbl;
+    sim::SqliteTable<sim::TopoMetaConfig> m_topoMetaConfigTbl;
+    sim::SqliteTable<sim::Plugin> m_pluginTbl;
+    sim::SqliteTable<sim::DpuPendingNotify> m_dpuPendingNotifyTbl;
+    sim::SqliteTable<sim::DpuDeviceInfo> m_dpuDeviceInfoTbl;
 
     std::mutex m_lazyMutex;
     std::unordered_map<std::type_index, sim::TableBase*> m_tableMap;
@@ -109,6 +121,8 @@ public:
         : m_serverTbl(m_db.GetDb(), "Server"),
           m_hostTbl(m_db.GetDb(), "Host"),
           m_runnerTbl(m_db.GetDb(), "Runner"),
+          m_communicatorTbl(m_db.GetDb(), "Communicator"),
+          m_communicatorDestroySyncTbl(m_db.GetDb(), "CommunicatorDestroySync"),
           m_deviceTbl(m_db.GetDb(), "Device"),
           m_deviceStatusTbl(m_db.GetDb(), "DeviceStatus"),
           m_contextTbl(m_db.GetDb(), "Context"),
@@ -143,7 +157,6 @@ public:
           m_raMRTbl(m_db.GetDb(), "RaMR"),
           m_memoryLayoutTbl(m_db.GetDb(), "MemoryLayout"),
           m_simModelDataTbl(m_db.GetDb(), "SimModelData"),
-          m_rankTbl(m_db.GetDb(), "Rank"),
           m_ipcNotifyTbl(m_db.GetDb(), "IpcNotify"),
           m_ipcNotifyVistorListTbl(m_db.GetDb(), "IpcNotifyVistorList"),
           m_notifyRecordTaskTbl(m_db.GetDb(), "NotifyRecordTask"),
@@ -158,11 +171,24 @@ public:
           m_raJfcTbl(m_db.GetDb(), "RaJfc"),
           m_raCrTbl(m_db.GetDb(), "RaCr"),
           m_raTlvTbl(m_db.GetDb(), "RaTlv"),
-          m_runModeConfigTbl(m_db.GetDb(), "RunModeConfig")
+          m_runModeConfigTbl(m_db.GetDb(), "RunModeConfig"),
+          m_hcclBufferTbl(m_db.GetDb(), "HcclBuffer"),
+          m_hcclThreadTbl(m_db.GetDb(), "HcclThread"),
+          m_hcclChannelTbl(m_db.GetDb(), "HcclChannel"),
+          m_hcommEndpointTbl(m_db.GetDb(), "HcommEndpoint"),
+          m_hcommMemRegTbl(m_db.GetDb(), "HcommMemReg"),
+          m_hcclEngineCtxTbl(m_db.GetDb(), "HcclEngineCtx"),
+          m_hcclMemTbl(m_db.GetDb(), "HcclMem"),
+          m_topoMetaConfigTbl(m_db.GetDb(), "TopoMetaConfig"),
+          m_pluginTbl(m_db.GetDb(), "Plugin"),
+          m_dpuPendingNotifyTbl(m_db.GetDb(), "DpuPendingNotify"),
+          m_dpuDeviceInfoTbl(m_db.GetDb(), "DpuDeviceInfo")
     {
         RegisterTable(m_serverTbl, "Server");
         RegisterTable(m_hostTbl, "Host");
         RegisterTable(m_runnerTbl, "Runner");
+        RegisterTable(m_communicatorTbl, "Communicator");
+        RegisterTable(m_communicatorDestroySyncTbl, "CommunicatorDestroySync");
         RegisterTable(m_deviceTbl, "Device");
         RegisterTable(m_deviceStatusTbl, "DeviceStatus");
         RegisterTable(m_contextTbl, "Context");
@@ -197,7 +223,6 @@ public:
         RegisterTable(m_raMRTbl, "RaMR");
         RegisterTable(m_memoryLayoutTbl, "MemoryLayout");
         RegisterTable(m_simModelDataTbl, "SimModelData");
-        RegisterTable(m_rankTbl, "Rank");
         RegisterTable(m_ipcNotifyTbl, "IpcNotify");
         RegisterTable(m_ipcNotifyVistorListTbl, "IpcNotifyVistorList");
         RegisterTable(m_notifyRecordTaskTbl, "NotifyRecordTask");
@@ -213,6 +238,17 @@ public:
         RegisterTable(m_raCrTbl, "RaCr");
         RegisterTable(m_raTlvTbl, "RaTlv");
         RegisterTable(m_runModeConfigTbl, "RunModeConfig");
+        RegisterTable(m_hcclBufferTbl, "HcclBuffer");
+        RegisterTable(m_hcclThreadTbl, "HcclThread");
+        RegisterTable(m_hcclChannelTbl, "HcclChannel");
+        RegisterTable(m_hcommEndpointTbl, "HcommEndpoint");
+        RegisterTable(m_hcommMemRegTbl, "HcommMemReg");
+        RegisterTable(m_hcclEngineCtxTbl, "HcclEngineCtx");
+        RegisterTable(m_hcclMemTbl, "HcclMem");
+        RegisterTable(m_topoMetaConfigTbl, "TopoMetaConfig");
+        RegisterTable(m_pluginTbl, "Plugin");
+        RegisterTable(m_dpuPendingNotifyTbl, "DpuPendingNotify");
+        RegisterTable(m_dpuDeviceInfoTbl, "DpuDeviceInfo");
     }
 
     SimRunnerSqliteDB(const SimRunnerSqliteDB&) = delete;
@@ -241,7 +277,10 @@ public:
             return *static_cast<sim::SqliteTable<T>*>(it->second);
         }
         std::string name = std::string("Unregistered_") + typeid(T).name();
-        HCCL_VM_WARN("[SimRunnerSqliteDB::GetTable] Lazily registering unregistered type: {}", name.c_str());
+        HCCL_VM_WARN(
+            "[SimRunnerSqliteDB::GetTable] Lazily registering "
+            "unregistered type: {}",
+            name.c_str());
         auto table = std::make_unique<sim::SqliteTable<T>>(m_db.GetDb(), name);
         auto* rawPtr = table.get();
         m_lazyTables.push_back(std::move(table));
@@ -294,7 +333,50 @@ public:
 
     std::vector<std::string> GetAllTableName() const { return m_tableNames; }
 
+    // 获取底层数据库连接对象(供批量写事务SqliteWriteTransaction使用)
+    sim::SqliteDatabase& GetDatabase() { return m_db; }
+
     void ClearAll() { m_db.ClearAllTables(); }
 };
+
+namespace sim {
+// RAII批量写事务守卫: 构造时在RunnerDB所在SQLite连接上开启事务, 作用域内的
+// RunnerDB::Add/Update并入该事务统一提交, 消除逐条独立事务的提交开销;
+// 显式调用Commit()提交; 未提交即离开作用域(异常/提前返回)时自动回滚。
+// 注意: 事务期间应保证无其他线程并发写库。
+class SqliteWriteTransaction {
+public:
+    SqliteWriteTransaction() : db_(SimRunnerSqliteDB::Instance().GetDatabase()), began_(false), committed_(false)
+    {
+        began_ = db_.BeginTransaction();
+    }
+
+    ~SqliteWriteTransaction()
+    {
+        if (began_ && !committed_) {
+            db_.RollbackTransaction();
+        }
+    }
+
+    SqliteWriteTransaction(const SqliteWriteTransaction&) = delete;
+    SqliteWriteTransaction& operator=(const SqliteWriteTransaction&) = delete;
+    SqliteWriteTransaction(SqliteWriteTransaction&&) = delete;
+    SqliteWriteTransaction& operator=(SqliteWriteTransaction&&) = delete;
+
+    bool Commit()
+    {
+        if (!began_ || committed_) {
+            return began_ && committed_;
+        }
+        committed_ = db_.CommitTransaction();
+        return committed_;
+    }
+
+private:
+    SqliteDatabase& db_;
+    bool began_;
+    bool committed_;
+};
+} // namespace sim
 
 #endif

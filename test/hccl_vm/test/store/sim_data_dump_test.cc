@@ -15,10 +15,10 @@
 #include <regex>
 #include <vector>
 
+#include "operation_data/operation_data_types.h"
 #include "sim_binary_data_type_pub.h"
-#include "store_dump_shm_data.h"
 #include "sim_data_dump.h"
-#include "sim_op_db_types.h"
+#include "store_dump_shm_data.h"
 
 using namespace HcclSim;
 
@@ -48,7 +48,7 @@ TEST(HcclDataDumpTest, GenDataId_UsesTimestampAndRandomSuffix)
 TEST(HcclDataDumpTest, CreateMemoryInfo_AddsOnlyNonZeroBuffers)
 {
     HcclVmSynData synData{};
-    sim::OpMemInfoTab memInfo{};
+    sim::operation::OpMemInfoTab memInfo{};
     memInfo.inputAddr = 0x1000;
     memInfo.inputSize = 128;
     memInfo.outputAddr = 0x2000;
@@ -81,19 +81,19 @@ TEST(HcclDataDumpTest, CreateSimTaskMetaData_SkipsShortBlobAndDeserializesValidT
     aiv.taskType = HccLTaskMetaType::AIV_GRAPH;
     aiv.taskData.aiv.launchIdx = 99;
 
-    sim::OpTaskTab shortBlob{};
+    sim::operation::OpTaskTab shortBlob{};
     shortBlob.optaskMeta = {0x1, 0x2, 0x3};
 
-    sim::OpTaskTab memCopyBlob{};
+    sim::operation::OpTaskTab memCopyBlob{};
     memCopyBlob.optaskMeta = ToBlob(memCopy);
 
-    sim::OpTaskTab aivBlob{};
+    sim::operation::OpTaskTab aivBlob{};
     aivBlob.optaskMeta = ToBlob(aiv);
 
-    sim::CompositeOpDetail composite{};
+    sim::operation::CompositeOpDetail composite{};
     composite.tasks = {shortBlob, memCopyBlob, aivBlob};
 
-    std::map<uint32_t, std::vector<sim::CompositeOpDetail>> compositeDataMap;
+    std::map<uint32_t, std::vector<sim::operation::CompositeOpDetail>> compositeDataMap;
     compositeDataMap[0].push_back(composite);
 
     HcclVmTaskMetaData taskMeta{};

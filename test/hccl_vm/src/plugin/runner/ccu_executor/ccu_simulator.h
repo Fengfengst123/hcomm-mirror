@@ -8,6 +8,12 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: ccu executor -- jmp Author:
+ * caiyifan
+ */
+
 #ifndef HCCL_SIM_CCU_SIMULATOR_H
 #define HCCL_SIM_CCU_SIMULATOR_H
 
@@ -68,10 +74,10 @@ private:
     int dieId_{0};
     bool finished_{false};
     bool waitCKE_{false}; // 是否需要等待CKE
-    uint16_t curInstrId_;
-    uint16_t startInstrId_;
-    uint16_t endInstrId_;
-    uint16_t instrCnt_;
+    uint16_t curInstrId_{0};
+    uint16_t startInstrId_{0};
+    uint16_t endInstrId_{0};
+    uint16_t instrCnt_{0};
     uint16_t jumpInstrId_{0};
     uint16_t instrType_{0};   // 当前指令的类型(主要用于记录当前执行是否为Loop)
     bool initialized_{false}; // 是否已经初始化

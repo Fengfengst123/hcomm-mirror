@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <map>
+#include <set>
 #include <sstream>
 #include <utility>
 
@@ -26,7 +27,7 @@ namespace HcclSim {
 namespace TaskGraphGeneratorV3 {
     namespace {
         using SeenLocalRecords = std::vector<NodeId>;
-        using SeenInterRankRecords = std::map<RankId, std::map<RankId, std::vector<NodeId>>>;
+        using SeenInterRankRecords = std::map<DeviceId, std::map<DeviceId, std::vector<NodeId>>>;
 
         std::string NodeIdsToString(const std::vector<TaskNode*>& nodes)
         {
@@ -44,9 +45,9 @@ namespace TaskGraphGeneratorV3 {
             return os.str();
         }
 
-        bool IsLocalNotify(const AicpuNotify& notify) { return notify.recordRankId == notify.waitRankId; }
+        bool IsLocalNotify(const AicpuNotify& notify) { return notify.recordDeviceId == notify.waitDeviceId; }
 
-        bool IsInterRankNotify(const AicpuNotify& notify) { return notify.recordRankId != notify.waitRankId; }
+        bool IsInterRankNotify(const AicpuNotify& notify) { return notify.recordDeviceId != notify.waitDeviceId; }
 
         const AicpuNotify* GetRecordNotify(const TaskNode* node)
         {
@@ -80,6 +81,55 @@ namespace TaskGraphGeneratorV3 {
                 const TaskNode* node = graph->GetNode(nodeId);
                 return node != nullptr && node->GetType() == TaskType::AIV_GRAPH;
             });
+        }
+
+        std::set<StreamId> GetMainStreamIds(
+            const std::vector<std::unique_ptr<TaskNode>>& nodes, DeviceId deviceId,
+            const RankNodeQueues& rankTaskQueues)
+        {
+            std::set<StreamId> mainStreamIds;
+            for (const auto& stream : rankTaskQueues) {
+                for (const NodeId nodeId : stream) {
+                    if (nodeId < 0 || static_cast<size_t>(nodeId) >= nodes.size() || nodes[nodeId] == nullptr) {
+                        continue;
+                    }
+                    const TaskPosition& position = nodes[nodeId]->GetPosition();
+                    if (position.deviceId == deviceId && position.mainStreamId != INVALID_STREAM_ID) {
+                        mainStreamIds.insert(position.mainStreamId);
+                    }
+                }
+            }
+            // Keep manually constructed/legacy task data usable. Production task nodes
+            // always carry the operator stream from opDetails.streamId.
+            if (mainStreamIds.empty()) {
+                mainStreamIds.insert(0);
+            }
+            return mainStreamIds;
+        }
+
+        struct SyncStreamGroupKey {
+            CommId commId{INVALID_COMM_ID};
+            uint32_t opIter{0};
+
+            bool operator<(const SyncStreamGroupKey& rhs) const
+            {
+                if (commId != rhs.commId) {
+                    return commId < rhs.commId;
+                }
+                return opIter < rhs.opIter;
+            }
+        };
+
+        bool AddEdgeOnce(TaskNode* parentNode, TaskNode* childNode)
+        {
+            if (parentNode == nullptr || childNode == nullptr || parentNode == childNode) {
+                return false;
+            }
+            if (!parentNode->AddChild(childNode)) {
+                return false;
+            }
+            (void)childNode->AddParent(parentNode);
+            return true;
         }
     } // namespace
 
@@ -143,8 +193,10 @@ namespace TaskGraphGeneratorV3 {
         TaskNode* childNode = GetNode(childNodeId);
         if (parentNode == nullptr || childNode == nullptr) {
             HCCL_VM_ERROR(
-                "{} Failed to remove one graph edge because the parent or child node does not "
-                "exist, parentNodeId={}, childNodeId={}, parentNode={}, childNode={}",
+                "{} Failed to remove one graph edge because the parent "
+                "or child node does not "
+                "exist, parentNodeId={}, childNodeId={}, parentNode={}, "
+                "childNode={}",
                 MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID), parentNodeId, childNodeId,
                 parentNode == nullptr ? "null" : parentNode->Describe(),
                 childNode == nullptr ? "null" : childNode->Describe());
@@ -153,6 +205,170 @@ namespace TaskGraphGeneratorV3 {
 
         (void)parentNode->RemoveChild(childNode);
         (void)childNode->RemoveParent(parentNode);
+        return HCCL_SUCCESS;
+    }
+
+    HcclResult TaskGraphGeneratorV3::CompactSyncNodes(SyncCompactStats* stats)
+    {
+        SyncCompactStats localStats;
+
+        std::map<SyncStreamGroupKey, std::vector<NodeId>> syncGroups;
+        for (const auto& node : nodes_) {
+            if (node == nullptr || node->GetType() != TaskType::SYNC_STREAM) {
+                continue;
+            }
+            const TaskPosition& position = node->GetPosition();
+            syncGroups[{position.commId, position.opIter}].push_back(node->GetNodeId());
+            ++localStats.syncNodeCount;
+        }
+        localStats.syncGroupCount = syncGroups.size();
+
+        std::set<NodeId> removedNodeIds;
+        for (const auto& groupEntry : syncGroups) {
+            const std::vector<NodeId>& group = groupEntry.second;
+            if (group.size() <= 1) {
+                continue;
+            }
+            ++localStats.mergedGroupCount;
+
+            NodeId unifiedNodeId = group.front();
+            DeviceId unifiedDeviceId = GetNode(unifiedNodeId)->GetPosition().deviceId;
+            for (const NodeId nodeId : group) {
+                const DeviceId deviceId = GetNode(nodeId)->GetPosition().deviceId;
+                if (deviceId < unifiedDeviceId || (deviceId == unifiedDeviceId && nodeId < unifiedNodeId)) {
+                    unifiedNodeId = nodeId;
+                    unifiedDeviceId = deviceId;
+                }
+            }
+            TaskNode* unifiedNode = GetNode(unifiedNodeId);
+            if (unifiedNode == nullptr) {
+                return HCCL_E_PTR;
+            }
+
+            for (const NodeId removedNodeId : group) {
+                if (removedNodeId == unifiedNodeId) {
+                    continue;
+                }
+                TaskNode* removedNode = GetNode(removedNodeId);
+                if (removedNode == nullptr) {
+                    return HCCL_E_PTR;
+                }
+
+                const std::vector<TaskNode*> parents = removedNode->GetParents();
+                const std::vector<TaskNode*> children = removedNode->GetChildren();
+                for (TaskNode* parentNode : parents) {
+                    if (parentNode == nullptr) {
+                        return HCCL_E_PTR;
+                    }
+                    (void)parentNode->RemoveChild(removedNode);
+                    (void)removedNode->RemoveParent(parentNode);
+                    if (parentNode != unifiedNode && AddEdgeOnce(parentNode, unifiedNode)) {
+                        ++localStats.rewiredEdgeCount;
+                    }
+                }
+                for (TaskNode* childNode : children) {
+                    if (childNode == nullptr) {
+                        return HCCL_E_PTR;
+                    }
+                    (void)removedNode->RemoveChild(childNode);
+                    (void)childNode->RemoveParent(removedNode);
+                    if (childNode != unifiedNode && AddEdgeOnce(unifiedNode, childNode)) {
+                        ++localStats.rewiredEdgeCount;
+                    }
+                }
+                for (TaskNode* parentNode : parents) {
+                    for (TaskNode* childNode : children) {
+                        if (parentNode == unifiedNode || childNode == unifiedNode) {
+                            continue;
+                        }
+                        if (AddEdgeOnce(parentNode, childNode)) {
+                            ++localStats.bypassEdgeCount;
+                        }
+                    }
+                }
+
+                const TaskPosition& position = removedNode->GetPosition();
+                const auto queueIter = taskQueues_.find(position.deviceId);
+                if (queueIter == taskQueues_.end() || position.streamId >= queueIter->second.size()) {
+                    HCCL_VM_ERROR(
+                        "{} Failed to compact sync-stream nodes because the task "
+                        "queue of the "
+                        "removed node is missing, removedNodeId={}, deviceId={}, "
+                        "streamId={}",
+                        MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID), removedNodeId, position.deviceId,
+                        position.streamId);
+                    return HCCL_E_PARA;
+                }
+                auto& stream = queueIter->second[position.streamId];
+                stream.erase(std::remove(stream.begin(), stream.end(), removedNodeId), stream.end());
+                (void)removedNodeIds.insert(removedNodeId);
+                ++localStats.removedNodeCount;
+            }
+        }
+
+        if (removedNodeIds.empty()) {
+            if (stats != nullptr) {
+                *stats = localStats;
+            }
+            HCCL_VM_DEBUG(
+                "No cross-rank sync-stream nodes need compaction, "
+                "syncNodeCount={}, "
+                "syncGroupCount={}",
+                localStats.syncNodeCount, localStats.syncGroupCount);
+            return HCCL_SUCCESS;
+        }
+
+        std::vector<NodeId> remappedNodeIds(nodes_.size(), INVALID_NODE_ID);
+        std::vector<std::unique_ptr<TaskNode>> compactedNodes;
+        compactedNodes.reserve(nodes_.size() - removedNodeIds.size());
+        for (auto& node : nodes_) {
+            if (node == nullptr) {
+                return HCCL_E_PTR;
+            }
+            const NodeId oldNodeId = node->GetNodeId();
+            if (oldNodeId < 0 || static_cast<size_t>(oldNodeId) >= remappedNodeIds.size()) {
+                return HCCL_E_PARA;
+            }
+            if (removedNodeIds.count(oldNodeId) != 0) {
+                continue;
+            }
+            const NodeId newNodeId = static_cast<NodeId>(compactedNodes.size());
+            node->SetNodeId(newNodeId);
+            remappedNodeIds[oldNodeId] = newNodeId;
+            compactedNodes.push_back(std::move(node));
+        }
+        nodes_ = std::move(compactedNodes);
+
+        for (auto& rankEntry : taskQueues_) {
+            for (auto& stream : rankEntry.second) {
+                std::vector<NodeId> remappedStream;
+                remappedStream.reserve(stream.size());
+                for (const NodeId nodeId : stream) {
+                    if (nodeId < 0 || static_cast<size_t>(nodeId) >= remappedNodeIds.size()
+                        || remappedNodeIds[nodeId] == INVALID_NODE_ID) {
+                        HCCL_VM_ERROR(
+                            "{} Failed to compact sync-stream nodes because one "
+                            "task queue entry "
+                            "is invalid, deviceId={}, nodeId={}",
+                            MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID), rankEntry.first, nodeId);
+                        return HCCL_E_PARA;
+                    }
+                    remappedStream.push_back(remappedNodeIds[nodeId]);
+                }
+                stream = std::move(remappedStream);
+            }
+        }
+
+        if (stats != nullptr) {
+            *stats = localStats;
+        }
+        HCCL_VM_INFO(
+            "Compacted cross-rank sync-stream nodes, syncNodeCount={}, "
+            "syncGroupCount={}, "
+            "mergedGroupCount={}, removedNodeCount={}, "
+            "rewiredEdgeCount={}, bypassEdgeCount={}, nodeCount={}",
+            localStats.syncNodeCount, localStats.syncGroupCount, localStats.mergedGroupCount,
+            localStats.removedNodeCount, localStats.rewiredEdgeCount, localStats.bypassEdgeCount, nodes_.size());
         return HCCL_SUCCESS;
     }
 
@@ -369,11 +585,13 @@ namespace TaskGraphGeneratorV3 {
     {
         Reset();
         HCCL_VM_INFO(
-            "Start building the CheckerV3 graph from translated nodes, rankCount={}, nodeCount={}",
+            "Start building the CheckerV3 graph from translated nodes, "
+            "rankCount={}, nodeCount={}",
             translatedTaskQueues.size(), translatedNodes.size());
         if (translatedNodes.empty() || translatedTaskQueues.empty()) {
             HCCL_VM_ERROR(
-                "{} Checker get empty task queue, please check if the HCCL-VM end normally, rankCount={}, nodeCount={}",
+                "{} Checker get empty task queue, please check if the "
+                "HCCL-VM end normally, rankCount={}, nodeCount={}",
                 MakeErrorCodeText(ErrorCode::CHECKER_RUNTIME_ERROR), translatedTaskQueues.size(),
                 translatedNodes.size());
             return HCCL_E_PARA;
@@ -409,8 +627,9 @@ namespace TaskGraphGeneratorV3 {
     HcclResult TaskGraphGeneratorV3::BuildDagEdges()
     {
         HCCL_VM_INFO(
-            "Start building graph edges, rankCount={}, nodeCount={}, mainStartNodeId={}", taskQueues_.size(),
-            nodes_.size(), mainStartNodeId_);
+            "Start building graph edges, rankCount={}, nodeCount={}, "
+            "mainStartNodeId={}",
+            taskQueues_.size(), nodes_.size(), mainStartNodeId_);
 
         HcclResult ret = HCCL_SUCCESS;
         for (const auto& rankEntry : taskQueues_) {
@@ -447,8 +666,9 @@ namespace TaskGraphGeneratorV3 {
         }
 
         HCCL_VM_INFO(
-            "Finished building graph edges, nodeCount={}, edgeCount={}, mainStartNodeId={}", nodes_.size(),
-            CountEdges(), mainStartNodeId_);
+            "Finished building graph edges, nodeCount={}, edgeCount={}, "
+            "mainStartNodeId={}",
+            nodes_.size(), CountEdges(), mainStartNodeId_);
         return HCCL_SUCCESS;
     }
 
@@ -468,7 +688,8 @@ namespace TaskGraphGeneratorV3 {
             auto* aivGraph = dynamic_cast<TaskAivGraph*>(node);
             if (aivGraph == nullptr) {
                 HCCL_VM_ERROR(
-                    "{} One node expected to be an AIV subgraph entry is actually another node "
+                    "{} One node expected to be an AIV subgraph entry is "
+                    "actually another node "
                     "type, nodeId={}, node={}",
                     MakeErrorCodeText(ErrorCode::CHECKER_RUNTIME_ERROR),
                     node == nullptr ? std::string("null") : std::to_string(node->GetNodeId()),
@@ -511,9 +732,12 @@ namespace TaskGraphGeneratorV3 {
         HCCL_VM_INFO(
             "Finished expanding AIV Graph nodes:\n"
             "  graph: aivGraphCount={}, internalNodeCount={}\n"
-            "  edges: setWaitEdgeCount={}, pipeBarrierMergeCount={}, syncAllMergeCount={}, sendRecvEdgeCount={}\n"
-            "  tasks: taskJsonTotalTaskCount={}, dagNodeCountBeforeCpGmMerge={}, dagNodeCountAfterCpGmMerge={}\n"
-            "  merge: cpGmLoopMergeCount={}, cpGmMergedIterationCount={}, cpGmMergedOriginalNodeCount={}\n"
+            "  edges: setWaitEdgeCount={}, pipeBarrierMergeCount={}, "
+            "syncAllMergeCount={}, sendRecvEdgeCount={}\n"
+            "  tasks: taskJsonTotalTaskCount={}, dagNodeCountBeforeCpGmMerge={}, "
+            "dagNodeCountAfterCpGmMerge={}\n"
+            "  merge: cpGmLoopMergeCount={}, cpGmMergedIterationCount={}, "
+            "cpGmMergedOriginalNodeCount={}\n"
             "  nodes: cpGmGeneratedNodeCount={}, cpGmInactiveNodeCount={}\n"
             "  buf: ubBufferSize={}, aivCommInfoSize={}\n"
             "  time: expandTotalMs={}",
@@ -542,7 +766,8 @@ namespace TaskGraphGeneratorV3 {
             auto* ccuGraph = dynamic_cast<TaskCcuGraph*>(node);
             if (ccuGraph == nullptr) {
                 HCCL_VM_ERROR(
-                    "{} One node expected to be a CCU subgraph entry is actually another node "
+                    "{} One node expected to be a CCU subgraph entry is "
+                    "actually another node "
                     "type, nodeId={}, node={}",
                     MakeErrorCodeText(ErrorCode::CHECKER_RUNTIME_ERROR),
                     node == nullptr ? std::string("null") : std::to_string(node->GetNodeId()),
@@ -573,7 +798,8 @@ namespace TaskGraphGeneratorV3 {
 
         ccuExpandStats_ = stats;
         HCCL_VM_INFO(
-            "Finished expanding CCU Graph nodes, ccuGraphCount={}, internalNodeCount={}, "
+            "Finished expanding CCU Graph nodes, ccuGraphCount={}, "
+            "internalNodeCount={}, "
             "recordWaitEdgeCount={}, expandTotalMs={}",
             stats.graphCount, stats.internalNodeCount, stats.recordWaitEdgeCount, stats.totalExpandNs / 1000000ULL);
         return HCCL_SUCCESS;
@@ -604,19 +830,23 @@ namespace TaskGraphGeneratorV3 {
         return HCCL_SUCCESS;
     }
 
-    HcclResult TaskGraphGeneratorV3::GenGraph4Rank(RankId rankId, const RankNodeQueues& rankTaskQueues)
+    HcclResult TaskGraphGeneratorV3::GenGraph4Rank(DeviceId deviceId, const RankNodeQueues& rankTaskQueues)
     {
         size_t nonEmptyStreamCount = 0;
         size_t taskNodeCount = 0;
         size_t startEdgeCount = 0;
         size_t streamOrderEdgeCount = 0;
-        // mainStart连接每个rank的主流的第一个taskNode
-        if (!rankTaskQueues.empty() && !rankTaskQueues[0].empty()) {
-            HcclResult ret = AddEdge(mainStartNodeId_, rankTaskQueues[0].front());
+        const std::set<StreamId> mainStreamIds = GetMainStreamIds(nodes_, deviceId, rankTaskQueues);
+        // mainStart connects to the first task of the operator stream(s).
+        for (const StreamId mainStreamId : mainStreamIds) {
+            if (mainStreamId >= rankTaskQueues.size() || rankTaskQueues[mainStreamId].empty()) {
+                continue;
+            }
+            HcclResult ret = AddEdge(mainStartNodeId_, rankTaskQueues[mainStreamId].front());
             if (ret != HCCL_SUCCESS) {
                 return ret;
             }
-            startEdgeCount = 1;
+            ++startEdgeCount;
         }
 
         for (size_t streamIndex = 0; streamIndex < rankTaskQueues.size(); ++streamIndex) {
@@ -625,7 +855,8 @@ namespace TaskGraphGeneratorV3 {
                 ++nonEmptyStreamCount;
             }
             taskNodeCount += stream.size();
-            if (hasAiv_ && streamIndex != 0 && !stream.empty() && StreamHasAivGraph(this, stream)) {
+            if (hasAiv_ && mainStreamIds.find(static_cast<StreamId>(streamIndex)) == mainStreamIds.end()
+                && !stream.empty() && StreamHasAivGraph(this, stream)) {
                 HcclResult ret = AddEdge(mainStartNodeId_, stream.front());
                 if (ret != HCCL_SUCCESS) {
                     return ret;
@@ -641,24 +872,29 @@ namespace TaskGraphGeneratorV3 {
             }
         }
         HCCL_VM_DEBUG(
-            "Built per-rank skeleton edges, rankId={}, nonEmptyStreamCount={}, taskNodeCount={}, "
+            "Built per-rank skeleton edges, rankId={}, "
+            "nonEmptyStreamCount={}, taskNodeCount={}, "
             "startEdgeCount={}, streamOrderEdgeCount={}",
-            rankId, nonEmptyStreamCount, taskNodeCount, startEdgeCount, streamOrderEdgeCount);
+            deviceId, nonEmptyStreamCount, taskNodeCount, startEdgeCount, streamOrderEdgeCount);
         return HCCL_SUCCESS;
     }
 
-    HcclResult TaskGraphGeneratorV3::AddLocalNotifyEdges(RankId rankId, const RankNodeQueues& rankTaskQueues)
+    HcclResult TaskGraphGeneratorV3::AddLocalNotifyEdges(DeviceId deviceId, const RankNodeQueues& rankTaskQueues)
     {
         std::vector<NodeId> rankNodeQue;
         SeenLocalRecords seenLocalRecords;
         uint64_t unmatchedCnt = 0;
         size_t matchedEdgeCount = 0;
 
-        if (!rankTaskQueues.empty() && !rankTaskQueues[0].empty()) {
-            rankNodeQue.push_back(rankTaskQueues[0].front());
+        const std::set<StreamId> mainStreamIds = GetMainStreamIds(nodes_, deviceId, rankTaskQueues);
+        for (const StreamId mainStreamId : mainStreamIds) {
+            if (mainStreamId < rankTaskQueues.size() && !rankTaskQueues[mainStreamId].empty()) {
+                rankNodeQue.push_back(rankTaskQueues[mainStreamId].front());
+            }
         }
-        for (size_t streamIndex = 1; streamIndex < rankTaskQueues.size(); ++streamIndex) {
-            if (!rankTaskQueues[streamIndex].empty()) {
+        for (size_t streamIndex = 0; streamIndex < rankTaskQueues.size(); ++streamIndex) {
+            if (mainStreamIds.find(static_cast<StreamId>(streamIndex)) == mainStreamIds.end()
+                && !rankTaskQueues[streamIndex].empty()) {
                 rankNodeQue.push_back(rankTaskQueues[streamIndex].front());
             }
         }
@@ -667,10 +903,12 @@ namespace TaskGraphGeneratorV3 {
             if (unmatchedCnt >= rankNodeQue.size()) {
                 const TaskNode* node = GetNode(rankNodeQue.front());
                 HCCL_VM_ERROR(
-                    "{} Local Record/Wait matching is stuck on this rank. Some Wait tasks are "
-                    "still blocked, but no new local Record task can unblock them, rankId={}, firstBlockedWaitNode={}, "
+                    "{} Local Record/Wait matching is stuck on this "
+                    "rank. Some Wait tasks are "
+                    "still blocked, but no new local Record task can "
+                    "unblock them, rankId={}, firstBlockedWaitNode={}, "
                     "blockedWaitNodeCount={}",
-                    MakeErrorCodeText(ErrorCode::GRAPH_DEADLOCK), rankId, node == nullptr ? "null" : node->Describe(),
+                    MakeErrorCodeText(ErrorCode::GRAPH_DEADLOCK), deviceId, node == nullptr ? "null" : node->Describe(),
                     rankNodeQue.size());
                 return HCCL_E_INTERNAL;
             }
@@ -733,17 +971,18 @@ namespace TaskGraphGeneratorV3 {
         if (!seenLocalRecords.empty()) {
             const TaskNode* node = GetNode(seenLocalRecords.front());
             HCCL_VM_ERROR(
-                "{} Found local Record tasks that were never consumed by any local Wait task, "
+                "{} Found local Record tasks that were never consumed by any local "
+                "Wait task, "
                 "rankId={}, firstUnconsumedRecordNode={}, unconsumedRecordCount={}",
-                MakeErrorCodeText(ErrorCode::GRAPH_UNMATCHED), rankId, node == nullptr ? "node=null" : node->Describe(),
-                seenLocalRecords.size());
+                MakeErrorCodeText(ErrorCode::GRAPH_UNMATCHED), deviceId,
+                node == nullptr ? "node=null" : node->Describe(), seenLocalRecords.size());
             return HCCL_E_INTERNAL;
         }
 
         HCCL_VM_DEBUG(
             "Finished matching local Record/Wait edges on one rank, rankId={}, "
             "matchedRecordWaitEdgeCount={}",
-            rankId, matchedEdgeCount);
+            deviceId, matchedEdgeCount);
         return HCCL_SUCCESS;
     }
 
@@ -765,8 +1004,10 @@ namespace TaskGraphGeneratorV3 {
             if (unmatchedCnt >= graphNodeQue.size()) {
                 const TaskNode* node = GetNode(graphNodeQue.front());
                 HCCL_VM_ERROR(
-                    "{} Cross-rank Record/Wait matching is stuck. Some Wait tasks are still "
-                    "blocked, but no new cross-rank Record task can unblock them, firstBlockedWaitNode={}, "
+                    "{} Cross-rank Record/Wait matching is stuck. Some "
+                    "Wait tasks are still "
+                    "blocked, but no new cross-rank Record task can "
+                    "unblock them, firstBlockedWaitNode={}, "
                     "blockedWaitNodeCount={}",
                     MakeErrorCodeText(ErrorCode::GRAPH_DEADLOCK), node == nullptr ? "node=null" : node->Describe(),
                     graphNodeQue.size());
@@ -788,7 +1029,7 @@ namespace TaskGraphGeneratorV3 {
 
             const AicpuNotify* recordNotify = GetRecordNotify(currNode);
             if (recordNotify != nullptr && IsInterRankNotify(*recordNotify)) {
-                seenInterRankRecords[recordNotify->recordRankId][recordNotify->waitRankId].push_back(currNodeId);
+                seenInterRankRecords[recordNotify->recordDeviceId][recordNotify->waitDeviceId].push_back(currNodeId);
                 ret = ExecuteNode(currNodeId, graphNodeQue, execFlags, traverseFlags);
                 if (ret != HCCL_SUCCESS) {
                     return ret;
@@ -800,9 +1041,9 @@ namespace TaskGraphGeneratorV3 {
             const AicpuNotify* waitNotify = GetWaitNotify(currNode);
             if (waitNotify != nullptr && IsInterRankNotify(*waitNotify)) {
                 bool matched = false;
-                auto rankIter = seenInterRankRecords.find(waitNotify->recordRankId);
+                auto rankIter = seenInterRankRecords.find(waitNotify->recordDeviceId);
                 if (rankIter != seenInterRankRecords.end()) {
-                    auto peerIter = rankIter->second.find(waitNotify->waitRankId);
+                    auto peerIter = rankIter->second.find(waitNotify->waitDeviceId);
                     if (peerIter != rankIter->second.end()) {
                         auto recordIter = peerIter->second.begin();
                         for (; recordIter != peerIter->second.end(); ++recordIter) {
@@ -847,8 +1088,10 @@ namespace TaskGraphGeneratorV3 {
                     const TaskNode* node = GetNode(peerEntry.second.front());
                     const AicpuNotify* recordNotify = GetRecordNotify(node);
                     HCCL_VM_ERROR(
-                        "{} Found cross-rank Record tasks that were never consumed by any matching "
-                        "Wait task, recordRankId={}, waitRankId={}, notifyId={}, firstUnconsumedRecordNode={}, "
+                        "{} Found cross-rank Record tasks that were "
+                        "never consumed by any matching "
+                        "Wait task, recordDeviceId={}, waitDeviceId={}, "
+                        "notifyId={}, firstUnconsumedRecordNode={}, "
                         "unconsumedRecordCount={}",
                         MakeErrorCodeText(ErrorCode::GRAPH_UNMATCHED), rankEntry.first, peerEntry.first,
                         recordNotify == nullptr ? std::string("null") : std::to_string(recordNotify->notifyId),

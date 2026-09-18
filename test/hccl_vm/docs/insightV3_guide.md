@@ -21,8 +21,8 @@ HVRM Insight V3 当前主要支持 `DAGView` 任务图查看。本文档围绕 D
   ...
   "setting": {              // Checker插件配置项
       ...
-      "enable_insight_dump": true,         // 是否启用可视化数据输出（默认为关闭状态）
-      "enable_memory_snapshot_dump": false  // 是否启用可视化内存快照数据输出（默认关闭，仅支持老Checker，需要先开启可视化数据输出"enable_insight_dump"）
+      "enable_insight_dump": true,         // 是否输出 Checker V3 Insight 数据（默认为关闭状态）
+      "enable_memory_snapshot_dump": false  // 是否输出内存快照数据（暂不支持，默认关闭，需要先开启 Insight 数据输出）
   }
 }
 ```
@@ -55,34 +55,34 @@ Insight V3 当前前端源码位于：
 
 推荐步骤如下：
 
-1. 进入前端目录。
+1. 进入前端目录：
 
-   ```bash
-   cd {hccl_vm目录}/src/plugin/insight/frontend_v3
-   ```
+```bash
+cd {hccl_vm目录}/src/plugin/insight/frontend_v3
+```
 
-2. 安装前端依赖。
+2. 安装前端依赖：
 
-   ```bash
-   npm install
-   ```
+```bash
+npm install
+```
 
-3. 编译前端产物。
+3. 编译前端产物：
 
-   ```bash
-   npm run build
-   ```
+```bash
+npm run build
+```
 
-   前端编译完成后，会生成 `src/plugin/insight/dist/` 目录。
+前端编译完成后，会生成 `src/plugin/insight/dist/` 目录。
 
-4. 回到 HCCL_VM 根目录，执行 `build.sh` 编译并安装 hccl-vm。
+4. 回到 HCCL_VM 根目录，执行 `build.sh` 编译并安装 hccl-vm：
 
-   ```bash
-   cd {HCCL_VM目录}
-   bash build.sh --package-path <ASCEND_CANN_PATH> --hcomm-path <HCOMM_CODE_PATH>
-   ```
+```bash
+cd {HCCL_VM目录}
+bash build.sh --package-path <ASCEND_CANN_PATH> --hcomm-path <HCOMM_CODE_PATH>
+```
 
-   如需打包安装目录，可附加 `--pkg`。若当前构建场景要求 AICPU / AIV / FULL 模式，可按项目常规流程追加 `--aicpu`、`--aiv` 或 `--full` 参数。
+如需打包安装目录，可附加 `--pkg`。若当前构建场景要求 AICPU / AIV / FULL 模式，可按项目常规流程追加 `--aicpu`、`--aiv` 或 `--full` 参数。
 
 ---
 

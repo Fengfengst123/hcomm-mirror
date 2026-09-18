@@ -11,21 +11,21 @@
 #ifndef HCCLV2_CCU_COMMON_V3_H
 #define HCCLV2_CCU_COMMON_V3_H
 
-#include <map>
-#include <set>
-#include <queue>
-#include <vector>
-#include <memory>
 #include <array>
-#include <unordered_map>
 #include <hccl_types.h>
+#include <map>
+#include <memory>
+#include <queue>
+#include <set>
+#include <unordered_map>
+#include <vector>
 
-#include "base.h"
-#include "log.h"
-#include "data_slice.h"
-#include "ccu_instr_info.h"
-#include "data_type.h"
 #include "../task_graph_generator_v3.h"
+#include "base.h"
+#include "ccu_instr_info.h"
+#include "data_slice.h"
+#include "data_type.h"
+#include "log.h"
 
 namespace HcclSim {
 class StorageManager;
@@ -56,7 +56,7 @@ namespace TaskGraphGeneratorV3 {
 
     struct CcuNodeMetaV3 {
         CcuNodeRoleV3 role{CcuNodeRoleV3::UNKNOWN};
-        RankId peerRank{INVALID_RANK_ID};
+        DeviceId peerDeviceId{INVALID_DEVICE_ID};
         uint32_t dieId{INVALID_DIE_ID};
         uint16_t ckeId{INVALID_CCU_CKE};
         uint16_t remainingCkeMask{0};
@@ -100,33 +100,37 @@ namespace TaskGraphGeneratorV3 {
         HcclResult InitInstrInfo(StorageManager& storage);
         HcclResult CreateHeadNode();
         HcclResult AppendGeneratedNode(
-            std::unique_ptr<TaskNode> node, RankId rankId, uint32_t queId, CcuNodeRoleV3 role, TaskNode*& outNode,
-            RankId peerRank = INVALID_RANK_ID, uint16_t remainingCkeMask = 0, uint32_t dieId = INVALID_DIE_ID,
+            std::unique_ptr<TaskNode> node, DeviceId deviceId, uint32_t queId, CcuNodeRoleV3 role, TaskNode*& outNode,
+            DeviceId peerDeviceId = INVALID_DEVICE_ID, uint16_t remainingCkeMask = 0, uint32_t dieId = INVALID_DIE_ID,
             uint16_t ckeId = INVALID_CCU_CKE, bool invalidPost = false);
         HcclResult AppendGeneratedNode(
             std::unique_ptr<TaskNode> node, const TaskPosition& position, CcuNodeRoleV3 role, TaskNode*& outNode,
-            RankId peerRank = INVALID_RANK_ID, uint16_t remainingCkeMask = 0, uint32_t dieId = INVALID_DIE_ID,
+            DeviceId peerDeviceId = INVALID_DEVICE_ID, uint16_t remainingCkeMask = 0, uint32_t dieId = INVALID_DIE_ID,
             uint16_t ckeId = INVALID_CCU_CKE, bool invalidPost = false);
 
         void SetNodeMeta(TaskNode* node, const CcuNodeMetaV3& meta);
         const CcuNodeMetaV3* GetNodeMeta(const TaskNode* node) const;
         CcuNodeRoleV3 GetNodeRole(const TaskNode* node) const;
-        RankId GetNodePeerRank(const TaskNode* node) const;
+        DeviceId GetNodePeerDeviceId(const TaskNode* node) const;
         uint16_t GetNodeRemainingCkeMask(const TaskNode* node) const;
         void SetNodeRemainingCkeMask(TaskNode* node, uint16_t remainingCkeMask);
-        void SetNodePeerRank(TaskNode* node, RankId peerRank);
+        void SetNodePeerDeviceId(TaskNode* node, DeviceId peerDeviceId);
         std::string Describe() const;
         std::string DescribeNextInstructionByQueue() const;
 
         void GetSqe(uint32_t queId, uint16_t sqeArgsId, uint64_t& argVal);
         void GetDieId(uint32_t queId, uint32_t& dieId) const;
         StorageManager& GetStorageManager() const { return storage_; }
+        HcclResult GetSlice(uint64_t addr, uint64_t len, DataSlice& dataSlice, DeviceId* deviceId = nullptr) const;
         uint32_t GetMissionEndInstrId(uint32_t queId) const;
-        RankId GetRankId() const { return rankId; }
+        CommId GetCommId() const { return commId; }
+        DeviceId GetDeviceId() const { return deviceId; }
+        std::string IdentityCtx() const;
 
         TaskGraphGeneratorV3& graph;
         TaskCcuGraph& ccuGraph;
-        RankId rankId{INVALID_RANK_ID};
+        CommId commId{INVALID_COMM_ID};
+        DeviceId deviceId{INVALID_DEVICE_ID};
         std::vector<hcomm::CcuRep::CcuInstrInfo> instrInfo;
         std::vector<std::vector<CcuSqeParam>> ccuParams;
         std::vector<u32> ccuParamIndexs;
@@ -141,7 +145,7 @@ namespace TaskGraphGeneratorV3 {
         uint32_t loopGroupIdx{0};
         std::array<uint32_t, MAX_LOOPGROUP_NUM_V3> loopIdx{};
         std::vector<std::vector<LoopInfoV3>> loopGroupInfo_;
-        std::vector<NodeId> loopNodeIdStack_; // 嵌套 loop 栈：栈顶为当前最内层 loop start 节点 ID
+        std::vector<NodeId> loopNodeIdStack_;
         std::map<TaskNode*, TaskNode*> localPostWaitPairs_;
         std::vector<TaskNode*> parallelNodes_;
         std::vector<BilateralWaitInfoV3> waitInfoTmp_;
@@ -157,7 +161,7 @@ namespace TaskGraphGeneratorV3 {
     };
 
     void PrintCcuGraph(TaskNode* dummyStart);
-    HcclResult GetPeerRankByTaskNode(CcuGraphStateV3* curCcuTask, TaskNode* currNode, RankId& peerRank);
+    HcclResult GetPeerDeviceIdByTaskNode(CcuGraphStateV3* curCcuTask, TaskNode* currNode, DeviceId& peerDeviceId);
 
     HcclResult CollectBilateralWaitInfo(CcuGraphStateV3* curCcuTask, uint32_t queId, TaskNode* node);
     HcclResult
@@ -165,38 +169,38 @@ namespace TaskGraphGeneratorV3 {
 
     HcclResult AppendTailNode(CcuGraphStateV3* curCcuTask, uint32_t queId, TaskNode* node);
 
-    MemSlice MakeCcuMemSlice(RankId rankId, const DataSlice& slice);
-    std::vector<MemSlice> MakeCcuMemSlices(RankId rankId, const std::vector<DataSlice>& slices);
+    MemSlice MakeCcuMemSlice(DeviceId deviceId, const DataSlice& slice);
+    std::vector<MemSlice> MakeCcuMemSlices(DeviceId deviceId, const std::vector<DataSlice>& slices);
 
     void AddLocalCopy(
-        uint32_t rankId, uint32_t queId, CcuGraphStateV3* curCcuTask, const DataSlice& srcSlice,
+        DeviceId deviceId, uint32_t queId, CcuGraphStateV3* curCcuTask, const DataSlice& srcSlice,
         const DataSlice& dstSlice);
     void AddLocalReduce(
-        uint32_t rankId, uint32_t queId, CcuGraphStateV3* curCcuTask, const DataSlice& srcSlice,
+        DeviceId deviceId, uint32_t queId, CcuGraphStateV3* curCcuTask, const DataSlice& srcSlice,
         const DataSlice& dstSlice, HcclDataType checkerDataType, HcclReduceOp checkerReduceOp);
     void AddLocalBatchReduce(
-        uint32_t rankId, uint32_t queId, CcuGraphStateV3* curCcuTask, const std::vector<DataSlice>& srcSlices,
+        DeviceId deviceId, uint32_t queId, CcuGraphStateV3* curCcuTask, const std::vector<DataSlice>& srcSlices,
         const DataSlice& dstSlice, DataType hcclDataType);
     HcclResult AddBatchTransMem(
-        uint32_t rankId, uint32_t queId, CcuGraphStateV3* curCcuTask, std::vector<MemSlice> srcs,
+        DeviceId deviceId, uint32_t queId, CcuGraphStateV3* curCcuTask, std::vector<MemSlice> srcs,
         std::vector<MemSlice> dsts, std::vector<MemSlice> mergedSrcs, std::vector<MemSlice> mergedDsts,
-        CcuNodeRoleV3 role, RankId peerRank = INVALID_RANK_ID);
+        CcuNodeRoleV3 role, DeviceId peerDeviceId = INVALID_DEVICE_ID);
     HcclResult AddBatchReduce(
-        uint32_t rankId, uint32_t queId, CcuGraphStateV3* curCcuTask, std::vector<std::vector<MemSlice>> srcGroups,
+        DeviceId deviceId, uint32_t queId, CcuGraphStateV3* curCcuTask, std::vector<std::vector<MemSlice>> srcGroups,
         std::vector<MemSlice> dsts, std::vector<std::vector<MemSlice>> mergedSrcGroups,
         std::vector<MemSlice> mergedDsts, HcclDataType checkerDataType, HcclReduceOp checkerReduceOp,
-        CcuNodeRoleV3 role, RankId peerRank = INVALID_RANK_ID);
+        CcuNodeRoleV3 role, DeviceId peerDeviceId = INVALID_DEVICE_ID);
     void AddWrite(
-        uint32_t rankId, uint32_t rmtRankId, uint32_t queId, CcuGraphStateV3* curCcuTask, const DataSlice& srcSlice,
+        DeviceId deviceId, DeviceId rmtDeviceId, uint32_t queId, CcuGraphStateV3* curCcuTask, const DataSlice& srcSlice,
         const DataSlice& dstSlice);
     void AddRead(
-        uint32_t rankId, uint32_t rmtRankId, uint32_t queId, CcuGraphStateV3* curCcuTask, const DataSlice& srcSlice,
+        DeviceId deviceId, DeviceId rmtDeviceId, uint32_t queId, CcuGraphStateV3* curCcuTask, const DataSlice& srcSlice,
         const DataSlice& dstSlice);
     void AddWriteReduce(
-        uint32_t rankId, uint32_t rmtRankId, uint32_t queId, CcuGraphStateV3* curCcuTask, const DataSlice& srcSlice,
+        DeviceId deviceId, DeviceId rmtDeviceId, uint32_t queId, CcuGraphStateV3* curCcuTask, const DataSlice& srcSlice,
         const DataSlice& dstSlice, HcclDataType checkerDataType, HcclReduceOp checkerReduceOp);
     void AddReadReduce(
-        uint32_t rankId, uint32_t rmtRankId, uint32_t queId, CcuGraphStateV3* curCcuTask, const DataSlice& srcSlice,
+        DeviceId deviceId, DeviceId rmtDeviceId, uint32_t queId, CcuGraphStateV3* curCcuTask, const DataSlice& srcSlice,
         const DataSlice& dstSlice, HcclDataType checkerDataType, HcclReduceOp checkerReduceOp);
     TaskNode* AddLoopStartTask(
         uint32_t queId, uint32_t loopIdx, uint32_t loopGroupIdx, CcuGraphStateV3* curCcuTask,
@@ -204,23 +208,23 @@ namespace TaskGraphGeneratorV3 {
         uint64_t expandCnt = 1);
     TaskNode* AddLoopEndTask(uint32_t queId, uint32_t loopIdx, uint32_t loopGroupIdx, CcuGraphStateV3* curCcuTask);
     void AddPost(
-        uint32_t rankId, uint32_t rmtRankId, uint32_t queId, CcuGraphStateV3* curCcuTask, uint32_t rmtDieId,
+        DeviceId deviceId, DeviceId rmtDeviceId, uint32_t queId, CcuGraphStateV3* curCcuTask, uint32_t rmtDieId,
         uint16_t rmtCKEId, uint16_t setRmtCKEMask);
     TaskNode* AddWait(
-        uint32_t rankId, uint32_t queId, CcuGraphStateV3* curCcuTask, uint32_t dieId, uint16_t waitCKEId,
+        DeviceId deviceId, uint32_t queId, CcuGraphStateV3* curCcuTask, uint32_t dieId, uint16_t waitCKEId,
         uint16_t remoteWaitMask);
     void AddLocalPost(
-        uint32_t rankId, uint32_t queId, uint32_t dieId, CcuGraphStateV3* curCcuTask, uint16_t setCKEId,
+        DeviceId deviceId, uint32_t queId, uint32_t dieId, CcuGraphStateV3* curCcuTask, uint16_t setCKEId,
         uint16_t setCKEMask, bool invalidPost = false);
     TaskNode* AddLocalWait(
-        uint32_t rankId, uint32_t queId, CcuGraphStateV3* curCcuTask, uint32_t dieId, uint16_t waitCKEId,
+        DeviceId deviceId, uint32_t queId, CcuGraphStateV3* curCcuTask, uint32_t dieId, uint16_t waitCKEId,
         uint16_t localWaitMask);
     void AddCcuSubGraphEnd(TaskNode* node, CcuGraphStateV3* curCcuTask);
     void AddNodeRelation(TaskNode* parent, TaskNode* child);
 
-    HcclResult ClearWaitMask(RankId rankId, uint32_t dieId, uint16_t waitCKEId, uint16_t waitCKEMask);
+    HcclResult ClearWaitMask(DeviceId deviceId, uint32_t dieId, uint16_t waitCKEId, uint16_t waitCKEMask);
     HcclResult ProcessSetMask(
-        RankId rankId, uint32_t dieId, CcuGraphStateV3* curCcuTask, uint32_t queId, uint16_t setCKEId,
+        DeviceId deviceId, uint32_t dieId, CcuGraphStateV3* curCcuTask, uint32_t queId, uint16_t setCKEId,
         uint16_t setCKEMask, bool invalidPost = false);
 
     uint16_t

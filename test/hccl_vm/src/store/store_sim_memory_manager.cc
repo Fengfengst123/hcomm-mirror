@@ -67,7 +67,7 @@ void* MemoryManager::AllocMemByName(const char* name, size_t size)
     memInfo.size = size;
     memInfo.type = 0; // 0: 共享内存
     memInfo.refCount = 1;
-    HCCL_VM_INFO("alloc name: {}, size: {:d}, ptr: {:p}", name, size, ptr);
+    HCCL_VM_DEBUG("alloc name: {}, size: {:d}, ptr: {:p}", name, size, ptr);
     m_memMap[nameStr] = memInfo;
     return ptr;
 }
@@ -84,7 +84,7 @@ void MemoryManager::FreeMemByName(const char* name)
     auto it = m_memMap.find(nameStr);
     if (it != m_memMap.end()) {
         // 关闭共享内存
-        HCCL_VM_INFO("free name: {}, size: {:d}, ptr: {:p}", name, it->second.size, it->second.ptr);
+        HCCL_VM_DEBUG("free name: {}, size: {:d}, ptr: {:p}", name, it->second.size, it->second.ptr);
         ShmClose(it->second.ptr);
         // 从映射表中移除
         m_memMap.erase(it);
@@ -151,7 +151,7 @@ void* MemoryManager::AcquireMemByName(const char* name)
     memInfo.size = size; // 使用ShmOpen返回的大小
     memInfo.type = 0;    // 0: 共享内存
     memInfo.refCount = 1;
-    HCCL_VM_INFO("acquire name: {}, size: {:d}, ptr: {:p}", name, size, ptr);
+    HCCL_VM_DEBUG("acquire name: {}, size: {:d}, ptr: {:p}", name, size, ptr);
     m_memMap[nameStr] = memInfo;
     return ptr;
 }
@@ -171,7 +171,7 @@ void MemoryManager::ReleaseMemByName(const char* name)
         int refCount = __sync_fetch_and_sub(&it->second.refCount, 1);
         if (refCount == 1) {
             // 引用计数归0，关闭共享内存并从映射表中移除
-            HCCL_VM_INFO("release name: {}, ptr: {:p}", name, it->second.ptr);
+            HCCL_VM_DEBUG("release name: {}, ptr: {:p}", name, it->second.ptr);
             ShmClose(it->second.ptr);
             m_memMap.erase(it);
         }

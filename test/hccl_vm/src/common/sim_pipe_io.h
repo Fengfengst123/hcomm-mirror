@@ -11,9 +11,10 @@
 #ifndef SIM_PIPE_IO_H
 #define SIM_PIPE_IO_H
 
+#include "sim_aicpu_pipe_msg.h"
 #include <cstddef>
 #include <cstdint>
-#include "sim_aicpu_pipe_msg.h"
+#include <sys/uio.h>
 
 namespace sim {
 
@@ -26,7 +27,11 @@ int PipeBlockRead(int fd, void* buf, size_t len);
 
 int PipeBlockWrite(int fd, const void* buf, size_t len);
 
+int PipeBlockWriteV(int fd, struct iovec* iov, int iovcnt);
+
 int PipeSendMsg(int fd, uint8_t cmd, const void* data, uint32_t len);
+
+int PipeSendMsgV(int fd, uint8_t cmd, const struct iovec* iov, uint32_t iovcnt);
 
 int PipeRecvMsg(int fd, uint8_t& outCmd, void* outData, uint32_t maxLen, uint32_t& outLen);
 

@@ -8,13 +8,19 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: ccu executor -- trans locms to
+ * locmem Author: caiyifan
+ */
+
 #include "trans_loc_ms_to_loc_mem_executor.h"
 
 #include <cstdint>
 
 #include "ccu_executor_manager.h"
-#include "sim_log.h"
 #include "ccu_string_util.h"
+#include "sim_log.h"
 
 using namespace std;
 using namespace hcomm::CcuRep;
@@ -136,8 +142,9 @@ std::string TransLocMSToLocMemExecutor::Describe()
 {
     if (version_ == RunnerCcuVersion::CCU_V1) {
         return HcclSim::StringFormat(
-            "ParseTransLocMSToLocMemInstr Wait CKE[%u:%04x], Trans LocMS[%u:%u] To LocMem[%u:%u] With LengthXn[%u] Use "
-            "Channel[%u], Set "
+            "ParseTransLocMSToLocMemInstr Wait CKE[%u:%04x], Trans "
+            "LocMS[%u:%u] To LocMem[%u:%u] With LengthXn[%u] Use Channel[%u], "
+            "Set "
             "CKE[%u:%04x], clearType[%u], lengthEn[%u]",
             waitCKEId_, waitCKEMask_, locMSId_ / 0x8000, locMSId_ % 0x8000, locGSAId_, locXnId_, lengthXnId_,
             channelId_, setCKEId_, setCKEMask_, clearType_, lengthEn_);

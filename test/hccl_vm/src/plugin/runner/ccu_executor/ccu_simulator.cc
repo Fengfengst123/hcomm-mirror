@@ -8,6 +8,12 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: ccu executor -- jmp Author:
+ * caiyifan
+ */
+
 #include "ccu_simulator.h"
 
 #include <cstdint>
@@ -28,8 +34,10 @@ void CcuSimulator::InitLoopGroupInfo(uint16_t startLoopId, uint64_t offsetCfg, u
     loopGroupInfo_.loopOffset_ = (repeatCfg >> 48) & 0x7F;    // 0x7F: 取loop偏移，即[54:48]位
     loopGroupInfo_.loopExtendNum_ = (repeatCfg >> 55) & 0x7F; // 0x7F: 取loop展开次数，即[61:55]位
     HCCL_VM_DEBUG(
-        "locCcu[{}:{}], curInstrId_=[{}], loopNum=[{}], loopOffset=[{}], loopExtendNum=[{}]", rankId_, dieId_,
-        curInstrId_, loopGroupInfo_.loopNum_, loopGroupInfo_.loopOffset_, loopGroupInfo_.loopExtendNum_);
+        "locCcu[{}:{}], curInstrId_=[{}], loopNum=[{}], "
+        "loopOffset=[{}], loopExtendNum=[{}]",
+        rankId_, dieId_, curInstrId_, loopGroupInfo_.loopNum_, loopGroupInfo_.loopOffset_,
+        loopGroupInfo_.loopExtendNum_);
 
     loopGroupInfo_.ckeOffset_ = offsetCfg & 0x3FF;              // 0x3FF: 取低[9:0]位
     loopGroupInfo_.msOffset_ = (offsetCfg >> 10) & 0x7FF;       // 0x7FF: 取低[20:10]位
@@ -47,16 +55,20 @@ void CcuSimulator::InitLoopGroupInfoV2(uint16_t startLoopId, uint64_t xnValue, u
     loopGroupInfo_.loopOffset_ = (xnValue >> 10) & 0x1FF;    // 0x1FF: 取loop偏移，即[18:10]位
     loopGroupInfo_.loopExtendNum_ = (xnValue >> 19) & 0x1FF; // 0x7F: 取loop展开次数，即[27:19]位
     HCCL_VM_DEBUG(
-        "locCcu[{}:{}], curInstrId_=[{}], loopNum=[{}], loopOffset=[{}], loopExtendNum=[{}]", rankId_, dieId_,
-        curInstrId_, loopGroupInfo_.loopNum_, loopGroupInfo_.loopOffset_, loopGroupInfo_.loopExtendNum_);
+        "locCcu[{}:{}], curInstrId_=[{}], loopNum=[{}], "
+        "loopOffset=[{}], loopExtendNum=[{}]",
+        rankId_, dieId_, curInstrId_, loopGroupInfo_.loopNum_, loopGroupInfo_.loopOffset_,
+        loopGroupInfo_.loopExtendNum_);
 
     loopGroupInfo_.ckeOffset_ = xmValue & 0x3FF;              // 0x3FF: 取低[9:0]位
     loopGroupInfo_.msOffset_ = (xmValue >> 10) & 0x7FF;       // 0x7FF: 取低[20:10]位
     loopGroupInfo_.gsaOffset_ = (xmValue >> 21) & 0xFFFFFFFF; // 0xFFFFFFFF: 取低[52:21]位
     loopGroupInfo_.xnIdOffset = xpValue & 0xFFFFFFFF;
     HCCL_VM_DEBUG(
-        "locCcu[{}:{}], ckeOffset=[{}], msOffset=[{}], gsaOffset=[{}], xnIdOffset=[{}]", rankId_, dieId_,
-        loopGroupInfo_.ckeOffset_, loopGroupInfo_.msOffset_, loopGroupInfo_.gsaOffset_, loopGroupInfo_.xnIdOffset);
+        "locCcu[{}:{}], ckeOffset=[{}], msOffset=[{}], "
+        "gsaOffset=[{}], xnIdOffset=[{}]",
+        rankId_, dieId_, loopGroupInfo_.ckeOffset_, loopGroupInfo_.msOffset_, loopGroupInfo_.gsaOffset_,
+        loopGroupInfo_.xnIdOffset);
 }
 
 void CcuSimulator::InitLoopInfo(uint16_t startInstrId, uint16_t endInstrId, uint16_t execCount, uint32_t addrStep)
@@ -218,6 +230,11 @@ void CcuSimulator::SetWaitCKEFlag(bool needCKE) { waitCKE_ = needCKE; }
 bool CcuSimulator::ExecuteInstr(uint16_t curInstrId)
 {
     auto& ccuResMgr = CcuResourceManager::GetInstance();
+    if (dieId_ < 0 || dieId_ >= HcclSim::DIE_NUM || !ccuResMgr.HasResource(rankId_)) {
+        state_ = CcuExecState::EXEC_FAIL;
+        HCCL_VM_ERROR("locCcu[{}:{}], CCU resource is unavailable", rankId_, dieId_);
+        return false;
+    }
     auto instrData = ccuResMgr.GetInstrData(rankId_, dieId_);
     auto& traceCollector = CcuTrace::CcuTraceCollector::GetInstance();
 
@@ -227,6 +244,14 @@ bool CcuSimulator::ExecuteInstr(uint16_t curInstrId)
         state_ = CcuExecState::EXEC_FAIL;
         HCCL_VM_ERROR(
             "locCcu[{}:{}], Invalid curInstrId_[{}], endInstrId[{}]", rankId_, dieId_, curInstrId, endInstrId_);
+        return false;
+    }
+    if (curInstrId >= instrData.size()) {
+        state_ = CcuExecState::EXEC_FAIL;
+        HCCL_VM_ERROR(
+            "locCcu[{}:{}], instruction [{}] is unavailable, "
+            "instrData size [{}]",
+            rankId_, dieId_, curInstrId, instrData.size());
         return false;
     }
     auto executor = CcuExecutorFactory::MakeCcuExecutorInstance(
@@ -275,7 +300,8 @@ bool CcuSimulator::ExecuteInstr(uint16_t curInstrId)
         return true;
     }
 
-    // === Trace: CKE 通过（或本条指令不涉及 CKE 等待），采集并记录 trace entry ===
+    // === Trace: CKE 通过（或本条指令不涉及 CKE 等待），采集并记录 trace entry
+    // ===
     if (traceCollector.IsEnabled()) {
         CcuTrace::CcuTraceEntry entry;
 
@@ -389,8 +415,9 @@ bool CcuSimulator::ExecuteLoop()
     auto instrCnt = loopGroupInfo_.loopStatus_.loopEndInstrId - loopGroupInfo_.loopStatus_.loopStartInstrId + 1;
     for (uint32_t i = 0; i < loopGroupInfo_.loopStatus_.loopExecCount; i++) {
         HCCL_VM_DEBUG(
-            "locCcu[{}:{}], loopStartInstrId=[{}], loopCurInstrId=[{}], instrCnt=[{}], loopRound=[{}].", rankId_,
-            dieId_, loopGroupInfo_.loopStatus_.loopStartInstrId, curInstrId_, instrCnt, i);
+            "locCcu[{}:{}], loopStartInstrId=[{}], "
+            "loopCurInstrId=[{}], instrCnt=[{}], loopRound=[{}].",
+            rankId_, dieId_, loopGroupInfo_.loopStatus_.loopStartInstrId, curInstrId_, instrCnt, i);
         auto simulator = std::make_unique<CcuSimulator>(
             rankId_, dieId_, loopGroupInfo_.loopStatus_.loopStartInstrId, loopGroupInfo_.loopStatus_.loopEndInstrId + 1,
             instrCnt, version_);

@@ -8,19 +8,23 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-// clean 模式设备侧集成：IsCheckOnlyMode() 每进程只 latch 一次，本二进制全程不 seed check-only(mode=1)，
-// 借此验证 clean 模式下大块走真实独立分配（与仅校验模式同址复用对照）。
+// clean 模式设备侧集成：IsCheckOnlyMode() 每进程只 latch 一次，本二进制全程不
+// seed check-only(mode=1)， 借此验证 clean
+// 模式下大块走真实独立分配（与仅校验模式同址复用对照）。
 
 #include <gtest/gtest.h>
 
 #include <sys/mman.h> // shm_unlink
 
+#include "runtime_state/db_sim_runner_ops.h"
+#include "runtime_state/sim_models.h"
+#include "simulation_storage_test_helper.h"
+#include "storage/internal/process_storage_context.h"
+#include "storage/storage_session.h"
 #include "store_sim_comm_pool_policy.h"
 #include "store_sim_device_memory_manager.h"
 #include "store_sim_memory_manager.h"
 #include "store_sim_run_mode.h"
-#include "db_sim_runner_db.h"
-#include "sim_models.h"
 
 class CheckOnlyOffTest : public testing::Test {
 protected:
@@ -29,8 +33,9 @@ protected:
         // 清进程内/磁盘上残留的 HcclCommPool。
         sim::MemoryManager::GetInstance().FreeMemByName(sim::CommPoolPolicy::kPoolName);
         shm_unlink(sim::CommPoolPolicy::kPoolName);
-        // 清空 RunModeConfig，保证 ProbeCheckOnlyMode 为 false。本文件不写任何 check-only(mode=1) 行。
-        RunnerDB::DeleteAll<sim::RunModeConfig>();
+        // 清空 RunModeConfig，保证 ProbeCheckOnlyMode 为 false。本文件不写任何
+        // check-only(mode=1) 行。
+        runnerdb_test::ClearRecords<sim::runtime::RunModeConfig>();
     }
 };
 
@@ -43,7 +48,8 @@ TEST_F(CheckOnlyOffTest, NormalMode_BigBlocks_RealIndependentAlloc)
     void* b = mgr.AllocPhyMem("clean_big_b", 0, big);
     ASSERT_NE(a, nullptr);
     ASSERT_NE(b, nullptr);
-    EXPECT_NE(a, b); // clean 模式各自真实独立分配（仅校验模式下两者同为池首址）。
+    EXPECT_NE(a,
+              b); // clean 模式各自真实独立分配（仅校验模式下两者同为池首址）。
     mgr.FreePhyMem("clean_big_a", 0);
     mgr.FreePhyMem("clean_big_b", 0);
 }

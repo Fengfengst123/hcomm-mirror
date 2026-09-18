@@ -11,11 +11,12 @@
 #include <cstdlib>
 #include <string>
 
-#include "topo_ascend_cluster_parser.h"
 #include "cmd_base_utils.h"
+#include "runtime_state/db_sim_runner_common.h"
 #include "sim_common_defs.h"
 #include "sim_log.h"
 #include "subcmd_mock_comm.h"
+#include "topo_ascend_cluster_parser.h"
 
 namespace HcclSim {
 void MockCommCommand::Setup(CLI::App& app)
@@ -59,11 +60,18 @@ void MockCommCommand::Execute()
         if (!ParseYamlTopo(configFileName, topoMeta)) {
             return;
         }
+        // 每次mock-comm执行: 刷新TopoMetaConfig表项与进程通信域配置缓存
+        // (ranktable模式在ParseRanktableAndInitCommDomain内刷新)
+        if (!sim::runtime::RefreshTopoMetaConfig(configFileName, &topoMeta)) {
+            HCCL_VM_ERROR("refresh topo meta config failed: {}", configFileName);
+            return;
+        }
     }
 
     ret = InitHvmCommEnv(topoMeta, configFileName, g_hcclVmLevel);
     if (ret != HcclVmResult::HCCL_SIM_HOST_SUCCESS_CMD) {
-        HCCL_VM_ERROR("Failed to initialize mock communication environment. Cleaning up environment.");
+        HCCL_VM_ERROR("Failed to initialize mock communication environment. "
+                      "Cleaning up environment.");
         return;
     }
     return;

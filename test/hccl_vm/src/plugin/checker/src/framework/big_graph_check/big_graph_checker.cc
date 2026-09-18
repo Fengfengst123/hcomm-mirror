@@ -29,12 +29,13 @@ namespace BigGraphCheckV3 {
         using V3NodeId = TaskGraphGeneratorV3::NodeId;
         using V3RankNodeQueues = TaskGraphGeneratorV3::RankNodeQueues;
 
-        HcclResult DecodeOpDetails(const sim::OpDetailTab& detailTab, OpDetails& details)
+        HcclResult DecodeOpDetails(const sim::operation::OpDetailTab& detailTab, OpDetails& details)
         {
             if (detailTab.opDetail.size() < sizeof(OpDetails)) {
                 HCCL_VM_ERROR(
-                    "Operator detail payload is too small, rankId={}, actualSize={}, expectedSize={}", detailTab.rankId,
-                    detailTab.opDetail.size(), sizeof(OpDetails));
+                    "Operator detail payload is too small, rankId={}, "
+                    "actualSize={}, expectedSize={}",
+                    detailTab.rankId, detailTab.opDetail.size(), sizeof(OpDetails));
                 return HCCL_E_PARA;
             }
             std::memcpy(&details, detailTab.opDetail.data(), sizeof(OpDetails));
@@ -82,9 +83,73 @@ namespace BigGraphCheckV3 {
         }
     } // namespace
 
-    HcclResult BigGraphCheckerV3::LoadOpData(loader::Loader& loader, uint32_t syncIter)
+    HcclResult BigGraphCheckerV3::LoadOpData(loader::Loader& loader)
     {
-        return dataLoader_.Load(loader, syncIter, data_);
+        data_.Clear();
+        HcclResult ret = loader.GetCcuChannelInfo(data_.channels);
+        if (ret != HCCL_SUCCESS) {
+            return ret;
+        }
+        ret = loader.GetInstrResInfo(data_.instrRes);
+        if (ret != HCCL_SUCCESS) {
+            data_.Clear();
+            return ret;
+        }
+        ret = loader.GetHalfRTTInfo(data_.halfRTT);
+        if (ret != HCCL_SUCCESS) {
+            data_.Clear();
+            return ret;
+        }
+        std::vector<sim::operation::OpExecution> executions;
+        ret = loader.LoadAllOpExecutions(executions);
+        if (ret != HCCL_SUCCESS) {
+            data_.Clear();
+            return ret;
+        }
+        if (executions.size() > static_cast<size_t>(TaskGraphGeneratorV3::INVALID_OPERATOR_ID)) {
+            HCCL_VM_ERROR("Too many operators in big graph, operatorCount={}", executions.size());
+            data_.Clear();
+            return HCCL_E_PARA;
+        }
+
+        data_.operators.reserve(executions.size());
+        for (size_t operatorIndex = 0; operatorIndex < executions.size(); ++operatorIndex) {
+            const sim::operation::OpExecution& execution = executions[operatorIndex];
+            OpParam opParam;
+            opParam.operatorId = static_cast<TaskGraphGeneratorV3::OperatorId>(operatorIndex);
+            opParam.key = execution.key;
+            opParam.ranks.reserve(execution.deviceRecords.size());
+            for (const sim::operation::DeviceOpExecutionRecord& record : execution.deviceRecords) {
+                OperatorRankData rankData;
+                rankData.deviceId = record.deviceId;
+                rankData.rankId = record.rankId;
+                rankData.op.deviceId = record.deviceId;
+                rankData.op.rankId = record.rankId;
+                rankData.op.commId = record.detail.commId;
+                rankData.op.detail = record.detail;
+                rankData.op.memInfo = record.memInfo;
+                rankData.op.tasks = record.tasks;
+                rankData.taskMetas.reserve(record.tasks.size());
+                for (const sim::operation::OpTaskTab& task : record.tasks) {
+                    if (task.optaskMeta.size() < sizeof(HcclTaskMetaData)) {
+                        HCCL_VM_ERROR(
+                            "Cannot load operator task metadata because "
+                            "the payload is too small, "
+                            "actualSize={}, expectedSize={}",
+                            task.optaskMeta.size(), sizeof(HcclTaskMetaData));
+                        data_.Clear();
+                        return HCCL_E_PARA;
+                    }
+                    HcclTaskMetaData taskMeta;
+                    std::memcpy(&taskMeta, task.optaskMeta.data(), sizeof(HcclTaskMetaData));
+                    rankData.taskMetas.push_back(taskMeta);
+                }
+                opParam.ranks.push_back(std::move(rankData));
+            }
+            data_.operators.push_back(std::move(opParam));
+        }
+        HCCL_VM_INFO("Loaded all operator data for big graph, operatorCount={}", data_.operators.size());
+        return HCCL_SUCCESS;
     }
 
     HcclResult BigGraphCheckerV3::TranslateTask()
@@ -100,7 +165,9 @@ namespace BigGraphCheckV3 {
 
         for (const OpParam& opParam : data_.operators) {
             for (const OperatorRankData& rankData : opParam.ranks) {
-                HcclResult ret = storage_.LoadHcclVmSynthesisData(rankData.rankId, rankData.op.memInfo, data_.channels);
+                HcclResult ret = storage_.LoadHcclVmSynthesisData(
+                    rankData.deviceId, rankData.op.detail.commId, opParam.key.commName, opParam.key.commHash,
+                    opParam.key.opIter, rankData.rankId, rankData.op.memInfo, data_.channels, data_.halfRTT);
                 if (ret != HCCL_SUCCESS) {
                     return ret;
                 }
@@ -112,14 +179,14 @@ namespace BigGraphCheckV3 {
         }
 
         for (const OpParam& opParam : data_.operators) {
-            storage_.BeginOpGroup();
+            storage_.BeginOpGroup(opParam.key.commName, opParam.key.commHash, opParam.key.opIter);
             for (const OperatorRankData& rankData : opParam.ranks) {
                 OpDetails details{};
                 ret = DecodeOpDetails(rankData.op.detail, details);
                 if (ret != HCCL_SUCCESS) {
                     return ret;
                 }
-                sim::OpDetailTab detailTab = rankData.op.detail;
+                sim::operation::OpDetailTab detailTab = rankData.op.detail;
                 ret = storage_.Trans2CheckerParam(detailTab, details);
                 if (ret != HCCL_SUCCESS) {
                     return ret;
@@ -143,7 +210,8 @@ namespace BigGraphCheckV3 {
             }
 
             TaskGraphGeneratorV3::TaskMetaTranslatorV3 translator;
-            ret = translator.Translate(storage_, opParam.operatorId);
+            ret = translator.Translate(
+                storage_, opParam.operatorId, opParam.key.commName, opParam.key.commHash, opParam.key.opIter);
             if (ret != HCCL_SUCCESS) {
                 return ret;
             }
@@ -154,8 +222,9 @@ namespace BigGraphCheckV3 {
         }
 
         HCCL_VM_INFO(
-            "Translated big graph tasks, operatorCount={}, nodeCount={}, rankCount={}", data_.operators.size(),
-            translatedNodes_.size(), translatedTaskQueues_.size());
+            "Translated big graph tasks, operatorCount={}, nodeCount={}, "
+            "rankCount={}",
+            data_.operators.size(), translatedNodes_.size(), translatedTaskQueues_.size());
         return HCCL_SUCCESS;
     }
 
@@ -163,8 +232,8 @@ namespace BigGraphCheckV3 {
     {
         if (translatedNodes_.empty() || translatedTaskQueues_.empty()) {
             HCCL_VM_ERROR(
-                "{} Checker get empty task queue, please check if the HCCL-VM end normally, operatorCount={}, "
-                "nodeCount={}, rankCount={}",
+                "{} Checker get empty task queue, please check if the HCCL-VM end "
+                "normally, operatorCount={}, nodeCount={}, rankCount={}",
                 MakeErrorCodeText(ErrorCode::CHECKER_RUNTIME_ERROR), data_.operators.size(), translatedNodes_.size(),
                 translatedTaskQueues_.size());
             return HCCL_E_PARA;
@@ -181,6 +250,13 @@ namespace BigGraphCheckV3 {
         if (ret != HCCL_SUCCESS) {
             return ret;
         }
+        ret = graph->CompactSyncNodes();
+        if (ret != HCCL_SUCCESS) {
+            HCCL_VM_ERROR(
+                "{} Failed to compact big-graph sync-stream nodes, ret={}",
+                MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID), static_cast<uint32_t>(ret));
+            return ret;
+        }
         graph_ = std::move(graph);
         HCCL_VM_INFO(
             "Generated big graph, nodeCount={}, rankCount={}", graph_->GetNodes().size(),
@@ -194,7 +270,8 @@ namespace BigGraphCheckV3 {
     {
         if (graph_ == nullptr || graph_->GetMainStartNode() == nullptr) {
             HCCL_VM_ERROR(
-                "{} Cannot run big graph sync-conflict check before the graph is generated",
+                "{} Cannot run big graph sync-conflict check before the "
+                "graph is generated",
                 MakeErrorCodeText(ErrorCode::CHECKER_RUNTIME_ERROR));
             return HCCL_E_PARA;
         }
@@ -202,8 +279,10 @@ namespace BigGraphCheckV3 {
         TaskGraphGeneratorV3::SyncConflictCheckStats stats;
         const HcclResult ret = TaskGraphGeneratorV3::CheckSyncResourceConflict(graph_->GetMainStartNode(), &stats);
         HCCL_VM_INFO(
-            "Big graph sync-conflict check finished, status={}, originalNodeCount={}, copiedNodeCount={}, "
-            "copiedEdgeCount={}, resourceBucketCount={}, pairCount={}, checkedBucketCount={}, conflictCount={}",
+            "Big graph sync-conflict check finished, status={}, "
+            "originalNodeCount={}, copiedNodeCount={}, "
+            "copiedEdgeCount={}, resourceBucketCount={}, pairCount={}, "
+            "checkedBucketCount={}, conflictCount={}",
             ret == HCCL_SUCCESS ? "success" : "failed", stats.originalNodeCount, stats.copiedNodeCount,
             stats.copiedEdgeCount, stats.resourceBucketCount, stats.pairCount, stats.checkedBucketCount,
             stats.conflictCount);

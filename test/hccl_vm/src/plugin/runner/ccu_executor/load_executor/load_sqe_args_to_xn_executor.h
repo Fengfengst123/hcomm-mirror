@@ -8,6 +8,12 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: ccu executor -- load sqe arg
+ * to xn Author: caiyifan
+ */
+
 #ifndef HCCL_SIM_LOAD_SQE_ARGS_TO_XN_EXECUTOR_H
 #define HCCL_SIM_LOAD_SQE_ARGS_TO_XN_EXECUTOR_H
 

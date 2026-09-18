@@ -14,16 +14,19 @@
 #include <cstddef>
 
 namespace sim {
-// HcclCommPool 复用区的准入策略，主机侧与设备侧共用的纯判定。阈值与上界集中在此定义。
+// HcclCommPool
+// 复用区的准入策略，主机侧与设备侧共用的纯判定。阈值与上界集中在此定义。
 struct CommPoolPolicy {
     static constexpr size_t kBigBlockThreshold = 200ULL * 1024 * 1024; // 200MB，对齐 CCL buffer 默认
-    // 复用区规格 4GB，大块可申请和可寻址的上界（含等于）。超过 4GB 由 ExceedsCeiling 报错。
+    // 复用区规格 4GB，大块可申请和可寻址的上界（含等于）。超过 4GB 由
+    // ExceedsCeiling 报错。
     static constexpr size_t kPoolSize = 4ULL * 1024 * 1024 * 1024; // 4GB
 
     // 复用区共享内存名。
     static constexpr const char* kPoolName = "HcclCommPool";
 
-    // 本次申请是否应引流到复用区：仅校验模式开且 threshold <= size <= poolSize。
+    // 本次申请是否应引流到复用区：仅校验模式开且 threshold <= size <=
+    // poolSize。
     static bool
     ShouldRedirect(size_t size, bool checkOnlyMode, size_t threshold = kBigBlockThreshold, size_t poolSize = kPoolSize)
     {

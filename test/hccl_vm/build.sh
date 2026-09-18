@@ -170,7 +170,6 @@ build_host() {
 }
 
 build_device() {
-    mkdir -p build_device
     mkdir -p build
     cd build
     cmake -DBUILD_DEVICE_ARM=ON .. && make -j16

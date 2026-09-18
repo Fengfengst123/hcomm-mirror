@@ -21,7 +21,7 @@
 using json = nlohmann::json;
 namespace fs = std::filesystem;
 
-constexpr char AIV_RANK_TASK_FILE_PREFIX[] = "hcclvm_aiv_rank";
+constexpr char AIV_RANK_TASK_FILE_PREFIX[] = "hcclvm_aiv_device";
 constexpr char AIV_RANK_TASK_FILE_SUFFIX[] = "_task.json";
 constexpr char AIV_RANK_TASK_FILE_LAUNCH_MARKER[] = "_launch";
 
@@ -45,7 +45,7 @@ static bool ResolveAivSnapshotDirectory(fs::path& snapshotDir, std::string* erro
 }
 
 static bool
-ResolveRankTaskFilePath(uint32_t rankId, uint32_t launchIndex, std::string& filePath, std::string* errorMessage)
+ResolveRankTaskFilePath(uint64_t deviceId, uint64_t launchIndex, std::string& filePath, std::string* errorMessage)
 {
     fs::path snapshotDir;
     if (!ResolveAivSnapshotDirectory(snapshotDir, errorMessage)) {
@@ -54,7 +54,7 @@ ResolveRankTaskFilePath(uint32_t rankId, uint32_t launchIndex, std::string& file
 
     std::error_code ec;
     filePath = (snapshotDir
-                / (std::string(AIV_RANK_TASK_FILE_PREFIX) + std::to_string(rankId)
+                / (std::string(AIV_RANK_TASK_FILE_PREFIX) + std::to_string(deviceId)
                    + std::string(AIV_RANK_TASK_FILE_LAUNCH_MARKER) + std::to_string(launchIndex)
                    + std::string(AIV_RANK_TASK_FILE_SUFFIX)))
                    .string();
@@ -88,8 +88,8 @@ ParseDataSlice(const json& payload, const char* pipeName, AivSim::AivDataSlice& 
 
     const auto& sliceJson = payload[pipeName];
     slice = AivSim::AivDataSlice(
-        static_cast<AivSim::AivBufferType>(sliceJson.value("bufferType", 0U)), sliceJson.value("offset", 0ULL),
-        sliceJson.value("size", 0ULL));
+        static_cast<AivSim::AivBufferType>(sliceJson.value("bufferType", 0U)), sliceJson.value("deviceId", UINT32_MAX),
+        sliceJson.value("offset", 0ULL), sliceJson.value("virtualAddr", 0ULL), sliceJson.value("size", 0ULL));
     return true;
 }
 
@@ -119,8 +119,7 @@ static bool ParseRuntimeTaskArray(
                     || !ParseDataSlice(payload, "dst", dst, errorMessage)) {
                     return false;
                 }
-                task = std::make_shared<AivSim::AivTaskMemCopy>(
-                    payload.value("srcRank", UINT32_MAX), src, payload.value("dstRank", UINT32_MAX), dst);
+                task = std::make_shared<AivSim::AivTaskMemCopy>(src, dst);
                 break;
             }
             case AivSim::AivTaskType::REDUCE: {
@@ -131,8 +130,7 @@ static bool ParseRuntimeTaskArray(
                     return false;
                 }
                 task = std::make_shared<AivSim::AivTaskReduce>(
-                    payload.value("srcRank", UINT32_MAX), src, payload.value("dstRank", UINT32_MAX), dst,
-                    payload.value("dataType", 0U), payload.value("reduceOp", 0U));
+                    src, dst, payload.value("dataType", 0U), payload.value("reduceOp", 0U));
                 break;
             }
             case AivSim::AivTaskType::SET_FLAG:
@@ -154,16 +152,24 @@ static bool ParseRuntimeTaskArray(
             case AivSim::AivTaskType::SYNC_ALL:
                 task = std::make_shared<AivSim::AivTaskSyncAll>(payload.value("syncRound", UINT32_MAX));
                 break;
-            case AivSim::AivTaskType::SEND_FLAG:
+            case AivSim::AivTaskType::SEND_FLAG: {
+                AivSim::AivDataSlice flagBuffer;
+                if (!ParseDataSlice(payload, "flagBuffer", flagBuffer, errorMessage)) {
+                    return false;
+                }
                 task = std::make_shared<AivSim::AivTaskSendFlag>(
-                    payload.value("rank", UINT32_MAX), payload.value("commInfoOffset", 0ULL),
-                    payload.value("flagValue", 0));
+                    payload.value("targetRank", UINT32_MAX), flagBuffer, payload.value("flagValue", 0));
                 break;
-            case AivSim::AivTaskType::RECV_FLAG:
+            }
+            case AivSim::AivTaskType::RECV_FLAG: {
+                AivSim::AivDataSlice flagBuffer;
+                if (!ParseDataSlice(payload, "flagBuffer", flagBuffer, errorMessage)) {
+                    return false;
+                }
                 task = std::make_shared<AivSim::AivTaskRecvFlag>(
-                    payload.value("rank", UINT32_MAX), payload.value("commInfoOffset", 0ULL),
-                    payload.value("targetValue", 0));
+                    payload.value("targetRank", UINT32_MAX), flagBuffer, payload.value("flagValue", 0));
                 break;
+            }
             default:
                 SetCommonError(
                     errorMessage,
@@ -173,6 +179,8 @@ static bool ParseRuntimeTaskArray(
 
         task->SetTaskId(taskJson.value("taskId", 0U));
         task->SetRankId(taskJson.value("rankId", 0U));
+        task->SetDeviceId(taskJson.value("deviceId", UINT32_MAX));
+        task->SetCommId(taskJson.value("commId", 0ULL));
         task->SetBlockId(taskJson.value("blockId", 0U));
         task->SetCurPipe(
             static_cast<AscendC::pipe_t>(taskJson.value("curPipe", static_cast<uint32_t>(AscendC::PIPE_ALL))));
@@ -210,11 +218,6 @@ static bool ResolveBarrierGroups(
 
 static bool ParseRuntimeRank(const json& rankJson, AivRuntimeTaskSnapshot& taskSnapshot, std::string* errorMessage)
 {
-    taskSnapshot.rankId = rankJson.value("rank", UINT32_MAX);
-    taskSnapshot.rankSize = rankJson.value("rankSize", 0U);
-    taskSnapshot.launchIndex = rankJson.value("launchIndex", 0U);
-    taskSnapshot.blocks.clear();
-
     if (!rankJson.contains("aivCores") || !rankJson["aivCores"].is_array()) {
         SetCommonError(errorMessage, "runtime snapshot missing aivCores array");
         return false;
@@ -261,17 +264,14 @@ void AivTaskSnapshotLoader::SetError(std::string* errorMessage, const std::strin
     }
 }
 
-bool AivTaskSnapshotLoader::LoadRuntimeTaskSnapshotByLaunchDirect(
-    uint32_t rankId, uint32_t launchIndex, AivRuntimeTaskSnapshot& taskSnapshot, std::string* errorMessage)
+bool AivTaskSnapshotLoader::LoadRuntimeTasks(
+    uint64_t deviceId, uint64_t launchIndex, AivRuntimeTaskSnapshot& taskSnapshot, std::string* errorMessage)
 {
     std::string filePath;
-    if (!ResolveRankTaskFilePath(rankId, launchIndex, filePath, errorMessage)) {
+    if (!ResolveRankTaskFilePath(deviceId, launchIndex, filePath, errorMessage)) {
         return false;
     }
 
-    taskSnapshot.rankId = rankId;
-    taskSnapshot.rankSize = 0;
-    taskSnapshot.launchIndex = launchIndex;
     taskSnapshot.filePath = filePath;
     taskSnapshot.blocks.clear();
 
@@ -287,26 +287,9 @@ bool AivTaskSnapshotLoader::LoadRuntimeTaskSnapshotByLaunchDirect(
         return false;
     }
 
-    const uint32_t fileRankId = rankJson.value("rank", UINT32_MAX);
-    if (fileRankId != rankId) {
-        SetError(
-            errorMessage, "rank id mismatch in file: " + filePath + ", file rank=" + std::to_string(fileRankId)
-                              + ", path rank=" + std::to_string(rankId));
-        return false;
-    }
-
-    const uint32_t fileLaunchIndex = rankJson.value("launchIndex", UINT32_MAX);
-    if (fileLaunchIndex != launchIndex) {
-        SetError(
-            errorMessage, "launchIndex mismatch in file: " + filePath + ", file launchIndex="
-                              + std::to_string(fileLaunchIndex) + ", path launchIndex=" + std::to_string(launchIndex));
-        return false;
-    }
-
     if (!ParseRuntimeRank(rankJson, taskSnapshot, errorMessage)) {
         return false;
     }
-    taskSnapshot.filePath = filePath;
-    taskSnapshot.launchIndex = fileLaunchIndex;
+
     return true;
 }

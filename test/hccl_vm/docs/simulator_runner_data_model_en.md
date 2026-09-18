@@ -562,7 +562,7 @@ graph RL
 
 ### 3.3 Asynchronous / Synchronous Execution Modeling
 
-#### 3.3.1 [Notify Resource Management](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850alpha001/appdevg/acldevg/aclcppdevg_000524.html)
+#### 3.3.1 [Notify Resource Management](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850alpha001/appdevg/acldevg/aclcppdevg_000524.html)
 
 ```mermaid
 erDiagram
@@ -601,7 +601,7 @@ erDiagram
     }
 ```
 
-##### Key Relationship Description ([Notify Resource Management](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850alpha001/appdevg/acldevg/aclcppdevg_000524.html))
+##### Key Relationship Description ([Notify Resource Management](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850alpha001/appdevg/acldevg/aclcppdevg_000524.html))
 
 **Notify and Device hardware constraints**:
 
@@ -622,7 +622,7 @@ erDiagram
 - `rtWaitAndResetNotify` waits for the Notify to reach Ready state and resets it.
 - Notify is used for inter-Stream synchronization and cross-process synchronization.
 
-##### API Mapping Table ([Notify Resource Management](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850alpha001/appdevg/acldevg/aclcppdevg_000524.html))
+##### API Mapping Table ([Notify Resource Management](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850alpha001/appdevg/acldevg/aclcppdevg_000524.html))
 
 | Entity                     | Key Management Interfaces                          |
 | -------------------------- | --------------------------------------------------- |
@@ -786,7 +786,7 @@ erDiagram
     EventTask {
         typ task-id FK
         typ event-id FK
-        typ excute-time
+        typ execute-time
         typ finish-time 
         typ first-capture-taskid  FK  
     }
@@ -797,23 +797,23 @@ erDiagram
 
     EventSyncTask {
         typ event-id FK
-        typ excute-time
+        typ execute-time
         typ finish-time 
         typ op-timeout-s 
     }
     EventRecordTask {
         typ event-id FK
-        typ excute-time
+        typ execute-time
         typ finish-time 
     }
     EventWaitTask {
         typ event-id FK
-        typ excute-time
+        typ execute-time
         typ finish-time 
     }    
     EventTimeTask {
         typ event-id FK
-        typ excute-time     
+        typ execute-time     
     }
     EventTraceTask {
         typ event-id FK

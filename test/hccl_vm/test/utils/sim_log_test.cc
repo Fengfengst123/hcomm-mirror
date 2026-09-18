@@ -27,7 +27,7 @@ TEST_F(HcclVmLogTest, LogConfig_DefaultValues)
     LogConfig config;
     EXPECT_EQ(config.consoleLevel, 2);
     EXPECT_EQ(config.fileLevel, 1);
-    EXPECT_EQ(config.maxFileSize, 10 * 1024 * 1024);
+    EXPECT_EQ(config.maxFileSize, 50 * 1024 * 1024);
     EXPECT_EQ(config.maxFiles, UINT16_MAX);
     EXPECT_EQ(config.filePath, "logs");
     EXPECT_EQ(config.fileBaseName, "app_log");

@@ -8,6 +8,12 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: ccu executor -- reduce add
+ * Author: caiyifan
+ */
+
 #ifndef HCCL_SIM_CCU_REDUCE_OPERATOR_H
 #define HCCL_SIM_CCU_REDUCE_OPERATOR_H
 
@@ -15,8 +21,8 @@
 #include <functional>
 #include <map>
 
-#include "ccu_resource_manager.h"
 #include "ccu_fp16.h"
+#include "ccu_resource_manager.h"
 
 bool ReduceProcess(
     const void* srcBuf, void* dstBuf, uint64_t length, uint16_t dataType, uint32_t reduceOp, RunnerCcuVersion version);

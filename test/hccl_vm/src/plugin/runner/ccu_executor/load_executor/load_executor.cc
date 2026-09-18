@@ -8,6 +8,12 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: ccu executor -- Load Executor
+ * Author: caiyifan
+ */
+
 #include "load_executor.h"
 
 #include <cstdint>
@@ -62,8 +68,9 @@ void LoadExecutor::Run()
 std::string LoadExecutor::Describe()
 {
     return HcclSim::StringFormat(
-        "[LoadExecutor] dstType:[%u], xdId:[%u], xsId:[%u], xlId:[%u], ckeId:[%u], ckeMask:[0x%04x]\n", dstType_, xdId_,
-        xsId_, xlId_, ckeId_, ckeMask_);
+        "[LoadExecutor] dstType:[%u], xdId:[%u], xsId:[%u], xlId:[%u], "
+        "ckeId:[%u], ckeMask:[0x%04x]\n",
+        dstType_, xdId_, xsId_, xlId_, ckeId_, ckeMask_);
 }
 
 CcuTrace::CcuInstrTraceDetail LoadExecutor::CollectTraceDetail()

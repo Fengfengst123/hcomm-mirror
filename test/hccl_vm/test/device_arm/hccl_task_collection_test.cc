@@ -39,8 +39,8 @@ TEST_F(HcclTaskCollectionTest, InsertTask_MemCpyTask)
     task.taskType = HccLTaskMetaType::MEM_CPY;
     task.rankId = 0;
     task.streamId = 0;
-    task.taskData.transMem.srcRankId = 0;
-    task.taskData.transMem.dstRankId = 1;
+    task.taskData.transMem.srcDeviceId = 0;
+    task.taskData.transMem.dstDeviceId = 1;
     task.taskData.transMem.srcOffset = 0x1000;
     task.taskData.transMem.dstOffset = 0x2000;
     task.taskData.transMem.len = 1024;
@@ -55,8 +55,8 @@ TEST_F(HcclTaskCollectionTest, InsertTask_ReduceTask)
     task.taskType = HccLTaskMetaType::REDUCE;
     task.rankId = 0;
     task.streamId = 0;
-    task.taskData.reduce.srcRankId = 0;
-    task.taskData.reduce.dstRankId = 1;
+    task.taskData.reduce.srcDeviceId = 0;
+    task.taskData.reduce.dstDeviceId = 1;
     task.taskData.reduce.srcOffset = 0x1000;
     task.taskData.reduce.dstOffset = 0x2000;
     task.taskData.reduce.dataCount = 256;
@@ -73,7 +73,7 @@ TEST_F(HcclTaskCollectionTest, InsertTask_NotifyWaitTask)
     task.taskType = HccLTaskMetaType::NOTIFY_WAIT;
     task.rankId = 0;
     task.streamId = 0;
-    task.taskData.notify.srcRankId = 1;
+    task.taskData.notify.srcDeviceId = 1;
     task.taskData.notify.notifyId = 100;
 
     EXPECT_NO_THROW(InsertTaskToCollectionDev(&task));
@@ -86,7 +86,7 @@ TEST_F(HcclTaskCollectionTest, InsertTask_NotifyRecordTask)
     task.taskType = HccLTaskMetaType::NOTIFY_RECORD;
     task.rankId = 0;
     task.streamId = 0;
-    task.taskData.notify.dstRankId = 1;
+    task.taskData.notify.dstDeviceId = 1;
     task.taskData.notify.notifyId = 100;
 
     EXPECT_NO_THROW(InsertTaskToCollectionDev(&task));

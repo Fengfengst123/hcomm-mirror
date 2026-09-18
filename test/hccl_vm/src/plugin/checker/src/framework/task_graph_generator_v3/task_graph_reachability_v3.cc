@@ -143,7 +143,8 @@ namespace TaskGraphGeneratorV3 {
             reachable = ReachableTaskNodes();
             if (!IsMainGraphStartNode(start)) {
                 HCCL_VM_ERROR(
-                    "{} Reachability analysis cannot start because the main start node is "
+                    "{} Reachability analysis cannot start because the main "
+                    "start node is "
                     "invalid, mainStartNode={}",
                     MakeErrorCodeText(ErrorCode::MEMCONFLICT_DAG_INVALID),
                     start == nullptr ? "null" : start->Describe());
@@ -167,7 +168,8 @@ namespace TaskGraphGeneratorV3 {
                 for (const TaskNode* childNode : node->GetChildren()) {
                     if (childNode == nullptr) {
                         HCCL_VM_ERROR(
-                            "{} Graph structure is broken because one child node is null, "
+                            "{} Graph structure is broken because one child node is "
+                            "null, "
                             "parent={}",
                             MakeErrorCodeText(ErrorCode::MEMCONFLICT_DAG_INVALID), node->Describe());
                         return HCCL_E_PTR;
@@ -190,7 +192,8 @@ namespace TaskGraphGeneratorV3 {
             }
             if (child == nullptr) {
                 HCCL_VM_ERROR(
-                    "{} Graph structure is broken because one child node is null, parent={}",
+                    "{} Graph structure is broken because one child node is "
+                    "null, parent={}",
                     MakeErrorCodeText(ErrorCode::MEMCONFLICT_DAG_INVALID), parent->Describe());
                 return HCCL_E_PTR;
             }
@@ -198,7 +201,8 @@ namespace TaskGraphGeneratorV3 {
             const auto iter = reachable.indexByNode.find(child);
             if (iter == reachable.indexByNode.end()) {
                 HCCL_VM_ERROR(
-                    "{} One graph edge is invalid, so reachability analysis cannot continue, "
+                    "{} One graph edge is invalid, so reachability analysis "
+                    "cannot continue, "
                     "parent={}, child={}",
                     MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID), parent->Describe(), child->Describe());
                 return HCCL_E_PARA;
@@ -297,7 +301,8 @@ namespace TaskGraphGeneratorV3 {
                 }
                 HCCL_VM_ERROR(
                     "{} This V3 graph is not a complete DAG from the main start node, "
-                    "topoSize={}, expectedTopoSize={}, reachableTaskCount={}, taskNodeCount={}, mainStartNodeId={}",
+                    "topoSize={}, expectedTopoSize={}, reachableTaskCount={}, "
+                    "taskNodeCount={}, mainStartNodeId={}",
                     MakeErrorCodeText(ErrorCode::MEMCONFLICT_DAG_INVALID), context.fullTopoOrder.size(), nodeCount + 1U,
                     context.taskTopoNodes.size(), nodeCount, MAIN_START_NODE_ID);
                 return HCCL_E_INTERNAL;
@@ -354,7 +359,8 @@ namespace TaskGraphGeneratorV3 {
                 const auto nodeIter = context.reachable.indexByNode.find(node);
                 if (nodeIter == context.reachable.indexByNode.end() || dataIndex >= closure.matrix.size()) {
                     HCCL_VM_ERROR(
-                        "{} This data-move node is missing its reachability index, node={}",
+                        "{} This data-move node is missing its reachability "
+                        "index, node={}",
                         MakeErrorCodeText(ErrorCode::MEMCONFLICT_DAG_INVALID), node->Describe());
                     return HCCL_E_INTERNAL;
                 }
@@ -395,8 +401,10 @@ namespace TaskGraphGeneratorV3 {
         const auto fromIter = closure.dataIndexByNodeId.find(fromNodeId);
         if (fromIter == closure.dataIndexByNodeId.end()) {
             HCCL_VM_ERROR(
-                "{} Task dependency query only supports memory-copy or reduce tasks, "
-                "but the source task is not in that set, sourceTaskId={}, targetTaskId={}, "
+                "{} Task dependency query only supports memory-copy or "
+                "reduce tasks, "
+                "but the source task is not in that set, "
+                "sourceTaskId={}, targetTaskId={}, "
                 "sourceReachabilityIndex=null",
                 MakeErrorCodeText(ErrorCode::CHECKER_RUNTIME_ERROR), fromNodeId, toNodeId);
             return HCCL_E_PARA;
@@ -404,8 +412,10 @@ namespace TaskGraphGeneratorV3 {
         const auto toIter = closure.dataIndexByNodeId.find(toNodeId);
         if (toIter == closure.dataIndexByNodeId.end()) {
             HCCL_VM_ERROR(
-                "{} Task dependency query only supports memory-copy or reduce tasks, "
-                "but the target task is not in that set, sourceTaskId={}, targetTaskId={}, "
+                "{} Task dependency query only supports memory-copy or reduce "
+                "tasks, "
+                "but the target task is not in that set, sourceTaskId={}, "
+                "targetTaskId={}, "
                 "sourceReachabilityIndex={}, targetReachabilityIndex=null",
                 MakeErrorCodeText(ErrorCode::CHECKER_RUNTIME_ERROR), fromNodeId, toNodeId, fromIter->second);
             return HCCL_E_PARA;
@@ -416,7 +426,8 @@ namespace TaskGraphGeneratorV3 {
         if (fromIndex >= closure.matrix.size() || toIndex / BITS_PER_WORD >= closure.matrix[fromIndex].size()) {
             HCCL_VM_ERROR(
                 "{} Reachability index is invalid for this data-move task pair, "
-                "sourceTaskId={}, targetTaskId={}, sourceIndex={}, targetIndex={}, matrixRowCount={}, "
+                "sourceTaskId={}, targetTaskId={}, sourceIndex={}, targetIndex={}, "
+                "matrixRowCount={}, "
                 "matrixWordCountInSourceRow={}",
                 MakeErrorCodeText(ErrorCode::MEMCONFLICT_DAG_INVALID), fromNodeId, toNodeId, fromIndex, toIndex,
                 closure.matrix.size(), fromIndex < closure.matrix.size() ? closure.matrix[fromIndex].size() : 0U);
@@ -426,19 +437,22 @@ namespace TaskGraphGeneratorV3 {
         return HCCL_SUCCESS;
     }
 
-    // HcclResult IsReachable(const RoaringReachabilityClosure &closure, NodeId fromNodeId, NodeId toNodeId,
+    // HcclResult IsReachable(const RoaringReachabilityClosure &closure, NodeId
+    // fromNodeId, NodeId toNodeId,
     //     bool &isReachable)
     // {
     //     isReachable = false;
     //     const auto fromIter = closure.dataIndexByNodeId.find(fromNodeId);
     //     if (fromIter == closure.dataIndexByNodeId.end()) {
-    //         HCCL_VM_ERROR("Roaring reachability query only supports data move task nodes, "
+    //         HCCL_VM_ERROR("Roaring reachability query only supports data move
+    //         task nodes, "
     //             "fromNodeId={}, toNodeId={}", fromNodeId, toNodeId);
     //         return HCCL_E_PARA;
     //     }
     //     const auto toIter = closure.dataIndexByNodeId.find(toNodeId);
     //     if (toIter == closure.dataIndexByNodeId.end()) {
-    //         HCCL_VM_ERROR("Roaring reachability query only supports data move task nodes, "
+    //         HCCL_VM_ERROR("Roaring reachability query only supports data move
+    //         task nodes, "
     //             "fromNodeId={}, toNodeId={}", fromNodeId, toNodeId);
     //         return HCCL_E_PARA;
     //     }
@@ -446,12 +460,14 @@ namespace TaskGraphGeneratorV3 {
     //     const size_t fromIndex = fromIter->second;
     //     const size_t toIndex = toIter->second;
     //     if (fromIndex >= closure.matrix.size()) {
-    //         HCCL_VM_ERROR("Invalid roaring data move reachability index, fromNodeId={}, "
+    //         HCCL_VM_ERROR("Invalid roaring data move reachability index,
+    //         fromNodeId={}, "
     //             "toNodeId={}, fromIndex={}, toIndex={}, matrixSize={}",
     //             fromNodeId, toNodeId, fromIndex, toIndex, closure.matrix.size());
     //         return HCCL_E_INTERNAL;
     //     }
-    //     isReachable = closure.matrix[fromIndex].contains(static_cast<uint32_t>(toIndex));
+    //     isReachable =
+    //     closure.matrix[fromIndex].contains(static_cast<uint32_t>(toIndex));
     //     return HCCL_SUCCESS;
     // }
 
@@ -516,7 +532,8 @@ namespace TaskGraphGeneratorV3 {
 
         HCCL_VM_INFO(
             "Task dependency summary generated, nodeCount={}, edgeCount={}, "
-            "memoryTaskCount={}, taskPairsChecked={}, orderedTaskPairs={}, parallelTaskPairs={}",
+            "memoryTaskCount={}, taskPairsChecked={}, orderedTaskPairs={}, "
+            "parallelTaskPairs={}",
             localStats.nodeCount, localStats.edgeCount, localStats.dataTaskNodeCount, localStats.dataTaskPairCount,
             localStats.reachablePairCount, localStats.unreachablePairCount);
 

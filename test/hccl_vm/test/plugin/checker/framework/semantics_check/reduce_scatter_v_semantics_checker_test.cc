@@ -27,7 +27,7 @@ protected:
 
     // Helper function to create valid ReduceScatterV semantics
     void CreateValidReduceScatterVSemantics(
-        std::map<RankId, RankMemorySemantics>& allRankMemSemantics, VDataDesTagInner& vDataDes, u32 rankSize,
+        std::map<DeviceId, RankMemorySemantics>& allRankMemSemantics, VDataDesTagInner& vDataDes, u32 rankSize,
         const std::vector<uint64_t>& counts, HcclReduceOp reduceType)
     {
         vDataDes.dataType = HcclDataType::HCCL_DATA_TYPE_INT32;
@@ -43,7 +43,7 @@ protected:
 
         for (RankId rankId = 0; rankId < rankSize; rankId++) {
             RankMemorySemantics rankMemSemantics;
-            std::set<BufferSemantic> outputSemantics;
+            BufferSemanticMap outputSemantics;
 
             u64 curDataSize = counts[rankId] * CHECK_SIZE_TABLE[vDataDes.dataType];
             if (curDataSize == 0) {
@@ -56,7 +56,7 @@ protected:
                 bufSem.srcBufs.insert(SrcBufDes(
                     srcRank, BufferType::INPUT, vDataDes.displs[rankId] * CHECK_SIZE_TABLE[vDataDes.dataType]));
             }
-            outputSemantics.insert(bufSem);
+            outputSemantics.emplace(bufSem.startAddr, bufSem);
 
             rankMemSemantics[BufferType::OUTPUT] = outputSemantics;
             allRankMemSemantics[rankId] = rankMemSemantics;
@@ -67,63 +67,79 @@ protected:
 // Test normal case: valid ReduceScatterV semantics with equal counts
 TEST_F(ReduceScatterVSemanticsCheckerTest, ValidSemantics_EqualCounts)
 {
-    std::map<RankId, RankMemorySemantics> allRankMemSemantics;
+    std::map<DeviceId, RankMemorySemantics> allRankMemSemantics;
     VDataDesTagInner vDataDes;
     u32 rankSize = 4;
     std::vector<uint64_t> counts = {100, 100, 100, 100};
 
     CreateValidReduceScatterVSemantics(allRankMemSemantics, vDataDes, rankSize, counts, HcclReduceOp::HCCL_REDUCE_SUM);
 
-    HcclResult result = TaskCheckReduceScatterVSemantics(allRankMemSemantics, HcclReduceOp::HCCL_REDUCE_SUM, vDataDes);
+    std::vector<DeviceId> rankToDevice(rankSize);
+    for (DeviceId i = 0; i < rankSize; i++)
+        rankToDevice[i] = i;
+    HcclResult result
+        = TaskCheckReduceScatterVSemantics(allRankMemSemantics, HcclReduceOp::HCCL_REDUCE_SUM, vDataDes, rankToDevice);
     EXPECT_EQ(result, HcclResult::HCCL_SUCCESS);
 }
 
 // Test normal case: valid ReduceScatterV semantics with different counts
 TEST_F(ReduceScatterVSemanticsCheckerTest, ValidSemantics_DifferentCounts)
 {
-    std::map<RankId, RankMemorySemantics> allRankMemSemantics;
+    std::map<DeviceId, RankMemorySemantics> allRankMemSemantics;
     VDataDesTagInner vDataDes;
     u32 rankSize = 4;
     std::vector<uint64_t> counts = {50, 100, 150, 200};
 
     CreateValidReduceScatterVSemantics(allRankMemSemantics, vDataDes, rankSize, counts, HcclReduceOp::HCCL_REDUCE_SUM);
 
-    HcclResult result = TaskCheckReduceScatterVSemantics(allRankMemSemantics, HcclReduceOp::HCCL_REDUCE_SUM, vDataDes);
+    std::vector<DeviceId> rankToDevice(rankSize);
+    for (DeviceId i = 0; i < rankSize; i++)
+        rankToDevice[i] = i;
+    HcclResult result
+        = TaskCheckReduceScatterVSemantics(allRankMemSemantics, HcclReduceOp::HCCL_REDUCE_SUM, vDataDes, rankToDevice);
     EXPECT_EQ(result, HcclResult::HCCL_SUCCESS);
 }
 
 // Test boundary case: single rank
 TEST_F(ReduceScatterVSemanticsCheckerTest, ValidSemantics_SingleRank)
 {
-    std::map<RankId, RankMemorySemantics> allRankMemSemantics;
+    std::map<DeviceId, RankMemorySemantics> allRankMemSemantics;
     VDataDesTagInner vDataDes;
     u32 rankSize = 1;
     std::vector<uint64_t> counts = {100};
 
     CreateValidReduceScatterVSemantics(allRankMemSemantics, vDataDes, rankSize, counts, HcclReduceOp::HCCL_REDUCE_SUM);
 
-    HcclResult result = TaskCheckReduceScatterVSemantics(allRankMemSemantics, HcclReduceOp::HCCL_REDUCE_SUM, vDataDes);
+    std::vector<DeviceId> rankToDevice(rankSize);
+    for (DeviceId i = 0; i < rankSize; i++)
+        rankToDevice[i] = i;
+    HcclResult result
+        = TaskCheckReduceScatterVSemantics(allRankMemSemantics, HcclReduceOp::HCCL_REDUCE_SUM, vDataDes, rankToDevice);
     EXPECT_EQ(result, HcclResult::HCCL_SUCCESS);
 }
 
 // Test boundary case: zero counts for some ranks
 TEST_F(ReduceScatterVSemanticsCheckerTest, ValidSemantics_ZeroCounts)
 {
-    std::map<RankId, RankMemorySemantics> allRankMemSemantics;
+    std::map<DeviceId, RankMemorySemantics> allRankMemSemantics;
     VDataDesTagInner vDataDes;
     u32 rankSize = 4;
     std::vector<uint64_t> counts = {0, 100, 0, 200};
 
     CreateValidReduceScatterVSemantics(allRankMemSemantics, vDataDes, rankSize, counts, HcclReduceOp::HCCL_REDUCE_SUM);
 
-    HcclResult result = TaskCheckReduceScatterVSemantics(allRankMemSemantics, HcclReduceOp::HCCL_REDUCE_SUM, vDataDes);
+    std::vector<DeviceId> rankToDevice(rankSize);
+    for (DeviceId i = 0; i < rankSize; i++)
+        rankToDevice[i] = i;
+    HcclResult result
+        = TaskCheckReduceScatterVSemantics(allRankMemSemantics, HcclReduceOp::HCCL_REDUCE_SUM, vDataDes, rankToDevice);
     EXPECT_EQ(result, HcclResult::HCCL_SUCCESS);
 }
 
 // Test abnormal case: missing rank
 TEST_F(ReduceScatterVSemanticsCheckerTest, Abnormal_MissingRank)
 {
-    std::map<RankId, RankMemorySemantics> allRankMemSemantics;
+    std::map<DeviceId, RankMemorySemantics> allRankMemSemantics;
     VDataDesTagInner vDataDes;
     u32 rankSize = 2;
     std::vector<uint64_t> counts = {100, 100};
@@ -134,32 +150,40 @@ TEST_F(ReduceScatterVSemanticsCheckerTest, Abnormal_MissingRank)
 
     // Only add rank 0
     RankMemorySemantics rankMemSemantics;
-    std::set<BufferSemantic> outputSemantics;
+    BufferSemanticMap outputSemantics;
 
     u64 dataSize = counts[0] * CHECK_SIZE_TABLE[vDataDes.dataType];
     BufferSemantic bufSem(0, dataSize, true, HcclReduceOp::HCCL_REDUCE_SUM);
     bufSem.srcBufs.insert(SrcBufDes(0, BufferType::INPUT, 0));
     bufSem.srcBufs.insert(SrcBufDes(1, BufferType::INPUT, 0));
-    outputSemantics.insert(bufSem);
+    outputSemantics.emplace(bufSem.startAddr, bufSem);
 
     rankMemSemantics[BufferType::OUTPUT] = outputSemantics;
     allRankMemSemantics[0] = rankMemSemantics;
 
-    HcclResult result = TaskCheckReduceScatterVSemantics(allRankMemSemantics, HcclReduceOp::HCCL_REDUCE_SUM, vDataDes);
+    std::vector<DeviceId> rankToDevice(rankSize);
+    for (DeviceId i = 0; i < rankSize; i++)
+        rankToDevice[i] = i;
+    HcclResult result
+        = TaskCheckReduceScatterVSemantics(allRankMemSemantics, HcclReduceOp::HCCL_REDUCE_SUM, vDataDes, rankToDevice);
     EXPECT_EQ(result, HcclResult::HCCL_E_PARA);
 }
 
 // Test abnormal case: wrong reduce type
 TEST_F(ReduceScatterVSemanticsCheckerTest, Abnormal_WrongReduceType)
 {
-    std::map<RankId, RankMemorySemantics> allRankMemSemantics;
+    std::map<DeviceId, RankMemorySemantics> allRankMemSemantics;
     VDataDesTagInner vDataDes;
     u32 rankSize = 2;
     std::vector<uint64_t> counts = {100, 100};
 
     CreateValidReduceScatterVSemantics(allRankMemSemantics, vDataDes, rankSize, counts, HcclReduceOp::HCCL_REDUCE_SUM);
 
-    HcclResult result = TaskCheckReduceScatterVSemantics(allRankMemSemantics, HcclReduceOp::HCCL_REDUCE_PROD, vDataDes);
+    std::vector<DeviceId> rankToDevice(rankSize);
+    for (DeviceId i = 0; i < rankSize; i++)
+        rankToDevice[i] = i;
+    HcclResult result
+        = TaskCheckReduceScatterVSemantics(allRankMemSemantics, HcclReduceOp::HCCL_REDUCE_PROD, vDataDes, rankToDevice);
     EXPECT_EQ(result, HcclResult::HCCL_E_PARA);
 }
 } // namespace HcclSim

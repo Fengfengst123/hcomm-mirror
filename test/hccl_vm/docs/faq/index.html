@@ -1302,10 +1302,10 @@
       "ErrorCode: 902"
     ],
     "logPatterns": [
-      "[Main] [ErrorCode: 902] This op is skipped because both the new checker and the old checker are disabled, opIndex=47, newCheckerEnabled=0, oldCheckerEnabled=0"
+      "[Main] [ErrorCode: 902] This op is skipped because the new checker is disabled, opIndex=47, newCheckerEnabled=0"
     ],
-    "symptom": "配置开关或运行策略不满足当前 op 的执行条件，例如新旧 checker 同时被关闭。",
-    "guidance": "【可能原因】\n1. manifest.json 或运行参数将 checker 关闭了。\n\n【排查步骤】\n1. 优先检查开关配置，确认至少启动一个 Checker。",
+    "symptom": "`enable_new_checker` 被关闭，当前算子未执行 Checker V3 单算子校验。老版本 Checker 已移除，不能通过其他开关接管该算子校验。",
+    "guidance": "【可能原因】\n1. `manifest.json` 中的 `enable_new_checker` 被设置为 `false`。\n\n【排查步骤】\n1. 检查 `manifest.json` 中的 `enable_new_checker`，需要执行单算子校验时将其设置为 `true`。\n2. 如果只需要跨算子同步资源校验，可以单独开启 `enable_big_graph_checker`；该开关不能替代单算子 Checker V3。",
     "diagram": "",
     "diagramType": "",
     "sourceFile": "checker_faq.md"

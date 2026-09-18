@@ -8,9 +8,12 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+#include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <future>
 #include <gtest/gtest.h>
 
 #include "db_sim_runner_common.h"
@@ -37,6 +40,7 @@ void CleanUpDb()
 void SetupTestData()
 {
     CleanUpDb();
+    g_cur_comm_key = 0;
     sim::SqliteDatabase::SetDbPath(kTestDbPath);
     SimRunnerSqliteDB::Instance().ClearAll();
 
@@ -120,6 +124,7 @@ TEST_F(SimRunnerCommonTest, UpdateDeviceLogicId_WhenValidParams_UpdateSuccessful
     auto getRet = sim::GetDeviceByPhysicalId(0, device);
     EXPECT_EQ(getRet, ACL_SUCCESS);
     EXPECT_EQ(device.logic_id, 100);
+    EXPECT_EQ(device.status, 1);
 }
 
 TEST_F(SimRunnerCommonTest, UpdateDeviceLogicId_WhenServerKeyInvalid_ReturnError)
@@ -476,30 +481,115 @@ protected:
         auto ret = sim::GetDeviceByLogicId(0, device);
         ASSERT_EQ(ret, ACL_SUCCESS);
 
-        sim::Rank rank{};
-        rank.device_id = device.id;
-        rank.rank_id = 5;
-        RunnerDB::Add<sim::Rank>(rank);
+        sim::Communicator comm{};
+        std::strncpy(comm.comm_id, "test_comm", sizeof(comm.comm_id) - 1);
+        comm.rank_size = 8;
+        comm.rank_id = 5;
+        comm.device_id = device.id;
+        g_cur_comm_key = RunnerDB::Add<sim::Communicator>(comm);
+        ASSERT_NE(g_cur_comm_key, 0U);
     }
 
     void TearDown() override { CleanUpDb(); }
 };
 
-TEST_F(SimRunnerCommonRankEndpointTest, GetRankIdByDeviceId_WhenExists_ReturnsRankId)
+TEST_F(SimRunnerCommonRankEndpointTest, GetCommRankByDeviceId_WhenExists_ReturnsRankId)
 {
-    auto ret = RunnerDB::GetOneByPred<sim::Rank>([](const sim::Rank& r) {
-        return r.rank_id == 5;
-    });
-    ASSERT_TRUE(ret.second);
+    const auto comm = RunnerDB::GetById<sim::Communicator>(g_cur_comm_key);
+    ASSERT_TRUE(comm.has_value());
 
-    int rankId = sim::GetRankIdByDeviceId(ret.first.device_id);
+    uint32_t rankId = UINT32_MAX;
+    ASSERT_TRUE(sim::GetCommRankByDeviceId(g_cur_comm_key, comm->device_id, rankId));
     EXPECT_EQ(rankId, 5);
 }
 
-TEST_F(SimRunnerCommonRankEndpointTest, GetRankIdByDeviceId_WhenNotExists_ReturnsZero)
+TEST_F(SimRunnerCommonRankEndpointTest, GetCommRankByDeviceId_WhenNotExists_ReturnsFalse)
 {
-    int rankId = sim::GetRankIdByDeviceId(999);
-    EXPECT_EQ(rankId, 0);
+    uint32_t rankId = UINT32_MAX;
+    EXPECT_FALSE(sim::GetCommRankByDeviceId(g_cur_comm_key, 999, rankId));
+    EXPECT_EQ(rankId, UINT32_MAX);
+}
+
+TEST_F(SimRunnerCommonTest, CommunicatorMemberIdResolvesPeersInSameDomain)
+{
+    uint64_t firstCommId = 0;
+    uint64_t secondCommId = 0;
+    ASSERT_TRUE(sim::GetOrInsertCommunicator("shared_domain", 2, 0, 1, 0, firstCommId));
+    ASSERT_TRUE(sim::GetOrInsertCommunicator("shared_domain", 2, 1, 2, 0, secondCommId));
+    EXPECT_NE(firstCommId, 0);
+    EXPECT_NE(firstCommId, secondCommId);
+
+    sim::Device device{};
+    ASSERT_EQ(sim::GetDeviceByCommRank(firstCommId, 1, device), ACL_SUCCESS);
+    EXPECT_EQ(device.id, 2);
+    ASSERT_EQ(sim::GetDeviceByCommRank(secondCommId, 0, device), ACL_SUCCESS);
+    EXPECT_EQ(device.id, 1);
+
+    std::vector<sim::CommunicatorMemberInfo> members;
+    ASSERT_TRUE(sim::GetCommunicatorMembers(secondCommId, members));
+    ASSERT_EQ(members.size(), 2U);
+    EXPECT_TRUE(std::any_of(members.begin(), members.end(), [&firstCommId](const sim::CommunicatorMemberInfo& member) {
+        return member.memberId == firstCommId && member.rankId == 0 && member.deviceId == 1;
+    }));
+    EXPECT_TRUE(std::any_of(members.begin(), members.end(), [&secondCommId](const sim::CommunicatorMemberInfo& member) {
+        return member.memberId == secondCommId && member.rankId == 1 && member.deviceId == 2;
+    }));
+
+    std::string commName;
+    ASSERT_TRUE(sim::GetCommunicatorName(secondCommId, commName));
+    EXPECT_EQ(commName, "shared_domain");
+}
+
+TEST_F(SimRunnerCommonTest, CommunicatorMemberIdSeparatesSameNameDomainsByHash)
+{
+    uint64_t firstDomainMemberId = 0;
+    uint64_t secondDomainMemberId = 0;
+    uint64_t unusedMemberId = 0;
+    ASSERT_TRUE(sim::GetOrInsertCommunicator("shared_sub_domain", 2, 0, 1, 100, firstDomainMemberId));
+    ASSERT_TRUE(sim::GetOrInsertCommunicator("shared_sub_domain", 2, 1, 2, 100, unusedMemberId));
+    ASSERT_TRUE(sim::GetOrInsertCommunicator("shared_sub_domain", 2, 0, 2, 200, unusedMemberId));
+    ASSERT_TRUE(sim::GetOrInsertCommunicator("shared_sub_domain", 2, 1, 1, 200, secondDomainMemberId));
+
+    sim::Device device{};
+    ASSERT_EQ(sim::GetDeviceByCommRank(firstDomainMemberId, 1, device), ACL_SUCCESS);
+    EXPECT_EQ(device.id, 2U);
+    ASSERT_EQ(sim::GetDeviceByCommRank(secondDomainMemberId, 1, device), ACL_SUCCESS);
+    EXPECT_EQ(device.id, 1U);
+
+    std::vector<sim::CommunicatorMemberInfo> members;
+    ASSERT_TRUE(sim::GetCommunicatorMembers(firstDomainMemberId, members));
+    ASSERT_EQ(members.size(), 2U);
+    ASSERT_TRUE(sim::GetCommunicatorMembers(secondDomainMemberId, members));
+    ASSERT_EQ(members.size(), 2U);
+}
+
+TEST_F(SimRunnerCommonTest, CommunicatorDestroyBarrierWaitsForEveryRank)
+{
+    uint64_t firstCommId = 0;
+    uint64_t secondCommId = 0;
+    ASSERT_TRUE(sim::GetOrInsertCommunicator("destroy_barrier", 2, 0, 1, 0, firstCommId));
+    ASSERT_TRUE(sim::GetOrInsertCommunicator("destroy_barrier", 2, 1, 2, 0, secondCommId));
+
+    auto firstWait = std::async(std::launch::async, [firstCommId] {
+        return sim::WaitCommunicatorDestroyReady(firstCommId);
+    });
+    EXPECT_EQ(firstWait.wait_for(std::chrono::milliseconds(200)), std::future_status::timeout);
+
+    EXPECT_TRUE(sim::WaitCommunicatorDestroyReady(secondCommId));
+    EXPECT_EQ(firstWait.wait_for(std::chrono::seconds(2)), std::future_status::ready);
+    EXPECT_TRUE(firstWait.get());
+}
+
+TEST_F(SimRunnerCommonTest, CommunicatorNameLengthIsValidatedWithoutChangingSameNameDomainSemantics)
+{
+    const std::string validName(127, 'a');
+    uint64_t commId = 0;
+    ASSERT_TRUE(sim::GetOrInsertCommunicator(validName.c_str(), 1, 0, 1, 0, commId));
+    EXPECT_NE(commId, 0U);
+
+    const std::string tooLongName(128, 'b');
+    EXPECT_FALSE(sim::GetOrInsertCommunicator(tooLongName.c_str(), 1, 0, 1, 0, commId));
+    EXPECT_FALSE(sim::WaitCommunicatorReady(tooLongName.c_str(), 0, 1));
 }
 
 TEST_F(SimRunnerCommonRankEndpointTest, GetEndPointByIpAddr_WhenNotExists_ReturnError)

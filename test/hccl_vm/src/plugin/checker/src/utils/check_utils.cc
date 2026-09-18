@@ -13,7 +13,6 @@
 #include <cstdint>
 
 #include "sim_log.h"
-#include "sim_task.h"
 
 namespace HcclSim {
 std::set<SrcBufDes> OffsetSrcBufs(const std::set<SrcBufDes>& srcBufs, u64 offset)
@@ -24,14 +23,12 @@ std::set<SrcBufDes> OffsetSrcBufs(const std::set<SrcBufDes>& srcBufs, u64 offset
 
     std::set<SrcBufDes> shiftedSrcBufs;
     for (const auto& srcBuf : srcBufs) {
-        shiftedSrcBufs.emplace(srcBuf.rankId, srcBuf.bufType, srcBuf.srcAddr + offset);
+        shiftedSrcBufs.emplace(srcBuf.deviceId, srcBuf.bufType, srcBuf.srcAddr + offset);
     }
     return shiftedSrcBufs;
 }
 
 // 获取原语的类型
-TaskTypeStub GetNodeType(const TaskNode* node) { return node->task->GetType(); }
-
 bool IsAllToAllSeries(HcclCMDType opType)
 {
     return (
@@ -141,59 +138,4 @@ void CalcDataSize(HcclCMDType opType, uint64_t count, HcclDataType dataType, u64
     }
 }
 
-std::vector<std::string> SplitString(const std::string& str, const char c)
-{
-    std::string::size_type startPos = 0;
-    std::string::size_type foundPos = str.find(c);
-
-    std::vector<std::string> strVector;
-    while (foundPos != std::string::npos) {
-        strVector.push_back(str.substr(startPos, foundPos - startPos));
-        startPos = foundPos + 1;
-        foundPos = str.find(c, startPos);
-    }
-    if (startPos != str.length()) {
-        strVector.push_back(str.substr(startPos));
-    }
-    return strVector;
-}
-
-bool DataSliceSizeIsEqual(std::unique_ptr<DataSlice>& a, std::unique_ptr<DataSlice>& b)
-{
-    return a->GetSize() == b->GetSize();
-}
-
-bool DataSliceSizeIsEqual(std::unique_ptr<DataSlice>& a, std::unique_ptr<DataSlice>& b, std::unique_ptr<DataSlice>& c)
-{
-    return (a->GetSize() == b->GetSize()) && (b->GetSize() == c->GetSize());
-}
-
-void GenTopoMeta(TopoMeta& topoMate, int superPodNum, int serverNum, int rankNum)
-{
-    for (u32 i = 0; i < superPodNum; i++) { // box
-        SuperPodMeta superPodMeta;
-        for (u32 j = 0; j < serverNum; j++) { // serverNumPerBox
-            ServerMeta serverMate;
-            for (u32 k = 0; k < rankNum; k++) {
-                serverMate.push_back(k);
-            }
-            superPodMeta.push_back(serverMate);
-        }
-        topoMate.push_back(superPodMeta);
-    }
-}
-
-u32 CalRankSize(const TopoMeta& topoMeta)
-{
-    u32 rankNum = 0;
-    for (const auto& superPod : topoMeta) {
-        for (const auto& server : superPod) {
-            for (const auto& phyId : server) {
-                rankNum++;
-            }
-        }
-    }
-
-    return rankNum;
-}
 } // namespace HcclSim

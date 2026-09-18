@@ -100,14 +100,14 @@ namespace TaskGraphGeneratorV3 {
         };
 
         struct FlagCellKey {
-            RankId flagOwnerRank{INVALID_RANK_ID};
+            DeviceId flagOwnerDevice{INVALID_DEVICE_ID};
             uint64_t launchIdx{0};
             uint64_t commInfoOffset{0};
 
             bool operator<(const FlagCellKey& rhs) const
             {
-                if (flagOwnerRank != rhs.flagOwnerRank) {
-                    return flagOwnerRank < rhs.flagOwnerRank;
+                if (flagOwnerDevice != rhs.flagOwnerDevice) {
+                    return flagOwnerDevice < rhs.flagOwnerDevice;
                 }
                 if (launchIdx != rhs.launchIdx) {
                     return launchIdx < rhs.launchIdx;
@@ -146,10 +146,17 @@ namespace TaskGraphGeneratorV3 {
         bool IsValidPipe(uint32_t pipe) { return pipe < AIV_PIPE_NUM; }
 
         TaskPosition MakeAivPosition(
-            RankId rankId, uint64_t launchIdx, uint32_t blockId, uint32_t pipe, uint32_t taskId, OperatorId operatorId)
+            DeviceId deviceId, RankId rankId, uint64_t launchIdx, uint32_t blockId, uint32_t pipe, uint32_t taskId,
+            OperatorId operatorId, StorageManager* storage, const TaskPosition& sourcePosition)
         {
             TaskPosition position;
             position.operatorId = operatorId;
+            position.commName = sourcePosition.commName;
+            position.commHash = sourcePosition.commHash;
+            position.opIter = sourcePosition.opIter;
+            const CheckerParam param = storage == nullptr ? CheckerParam{} : storage->GetCheckerParam(operatorId);
+            position.commId = param.commId;
+            position.deviceId = deviceId;
             position.rankId = rankId;
             position.streamId = INVALID_STREAM_ID;
             position.launchIdx = launchIdx;
@@ -182,44 +189,41 @@ namespace TaskGraphGeneratorV3 {
             }
         }
 
-        MemSlice ConvertAivSlice(RankId rankId, const AivDataSliceV3& slice)
+        MemSlice ConvertAivSlice(const AivDataSliceV3& slice)
         {
             MemSlice result;
-            result.rankId = rankId;
+            result.deviceId = slice.deviceId;
+            result.rankId = INVALID_RANK_ID;
             result.memType = ConvertAivMemType(slice.type);
             result.offset = slice.offset;
             result.len = slice.size;
+            result.rawAddr = slice.virtualAddr;
             return result;
         }
 
-        TaskPosition MakeAivLocation(const AivRuntimeTaskV3& task, uint64_t launchIdx, OperatorId operatorId)
+        SetWaitKey MakeSetWaitKey(const TaskNode& node, const AivPipeEvent& event)
         {
-            return MakeAivPosition(task.rankId, launchIdx, task.blockId, task.curPipe, task.taskId, operatorId);
+            const TaskPosition& position = node.GetPosition();
+            return SetWaitKey{position.deviceId, position.launchIdx, position.blockId,
+                              event.srcPipe,     event.dstPipe,      event.eventId};
         }
 
-        SetWaitKey MakeSetWaitKey(const AivPipeEvent& event)
+        FlagCellKey MakeFlagCellKey(const TaskNode& node, const AivFlagSync& flag)
         {
-            return SetWaitKey{event.rankId,  event.launchIdx, event.blockId,
-                              event.srcPipe, event.dstPipe,   event.eventId};
+            return FlagCellKey{flag.flagOwnerDevice, node.GetPosition().launchIdx, flag.commInfoOffset};
         }
 
-        FlagCellKey MakeFlagCellKey(const AivFlagSync& flag)
-        {
-            return FlagCellKey{flag.flagOwnerRank, flag.launchIdx, flag.commInfoOffset};
-        }
-
-        std::unique_ptr<TaskNode>
-        TranslateAivRuntimeTask(const AivRuntimeTaskV3& task, uint64_t launchIdx, OperatorId operatorId)
+        std::unique_ptr<TaskNode> TranslateAivRuntimeTask(const AivRuntimeTaskV3& task)
         {
             switch (task.taskType) {
                 case AivRuntimeTaskTypeV3::MEM_COPY: {
-                    const MemSlice src = ConvertAivSlice(task.srcRank, task.src);
-                    const MemSlice dst = ConvertAivSlice(task.dstRank, task.dst);
+                    const MemSlice src = ConvertAivSlice(task.src);
+                    const MemSlice dst = ConvertAivSlice(task.dst);
                     return std::make_unique<TaskTransMem>(src, dst, ProtocolType::SDMA);
                 }
                 case AivRuntimeTaskTypeV3::REDUCE: {
-                    const MemSlice src = ConvertAivSlice(task.srcRank, task.src);
-                    const MemSlice dst = ConvertAivSlice(task.dstRank, task.dst);
+                    const MemSlice src = ConvertAivSlice(task.src);
+                    const MemSlice dst = ConvertAivSlice(task.dst);
                     auto node = std::make_unique<TaskReduce>(
                         src, dst, static_cast<uint8_t>(task.dataType), static_cast<uint8_t>(task.reduceOp),
                         ProtocolType::SDMA);
@@ -227,62 +231,40 @@ namespace TaskGraphGeneratorV3 {
                 }
                 case AivRuntimeTaskTypeV3::SET_FLAG: {
                     AivPipeEvent event;
-                    event.rankId = task.rankId;
-                    event.launchIdx = launchIdx;
-                    event.blockId = task.blockId;
-                    event.curPipe = task.curPipe;
                     event.srcPipe = task.srcPipe;
                     event.dstPipe = task.dstPipe;
                     event.eventId = task.eventId;
-                    event.taskId = task.taskId;
                     return std::make_unique<TaskAivSetFlag>(event);
                 }
                 case AivRuntimeTaskTypeV3::WAIT_FLAG: {
                     AivPipeEvent event;
-                    event.rankId = task.rankId;
-                    event.launchIdx = launchIdx;
-                    event.blockId = task.blockId;
-                    event.curPipe = task.curPipe;
                     event.srcPipe = task.srcPipe;
                     event.dstPipe = task.dstPipe;
                     event.eventId = task.eventId;
-                    event.taskId = task.taskId;
                     return std::make_unique<TaskAivWaitFlag>(event);
                 }
                 case AivRuntimeTaskTypeV3::PIPE_BARRIER: {
                     AivBarrierInfo info;
-                    info.taskLoc = MakeAivLocation(task, launchIdx, operatorId);
                     info.pipeType = task.pipeType;
                     info.memberTaskIds = task.barrierGroupTaskIds;
                     return std::make_unique<TaskAivPipeBarrier>(std::move(info));
                 }
                 case AivRuntimeTaskTypeV3::SYNC_ALL: {
                     AivSyncAllInfo info;
-                    info.taskLoc = MakeAivLocation(task, launchIdx, operatorId);
                     info.syncRound = task.syncRound;
                     return std::make_unique<TaskAivSyncAll>(std::move(info));
                 }
                 case AivRuntimeTaskTypeV3::SEND_FLAG: {
                     AivFlagSync flag;
-                    flag.currentRank = task.rankId;
-                    flag.flagOwnerRank = task.flagOwnerRank;
-                    flag.launchIdx = launchIdx;
-                    flag.blockId = task.blockId;
-                    flag.curPipe = task.curPipe;
-                    flag.taskId = task.taskId;
-                    flag.commInfoOffset = task.commInfoOffset;
+                    flag.flagOwnerDevice = task.flagBuffer.deviceId;
+                    flag.commInfoOffset = task.flagBuffer.offset;
                     flag.value = task.flagValue;
                     return std::make_unique<TaskAivSendFlag>(flag);
                 }
                 case AivRuntimeTaskTypeV3::RECV_FLAG: {
                     AivFlagSync flag;
-                    flag.currentRank = task.rankId;
-                    flag.flagOwnerRank = task.flagOwnerRank;
-                    flag.launchIdx = launchIdx;
-                    flag.blockId = task.blockId;
-                    flag.curPipe = task.curPipe;
-                    flag.taskId = task.taskId;
-                    flag.commInfoOffset = task.commInfoOffset;
+                    flag.flagOwnerDevice = task.flagBuffer.deviceId;
+                    flag.commInfoOffset = task.flagBuffer.offset;
                     flag.value = task.flagValue;
                     return std::make_unique<TaskAivRecvFlag>(flag);
                 }
@@ -354,9 +336,11 @@ namespace TaskGraphGeneratorV3 {
             const CheckerParam param = ctx.storage->GetCheckerParam(ctx.placeholder->GetOperatorId());
             if (ctx.snapshot.rankSize != 0 && param.rankSize != 0 && ctx.snapshot.rankSize != param.rankSize) {
                 HCCL_VM_ERROR(
-                    "{} The AIV snapshot was captured for a different rank count than the current "
-                    "checker input, rankId={}, launchId={}, snapshotRankCount={}, currentRankCount={}, snapshotFile={}",
-                    MakeErrorCodeText(ErrorCode::GRAPH_SNAPSHOT_MISMATCH), ctx.placeholder->GetRankId(),
+                    "{} The AIV snapshot was captured for a different rank count than "
+                    "the current "
+                    "checker input, rankId={}, launchId={}, snapshotRankCount={}, "
+                    "currentRankCount={}, snapshotFile={}",
+                    MakeErrorCodeText(ErrorCode::GRAPH_SNAPSHOT_MISMATCH), ctx.placeholder->GetDeviceId(),
                     ctx.placeholder->GetLaunchIdx(), ctx.snapshot.rankSize, param.rankSize, ctx.snapshot.filePath);
                 return HCCL_E_PARA;
             }
@@ -378,9 +362,11 @@ namespace TaskGraphGeneratorV3 {
             }
 
             HCCL_VM_ERROR(
-                "{} AIV buffer size is inconsistent across snapshots, field={}, rankId={}, "
-                "launchId={}, expectedSize={}, actualSize={}, expectedSource=firstNonZeroSnapshot, snapshotFile={}",
-                MakeErrorCodeText(ErrorCode::GRAPH_SNAPSHOT_MISMATCH), fieldName, ctx.placeholder->GetRankId(),
+                "{} AIV buffer size is inconsistent across snapshots, "
+                "field={}, rankId={}, "
+                "launchId={}, expectedSize={}, actualSize={}, "
+                "expectedSource=firstNonZeroSnapshot, snapshotFile={}",
+                MakeErrorCodeText(ErrorCode::GRAPH_SNAPSHOT_MISMATCH), fieldName, ctx.placeholder->GetDeviceId(),
                 ctx.placeholder->GetLaunchIdx(), bufferSize, snapshotSize, ctx.snapshot.filePath);
             return HCCL_E_PARA;
         }
@@ -388,21 +374,21 @@ namespace TaskGraphGeneratorV3 {
         HcclResult
         AppendRuntimeTask(AivLaunchContext& ctx, const AivRuntimeTaskV3& task, uint64_t order, NodeId& nodeId)
         {
-            std::unique_ptr<TaskNode> node
-                = TranslateAivRuntimeTask(task, ctx.placeholder->GetLaunchIdx(), ctx.placeholder->GetOperatorId());
+            std::unique_ptr<TaskNode> node = TranslateAivRuntimeTask(task);
             if (node == nullptr) {
                 HCCL_VM_ERROR(
                     "{} One AIV runtime task type is not supported, "
                     "rankId={}, launchId={}, taskId={}, taskType={}, snapshotFile={}",
-                    MakeErrorCodeText(ErrorCode::GRAPH_UNSUPPORTED), ctx.placeholder->GetRankId(),
+                    MakeErrorCodeText(ErrorCode::GRAPH_UNSUPPORTED), ctx.placeholder->GetDeviceId(),
                     ctx.placeholder->GetLaunchIdx(), task.taskId, static_cast<uint32_t>(task.taskType),
                     ctx.snapshot.filePath);
                 return HCCL_E_NOT_SUPPORT;
             }
 
+            const DeviceId taskDeviceId = task.deviceId == INVALID_DEVICE_ID ? ctx.snapshot.deviceId : task.deviceId;
             const TaskPosition position = MakeAivPosition(
-                task.rankId, ctx.placeholder->GetLaunchIdx(), task.blockId, task.curPipe, task.taskId,
-                ctx.placeholder->GetOperatorId());
+                taskDeviceId, task.rankId, ctx.placeholder->GetLaunchIdx(), task.blockId, task.curPipe, task.taskId,
+                ctx.placeholder->GetOperatorId(), ctx.storage, ctx.placeholder->GetPosition());
             HcclResult ret = ctx.graph->AppendGeneratedNode(std::move(node), position, nodeId);
             if (ret != HCCL_SUCCESS) {
                 return ret;
@@ -522,15 +508,18 @@ namespace TaskGraphGeneratorV3 {
                     if (node != nullptr && node->GetType() == TaskType::AIV_WAIT_FLAG) {
                         const auto* waitFlag = dynamic_cast<const TaskAivWaitFlag*>(node);
                         if (waitFlag != nullptr) {
-                            const SetWaitKey key = MakeSetWaitKey(waitFlag->GetEvent());
+                            const SetWaitKey key = MakeSetWaitKey(*node, waitFlag->GetEvent());
                             const auto iter = seenSetFlags.find(key);
                             seenMatchingSetFlagCount = (iter == seenSetFlags.end()) ? 0U : iter->second.size();
                         }
                     }
                     HCCL_VM_ERROR(
-                        "{} AIV SetFlag/WaitFlag matching is stuck. Some WaitFlag tasks are still "
-                        "blocked, but no matching SetFlag has become available, firstBlockedWaitFlagNode={}, "
-                        "blockedWaitFlagNodeCount={}, availableSetFlagCountForThisWait={}, snapshotFile={}",
+                        "{} AIV SetFlag/WaitFlag matching is stuck. Some WaitFlag "
+                        "tasks are still "
+                        "blocked, but no matching SetFlag has become available, "
+                        "firstBlockedWaitFlagNode={}, "
+                        "blockedWaitFlagNodeCount={}, "
+                        "availableSetFlagCountForThisWait={}, snapshotFile={}",
                         MakeErrorCodeText(ErrorCode::GRAPH_DEADLOCK), node == nullptr ? "node=null" : node->Describe(),
                         readyQueue.size(), seenMatchingSetFlagCount, ctx.snapshot.filePath);
                     return HCCL_E_INTERNAL;
@@ -560,7 +549,7 @@ namespace TaskGraphGeneratorV3 {
                     if (setFlag == nullptr) {
                         return HCCL_E_PTR;
                     }
-                    seenSetFlags[MakeSetWaitKey(setFlag->GetEvent())].push_back(nodeId);
+                    seenSetFlags[MakeSetWaitKey(*node, setFlag->GetEvent())].push_back(nodeId);
                     executed.insert(nodeId);
                     HcclResult ret = enqueueChildren(node);
                     if (ret != HCCL_SUCCESS) {
@@ -582,7 +571,7 @@ namespace TaskGraphGeneratorV3 {
                 if (waitFlag == nullptr) {
                     return HCCL_E_PTR;
                 }
-                const SetWaitKey key = MakeSetWaitKey(waitFlag->GetEvent());
+                const SetWaitKey key = MakeSetWaitKey(*node, waitFlag->GetEvent());
                 auto iter = seenSetFlags.find(key);
                 if (iter == seenSetFlags.end() || iter->second.empty()) {
                     readyQueue.push_back(nodeId);
@@ -609,8 +598,10 @@ namespace TaskGraphGeneratorV3 {
                 if (!entry.second.empty()) {
                     TaskNode* node = ctx.graph->GetNode(entry.second.front());
                     HCCL_VM_WARN(
-                        "{} Found SetFlag tasks that were never consumed by any WaitFlag task, "
-                        "firstUnconsumedSetFlagNode={}, unconsumedSetFlagCount={}, snapshotFile={}",
+                        "{} Found SetFlag tasks that were never consumed by "
+                        "any WaitFlag task, "
+                        "firstUnconsumedSetFlagNode={}, "
+                        "unconsumedSetFlagCount={}, snapshotFile={}",
                         MakeErrorCodeText(ErrorCode::GRAPH_UNMATCHED), node == nullptr ? "node=null" : node->Describe(),
                         entry.second.size(), ctx.snapshot.filePath);
                 }
@@ -687,18 +678,25 @@ namespace TaskGraphGeneratorV3 {
 
         bool SameSliceIdentity(const MemSlice& lhs, const MemSlice& rhs)
         {
-            return lhs.rankId == rhs.rankId && lhs.memType == rhs.memType;
+            return lhs.deviceId == rhs.deviceId && lhs.memType == rhs.memType;
         }
 
         bool IsContinuousAfter(const MemSlice& prev, const MemSlice& next)
         {
-            return SameSliceIdentity(prev, next) && next.offset == prev.offset + prev.len;
+            return SameSliceIdentity(prev, next) && next.offset == prev.offset + prev.len
+                   && next.rawAddr == prev.rawAddr + prev.len;
+        }
+
+        bool HasSameAddressMapping(const MemSlice& lhs, const MemSlice& rhs)
+        {
+            return lhs.rawAddr >= lhs.offset && rhs.rawAddr >= rhs.offset
+                   && lhs.rawAddr - lhs.offset == rhs.rawAddr - rhs.offset;
         }
 
         bool SliceExactEqual(const MemSlice& lhs, const MemSlice& rhs)
         {
-            return lhs.rankId == rhs.rankId && lhs.memType == rhs.memType && lhs.offset == rhs.offset
-                   && lhs.len == rhs.len;
+            return SameSliceIdentity(lhs, rhs) && lhs.offset == rhs.offset && lhs.len == rhs.len
+                   && lhs.rawAddr == rhs.rawAddr;
         }
 
         bool IntervalsOverlap(const MemSlice& lhs, const MemSlice& rhs)
@@ -715,14 +713,17 @@ namespace TaskGraphGeneratorV3 {
                 return {};
             }
             std::sort(slices.begin(), slices.end(), [](const MemSlice& lhs, const MemSlice& rhs) {
-                if (lhs.rankId != rhs.rankId) {
-                    return lhs.rankId < rhs.rankId;
+                if (lhs.deviceId != rhs.deviceId) {
+                    return lhs.deviceId < rhs.deviceId;
                 }
                 if (lhs.memType != rhs.memType) {
                     return static_cast<uint32_t>(lhs.memType) < static_cast<uint32_t>(rhs.memType);
                 }
                 if (lhs.offset != rhs.offset) {
                     return lhs.offset < rhs.offset;
+                }
+                if (lhs.rawAddr != rhs.rawAddr) {
+                    return lhs.rawAddr < rhs.rawAddr;
                 }
                 return lhs.len < rhs.len;
             });
@@ -738,7 +739,7 @@ namespace TaskGraphGeneratorV3 {
                 }
                 const uint64_t lastEnd = last.offset + last.len;
                 const uint64_t curEnd = cur.offset + cur.len;
-                if (cur.offset <= lastEnd) {
+                if (cur.offset <= lastEnd && HasSameAddressMapping(last, cur)) {
                     last.len = std::max(lastEnd, curEnd) - last.offset;
                     continue;
                 }
@@ -825,8 +826,7 @@ namespace TaskGraphGeneratorV3 {
                 const auto* waitFlag = dynamic_cast<const TaskAivWaitFlag*>(node);
                 event = waitFlag == nullptr ? nullptr : &waitFlag->GetEvent();
             }
-            return event != nullptr && event->curPipe == curPipe && event->srcPipe == srcPipe
-                   && event->dstPipe == dstPipe;
+            return event != nullptr && event->srcPipe == srcPipe && event->dstPipe == dstPipe;
         }
 
         const AivPipeEvent* GetPipeEvent(const TaskNode* node)
@@ -847,7 +847,8 @@ namespace TaskGraphGeneratorV3 {
 
         bool SamePositionScope(const TaskPosition& lhs, const TaskPosition& rhs)
         {
-            return lhs.rankId == rhs.rankId && lhs.launchIdx == rhs.launchIdx && lhs.blockId == rhs.blockId;
+            return lhs.deviceId == rhs.deviceId && lhs.rankId == rhs.rankId && lhs.launchIdx == rhs.launchIdx
+                   && lhs.blockId == rhs.blockId;
         }
 
         bool SameEventExceptTaskId(const TaskNode* lhsNode, const TaskNode* rhsNode)
@@ -860,9 +861,9 @@ namespace TaskGraphGeneratorV3 {
             if (lhs == nullptr || rhs == nullptr) {
                 return false;
             }
-            return lhs->rankId == rhs->rankId && lhs->launchIdx == rhs->launchIdx && lhs->blockId == rhs->blockId
-                   && lhs->curPipe == rhs->curPipe && lhs->srcPipe == rhs->srcPipe && lhs->dstPipe == rhs->dstPipe
-                   && lhs->eventId == rhs->eventId;
+            return SamePositionScope(lhsNode->GetPosition(), rhsNode->GetPosition())
+                   && lhsNode->GetPosition().pipe == rhsNode->GetPosition().pipe && lhs->srcPipe == rhs->srcPipe
+                   && lhs->dstPipe == rhs->dstPipe && lhs->eventId == rhs->eventId;
         }
 
         bool SameSetWaitEvent(const TaskNode* setNode, const TaskNode* waitNode)
@@ -872,9 +873,9 @@ namespace TaskGraphGeneratorV3 {
             if (setEvent == nullptr || waitEvent == nullptr) {
                 return false;
             }
-            return setEvent->rankId == waitEvent->rankId && setEvent->launchIdx == waitEvent->launchIdx
-                   && setEvent->blockId == waitEvent->blockId && setEvent->srcPipe == waitEvent->srcPipe
-                   && setEvent->dstPipe == waitEvent->dstPipe && setEvent->eventId == waitEvent->eventId;
+            return SamePositionScope(setNode->GetPosition(), waitNode->GetPosition())
+                   && setEvent->srcPipe == waitEvent->srcPipe && setEvent->dstPipe == waitEvent->dstPipe
+                   && setEvent->eventId == waitEvent->eventId;
         }
 
         bool SameDataTypeAndOp(const TaskNode* lhsNode, const TaskNode* rhsNode)
@@ -1252,18 +1253,14 @@ namespace TaskGraphGeneratorV3 {
                 if (setFlag == nullptr) {
                     return nullptr;
                 }
-                AivPipeEvent event = setFlag->GetEvent();
-                event.taskId = position.taskId;
-                return std::make_unique<TaskAivSetFlag>(event);
+                return std::make_unique<TaskAivSetFlag>(setFlag->GetEvent());
             }
             if (source->GetType() == TaskType::AIV_WAIT_FLAG) {
                 const auto* waitFlag = dynamic_cast<const TaskAivWaitFlag*>(source);
                 if (waitFlag == nullptr) {
                     return nullptr;
                 }
-                AivPipeEvent event = waitFlag->GetEvent();
-                event.taskId = position.taskId;
-                return std::make_unique<TaskAivWaitFlag>(event);
+                return std::make_unique<TaskAivWaitFlag>(waitFlag->GetEvent());
             }
             return nullptr;
         }
@@ -1569,9 +1566,11 @@ namespace TaskGraphGeneratorV3 {
                 std::vector<NodeId> topo;
                 if (!CollectCpGmBlockTopo(ctx, block.blockIdx, topo)) {
                     HCCL_VM_WARN(
-                        "Skip CpGM-to-GM merge for one block because the block DAG order could not "
-                        "be determined, rankId={}, launchId={}, blockId={}, snapshotFile={}",
-                        ctx.placeholder->GetRankId(), ctx.placeholder->GetLaunchIdx(), block.blockIdx,
+                        "Skip CpGM-to-GM merge for one block because the "
+                        "block DAG order could not "
+                        "be determined, rankId={}, launchId={}, blockId={}, "
+                        "snapshotFile={}",
+                        ctx.placeholder->GetDeviceId(), ctx.placeholder->GetLaunchIdx(), block.blockIdx,
                         ctx.snapshot.filePath);
                     continue;
                 }
@@ -1608,10 +1607,12 @@ namespace TaskGraphGeneratorV3 {
             HCCL_VM_INFO(
                 "Finished CpGM-to-GM merge analysis:\n"
                 "  ctx: rankId={}, launchId={}\n"
-                "  tasks: taskJsonTotalTaskCount={}, dagNodeCountBeforeMerge={}, dagNodeCountAfterMerge={}\n"
-                "  merge: cpGmLoopMergeCount={}, cpGmMergedIterationCount={}, cpGmMergedOriginalNodeCount={}\n"
+                "  tasks: taskJsonTotalTaskCount={}, "
+                "dagNodeCountBeforeMerge={}, dagNodeCountAfterMerge={}\n"
+                "  merge: cpGmLoopMergeCount={}, cpGmMergedIterationCount={}, "
+                "cpGmMergedOriginalNodeCount={}\n"
                 "  nodes: cpGmGeneratedNodeCount={}, cpGmInactiveNodeCount={}",
-                ctx.placeholder->GetRankId(), ctx.placeholder->GetLaunchIdx(), ctx.taskJsonTotalTaskCount,
+                ctx.placeholder->GetDeviceId(), ctx.placeholder->GetLaunchIdx(), ctx.taskJsonTotalTaskCount,
                 ctx.dagNodeCountBeforeCpGmMerge, ctx.dagNodeCountAfterCpGmMerge, ctx.cpGmLoopMergeCount,
                 ctx.cpGmMergedIterationCount, ctx.cpGmMergedOriginalNodeCount, ctx.cpGmGeneratedNodeCount,
                 ctx.cpGmInactiveNodeCount);
@@ -1750,29 +1751,33 @@ namespace TaskGraphGeneratorV3 {
                     const auto* barrier = dynamic_cast<const TaskAivPipeBarrier*>(member);
                     if (barrier == nullptr) {
                         HCCL_VM_ERROR(
-                            "{} One PipeBarrier group member is not a valid PipeBarrier node, "
+                            "{} One PipeBarrier group member is not a valid "
+                            "PipeBarrier node, "
                             "rankId={}, launchId={}, nodeId={}, snapshotFile={}",
-                            MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID), ctx.placeholder->GetRankId(),
+                            MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID), ctx.placeholder->GetDeviceId(),
                             ctx.placeholder->GetLaunchIdx(), memberNodeId, ctx.snapshot.filePath);
                         return HCCL_E_INTERNAL;
                     }
-                    const AivBarrierInfo& memberInfo = barrier->GetInfo();
-                    if (memberInfo.taskLoc.blockId != group.blockId) {
+                    const TaskPosition& memberPosition = barrier->GetPosition();
+                    if (memberPosition.blockId != group.blockId) {
                         HCCL_VM_ERROR(
-                            "{} One PipeBarrier group mixes tasks from different blocks, rankId={}, "
-                            "launchId={}, expectedBlockId={}, actualBlockId={}, memberTaskId={}, snapshotFile={}",
-                            MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID), ctx.placeholder->GetRankId(),
-                            ctx.placeholder->GetLaunchIdx(), group.blockId, memberInfo.taskLoc.blockId,
-                            memberInfo.taskLoc.taskId, ctx.snapshot.filePath);
+                            "{} One PipeBarrier group mixes tasks from different "
+                            "blocks, rankId={}, "
+                            "launchId={}, expectedBlockId={}, actualBlockId={}, "
+                            "memberTaskId={}, snapshotFile={}",
+                            MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID), ctx.placeholder->GetDeviceId(),
+                            ctx.placeholder->GetLaunchIdx(), group.blockId, memberPosition.blockId,
+                            memberPosition.taskId, ctx.snapshot.filePath);
                         return HCCL_E_INTERNAL;
                     }
-                    if (!memberPipes.insert(memberInfo.taskLoc.pipe).second) {
+                    if (!memberPipes.insert(memberPosition.pipe).second) {
                         HCCL_VM_ERROR(
-                            "{} One PipeBarrier group contains two tasks from the same pipe, "
-                            "rankId={}, launchId={}, blockId={}, duplicatedPipeId={}, snapshotFile={}",
-                            MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID), ctx.placeholder->GetRankId(),
-                            ctx.placeholder->GetLaunchIdx(), group.blockId, memberInfo.taskLoc.pipe,
-                            ctx.snapshot.filePath);
+                            "{} One PipeBarrier group contains two tasks from the same "
+                            "pipe, "
+                            "rankId={}, launchId={}, blockId={}, duplicatedPipeId={}, "
+                            "snapshotFile={}",
+                            MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID), ctx.placeholder->GetDeviceId(),
+                            ctx.placeholder->GetLaunchIdx(), group.blockId, memberPosition.pipe, ctx.snapshot.filePath);
                         return HCCL_E_INTERNAL;
                     }
                 }
@@ -1800,11 +1805,12 @@ namespace TaskGraphGeneratorV3 {
                         }
                         memberTaskIds << "]";
                         HCCL_VM_ERROR(
-                            "{} One PIPE_ALL PipeBarrier is incomplete because one pipe is missing, "
-                            "rankId={}, launchId={}, blockId={}, missingPipeId={}, existingPipeIds={}, "
-                            "memberTaskIds={}, "
+                            "{} One PIPE_ALL PipeBarrier is incomplete because one "
+                            "pipe is missing, "
+                            "rankId={}, launchId={}, blockId={}, missingPipeId={}, "
+                            "existingPipeIds={}, memberTaskIds={}, "
                             "snapshotFile={}",
-                            MakeErrorCodeText(ErrorCode::GRAPH_MEMBER_MISSING), ctx.placeholder->GetRankId(),
+                            MakeErrorCodeText(ErrorCode::GRAPH_MEMBER_MISSING), ctx.placeholder->GetDeviceId(),
                             ctx.placeholder->GetLaunchIdx(), group.blockId, pipe, existingPipeIds.str(),
                             memberTaskIds.str(), ctx.snapshot.filePath);
                         return HCCL_E_INTERNAL;
@@ -1813,9 +1819,6 @@ namespace TaskGraphGeneratorV3 {
                 AivBarrierInfo info;
                 const uint32_t mergedTaskId
                     = group.memberTaskIds.empty() ? std::numeric_limits<uint32_t>::max() : group.memberTaskIds.front();
-                info.taskLoc = MakeAivPosition(
-                    ctx.placeholder->GetRankId(), ctx.placeholder->GetLaunchIdx(), group.blockId,
-                    std::numeric_limits<uint32_t>::max(), mergedTaskId, ctx.placeholder->GetOperatorId());
                 info.pipeType = group.pipeType;
                 info.merged = true;
                 info.memberNodeIds = group.memberNodeIds;
@@ -1824,8 +1827,9 @@ namespace TaskGraphGeneratorV3 {
 
                 NodeId mergeNodeId = INVALID_NODE_ID;
                 const TaskPosition position = MakeAivPosition(
-                    ctx.placeholder->GetRankId(), ctx.placeholder->GetLaunchIdx(), group.blockId,
-                    std::numeric_limits<uint32_t>::max(), mergedTaskId, ctx.placeholder->GetOperatorId());
+                    ctx.snapshot.deviceId, ctx.snapshot.rankId, ctx.placeholder->GetLaunchIdx(), group.blockId,
+                    std::numeric_limits<uint32_t>::max(), mergedTaskId, ctx.placeholder->GetOperatorId(), ctx.storage,
+                    ctx.placeholder->GetPosition());
                 HcclResult ret = ctx.graph->AppendGeneratedNode(
                     std::make_unique<TaskAivPipeBarrier>(std::move(info)), position, mergeNodeId);
                 if (ret != HCCL_SUCCESS) {
@@ -1853,10 +1857,12 @@ namespace TaskGraphGeneratorV3 {
                 }
                 if (expectedMemberCount != 0 && group.memberNodeIds.size() != expectedMemberCount) {
                     HCCL_VM_ERROR(
-                        "{} One SyncAll group is incomplete because it does not contain one member "
-                        "for every expected block/pipe pair, rankId={}, launchId={}, syncRound={}, actualCount={}, "
+                        "{} One SyncAll group is incomplete because it does "
+                        "not contain one member "
+                        "for every expected block/pipe pair, rankId={}, "
+                        "launchId={}, syncRound={}, actualCount={}, "
                         "expectedCount={}, snapshotFile={}",
-                        MakeErrorCodeText(ErrorCode::GRAPH_MEMBER_MISSING), ctx.placeholder->GetRankId(),
+                        MakeErrorCodeText(ErrorCode::GRAPH_MEMBER_MISSING), ctx.placeholder->GetDeviceId(),
                         ctx.placeholder->GetLaunchIdx(), group.syncRound, group.memberNodeIds.size(),
                         expectedMemberCount, ctx.snapshot.filePath);
                     return HCCL_E_INTERNAL;
@@ -1867,20 +1873,22 @@ namespace TaskGraphGeneratorV3 {
                     const auto* syncAll = dynamic_cast<const TaskAivSyncAll*>(member);
                     if (syncAll == nullptr) {
                         HCCL_VM_ERROR(
-                            "{} One SyncAll group member is not a valid SyncAll node, rankId={}, "
+                            "{} One SyncAll group member is not a valid SyncAll node, "
+                            "rankId={}, "
                             "launchId={}, syncRound={}, nodeId={}, snapshotFile={}",
-                            MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID), ctx.placeholder->GetRankId(),
+                            MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID), ctx.placeholder->GetDeviceId(),
                             ctx.placeholder->GetLaunchIdx(), group.syncRound, memberNodeId, ctx.snapshot.filePath);
                         return HCCL_E_INTERNAL;
                     }
-                    const TaskPosition& taskLoc = syncAll->GetInfo().taskLoc;
-                    if (!members.insert({taskLoc.blockId, taskLoc.pipe}).second) {
+                    const TaskPosition& position = syncAll->GetPosition();
+                    if (!members.insert({position.blockId, position.pipe}).second) {
                         HCCL_VM_ERROR(
-                            "{} One SyncAll group contains duplicate members for the same "
-                            "block/pipe pair, rankId={}, launchId={}, syncRound={}, blockId={}, pipeId={}, "
-                            "snapshotFile={}",
-                            MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID), ctx.placeholder->GetRankId(),
-                            ctx.placeholder->GetLaunchIdx(), group.syncRound, taskLoc.blockId, taskLoc.pipe,
+                            "{} One SyncAll group contains duplicate members for the "
+                            "same "
+                            "block/pipe pair, rankId={}, launchId={}, syncRound={}, "
+                            "blockId={}, pipeId={}, snapshotFile={}",
+                            MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID), ctx.placeholder->GetDeviceId(),
+                            ctx.placeholder->GetLaunchIdx(), group.syncRound, position.blockId, position.pipe,
                             ctx.snapshot.filePath);
                         return HCCL_E_INTERNAL;
                     }
@@ -1891,10 +1899,12 @@ namespace TaskGraphGeneratorV3 {
                             continue;
                         }
                         HCCL_VM_ERROR(
-                            "{} One SyncAll group is incomplete because a block/pipe member is "
-                            "missing, rankId={}, launchId={}, syncRound={}, missingBlockId={}, missingPipeId={}, "
+                            "{} One SyncAll group is incomplete because a block/pipe "
+                            "member is "
+                            "missing, rankId={}, launchId={}, syncRound={}, "
+                            "missingBlockId={}, missingPipeId={}, "
                             "snapshotFile={}",
-                            MakeErrorCodeText(ErrorCode::GRAPH_MEMBER_MISSING), ctx.placeholder->GetRankId(),
+                            MakeErrorCodeText(ErrorCode::GRAPH_MEMBER_MISSING), ctx.placeholder->GetDeviceId(),
                             ctx.placeholder->GetLaunchIdx(), group.syncRound, block.blockIdx, pipe,
                             ctx.snapshot.filePath);
                         return HCCL_E_INTERNAL;
@@ -1903,9 +1913,6 @@ namespace TaskGraphGeneratorV3 {
                 AivSyncAllInfo info;
                 const uint32_t mergedTaskId
                     = group.memberTaskIds.empty() ? std::numeric_limits<uint32_t>::max() : group.memberTaskIds.front();
-                info.taskLoc = MakeAivPosition(
-                    ctx.placeholder->GetRankId(), ctx.placeholder->GetLaunchIdx(), std::numeric_limits<uint32_t>::max(),
-                    std::numeric_limits<uint32_t>::max(), mergedTaskId, ctx.placeholder->GetOperatorId());
                 info.syncRound = group.syncRound;
                 info.merged = true;
                 info.memberNodeIds = group.memberNodeIds;
@@ -1914,8 +1921,9 @@ namespace TaskGraphGeneratorV3 {
 
                 NodeId mergeNodeId = INVALID_NODE_ID;
                 const TaskPosition position = MakeAivPosition(
-                    ctx.placeholder->GetRankId(), ctx.placeholder->GetLaunchIdx(), std::numeric_limits<uint32_t>::max(),
-                    std::numeric_limits<uint32_t>::max(), mergedTaskId, ctx.placeholder->GetOperatorId());
+                    ctx.snapshot.deviceId, ctx.snapshot.rankId, ctx.placeholder->GetLaunchIdx(),
+                    std::numeric_limits<uint32_t>::max(), std::numeric_limits<uint32_t>::max(), mergedTaskId,
+                    ctx.placeholder->GetOperatorId(), ctx.storage, ctx.placeholder->GetPosition());
                 HcclResult ret = ctx.graph->AppendGeneratedNode(
                     std::make_unique<TaskAivSyncAll>(std::move(info)), position, mergeNodeId);
                 if (ret != HCCL_SUCCESS) {
@@ -2040,14 +2048,18 @@ namespace TaskGraphGeneratorV3 {
             ctx.storage = storage;
             ctx.placeholder = aivGraph;
             std::string errorMessage;
-            HcclResult ret = loader.LoadByRankAndLaunch(
-                aivGraph->GetRankId(), aivGraph->GetLaunchIdx(), ctx.snapshot, errorMessage);
+            // Task JSON filenames are keyed by physical device id. The JSON payload
+            // still carries the logical communicator rank for task semantics.
+            const DeviceId deviceId = aivGraph->GetDeviceId();
+            HcclResult ret
+                = loader.LoadByDeviceAndLaunch(deviceId, aivGraph->GetLaunchIdx(), ctx.snapshot, errorMessage);
             if (ret != HCCL_SUCCESS) {
                 HCCL_VM_ERROR(
-                    "{} Failed to load the AIV runtime snapshot file, rankId={}, launchId={}, "
+                    "{} Failed to load the AIV runtime snapshot file, "
+                    "deviceId={}, launchId={}, "
                     "ret={}, loaderMessage={}",
-                    MakeErrorCodeText(ErrorCode::GRAPH_RESOURCE_NOT_FOUND), aivGraph->GetRankId(),
-                    aivGraph->GetLaunchIdx(), static_cast<uint32_t>(ret), errorMessage);
+                    MakeErrorCodeText(ErrorCode::GRAPH_RESOURCE_NOT_FOUND), deviceId, aivGraph->GetLaunchIdx(),
+                    static_cast<uint32_t>(ret), errorMessage);
                 return ret;
             }
             ret = ValidateSnapshot(ctx);
@@ -2202,7 +2214,7 @@ namespace TaskGraphGeneratorV3 {
                     if (node != nullptr && node->GetType() == TaskType::AIV_RECV_FLAG) {
                         const auto* recvFlag = dynamic_cast<const TaskAivRecvFlag*>(node);
                         if (recvFlag != nullptr) {
-                            const auto stateIter = flagStates.find(MakeFlagCellKey(recvFlag->GetFlag()));
+                            const auto stateIter = flagStates.find(MakeFlagCellKey(*node, recvFlag->GetFlag()));
                             if (stateIter != flagStates.end()) {
                                 std::ostringstream os;
                                 os << "{currentValue=" << stateIter->second.currentValue
@@ -2220,9 +2232,12 @@ namespace TaskGraphGeneratorV3 {
                         }
                     }
                     HCCL_VM_ERROR(
-                        "{} AIV SendFlag/RecvFlag matching is stuck. Some RecvFlag tasks are still "
-                        "blocked, but no matching SendFlag value has become available, firstBlockedRecvFlagNode={}, "
-                        "blockedRecvFlagNodeCount={}, currentFlagCellState={}, snapshotFile={}",
+                        "{} AIV SendFlag/RecvFlag matching is stuck. Some "
+                        "RecvFlag tasks are still "
+                        "blocked, but no matching SendFlag value has become "
+                        "available, firstBlockedRecvFlagNode={}, "
+                        "blockedRecvFlagNodeCount={}, "
+                        "currentFlagCellState={}, snapshotFile={}",
                         MakeErrorCodeText(ErrorCode::GRAPH_DEADLOCK), node == nullptr ? "node=null" : node->Describe(),
                         readyQueue.size(), flagCellStateText, snapshotFile);
                     return HCCL_E_INTERNAL;
@@ -2251,10 +2266,11 @@ namespace TaskGraphGeneratorV3 {
                     if (sendFlag == nullptr) {
                         return HCCL_E_PTR;
                     }
-                    FlagCellState& state = flagStates[MakeFlagCellKey(sendFlag->GetFlag())];
+                    FlagCellState& state = flagStates[MakeFlagCellKey(*node, sendFlag->GetFlag())];
                     if (state.currentValue == sendFlag->GetFlag().value && !state.producerNodes.empty()) {
                         HCCL_VM_WARN(
-                            "The same flag cell received the same SendFlag value again before any "
+                            "The same flag cell received the same SendFlag "
+                            "value again before any "
                             "new RecvFlag consumed it, node={}",
                             node == nullptr ? "node=null" : node->Describe());
                     }
@@ -2266,7 +2282,7 @@ namespace TaskGraphGeneratorV3 {
                     if (recvFlag == nullptr) {
                         return HCCL_E_PTR;
                     }
-                    FlagCellState& state = flagStates[MakeFlagCellKey(recvFlag->GetFlag())];
+                    FlagCellState& state = flagStates[MakeFlagCellKey(*node, recvFlag->GetFlag())];
                     if (state.currentValue != recvFlag->GetFlag().value) {
                         readyQueue.push_back(nodeId);
                         queued.insert(nodeId);

@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#include <cstdint>
 #include "aiv_graph_executor.h"
+#include <cstdint>
 
 AivBlock::AivBlock(uint32_t blockIdx, size_t maxEventId, size_t ubSize) : blockIdx_(blockIdx), ubSize_(ubSize)
 {

@@ -25,6 +25,8 @@ public:
     const Network& GetNetwork() const { return network_; }
     Network& GetNetwork() { return network_; }
 
+    static int ExtractDieIdFromPortId(const std::string& portId);
+
 private:
     ParseStatus ScanSuperPodDirs(const std::string& clusterDir);
     ParseStatus ScanServerDirs(const std::string& superpodDir, SuperPod& superpod);
@@ -35,7 +37,6 @@ private:
     ParseStatus ParseServersInfoJson(const std::string& serversInfoPath);
 
     void MergeTopoAndRootinfo(Server& server);
-    int ExtractDieIdFromPortId(const std::string& portId);
 
     std::string FindFileBySuffix(const std::string& dir, const std::string& suffix);
 

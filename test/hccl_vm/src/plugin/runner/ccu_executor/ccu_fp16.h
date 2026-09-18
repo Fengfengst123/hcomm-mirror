@@ -8,14 +8,17 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: fwk types header
+ */
+
 #ifndef HCCL_SIM_CCU_FP16_H
 #define HCCL_SIM_CCU_FP16_H
+#include "hccl/hccl_types.h"
 #include <cmath>
 #include <ostream>
 #include <string>
-
-#include "hccl/base.h"
-#include "hccl/hccl_types.h"
 
 typedef unsigned short half;
 typedef unsigned short ushort;

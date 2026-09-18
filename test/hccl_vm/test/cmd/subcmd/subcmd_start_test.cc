@@ -14,12 +14,40 @@
 #include <iostream>
 #include <sstream>
 
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <string>
+#include <unistd.h>
+#include <utility>
+#include <vector>
+
 #include "cmd_base_utils.h"
+#include "runtime_state/sim_models.h"
+#include "storage/internal/process_storage_context.h"
+#include "storage/table_access.h"
+#include "storage_composition/storage_composition.h"
 #include "subcmd_start.h"
 
 using namespace HcclSim;
 #define private public
 #undef private
+namespace {
+/// 全二进制唯一的临时安装根：InstallPath 首次解析后进程内缓存，
+/// 各用例共用同一根路径、按需重建 data/ 布局实现隔离。
+std::string InstallRootPath()
+{
+    static const std::string root = "/tmp/hvm_subcmd_start_test_" + std::to_string(::getpid());
+    return root;
+}
+
+std::string TopoMarkerPath() { return InstallRootPath() + "/topo_generated.marker"; }
+
+std::string RunnerDbPath() { return InstallRootPath() + "/data/hccl_sim.db"; }
+
+bool TopoMarkerExists() { return std::filesystem::exists(TopoMarkerPath()); }
+} // namespace
+
 class StartCommandTest : public testing::Test {
 protected:
     void SetUp() override
@@ -31,6 +59,12 @@ protected:
         savedLevel_ = g_hcclVmLevel;
         g_hcclVmBashFlag = false;
         g_hcclVmLevel = 2;
+        // 关闭上一用例可能遗留的进程存储会话并重建干净安装根。
+        (void)HcclSim::Storage::StorageRuntime::CloseProcessSession();
+        std::filesystem::remove_all(InstallRootPath());
+        PrepareInstallRoot(false);
+        // 安装根固定为同一路径：InstallPath 进程内只解析一次。
+        setenv("HCCL_VM_INSTALL_ROOT", InstallRootPath().c_str(), 1);
     }
 
     void TearDown() override
@@ -38,6 +72,34 @@ protected:
         // Restore global state
         g_hcclVmBashFlag = savedBashFlag_;
         g_hcclVmLevel = savedLevel_;
+        (void)HcclSim::Storage::StorageRuntime::CloseProcessSession();
+        std::filesystem::remove_all(InstallRootPath());
+    }
+
+    /// 搭建假安装根：生成脚本（进入即落 marker）与集群配置齐备，data
+    /// 目录按参数决定。 无 data 目录时存储会话初始化必然失败（打开
+    /// data/hccl_sim.db 报错）。
+    void PrepareInstallRoot(bool withDataDir)
+    {
+        const std::string root = InstallRootPath();
+        std::filesystem::create_directories(root + "/script");
+        std::filesystem::create_directories(root + "/config/cluster");
+        if (withDataDir) {
+            std::filesystem::create_directories(root + "/data");
+        }
+        std::ofstream script(root + "/script/generate_cluster_topo.sh");
+        script << "#!/bin/bash\ntouch " << TopoMarkerPath() << "\nexit 0\n";
+        script.close();
+        std::filesystem::permissions(
+            root + "/script/generate_cluster_topo.sh",
+            std::filesystem::perms::owner_exec | std::filesystem::perms::group_exec
+                | std::filesystem::perms::others_exec,
+            std::filesystem::perm_options::add);
+        for (const char* model : {"fake", "test_model", "cfg"}) {
+            std::ofstream config(root + "/config/cluster/" + model + ".yaml");
+            config << "meta:\n  podNum: 1\n";
+            config.close();
+        }
     }
 
     std::unique_ptr<CLI::App> app_;
@@ -125,8 +187,8 @@ TEST_F(StartCommandTest, ParseStart_WithoutConfigFile_Throws)
 
 TEST_F(StartCommandTest, Execute_BashFlagTrue_LogsWarningAndReturns)
 {
-    // When g_hcclVmBashFlag is true, Execute() should log a warning and return early
-    // without calling ParseYamlTopo or other external functions
+    // When g_hcclVmBashFlag is true, Execute() should log a warning and return
+    // early without calling ParseYamlTopo or other external functions
     g_hcclVmBashFlag = true;
     cmd_->Setup(*app_);
     // Parse to trigger the callback which calls Execute()
@@ -205,7 +267,7 @@ TEST_F(StartCommandTest, Setup_ConfigFileOptionHasValidator)
     cmd_->Setup(*app_);
     auto start = app_->get_subcommand("start");
     ASSERT_NE(start, nullptr);
-    auto* opt = start->get_option("configFile");
+    auto* opt = start->get_option("configCluster");
     ASSERT_NE(opt, nullptr);
     EXPECT_NE(opt->get_validator(), nullptr);
 }
@@ -215,7 +277,81 @@ TEST_F(StartCommandTest, Setup_ConfigFileOptionRequired)
     cmd_->Setup(*app_);
     auto start = app_->get_subcommand("start");
     ASSERT_NE(start, nullptr);
-    auto* opt = start->get_option("configFile");
+    auto* opt = start->get_option("configCluster");
     ASSERT_NE(opt, nullptr);
     EXPECT_TRUE(opt->get_required());
+}
+
+TEST_F(StartCommandTest, Parse_HelpAndInvalidArgs_DoNotCreateDatabase)
+{
+    // help 与非法参数只做命令行解析，不建立数据库会话、不创建数据库文件。
+    cmd_->Setup(*app_);
+    try {
+        app_->parse("test start --help", true);
+    } catch (const CLI::CallForHelp& e) {
+        std::cerr << "Catch CLI::CallForHelp: " << e.what() << "\n";
+    } catch (const std::exception& e) {
+        std::cerr << "Catch unexpected exception: " << e.what() << "\n";
+    }
+    try {
+        // 不存在的集群配置：解析期校验失败，回调不执行。
+        app_->parse("test start no_such_model.yaml", true);
+    } catch (const CLI::ValidationError& e) {
+        std::cerr << "Catch CLI::ValidationError: " << e.what() << "\n";
+    } catch (const std::exception& e) {
+        std::cerr << "Catch unexpected exception: " << e.what() << "\n";
+    }
+    EXPECT_FALSE(std::filesystem::exists(RunnerDbPath()));
+    EXPECT_FALSE(std::filesystem::exists(InstallRootPath() + "/data"));
+}
+
+TEST_F(StartCommandTest, Execute_MissingDataDir_InstallsSessionAndReachesCopyFile)
+{
+    // Session 安装只登记逻辑路由和惰性引擎工厂，不打开 SQLite。data
+    // 目录缺失不是 Session 安装失败；Start 与基线一样继续生成拓扑，随后
+    // CopyFile 创建 data 目录并因源 topo.json
+    // 缺失返回。此时尚未执行首个表操作，所以不应创建物理数据库文件。
+    PrepareInstallRoot(false);
+    cmd_->Setup(*app_);
+    try {
+        app_->parse("test start fake.yaml", true);
+    } catch (const CLI::CallForHelp& e) {
+        std::cerr << "Catch CLI::CallForHelp: " << e.what() << "\n";
+    } catch (const std::exception& e) {
+        std::cerr << "Catch unexpected exception: " << e.what() << "\n";
+    }
+    EXPECT_TRUE(TopoMarkerExists());
+    EXPECT_FALSE(std::filesystem::exists(RunnerDbPath()));
+    EXPECT_TRUE(std::filesystem::exists(InstallRootPath() + "/data"));
+    auto lease = HcclSim::Storage::ProcessStorageContext::Acquire();
+    ASSERT_TRUE(lease.ok()) << lease.diagnostic;
+}
+
+TEST_F(StartCommandTest, Execute_NormalPath_InstallsSessionBeforeFirstDbWrite)
+{
+    // 正常路径：会话安装于 Execute 起点（首个数据库写入 RunModeConfig
+    // 之前的代码位置）完成； 本用例 topo.json 源缺失使 CopyFile
+    // 失败返回，恰好停在首个数据库写入与 InitHvmEnv 之前 （不进入监听线程/fork
+    // 路径，保证单元测试安全）。
+    PrepareInstallRoot(true);
+    cmd_->Setup(*app_);
+    try {
+        app_->parse("test start fake.yaml", true);
+    } catch (const CLI::CallForHelp& e) {
+        std::cerr << "Catch CLI::CallForHelp: " << e.what() << "\n";
+    } catch (const std::exception& e) {
+        std::cerr << "Catch unexpected exception: " << e.what() << "\n";
+    }
+    EXPECT_TRUE(TopoMarkerExists());                       // 会话安装通过后正常进入拓扑生成
+    EXPECT_FALSE(std::filesystem::exists(RunnerDbPath())); // 未做表操作，物理后端仍未打开
+    {
+        auto lease = HcclSim::Storage::ProcessStorageContext::Acquire();
+        ASSERT_TRUE(lease.ok()) << lease.diagnostic;
+    }
+    auto count
+        = HcclSim::Storage::Count<sim::runtime::RunModeConfig>(HcclSim::Storage::All<sim::runtime::RunModeConfig>());
+    ASSERT_TRUE(count.ok()) << count.diagnostic;
+    ASSERT_TRUE(count.value.has_value());
+    EXPECT_EQ(*count, 0U);
+    EXPECT_TRUE(std::filesystem::exists(RunnerDbPath())); // 首个真实表操作才惰性打开后端
 }

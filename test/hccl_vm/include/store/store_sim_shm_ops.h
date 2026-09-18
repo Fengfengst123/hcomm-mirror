@@ -20,7 +20,7 @@
 typedef struct __attribute__((packed)) {
     uint32_t magic;             // 魔数
     uint32_t version;           // 版本号
-    char name[64];              // 共享内存名称
+    char name[256];             // 共享内存名称(含 pid 前缀)
     uint64_t size;              // 大小
     volatile uint32_t lock;     // 锁(0:未锁定， 1：已锁定)
     volatile uint32_t refCount; // 引用计数,记录所有进程对共享内存的引用
@@ -35,12 +35,12 @@ void* ShmOpen(const char* name, size_t* size);
 /*共享内存, ShmHead引用计数减1,引用计数归0则删除共享内存区域*/
 void ShmClose(void* shm);
 
-/*锁定指定的内存该内存由ShmCreate/ShmOpen创建，整块锁定，0 成功，-1 失败,内部使用POSIX信号量或者futex/atomic
- * compare-and-swap实现细粒度锁*/
+/*锁定指定的内存该内存由ShmCreate/ShmOpen创建，整块锁定，0 成功，-1
+ * 失败,内部使用POSIX信号量或者futex/atomic compare-and-swap实现细粒度锁*/
 int ShmLock(void* shm);
 
-/*解锁指定的内存该内存由ShmCreate/ShmOpen创建，整块锁定，0 成功，-1 失败，内部使用POSIX信号量或者futex/atomic
- * compare-and-swap实现细粒度锁*/
+/*解锁指定的内存该内存由ShmCreate/ShmOpen创建，整块锁定，0 成功，-1
+ * 失败，内部使用POSIX信号量或者futex/atomic compare-and-swap实现细粒度锁*/
 int ShmUnlock(void* shm);
 
 #endif // SIM_SHM_OPS_H

@@ -11,8 +11,8 @@
 #include <fstream>
 #include <iostream>
 
-#include "topo_cluster_dumper.h"
 #include "sim_log.h"
+#include "topo_cluster_dumper.h"
 
 std::string ClusterTopoDumper::Indent(int level) { return std::string(level * 2, ' '); }
 
@@ -136,6 +136,7 @@ void ClusterTopoDumper::DumpPort(const Port& port, std::ostream& os, int indent)
     os << Indent(indent + 1) << "topoType: " << TopoTypeToString(port.topoType) << "\n";
     os << Indent(indent + 1) << "topoInstanceId: " << port.topoInstanceId << "\n";
     os << Indent(indent + 1) << "position: " << PositionToString(port.position) << "\n";
+    os << Indent(indent + 1) << "netInstanceId: \"" << port.netInstanceId << "\"\n";
     os << Indent(indent) << "}\n";
 }
 

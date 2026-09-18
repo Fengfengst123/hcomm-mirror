@@ -12,11 +12,13 @@
 #include <string>
 
 #include "cmd_base_utils.h"
-#include "db_sim_runner_db.h"
+#include "operation_data/operation_data_ops.h"
+#include "runtime_state/db_sim_runner_ops.h"
+#include "runtime_state/sim_models.h"
 #include "sim_common_api.h"
 #include "sim_common_defs.h"
 #include "sim_log.h"
-#include "sim_models.h"
+#include "storage/table_access.h"
 #include "subcmd_start.h"
 
 namespace HcclSim {
@@ -30,7 +32,8 @@ void StartCommand::Setup(CLI::App& app)
     sub_start->add_option("--level", g_hcclVmLevel, "设置模拟等级, 当前支持等级为 1 和 2, 默认模拟等级 2 ");
     sub_start->add_flag(
         "--check-only", checkOnlyMode,
-        "仅校验模式:大块(200MB-4GB)内存申请复用同一块 4GB 共享区,内容不保证正确,换取内存节省");
+        "仅校验模式:大块(200MB-4GB)内存申请复用同一块 4GB "
+        "共享区,内容不保证正确,换取内存节省");
 
     sub_start->callback([this]() {
         Execute();
@@ -40,10 +43,19 @@ void StartCommand::Setup(CLI::App& app)
 void StartCommand::Execute()
 {
     if (g_hcclVmBashFlag) {
-        HCCL_VM_WARN("hccl-vm has already started. Please do not start it again in a sub-bash.");
+        HCCL_VM_WARN("hccl-vm has already started. Please do not start it "
+                     "again in a sub-bash.");
         return;
     }
 
+    // 启动时序（方案 §2.1）：参数解析成功后于命令起点取得数据库会话并
+    // fail-fast—— 初始化失败立即返回，不进入任何 RunnerDB 写入 / InitHvmEnv /
+    // workload； 已创建对象由 main 命令结束后的显式排空关闭统一释放。
+    if (sim::operation::EnsureProcessStorageSession() != 0) {
+        HCCL_VM_ERROR("Failed to initialize simulation database. Please check "
+                      "the data directory.");
+        return;
+    }
     if (configClusterName.find(".yaml") != std::string::npos) {
         configClusterName.erase(configClusterName.find(".yaml"), 5);
     }
@@ -64,18 +76,19 @@ void StartCommand::Execute()
         return;
     }
 
-    sim::RunModeConfig runMode{};
-    runMode.mode = checkOnlyMode ? 1 : 0;
-    RunnerDB::DeleteAll<sim::RunModeConfig>();
-    RunnerDB::Add<sim::RunModeConfig>(runMode);
+    if (!sim::runtime::SetRunMode(checkOnlyMode)) {
+        return;
+    }
     HCCL_VM_INFO("run mode: {}", checkOnlyMode ? "check-only" : "normal");
 
     ret = InitHvmEnv(g_configClusterDir, g_hcclVmLevel, checkOnlyMode);
     if (ret != HcclVmResult::HCCL_SIM_HOST_SUCCESS_CMD) {
-        HCCL_VM_ERROR("Failed to initialize simulation environment. Cleaning up environment.");
+        HCCL_VM_ERROR("Failed to initialize simulation environment. Cleaning "
+                      "up environment.");
         auto cleanRet = HcclVmExit();
         if (cleanRet != HcclVmResult::HCCL_SIM_HOST_SUCCESS_CMD) {
-            HCCL_VM_ERROR("Failed to clean up environment. Please check for residual environment artifacts.");
+            HCCL_VM_ERROR("Failed to clean up environment. Please check for "
+                          "residual environment artifacts.");
         }
         return;
     }
@@ -85,7 +98,8 @@ void StartCommand::Execute()
         HCCL_VM_ERROR("Failed to start hvm command.");
         auto cleanRet = HcclVmExit();
         if (cleanRet != HcclVmResult::HCCL_SIM_HOST_SUCCESS_CMD) {
-            HCCL_VM_ERROR("Failed to clean up environment. Please check for residual environment artifacts.");
+            HCCL_VM_ERROR("Failed to clean up environment. Please check for "
+                          "residual environment artifacts.");
         }
         return;
     }

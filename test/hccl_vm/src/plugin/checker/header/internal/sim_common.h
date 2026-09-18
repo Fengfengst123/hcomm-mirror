@@ -12,6 +12,8 @@
 #define SIM_COMMON_H
 #include <cstdint>
 #include <iostream>
+#include <limits>
+#include <map>
 #include <vector>
 
 using u8 = unsigned char;
@@ -28,6 +30,12 @@ using RankId = uint32_t;
 using PodId = uint32_t;
 using SerId = uint32_t;
 using PhyId = uint32_t;
+// 物理设备 ID：全局唯一，内部逻辑统一使用 deviceId
+// 标识设备（为多通信域执行做准备）
+using DeviceId = uint32_t;
+using CommId = uint64_t;
+constexpr DeviceId INVALID_DEVICE_ID = std::numeric_limits<DeviceId>::max();
+constexpr CommId INVALID_COMM_ID = std::numeric_limits<CommId>::max();
 constexpr uint64_t SIM_MEM_BLOCK_SIZE = 0x10000000000; // 内存分配起始地址
 constexpr uint64_t SIM_MEM_MASKER = 0xFFFFFF0000000000;
 constexpr uint64_t SIZE_200MB = 200ULL * 1024 * 1024; // CCL 200MB
@@ -40,8 +48,8 @@ using ChannelHandle = uint64_t;
 using ThreadHandle = uint64_t;
 using PhyDeviceId = uint32_t;
 using ServerMeta = std::vector<PhyDeviceId>;
-using SuperPodMeta = std::vector<ServerMeta>;
-using TopoMeta = std::vector<SuperPodMeta>;
+using SuperPodMeta = std::map<uint32_t, ServerMeta>;
+using TopoMeta = std::map<uint32_t, SuperPodMeta>;
 
 struct NpuPos {
     PodId superpodId; // 超节点Id

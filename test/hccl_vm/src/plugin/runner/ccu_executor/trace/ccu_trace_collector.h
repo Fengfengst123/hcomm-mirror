@@ -8,6 +8,12 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: CCU trace collector - collects
+ * trace data during CCU instruction execution
+ */
+
 #ifndef HCCL_SIM_CCU_TRACE_COLLECTOR_H
 #define HCCL_SIM_CCU_TRACE_COLLECTOR_H
 
@@ -56,7 +62,7 @@ public:
     void RegisterInstrSpace(const CcuInstrSpace& instrSpace);
     void RegisterChannelSpace(const CcuChannelSpace& channelSpace);
 
-    // ===== 全局上下文管理（由 SqeuentialExecutor 层调用） =====
+    // ===== 全局上下文管理（由 SequentialExecutor 层调用） =====
     void BeginRound(uint32_t execRound);
     void BeginGlobalStep();
     uint32_t RegisterSqeTask(
@@ -111,7 +117,7 @@ public:
     const std::string& GetOutputPath() const;
 
     // ===== 增量落盘：将当前已采集的 trace 数据序列化写入磁盘 =====
-    // 由 SqeuentialExecutor 定期调用，确保崩溃时磁盘上有最新数据
+    // 由 SequentialExecutor 定期调用，确保崩溃时磁盘上有最新数据
     void IncrementalDump();
 
     // ===== 重置 =====

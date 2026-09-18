@@ -16,19 +16,47 @@
 #include <memory>
 #include <vector>
 
-#include "big_graph_data_loader.h"
+#include "sim_loader.h"
 #include "storage_manager.h"
 #include "task_graph_generator_v3/task_graph_generator_v3.h"
 
 namespace HcclSim {
 namespace BigGraphCheckV3 {
 
+    struct OperatorRankData {
+        uint32_t deviceId{UINT32_MAX};
+        uint32_t rankId{UINT32_MAX};
+        sim::operation::CompositeOpDetail op;
+        std::vector<HcclTaskMetaData> taskMetas;
+    };
+
+    struct OpParam {
+        TaskGraphGeneratorV3::OperatorId operatorId{TaskGraphGeneratorV3::INVALID_OPERATOR_ID};
+        sim::operation::OpExecutionKey key;
+        std::vector<OperatorRankData> ranks;
+    };
+
+    struct BigGraphData {
+        std::vector<sim::operation::CcuChannelTab> channels;
+        std::vector<sim::operation::HalfRTTTab> halfRTT;
+        std::vector<sim::operation::CcuInstrResTab> instrRes;
+        std::vector<OpParam> operators;
+
+        void Clear()
+        {
+            channels.clear();
+            halfRTT.clear();
+            instrRes.clear();
+            operators.clear();
+        }
+    };
+
     class BigGraphCheckerV3 {
     public:
         BigGraphCheckerV3() = default;
         ~BigGraphCheckerV3() = default;
 
-        HcclResult LoadOpData(loader::Loader& loader, uint32_t syncIter);
+        HcclResult LoadOpData(loader::Loader& loader);
         const BigGraphData& GetData() const { return data_; }
         const std::vector<OpParam>& GetOpParams() const { return data_.operators; }
         const TaskGraphGeneratorV3::TaskGraphGeneratorV3* GetGraph() const { return graph_.get(); }
@@ -43,7 +71,6 @@ namespace BigGraphCheckV3 {
 
     private:
         BigGraphData data_;
-        BigGraphDataLoader dataLoader_;
         StorageManager storage_;
         std::vector<std::unique_ptr<TaskGraphGeneratorV3::TaskNode>> translatedNodes_;
         TaskGraphGeneratorV3::AllRankNodeQueues translatedTaskQueues_;

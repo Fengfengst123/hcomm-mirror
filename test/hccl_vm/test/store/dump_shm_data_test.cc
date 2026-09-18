@@ -15,47 +15,73 @@
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
+#include <map>
 #include <string>
 #include <sys/mman.h>
+#include <vector>
 
+#include "hccl_types.h"
+#include "operation_data/operation_data_ops.h"
+#include "runtime_state/db_sim_runner_common.h"
+#include "runtime_state/db_sim_runner_ops.h"
+#include "runtime_state/sim_models.h"
+#include "sim_loader.h"
+#include "simulation_storage_test_helper.h"
+#include "storage/internal/process_storage_context.h"
+#include "storage/storage_session.h"
 #include "store_binary_data_operator.h"
 #include "store_dump_shm_data.h"
-#include "hccl_types.h"
-#include "sim_models.h"
-#include "db_sim_runner_common.h"
-#include "db_sim_runner_db.h"
 #include "store_sim_shm_ops.h"
-#include "db_sim_sqlite_db.h"
+
+using sim::runtime::g_cur_comm_key;
+using sim::runtime::g_cur_device_key;
 
 using namespace HcclSim;
 
 extern uint8_t g_opExpansionMode;
 namespace HcclSim {
 std::string GetBinLocation();
-HcclVmResult CreateSimSynData(HcclVmSynData& hvmSynData);
+HcclVmResult CreateSimSynData(HcclVmSynData& hvmSynData, const sim::operation::OpExecutionKey& key);
 HcclVmResult CreateSimInstrData(HcclVmInstrData& hvmInstrData);
-HcclVmResult CreateSimTaskMetaData(HcclVmTaskMetaData& hvmTaskMetaData);
+HcclVmResult CreateSimTaskMetaData(
+    HcclVmTaskMetaData& hvmTaskMetaData,
+    const std::map<uint32_t, std::vector<sim::operation::CompositeOpDetail>>& compositeDataMap);
 } // namespace HcclSim
 
 static const std::string kSynDataFile = "/%s_hcclvm_syn_data.bin";
 static const std::string kTaskDataFile = "/%s_hcclvm_task_data.bin";
 
+static bool LoadFirstOpExecutionKey(sim::operation::OpExecutionKey& key)
+{
+    loader::Loader dataLoader;
+    std::vector<sim::operation::OpExecutionKey> keys;
+    if (dataLoader.LoadOpExecutionKeys(keys) != HcclResult::HCCL_SUCCESS || keys.empty()) {
+        return false;
+    }
+    key = keys.front();
+    return true;
+}
+
 static void ClearAllDbTables()
 {
-    SimRunnerSqliteDB::Instance().ClearAll();
-    RunnerDB::DeleteAll<sim::SimModelData>();
-    RunnerDB::DeleteAll<sim::Server>();
-    RunnerDB::DeleteAll<sim::Host>();
-    RunnerDB::DeleteAll<sim::Device>();
-    RunnerDB::DeleteAll<sim::Rank>();
-    RunnerDB::DeleteAll<sim::MemoryLayout>();
-    RunnerDB::DeleteAll<sim::EndPoint>();
-    RunnerDB::DeleteAll<sim::Ccu>();
-    RunnerDB::DeleteAll<sim::CcuResource>();
-    RunnerDB::DeleteAll<sim::CcuChannel>();
-    RunnerDB::DeleteAll<sim::RaContext>();
-    RunnerDB::DeleteAll<sim::RaJetty>();
-    RunnerDB::DeleteAll<sim::EndPointPair>();
+    // 迁移前单库 ClearAll() 的等价语义：关闭进程会话、清理数据库文件后重装。
+    // 确保进程存储会话存在后逐表清空。
+    g_cur_comm_key = 0;
+    std::filesystem::create_directories(GetBinLocation() + DATA_FILE_PATH);
+    (void)runnerdb_test::ResetTestSession("/tmp/test_dump_shm_data.db", "/tmp/test_dump_shm_data_op.db");
+    runnerdb_test::ClearRecords<sim::runtime::SimModelData>();
+    runnerdb_test::ClearRecords<sim::runtime::Server>();
+    runnerdb_test::ClearRecords<sim::runtime::Host>();
+    runnerdb_test::ClearRecords<sim::runtime::Device>();
+    runnerdb_test::ClearRecords<sim::runtime::Communicator>();
+    runnerdb_test::ClearRecords<sim::runtime::MemoryLayout>();
+    runnerdb_test::ClearRecords<sim::runtime::EndPoint>();
+    runnerdb_test::ClearRecords<sim::runtime::Ccu>();
+    runnerdb_test::ClearRecords<sim::runtime::CcuResource>();
+    runnerdb_test::ClearRecords<sim::runtime::CcuChannel>();
+    runnerdb_test::ClearRecords<sim::runtime::RaContext>();
+    runnerdb_test::ClearRecords<sim::runtime::RaJetty>();
+    runnerdb_test::ClearRecords<sim::runtime::EndPointPair>();
 }
 
 class DumpShmDataTest : public testing::Test {
@@ -210,9 +236,73 @@ protected:
         g_opExpansionMode = 0;
     }
 
-    void InsertSimModelData_CCU()
+    void InsertOpData(
+        uint32_t rankId, uint32_t expansionMode, uint16_t opType = 0, uint64_t dataCount = 1024, bool withTask = false,
+        const std::vector<uint64_t>& matrix = {})
     {
-        sim::SimModelData model;
+        // InsertOpDetail 依赖有效 commId 来解析 commName/commHash 并分配
+        // opIter， 若尚未建立 communicator 则先补一个，避免 commId=0
+        // 导致插入失败。
+        if (g_cur_comm_key == 0) {
+            sim::runtime::Communicator comm{};
+            std::strncpy(comm.comm_id, "test_comm", sizeof(comm.comm_id) - 1);
+            comm.rank_size = 2;
+            comm.rank_id = rankId;
+            auto commResult = sim::runtime::Db::Add<sim::runtime::Communicator>(comm);
+            ASSERT_TRUE(commResult.ok());
+            ASSERT_TRUE(commResult.value.has_value());
+            g_cur_comm_key = commResult.value->value;
+        }
+        ::OpDetails op{};
+        op.opType = opType;
+        op.dataType = HCCL_DATA_TYPE_INT8;
+        op.reduceType = HCCL_REDUCE_SUM;
+        op.opV1.count = dataCount;
+
+        sim::operation::OpDetailTab detail{};
+        detail.pid = getpid();
+        detail.rankId = rankId;
+        detail.commId = g_cur_comm_key;
+        detail.root = 0;
+        detail.opExpansionMode = expansionMode;
+        detail.devType = 0;
+        detail.rankSize = 2;
+        detail.srcRank = rankId;
+        detail.dstRank = (rankId + 1) % 2;
+        detail.opDetail.resize(sizeof(op));
+        std::memcpy(detail.opDetail.data(), &op, sizeof(op));
+        if (!matrix.empty()) {
+            uint32_t count = matrix.size();
+            detail.opExtInfo.resize(sizeof(count) + matrix.size() * sizeof(uint64_t));
+            std::memcpy(detail.opExtInfo.data(), &count, sizeof(count));
+            std::memcpy(detail.opExtInfo.data() + sizeof(count), matrix.data(), matrix.size() * sizeof(uint64_t));
+        }
+
+        sim::operation::OpMemInfoTab mem{};
+        mem.inputAddr = 0x1000 + rankId * 0x10000;
+        mem.inputSize = 4096;
+        mem.outputAddr = 0x2000 + rankId * 0x10000;
+        mem.outputSize = 8192;
+        ASSERT_EQ(sim::operation::InsertOpDetailAndMem(detail, mem), 0);
+
+        if (withTask) {
+            HcclTaskMetaData task{};
+            task.taskType = HccLTaskMetaType::NOTIFY_RECORD;
+            task.rankId = rankId;
+            task.taskData.notify.srcDeviceId = rankId;
+            task.taskData.notify.dstDeviceId = rankId;
+            task.taskData.notify.notifyId = 1;
+            sim::operation::OpTaskTab taskRow{};
+            taskRow.optaskMeta.resize(sizeof(task));
+            std::memcpy(taskRow.optaskMeta.data(), &task, sizeof(task));
+            ASSERT_EQ(sim::operation::InsertOpTask(taskRow), 0);
+        }
+    }
+
+    void InsertSimModelData_CCU(bool withTask = false)
+    {
+        InsertOpData(0, sim::runtime::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_CCU, 0, 1024, withTask);
+        sim::runtime::SimModelData model;
         model.rank_id = 0;
         model.src_rank = 0;
         model.dst_rank = 1;
@@ -223,7 +313,7 @@ protected:
         model.reduce_op = 0;
         model.data_type = 0;
         model.data_count = 1024;
-        model.op_expansion_mode = sim::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_CCU;
+        model.op_expansion_mode = sim::runtime::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_CCU;
         model.ccu0_resource_base_addr = 0;
         model.ccu1_resource_base_addr = 0;
         model.all2AllDataDes.sendType = 0;
@@ -234,12 +324,13 @@ protected:
         memset(model.all2AllDataDes.sendCountMatrix, 0, sizeof(model.all2AllDataDes.sendCountMatrix));
         model.all2AllDataDes.sendCountMatrix[0] = 512;
         model.all2AllDataDes.sendCountMatrix[1] = 512;
-        RunnerDB::Add<sim::SimModelData>(model);
+        runnerdb_test::InsertRecord<sim::runtime::SimModelData>(model);
     }
 
     void InsertSimModelData_AICPU()
     {
-        sim::SimModelData model;
+        InsertOpData(0, sim::runtime::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_AICPU);
+        sim::runtime::SimModelData model;
         model.rank_id = 0;
         model.src_rank = 0;
         model.dst_rank = 1;
@@ -250,7 +341,7 @@ protected:
         model.reduce_op = 0;
         model.data_type = 0;
         model.data_count = 1024;
-        model.op_expansion_mode = sim::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_AICPU;
+        model.op_expansion_mode = sim::runtime::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_AICPU;
         model.ccu0_resource_base_addr = 0;
         model.ccu1_resource_base_addr = 0;
         model.all2AllDataDes.sendType = 0;
@@ -258,12 +349,18 @@ protected:
         model.all2AllDataDes.sendCount = 0;
         model.all2AllDataDes.recvCount = 0;
         model.all2AllDataDes.count = 0;
-        RunnerDB::Add<sim::SimModelData>(model);
+        runnerdb_test::InsertRecord<sim::runtime::SimModelData>(model);
     }
 
     void InsertSimModelData_AllToAllV()
     {
-        sim::SimModelData model0;
+        InsertOpData(
+            0, sim::runtime::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_CCU,
+            static_cast<uint16_t>(HcclCMDType::HCCL_CMD_ALLTOALLV), 1024, false, {512, 512, 256, 256});
+        InsertOpData(
+            1, sim::runtime::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_CCU,
+            static_cast<uint16_t>(HcclCMDType::HCCL_CMD_ALLTOALLV), 1024, false, {128, 128, 64, 64});
+        sim::runtime::SimModelData model0;
         model0.rank_id = 0;
         model0.src_rank = 0;
         model0.dst_rank = 1;
@@ -274,16 +371,16 @@ protected:
         model0.reduce_op = 0;
         model0.data_type = 0;
         model0.data_count = 1024;
-        model0.op_expansion_mode = sim::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_CCU;
+        model0.op_expansion_mode = sim::runtime::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_CCU;
         model0.all2AllDataDes.count = 2;
         memset(model0.all2AllDataDes.sendCountMatrix, 0, sizeof(model0.all2AllDataDes.sendCountMatrix));
         model0.all2AllDataDes.sendCountMatrix[0] = 512;
         model0.all2AllDataDes.sendCountMatrix[1] = 512;
         model0.all2AllDataDes.sendCountMatrix[2] = 256;
         model0.all2AllDataDes.sendCountMatrix[3] = 256;
-        RunnerDB::Add<sim::SimModelData>(model0);
+        runnerdb_test::InsertRecord<sim::runtime::SimModelData>(model0);
 
-        sim::SimModelData model1;
+        sim::runtime::SimModelData model1;
         model1.rank_id = 1;
         model1.src_rank = 1;
         model1.dst_rank = 0;
@@ -294,176 +391,215 @@ protected:
         model1.reduce_op = 0;
         model1.data_type = 0;
         model1.data_count = 1024;
-        model1.op_expansion_mode = sim::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_CCU;
+        model1.op_expansion_mode = sim::runtime::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_CCU;
         model1.all2AllDataDes.count = 2;
         memset(model1.all2AllDataDes.sendCountMatrix, 0, sizeof(model1.all2AllDataDes.sendCountMatrix));
         model1.all2AllDataDes.sendCountMatrix[0] = 128;
         model1.all2AllDataDes.sendCountMatrix[1] = 128;
         model1.all2AllDataDes.sendCountMatrix[2] = 64;
         model1.all2AllDataDes.sendCountMatrix[3] = 64;
-        RunnerDB::Add<sim::SimModelData>(model1);
+        runnerdb_test::InsertRecord<sim::runtime::SimModelData>(model1);
     }
 
     void InsertBasicTopology()
     {
-        sim::Server server{};
-        uint64_t serverId = RunnerDB::Add<sim::Server>(server);
-        sim::Host host{};
+        sim::runtime::Server server{};
+        uint64_t serverId = runnerdb_test::InsertRecord<sim::runtime::Server>(server);
+        sim::runtime::Host host{};
         host.server_id = serverId;
         strncpy(host.ip_addr, "192.1.5.5", sizeof(host.ip_addr) - 1);
-        uint64_t hostId = RunnerDB::Add<sim::Host>(host);
+        uint64_t hostId = runnerdb_test::InsertRecord<sim::runtime::Host>(host);
 
-        sim::Device dev0{};
+        sim::runtime::Device dev0{};
         dev0.server_id = serverId;
-        uint64_t dev0Id = RunnerDB::Add<sim::Device>(dev0);
+        dev0.physical_id = 0;
+        uint64_t dev0Id = runnerdb_test::InsertRecord<sim::runtime::Device>(dev0);
 
-        sim::Device dev1{};
+        sim::runtime::Device dev1{};
         dev1.server_id = serverId;
-        uint64_t dev1Id = RunnerDB::Add<sim::Device>(dev1);
+        dev1.physical_id = 1;
+        uint64_t dev1Id = runnerdb_test::InsertRecord<sim::runtime::Device>(dev1);
 
-        sim::Rank rank0{};
-        rank0.rank_id = 0;
-        rank0.device_id = static_cast<uint32_t>(dev0Id);
-        RunnerDB::Add<sim::Rank>(rank0);
+        sim::runtime::Communicator comm0{};
+        std::strncpy(comm0.comm_id, "test_comm", sizeof(comm0.comm_id) - 1);
+        comm0.rank_size = 2;
+        comm0.rank_id = 0;
+        comm0.device_id = dev0Id;
+        g_cur_comm_key = runnerdb_test::InsertRecord<sim::runtime::Communicator>(comm0);
 
-        sim::Rank rank1{};
-        rank1.rank_id = 1;
-        rank1.device_id = static_cast<uint32_t>(dev1Id);
-        RunnerDB::Add<sim::Rank>(rank1);
+        sim::runtime::Communicator comm1{};
+        std::strncpy(comm1.comm_id, "test_comm", sizeof(comm1.comm_id) - 1);
+        comm1.rank_size = 2;
+        comm1.rank_id = 1;
+        comm1.device_id = dev1Id;
+        runnerdb_test::InsertRecord<sim::runtime::Communicator>(comm1);
 
-        sim::MemoryLayout mem0{};
+        sim::runtime::MemoryLayout mem0{};
         mem0.rank_id = 0;
         mem0.buf_type = 0;
         mem0.base_addr = 0x1000;
         mem0.size = 4096;
         mem0.global_offset = 0;
-        RunnerDB::Add<sim::MemoryLayout>(mem0);
+        runnerdb_test::InsertRecord<sim::runtime::MemoryLayout>(mem0);
 
-        sim::MemoryLayout mem1{};
+        sim::runtime::MemoryLayout mem1{};
         mem1.rank_id = 1;
         mem1.buf_type = 1;
         mem1.base_addr = 0x2000;
         mem1.size = 8192;
         mem1.global_offset = 4096;
-        RunnerDB::Add<sim::MemoryLayout>(mem1);
+        runnerdb_test::InsertRecord<sim::runtime::MemoryLayout>(mem1);
     }
 
     void InsertChannelTopology()
     {
         InsertBasicTopology();
 
-        sim::EndPoint localEp{};
-        localEp.device_id = 0;
+        auto rank0 = runnerdb_test::SelectFirstRecord<sim::runtime::Device>(
+            HcclSim::Storage::Eq(&sim::runtime::Device::physical_id, uint64_t{0}));
+        auto rank1 = runnerdb_test::SelectFirstRecord<sim::runtime::Device>(
+            HcclSim::Storage::Eq(&sim::runtime::Device::physical_id, uint64_t{1}));
+        ASSERT_TRUE(rank0.second);
+        ASSERT_TRUE(rank1.second);
+
+        sim::runtime::EndPoint localEp{};
+        localEp.device_id = rank0.first.id;
         localEp.die_id = 0;
         memset(localEp.eid, 0x01, sizeof(localEp.eid));
         strncpy(localEp.ip_addr, "192.1.5.5", sizeof(localEp.ip_addr) - 1);
-        uint64_t localEpId = RunnerDB::Add<sim::EndPoint>(localEp);
+        uint64_t localEpId = runnerdb_test::InsertRecord<sim::runtime::EndPoint>(localEp);
 
-        sim::EndPoint remoteEp{};
-        remoteEp.device_id = 1;
+        sim::runtime::EndPoint remoteEp{};
+        remoteEp.device_id = rank1.first.id;
         remoteEp.die_id = 1;
         memset(remoteEp.eid, 0x02, sizeof(remoteEp.eid));
         strncpy(remoteEp.ip_addr, "192.2.5.5", sizeof(remoteEp.ip_addr) - 1);
-        uint64_t remoteEpId = RunnerDB::Add<sim::EndPoint>(remoteEp);
+        uint64_t remoteEpId = runnerdb_test::InsertRecord<sim::runtime::EndPoint>(remoteEp);
 
-        sim::CcuChannel channel{};
+        sim::runtime::CcuChannel channel{};
         channel.channel_id = 1;
         channel.local_endpoint_id = localEpId;
         channel.remote_endpoint_id = remoteEpId;
         channel.protocol = 0;
         channel.jetty_start = 10;
         channel.jetty_num = 4;
-        RunnerDB::Add<sim::CcuChannel>(channel);
+        runnerdb_test::InsertRecord<sim::runtime::CcuChannel>(channel);
+
+        sim::runtime::EndPointPair pair{};
+        pair.local_enpoint_id = localEpId;
+        pair.remote_enpoint_id = remoteEpId;
+        pair.tp_type = 0;
+        runnerdb_test::InsertRecord<sim::runtime::EndPointPair>(pair);
+
+        sim::operation::CcuChannelTab channelRow{};
+        channelRow.channelId = 1;
+        channelRow.srcDieId = localEp.die_id;
+        channelRow.dstDieId = remoteEp.die_id;
+        channelRow.srcRankId = 0;
+        channelRow.dstRankId = 1;
+        std::memcpy(channelRow.leid, localEp.eid, sizeof(channelRow.leid));
+        std::memcpy(channelRow.reid, remoteEp.eid, sizeof(channelRow.reid));
+        channelRow.protocol = 0;
+        channelRow.jettyNum = 4;
+        for (uint32_t i = 0; i < channelRow.jettyNum; ++i) {
+            channelRow.jettyId[i] = 10 + i;
+        }
+        ASSERT_EQ(sim::operation::InsertCcuChannel(channelRow), 0);
     }
 
     void InsertJettyTopology()
     {
         InsertBasicTopology();
 
-        sim::EndPoint localEp{};
-        localEp.device_id = 0;
+        auto rank0 = runnerdb_test::SelectFirstRecord<sim::runtime::Device>(
+            HcclSim::Storage::Eq(&sim::runtime::Device::physical_id, uint64_t{0}));
+        auto rank1 = runnerdb_test::SelectFirstRecord<sim::runtime::Device>(
+            HcclSim::Storage::Eq(&sim::runtime::Device::physical_id, uint64_t{1}));
+        ASSERT_TRUE(rank0.second);
+        ASSERT_TRUE(rank1.second);
+
+        sim::runtime::EndPoint localEp{};
+        localEp.device_id = rank0.first.id;
         localEp.die_id = 0;
         memset(localEp.eid, 0x03, sizeof(localEp.eid));
         strncpy(localEp.ip_addr, "192.1.5.5", sizeof(localEp.ip_addr) - 1);
-        uint64_t localEpId = RunnerDB::Add<sim::EndPoint>(localEp);
+        uint64_t localEpId = runnerdb_test::InsertRecord<sim::runtime::EndPoint>(localEp);
 
-        sim::EndPoint remoteEp{};
-        remoteEp.device_id = 1;
+        sim::runtime::EndPoint remoteEp{};
+        remoteEp.device_id = rank1.first.id;
         remoteEp.die_id = 1;
         memset(remoteEp.eid, 0x04, sizeof(remoteEp.eid));
         strncpy(remoteEp.ip_addr, "192.2.5.5", sizeof(remoteEp.ip_addr) - 1);
-        uint64_t remoteEpId = RunnerDB::Add<sim::EndPoint>(remoteEp);
+        uint64_t remoteEpId = runnerdb_test::InsertRecord<sim::runtime::EndPoint>(remoteEp);
 
-        sim::RaContext raCtx{};
+        sim::runtime::RaContext raCtx{};
         raCtx.endpoint_id = localEpId;
-        uint64_t raCtxId = RunnerDB::Add<sim::RaContext>(raCtx);
+        uint64_t raCtxId = runnerdb_test::InsertRecord<sim::runtime::RaContext>(raCtx);
 
-        sim::RaJetty jetty{};
+        sim::runtime::RaJetty jetty{};
         jetty.ctx_handle = raCtxId;
         jetty.jetty_id = 5;
         jetty.mode = 3;
-        RunnerDB::Add<sim::RaJetty>(jetty);
+        runnerdb_test::InsertRecord<sim::runtime::RaJetty>(jetty);
 
-        sim::EndPointPair epPair{};
+        sim::runtime::EndPointPair epPair{};
         epPair.local_enpoint_id = localEpId;
         epPair.remote_enpoint_id = remoteEpId;
-        RunnerDB::Add<sim::EndPointPair>(epPair);
+        runnerdb_test::InsertRecord<sim::runtime::EndPointPair>(epPair);
     }
 
     void InsertCcuResourceTopology()
     {
-        sim::Server server{};
-        uint64_t serverId = RunnerDB::Add<sim::Server>(server);
-        sim::Host host{};
+        sim::runtime::Server server{};
+        uint64_t serverId = runnerdb_test::InsertRecord<sim::runtime::Server>(server);
+        sim::runtime::Host host{};
         host.server_id = serverId;
         strncpy(host.ip_addr, "192.1.5.5", sizeof(host.ip_addr) - 1);
-        RunnerDB::Add<sim::Host>(host);
+        runnerdb_test::InsertRecord<sim::runtime::Host>(host);
 
-        sim::Device dev0{};
+        sim::runtime::Device dev0{};
         dev0.server_id = serverId;
-        uint64_t dev0Id = RunnerDB::Add<sim::Device>(dev0);
+        uint64_t dev0Id = runnerdb_test::InsertRecord<sim::runtime::Device>(dev0);
 
-        sim::Device dev1{};
+        sim::runtime::Device dev1{};
         dev1.server_id = serverId;
-        uint64_t dev1Id = RunnerDB::Add<sim::Device>(dev1);
+        uint64_t dev1Id = runnerdb_test::InsertRecord<sim::runtime::Device>(dev1);
 
-        sim::Rank rank0{};
-        rank0.rank_id = 0;
-        rank0.device_id = static_cast<uint32_t>(dev0Id);
-        RunnerDB::Add<sim::Rank>(rank0);
-
-        sim::Rank rank1{};
-        rank1.rank_id = 1;
-        rank1.device_id = static_cast<uint32_t>(dev1Id);
-        RunnerDB::Add<sim::Rank>(rank1);
-
-        sim::MemoryLayout mem0{};
+        sim::runtime::MemoryLayout mem0{};
         mem0.rank_id = 0;
         mem0.buf_type = 0;
         mem0.base_addr = 0x1000;
         mem0.size = 4096;
         mem0.global_offset = 0;
-        RunnerDB::Add<sim::MemoryLayout>(mem0);
+        runnerdb_test::InsertRecord<sim::runtime::MemoryLayout>(mem0);
 
-        sim::MemoryLayout mem1{};
+        sim::runtime::MemoryLayout mem1{};
         mem1.rank_id = 1;
         mem1.buf_type = 1;
         mem1.base_addr = 0x2000;
         mem1.size = 8192;
         mem1.global_offset = 4096;
-        RunnerDB::Add<sim::MemoryLayout>(mem1);
+        runnerdb_test::InsertRecord<sim::runtime::MemoryLayout>(mem1);
 
-        sim::Ccu ccu{};
+        sim::runtime::Ccu ccu{};
         ccu.device_id = dev0Id;
         ccu.die_id = 0;
-        uint64_t ccuId = RunnerDB::Add<sim::Ccu>(ccu);
+        uint64_t ccuId = runnerdb_test::InsertRecord<sim::runtime::Ccu>(ccu);
 
-        sim::CcuResource ccuRes{};
+        sim::runtime::CcuResource ccuRes{};
         ccuRes.ccu_id = ccuId;
         ccuRes.state = 1;
         ccuRes.instr_cnt = 2;
-        memset(ccuRes.instr_space, 0, sizeof(ccuRes.instr_space));
-        RunnerDB::Add<sim::CcuResource>(ccuRes);
+        runnerdb_test::InsertRecord<sim::runtime::CcuResource>(ccuRes);
+
+        sim::operation::CcuInstrResTab instrRes{};
+        instrRes.deviceId = dev0Id;
+        instrRes.dieId = 0;
+        instrRes.instrCount = 2;
+        // 指令空间不落库（CcuResource.instr_space 已删除）：载荷以全零初始化，
+        // 保持原与 DB 列同步的全零语义。
+        memset(instrRes.instrSpace, 0, sizeof(instrRes.instrSpace));
+        ASSERT_EQ(sim::operation::InsertCcuInstrRes(instrRes), 0);
     }
 };
 
@@ -471,7 +607,8 @@ TEST_F(DumpShmDataWithDBTest, CreateSimSynData_NoSimModel_ReturnsError)
 {
     InsertBasicTopology();
     HcclVmSynData synData;
-    HcclVmResult ret = CreateSimSynData(synData);
+    sim::operation::OpExecutionKey key{"comm", 0, 0};
+    HcclVmResult ret = CreateSimSynData(synData, key);
     EXPECT_NE(ret, HcclVmResult::HCCL_SIM_SUCCESS);
 }
 
@@ -481,7 +618,9 @@ TEST_F(DumpShmDataWithDBTest, CreateSimSynData_CCU_Success)
     InsertChannelTopology();
 
     HcclVmSynData synData;
-    HcclVmResult ret = CreateSimSynData(synData);
+    sim::operation::OpExecutionKey key;
+    ASSERT_TRUE(LoadFirstOpExecutionKey(key));
+    HcclVmResult ret = CreateSimSynData(synData, key);
     EXPECT_EQ(ret, HcclVmResult::HCCL_SIM_SUCCESS);
 
     EXPECT_EQ(synData.header.magic, HCCLVM_SYN_FILE_MAGIC);
@@ -490,7 +629,7 @@ TEST_F(DumpShmDataWithDBTest, CreateSimSynData_CCU_Success)
     EXPECT_EQ(synData.model_info.comm.rank_size, 2u);
     EXPECT_EQ(
         synData.model_info.comm.op_expansion_mode,
-        static_cast<uint32_t>(sim::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_CCU));
+        static_cast<uint32_t>(sim::runtime::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_CCU));
     EXPECT_EQ(synData.channel_info.count, 1u);
     EXPECT_EQ(synData.channel_info.data.size(), 1u);
     if (!synData.channel_info.data.empty()) {
@@ -506,12 +645,14 @@ TEST_F(DumpShmDataWithDBTest, CreateSimSynData_AICPU_JettyInfo)
     InsertJettyTopology();
 
     HcclVmSynData synData;
-    HcclVmResult ret = CreateSimSynData(synData);
+    sim::operation::OpExecutionKey key;
+    ASSERT_TRUE(LoadFirstOpExecutionKey(key));
+    HcclVmResult ret = CreateSimSynData(synData, key);
     EXPECT_EQ(ret, HcclVmResult::HCCL_SIM_SUCCESS);
 
     EXPECT_EQ(
         synData.model_info.comm.op_expansion_mode,
-        static_cast<uint32_t>(sim::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_AICPU));
+        static_cast<uint32_t>(sim::runtime::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_AICPU));
     EXPECT_GE(synData.channel_info.count, 1u);
 }
 
@@ -521,7 +662,9 @@ TEST_F(DumpShmDataWithDBTest, CreateSimSynData_AllToAllV)
     InsertChannelTopology();
 
     HcclVmSynData synData;
-    HcclVmResult ret = CreateSimSynData(synData);
+    sim::operation::OpExecutionKey key;
+    ASSERT_TRUE(LoadFirstOpExecutionKey(key));
+    HcclVmResult ret = CreateSimSynData(synData, key);
     EXPECT_EQ(ret, HcclVmResult::HCCL_SIM_SUCCESS);
 
     EXPECT_EQ(synData.model_info.comm.op_type, static_cast<uint16_t>(HcclCMDType::HCCL_CMD_ALLTOALLV));
@@ -557,17 +700,26 @@ TEST_F(DumpShmDataWithDBTest, CreateChannelInfo_ChannelWithEndpoint_Success)
 TEST_F(DumpShmDataWithDBTest, CreateChannelInfo_MissingLocalEndpoint_ReturnsError)
 {
     InsertBasicTopology();
-    sim::EndPoint remoteEp{};
+    sim::runtime::EndPoint remoteEp{};
     remoteEp.device_id = 1;
-    RunnerDB::Add<sim::EndPoint>(remoteEp);
+    runnerdb_test::InsertRecord<sim::runtime::EndPoint>(remoteEp);
 
-    sim::CcuChannel channel{};
+    sim::runtime::CcuChannel channel{};
     channel.channel_id = 1;
     channel.local_endpoint_id = 99999;
     channel.remote_endpoint_id = remoteEp.id;
     channel.protocol = 0;
     channel.jetty_num = 2;
-    RunnerDB::Add<sim::CcuChannel>(channel);
+    runnerdb_test::InsertRecord<sim::runtime::CcuChannel>(channel);
+
+    sim::operation::CcuChannelTab channelRow{};
+    channelRow.channelId = 1;
+    channelRow.srcRankId = 0;
+    channelRow.dstRankId = 1;
+    std::memset(channelRow.leid, 0xAA, sizeof(channelRow.leid));
+    std::memcpy(channelRow.reid, remoteEp.eid, sizeof(channelRow.reid));
+    channelRow.jettyNum = 2;
+    ASSERT_EQ(sim::operation::InsertCcuChannel(channelRow), 0);
 
     HcclVmSynData synData;
     HcclVmResult ret = CreateChannelInfo(synData);
@@ -577,17 +729,26 @@ TEST_F(DumpShmDataWithDBTest, CreateChannelInfo_MissingLocalEndpoint_ReturnsErro
 TEST_F(DumpShmDataWithDBTest, CreateChannelInfo_MissingRemoteEndpoint_ReturnsError)
 {
     InsertBasicTopology();
-    sim::EndPoint localEp{};
+    sim::runtime::EndPoint localEp{};
     localEp.device_id = 0;
-    RunnerDB::Add<sim::EndPoint>(localEp);
+    runnerdb_test::InsertRecord<sim::runtime::EndPoint>(localEp);
 
-    sim::CcuChannel channel{};
+    sim::runtime::CcuChannel channel{};
     channel.channel_id = 1;
     channel.local_endpoint_id = localEp.id;
     channel.remote_endpoint_id = 99999;
     channel.protocol = 0;
     channel.jetty_num = 2;
-    RunnerDB::Add<sim::CcuChannel>(channel);
+    runnerdb_test::InsertRecord<sim::runtime::CcuChannel>(channel);
+
+    sim::operation::CcuChannelTab channelRow{};
+    channelRow.channelId = 1;
+    channelRow.srcRankId = 0;
+    channelRow.dstRankId = 1;
+    std::memcpy(channelRow.leid, localEp.eid, sizeof(channelRow.leid));
+    std::memset(channelRow.reid, 0xBB, sizeof(channelRow.reid));
+    channelRow.jettyNum = 2;
+    ASSERT_EQ(sim::operation::InsertCcuChannel(channelRow), 0);
 
     HcclVmSynData synData;
     HcclVmResult ret = CreateChannelInfo(synData);
@@ -616,11 +777,11 @@ TEST_F(DumpShmDataWithDBTest, CreateJettyInfo_MissingRaContext_Continues)
 {
     InsertBasicTopology();
 
-    sim::RaJetty jetty{};
+    sim::runtime::RaJetty jetty{};
     jetty.ctx_handle = 99999;
     jetty.jetty_id = 5;
     jetty.mode = 3;
-    RunnerDB::Add<sim::RaJetty>(jetty);
+    runnerdb_test::InsertRecord<sim::runtime::RaJetty>(jetty);
 
     HcclVmSynData synData;
     HcclVmResult ret = CreateJettyInfo(synData);
@@ -632,7 +793,7 @@ TEST_F(DumpShmDataWithDBTest, CreateJettyInfo_MissingEndPointPair_Continues)
 {
     InsertJettyTopology();
 
-    RunnerDB::DeleteAll<sim::EndPointPair>();
+    runnerdb_test::ClearRecords<sim::runtime::EndPointPair>();
 
     HcclVmSynData synData;
     HcclVmResult ret = CreateJettyInfo(synData);
@@ -643,15 +804,15 @@ TEST_F(DumpShmDataWithDBTest, CreateJettyInfo_MissingLocalEndPoint_Continues)
 {
     InsertBasicTopology();
 
-    sim::RaContext raCtx{};
+    sim::runtime::RaContext raCtx{};
     raCtx.endpoint_id = 99999;
-    RunnerDB::Add<sim::RaContext>(raCtx);
+    runnerdb_test::InsertRecord<sim::runtime::RaContext>(raCtx);
 
-    sim::RaJetty jetty{};
+    sim::runtime::RaJetty jetty{};
     jetty.ctx_handle = raCtx.id;
     jetty.jetty_id = 5;
     jetty.mode = 3;
-    RunnerDB::Add<sim::RaJetty>(jetty);
+    runnerdb_test::InsertRecord<sim::runtime::RaJetty>(jetty);
 
     HcclVmSynData synData;
     HcclVmResult ret = CreateJettyInfo(synData);
@@ -663,8 +824,11 @@ TEST_F(DumpShmDataWithDBTest, DumpHcclVmSynthesisData_Success)
     InsertSimModelData_CCU();
     InsertChannelTopology();
 
+    sim::operation::OpExecutionKey key;
+    ASSERT_TRUE(LoadFirstOpExecutionKey(key));
+
     std::string dataId = GenDataId();
-    HcclVmResult ret = DumpHcclVmSynthesisData(dataId);
+    HcclVmResult ret = DumpHcclVmSynthesisData(dataId, key);
     EXPECT_EQ(ret, HcclVmResult::HCCL_SIM_SUCCESS);
 
     char fileName[256];
@@ -689,7 +853,8 @@ TEST_F(DumpShmDataWithDBTest, DumpHcclVmSynthesisData_NoSimModel_Fails)
 {
     InsertBasicTopology();
     std::string dataId = GenDataId();
-    HcclVmResult ret = DumpHcclVmSynthesisData(dataId);
+    sim::operation::OpExecutionKey key{"comm", 0, 0};
+    HcclVmResult ret = DumpHcclVmSynthesisData(dataId, key);
     EXPECT_NE(ret, HcclVmResult::HCCL_SIM_SUCCESS);
 }
 
@@ -713,24 +878,25 @@ TEST_F(DumpShmDataWithDBTest, CreateSimInstrData_WithCcuResource_Success)
     EXPECT_EQ(instrData.instr_data.size(), instrData.header.count);
 }
 
-TEST_F(DumpShmDataWithDBTest, CreateSimInstrData_MissingCcu_ReturnsError)
+TEST_F(DumpShmDataWithDBTest, CreateSimInstrData_IgnoresLegacyCcuResource)
 {
     InsertBasicTopology();
 
-    sim::CcuResource ccuRes{};
+    sim::runtime::CcuResource ccuRes{};
     ccuRes.ccu_id = 99999;
     ccuRes.state = 1;
     ccuRes.instr_cnt = 2;
-    RunnerDB::Add<sim::CcuResource>(ccuRes);
+    runnerdb_test::InsertRecord<sim::runtime::CcuResource>(ccuRes);
 
     HcclVmInstrData instrData;
     HcclVmResult ret = CreateSimInstrData(instrData);
-    EXPECT_NE(ret, HcclVmResult::HCCL_SIM_SUCCESS);
+    EXPECT_EQ(ret, HcclVmResult::HCCL_SIM_SUCCESS);
+    EXPECT_EQ(instrData.header.count, 0u);
 }
 
 TEST_F(DumpShmDataWithDBTest, DumpHcclVmInstrData_CCU_WithInstr_Success)
 {
-    g_opExpansionMode = sim::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_CCU;
+    g_opExpansionMode = sim::runtime::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_CCU;
     InsertSimModelData_CCU();
     InsertCcuResourceTopology();
 
@@ -741,7 +907,7 @@ TEST_F(DumpShmDataWithDBTest, DumpHcclVmInstrData_CCU_WithInstr_Success)
 
 TEST_F(DumpShmDataWithDBTest, DumpHcclVmInstrData_AICPU_NoInstrDump_Success)
 {
-    g_opExpansionMode = sim::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_AICPU;
+    g_opExpansionMode = sim::runtime::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_AICPU;
     InsertSimModelData_AICPU();
     InsertBasicTopology();
 
@@ -750,20 +916,20 @@ TEST_F(DumpShmDataWithDBTest, DumpHcclVmInstrData_AICPU_NoInstrDump_Success)
     EXPECT_EQ(ret, HcclVmResult::HCCL_SIM_SUCCESS);
 }
 
-TEST_F(DumpShmDataWithDBTest, DumpHcclVmInstrData_CCU_NoInstr_ReturnsError)
+TEST_F(DumpShmDataWithDBTest, DumpHcclVmInstrData_CCU_NoInstr_Success)
 {
-    g_opExpansionMode = sim::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_CCU;
+    g_opExpansionMode = sim::runtime::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_CCU;
     InsertSimModelData_CCU();
     InsertBasicTopology();
 
     std::string dataId = GenDataId();
     HcclVmResult ret = DumpHcclVmInstrData(dataId);
-    EXPECT_NE(ret, HcclVmResult::HCCL_SIM_SUCCESS);
+    EXPECT_EQ(ret, HcclVmResult::HCCL_SIM_SUCCESS);
 }
 
 TEST_F(DumpShmDataWithDBTest, DumpDataToFile_Success)
 {
-    InsertSimModelData_CCU();
+    InsertSimModelData_CCU(true);
     InsertChannelTopology();
     InsertCcuResourceTopology();
 
@@ -822,20 +988,16 @@ TEST_F(DumpShmDataTaskTest, CreateSimTaskMetaData_AivGraphTask_NoTaskMeta)
 
 TEST_F(DumpShmDataTaskTest, DumpHcclVmTask_WithModels_Success)
 {
-    g_opExpansionMode = sim::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_CCU;
-    InsertSimModelData_CCU();
+    g_opExpansionMode = sim::runtime::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_CCU;
+    InsertSimModelData_CCU(true);
     InsertChannelTopology();
 
-    std::string dataId = GenDataId();
-    HcclVmResult ret = DumpHcclVmTask(dataId);
-    EXPECT_EQ(ret, HcclVmResult::HCCL_SIM_SUCCESS);
-}
+    sim::operation::OpExecutionKey key;
+    ASSERT_TRUE(LoadFirstOpExecutionKey(key));
 
-TEST_F(DumpShmDataTaskTest, DumpHcclVmTask_NoTask_ReturnsError)
-{
     std::string dataId = GenDataId();
-    HcclVmResult ret = DumpHcclVmTask(dataId);
-    EXPECT_NE(ret, HcclVmResult::HCCL_SIM_SUCCESS);
+    HcclVmResult ret = DumpHcclVmTask(dataId, key);
+    EXPECT_EQ(ret, HcclVmResult::HCCL_SIM_SUCCESS);
 }
 
 TEST_F(DumpShmDataWithDBTest, CreateJettyInfo_JettyWithEndPointPair_Success)
@@ -851,7 +1013,7 @@ TEST_F(DumpShmDataWithDBTest, CreateJettyInfo_JettyWithEndPointPair_Success)
 
 TEST_F(DumpShmDataWithDBTest, DumpHcclVmInstrData_CCU_WithNullCcuSimulator)
 {
-    g_opExpansionMode = sim::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_CCU;
+    g_opExpansionMode = sim::runtime::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_CCU;
     InsertSimModelData_CCU();
     InsertCcuResourceTopology();
 
@@ -864,50 +1026,50 @@ TEST_F(DumpShmDataWithDBTest, CreateSimInstrData_MultipleCcuResources)
 {
     InsertBasicTopology();
 
-    sim::Server server{};
-    uint64_t serverId = RunnerDB::Add<sim::Server>(server);
+    sim::runtime::Server server{};
+    uint64_t serverId = runnerdb_test::InsertRecord<sim::runtime::Server>(server);
 
-    sim::Device dev0{};
+    sim::runtime::Device dev0{};
     dev0.server_id = serverId;
-    uint64_t dev0Id = RunnerDB::Add<sim::Device>(dev0);
+    uint64_t dev0Id = runnerdb_test::InsertRecord<sim::runtime::Device>(dev0);
 
-    sim::Device dev1{};
+    sim::runtime::Device dev1{};
     dev1.server_id = serverId;
-    uint64_t dev1Id = RunnerDB::Add<sim::Device>(dev1);
+    uint64_t dev1Id = runnerdb_test::InsertRecord<sim::runtime::Device>(dev1);
 
-    sim::Rank rank0{};
-    rank0.rank_id = 0;
-    rank0.device_id = static_cast<uint32_t>(dev0Id);
-    RunnerDB::Add<sim::Rank>(rank0);
-
-    sim::Rank rank1{};
-    rank1.rank_id = 1;
-    rank1.device_id = static_cast<uint32_t>(dev1Id);
-    RunnerDB::Add<sim::Rank>(rank1);
-
-    sim::Ccu ccu0{};
+    sim::runtime::Ccu ccu0{};
     ccu0.device_id = dev0Id;
     ccu0.die_id = 0;
-    uint64_t ccu0Id = RunnerDB::Add<sim::Ccu>(ccu0);
+    uint64_t ccu0Id = runnerdb_test::InsertRecord<sim::runtime::Ccu>(ccu0);
 
-    sim::Ccu ccu1{};
+    sim::runtime::Ccu ccu1{};
     ccu1.device_id = dev1Id;
     ccu1.die_id = 0;
-    uint64_t ccu1Id = RunnerDB::Add<sim::Ccu>(ccu1);
+    uint64_t ccu1Id = runnerdb_test::InsertRecord<sim::runtime::Ccu>(ccu1);
 
-    sim::CcuResource ccuRes0{};
+    sim::runtime::CcuResource ccuRes0{};
     ccuRes0.ccu_id = ccu0Id;
     ccuRes0.state = 1;
     ccuRes0.instr_cnt = 1;
-    memset(ccuRes0.instr_space, 0, sizeof(ccuRes0.instr_space));
-    RunnerDB::Add<sim::CcuResource>(ccuRes0);
+    runnerdb_test::InsertRecord<sim::runtime::CcuResource>(ccuRes0);
 
-    sim::CcuResource ccuRes1{};
+    sim::operation::CcuInstrResTab instrRes0{};
+    instrRes0.deviceId = dev0Id;
+    instrRes0.dieId = 0;
+    instrRes0.instrCount = 1;
+    ASSERT_EQ(sim::operation::InsertCcuInstrRes(instrRes0), 0);
+
+    sim::runtime::CcuResource ccuRes1{};
     ccuRes1.ccu_id = ccu1Id;
     ccuRes1.state = 1;
     ccuRes1.instr_cnt = 1;
-    memset(ccuRes1.instr_space, 0, sizeof(ccuRes1.instr_space));
-    RunnerDB::Add<sim::CcuResource>(ccuRes1);
+    runnerdb_test::InsertRecord<sim::runtime::CcuResource>(ccuRes1);
+
+    sim::operation::CcuInstrResTab instrRes1{};
+    instrRes1.deviceId = dev1Id;
+    instrRes1.dieId = 0;
+    instrRes1.instrCount = 1;
+    ASSERT_EQ(sim::operation::InsertCcuInstrRes(instrRes1), 0);
 
     HcclVmInstrData instrData;
     HcclVmResult ret = CreateSimInstrData(instrData);
@@ -925,11 +1087,14 @@ TEST_F(DumpShmDataTaskTest, CreateSimTaskMetaData_CCU_NoTaskMeta)
 
 TEST_F(DumpShmDataTaskTest, DumpHcclVmTask_WithCcuAndChannel_Success)
 {
-    g_opExpansionMode = sim::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_CCU;
-    InsertSimModelData_CCU();
+    g_opExpansionMode = sim::runtime::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_CCU;
+    InsertSimModelData_CCU(true);
     InsertChannelTopology();
 
+    sim::operation::OpExecutionKey key;
+    ASSERT_TRUE(LoadFirstOpExecutionKey(key));
+
     std::string dataId = GenDataId();
-    HcclVmResult ret = DumpHcclVmTask(dataId);
+    HcclVmResult ret = DumpHcclVmTask(dataId, key);
     EXPECT_EQ(ret, HcclVmResult::HCCL_SIM_SUCCESS);
 }

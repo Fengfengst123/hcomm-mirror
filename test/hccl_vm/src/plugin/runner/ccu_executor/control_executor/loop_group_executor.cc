@@ -8,6 +8,12 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: ccu executor -- loop group
+ * Author: caiyifan
+ */
+
 #include "loop_group_executor.h"
 
 #include <cstdint>
@@ -83,7 +89,8 @@ void LoopGroupExecutor::Run()
 std::string LoopGroupExecutor::Describe()
 {
     return HcclSim::StringFormat(
-        "[Simulation Execute] LoopGroup From startLoopInstrId[%u] with loopGroupXn[%u], "
+        "[Simulation Execute] LoopGroup From "
+        "startLoopInstrId[%u] with loopGroupXn[%u], "
         "offsetXn[%u] and highPerfModeEn[%u]\n",
         startLoopInstrId_, xnId_, xmId_, highPerfModeEn_);
 }

@@ -8,6 +8,12 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: ccu executor resource manager
+ * Author: caiyifan
+ */
+
 #ifndef HCCL_SIM_CCU_RESOURCE_COMMON_H
 #define HCCL_SIM_CCU_RESOURCE_COMMON_H
 
@@ -15,9 +21,9 @@
 #include <cstdint>
 #include <vector>
 
-#include "ccu_microcode_v1.h"
 #include "ccu_microcode_common_v1.h"
 #include "ccu_microcode_common_v2.h"
+#include "ccu_microcode_v1.h"
 #include "sim_common_defs.h"
 
 enum class RunnerCcuVersion : uint16_t { CCU_INVALID, CCU_V1, CCU_V2 };

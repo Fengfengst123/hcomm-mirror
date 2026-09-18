@@ -11,13 +11,13 @@
 #ifndef DUMP_FLAG_DATA_H
 #define DUMP_FLAG_DATA_H
 
+#include "operation_data/operation_data_types.h"
+#include "rt_external_kernel.h"
+#include "sim_binary_data_type_pub.h"
+#include "sim_common_defs.h"
 #include <cstdint>
 #include <map>
 #include <vector>
-
-#include "sim_binary_data_type_pub.h"
-#include "sim_common_defs.h"
-#include "sim_op_db_types.h"
 
 namespace HcclSim {
 std::string GenDataId();
@@ -25,14 +25,18 @@ HcclVmResult DumpDataToFile(const std::string& dataId);
 
 HcclVmResult DumpHcclVmFlagData(HcclSim::HcclVmFlagData& flagData);
 HcclVmResult GetHcclVmFlagData(HcclSim::HcclVmFlagData& waitFlag);
-HcclVmResult DumpHcclVmSynthesisData(const std::string& dataId);
+HcclVmResult DumpHcclVmSynthesisData(const std::string& dataId, const sim::operation::OpExecutionKey& key);
 HcclVmResult DumpHcclVmInstrData(const std::string& dataId);
-HcclVmResult DumpHcclVmTask(const std::string& dataId);
+HcclVmResult DumpHcclVmTask(const std::string& dataId, const sim::operation::OpExecutionKey& key);
 HcclVmResult CreateChannelInfo(HcclVmSynData& hvmSynData);
 HcclVmResult CreateJettyInfo(HcclVmSynData& hvmSynData);
-HcclVmResult CreateMemoryInfo(HcclVmSynData& hvmSynData, const sim::OpMemInfoTab& memInfo, uint32_t rankId);
+HcclVmResult CreateMemoryInfo(HcclVmSynData& hvmSynData, const sim::operation::OpMemInfoTab& memInfo, uint32_t rankId);
 HcclVmResult CreateSimTaskMetaData(
     HcclVmTaskMetaData& hvmTaskMetaData,
-    const std::map<uint32_t, std::vector<sim::CompositeOpDetail>>& compositeDataMap);
+    const std::map<uint32_t, std::vector<sim::operation::CompositeOpDetail>>& compositeDataMap);
+HcclVmResult CreateSimSynData(HcclVmSynData& hvmSynData, const sim::operation::OpExecutionKey& key);
+HcclVmResult
+GenCaModelCcuInstr(hcomm::CcuRep::CcuInstr* instrData, uint32_t instrCnt, uint32_t deviceId, uint32_t dieId);
+HcclVmResult GenCaModelCcuToml(rtCcuTaskInfo_t* taskInfo, uint32_t deviceId, uint32_t streamId);
 } // namespace HcclSim
 #endif

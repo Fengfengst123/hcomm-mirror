@@ -32,25 +32,4 @@ inline std::string StringFormat(const char* format, Args... args)
     return buffer;
 }
 
-template <typename I>
-std::string Dec2hex(I i)
-{
-    static_assert(std::is_integral<I>::value, "type I is not a integral");
-    std::stringstream ss;
-    ss << std::hex << "0x" << i;
-    return ss.str();
-}
-
-std::vector<std::string> SplitString(const std::string& str, const char c);
-
-template <class T>
-T String2T(const std::string& s)
-{
-    // T must support >>
-    T t;
-    std::istringstream ist(s);
-    ist >> t;
-    return t;
-}
-
 #endif

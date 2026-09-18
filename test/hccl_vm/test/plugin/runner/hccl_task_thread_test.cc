@@ -8,11 +8,16 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: unit test for hccl_task_thread
+ */
+
 #include <gtest/gtest.h>
 
-#include "store_sim_store_pub.h"
 #include "hccl_task_thread.h"
 #include "hccl_types.h"
+#include "store_sim_store_pub.h"
 
 using namespace VirtualRunTime;
 
@@ -252,11 +257,14 @@ TEST_F(HcclTaskThreadTest, TaskReduce_InvalidOp_ReturnsSuccess)
     EXPECT_EQ(ret, HcclSim::HcclVmResult::HCCL_SIM_SUCCESS);
 }
 
-// Test: TaskCcuGraph without CCU resource setup - skipped (causes segfault due to uninitialized CCU resources)
-// This would require full CCU resource initialization which is too complex for unit testing
+// Test: TaskCcuGraph without CCU resource setup - skipped (causes segfault due
+// to uninitialized CCU resources) This would require full CCU resource
+// initialization which is too complex for unit testing
 TEST_F(HcclTaskThreadTest, TaskCcuGraph_NoCcuSetup_Skipped)
 {
-    // TaskCcuGraph requires CcuResourceManager to be initialized with valid rank/die/instr data.
-    // Calling it without initialization causes a segfault. Skipping this test.
-    SUCCEED() << "TaskCcuGraph requires full CCU resource setup - skipped to avoid segfault";
+    // TaskCcuGraph requires CcuResourceManager to be initialized with valid
+    // rank/die/instr data. Calling it without initialization causes a segfault.
+    // Skipping this test.
+    SUCCEED() << "TaskCcuGraph requires full CCU resource setup - skipped to "
+                 "avoid segfault";
 }

@@ -8,6 +8,14 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
+# You may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and limitations under the License.
+
 hccl_vm:
     console_level: 2
     file_level: 1
@@ -47,3 +55,15 @@ checker:
     file_base_name: app_log
     file_suffix: .log
     enable_compress: false
+
+# 拓扑生成脚本(generate_cluster_topo.sh/generate_server_topo.sh/allocate_eid.sh)日志配置
+# console_level: 脚本控制台日志级别, 与C++日志级别定义一致:
+#   0-trace 1-debug 2-info 3-warn 4-error 5-critical 6-off
+#   debug(1): 输出全部日志(含逐server/逐die/逐端口明细)
+#   info(2):  输出步骤与汇总信息(默认)
+#   warn(3):  仅输出警告与错误
+#   error(4): 仅输出错误
+#   off(6):   不输出任何日志
+script:
+    console_level: 2
+

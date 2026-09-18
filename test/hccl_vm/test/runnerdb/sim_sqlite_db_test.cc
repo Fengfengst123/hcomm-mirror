@@ -59,6 +59,8 @@ TEST_F(SimSqliteDbTest, GetAllTableName_ContainsCoreTables)
     bool foundDevice = false;
     bool foundHost = false;
     bool foundContext = false;
+    bool foundHcommEndpoint = false;
+    bool foundHcommMemReg = false;
 
     for (const auto& name : tableNames) {
         if (name == "Server") {
@@ -73,12 +75,66 @@ TEST_F(SimSqliteDbTest, GetAllTableName_ContainsCoreTables)
         if (name == "Context") {
             foundContext = true;
         }
+        if (name == "HcommEndpoint") {
+            foundHcommEndpoint = true;
+        }
+        if (name == "HcommMemReg") {
+            foundHcommMemReg = true;
+        }
     }
 
     EXPECT_TRUE(foundServer);
     EXPECT_TRUE(foundDevice);
     EXPECT_TRUE(foundHost);
     EXPECT_TRUE(foundContext);
+    EXPECT_TRUE(foundHcommEndpoint);
+    EXPECT_TRUE(foundHcommMemReg);
+}
+
+TEST_F(SimSqliteDbTest, HcommResourceTables_PreserveEndpointAndMemoryRecords)
+{
+    sim::HcommEndpoint endpoint{};
+    endpoint.runner_id = 11;
+    endpoint.south_endpoint_id = 22;
+    endpoint.protocol = 1;
+    endpoint.addr_type = 3;
+    endpoint.addr[0] = 0xAB;
+    endpoint.loc_type = 0;
+    endpoint.loc[0] = 7;
+    endpoint.extension[0] = 9;
+    endpoint.bind_state = sim::HCOMM_ENDPOINT_BOUND;
+
+    uint64_t endpointId = SimRunnerSqliteDB::Instance().Add<sim::HcommEndpoint>(endpoint);
+    ASSERT_GT(endpointId, 0);
+
+    auto foundEndpoint = SimRunnerSqliteDB::Instance().Find<sim::HcommEndpoint>(endpointId);
+    ASSERT_TRUE(foundEndpoint.has_value());
+    EXPECT_EQ(foundEndpoint->runner_id, 11);
+    EXPECT_EQ(foundEndpoint->south_endpoint_id, 22);
+    EXPECT_EQ(foundEndpoint->addr[0], 0xAB);
+    EXPECT_EQ(foundEndpoint->bind_state, sim::HCOMM_ENDPOINT_BOUND);
+
+    sim::HcommMemReg memory{};
+    memory.endpoint_id = endpointId;
+    memory.runner_id = 11;
+    memory.descriptor_key = 33;
+    memory.addr = 0x1000;
+    memory.size = 4096;
+    memory.mem_type = 0;
+    memory.record_kind = sim::HCOMM_MEM_LOCAL_REGISTERED;
+    snprintf(memory.mem_tag, sizeof(memory.mem_tag), "input");
+
+    uint64_t memoryId = SimRunnerSqliteDB::Instance().Add<sim::HcommMemReg>(memory);
+    ASSERT_GT(memoryId, 0);
+
+    auto foundMemory = SimRunnerSqliteDB::Instance().Find<sim::HcommMemReg>(memoryId);
+    ASSERT_TRUE(foundMemory.has_value());
+    EXPECT_EQ(foundMemory->endpoint_id, endpointId);
+    EXPECT_EQ(foundMemory->descriptor_key, 33);
+    EXPECT_EQ(foundMemory->addr, 0x1000);
+    EXPECT_EQ(foundMemory->size, 4096);
+    EXPECT_EQ(foundMemory->record_kind, sim::HCOMM_MEM_LOCAL_REGISTERED);
+    EXPECT_STREQ(foundMemory->mem_tag, "input");
 }
 
 TEST_F(SimSqliteDbTest, AddServer_IncreasesCount)
@@ -442,22 +498,6 @@ protected:
     void TearDown() override { CleanUpDb(); }
 };
 
-TEST_F(SimSqliteDbTableTest, AddRank_InsertsRecord)
-{
-    sim::Rank rank{};
-    rank.rank_id = 0;
-    rank.device_id = 1;
-
-    uint64_t id = SimRunnerSqliteDB::Instance().Add<sim::Rank>(rank);
-
-    EXPECT_GT(id, 0);
-
-    auto found = SimRunnerSqliteDB::Instance().Find<sim::Rank>(id);
-    ASSERT_TRUE(found.has_value());
-    EXPECT_EQ(found->rank_id, 0);
-    EXPECT_EQ(found->device_id, 1);
-}
-
 TEST_F(SimSqliteDbTableTest, AddPort_InsertsRecord)
 {
     sim::Port port{};
@@ -509,7 +549,8 @@ TEST_F(SimSqliteDbTableTest, AddCcuResource_InsertsRecord)
 
 TEST_F(SimSqliteDbTest, RunModeConfig_WriteThenRead_RoundTrip)
 {
-    // RunModeConfig 表惰性注册，ClearAll 不一定覆盖到它，写入前先显式清空，避免跨用例残留。
+    // RunModeConfig 表惰性注册，ClearAll
+    // 不一定覆盖到它，写入前先显式清空，避免跨用例残留。
     SimRunnerSqliteDB::Instance().DeleteAll<sim::RunModeConfig>();
     sim::RunModeConfig cfg{};
     cfg.mode = 1;
@@ -524,9 +565,11 @@ TEST_F(SimSqliteDbTest, RunModeConfig_WriteThenRead_RoundTrip)
 
 TEST_F(SimSqliteDbTest, RunModeConfig_DeleteAllThenWrite_LatestSingleRowWins)
 {
-    // RunModeConfig 表惰性注册，ClearAll 不一定覆盖到它，进表前先显式清空，避免跨用例残留。
+    // RunModeConfig 表惰性注册，ClearAll
+    // 不一定覆盖到它，进表前先显式清空，避免跨用例残留。
     SimRunnerSqliteDB::Instance().DeleteAll<sim::RunModeConfig>();
-    // 先写仅校验模式行，DeleteAll 清空后再写 clean 行：单行覆盖语义，读到的是清空后的最新值。
+    // 先写仅校验模式行，DeleteAll 清空后再写 clean
+    // 行：单行覆盖语义，读到的是清空后的最新值。
     sim::RunModeConfig checkOnly{};
     checkOnly.mode = 1;
     SimRunnerSqliteDB::Instance().Add<sim::RunModeConfig>(checkOnly);

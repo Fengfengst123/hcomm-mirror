@@ -8,13 +8,19 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: ccu executor -- load imd to xn
+ * Author: caiyifan
+ */
+
 #include "load_imd_to_xn_executor.h"
 
 #include <cstdint>
 
 #include "ccu_executor_manager.h"
-#include "sim_log.h"
 #include "ccu_string_util.h"
+#include "sim_log.h"
 
 using namespace std;
 using namespace hcomm::CcuRep;

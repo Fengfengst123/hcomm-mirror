@@ -19,8 +19,14 @@
 #include "sim_op_db_types.h"
 
 namespace sim {
+extern uint32_t g_currOpDetailId;
+
 int InitOpDataDb();
 int SetDbConfig(DBConfig& config);
+
+void AddSyncStreamIter(uint64_t streamId);
+void RemoveSyncStreamIter(uint64_t streamId);
+bool NextStreamSyncIdx(uint64_t streamId, uint64_t& syncIdx);
 
 int InsertOpDetail(OpDetailTab& rec);
 int InsertOpMem(OpMemInfoTab& rec);
@@ -31,10 +37,12 @@ int InsertOpTask(OpTaskTab& rec, bool isDevice = false);
 int InsertSyncRecord(SyncRecordTab& rec);
 int InsertCcuInstrRes(CcuInstrResTab& rec);
 int InsertCcuInstr(CcuInstrTab& rec);
+int InsertHalfRTT(HalfRTTTab& rec);
 
 int UpdateAndInsertByCcuId(
-    uint64_t& ccuId, uint32_t deviceId, uint32_t rankId, uint32_t dieId, uint32_t instrCount, uint32_t instrOffset,
-    uint32_t instrInfoSize, const void* instrInfo);
+    uint64_t& ccuId, uint32_t deviceId, uint32_t dieId, uint32_t startId, uint32_t instrCount, uint32_t instrOffset,
+    uint32_t instrInfoSize, const void* instrInfo, std::vector<uint8_t>* mergedInstrSpace = nullptr,
+    uint32_t* totalInstrCount = nullptr);
 int UpdateSyncRecordStatus(std::vector<SyncRecordTab>& syncRecord);
 int UpdateOpMemCclBuffer(uint64_t cclAddr, uint64_t cclSize);
 int UpdateOpExpansionMode(uint8_t mode);
@@ -44,10 +52,20 @@ int QueryCcuChannelAll(std::vector<CcuChannelTab>& out);
 int QueryJettyMapAll(std::vector<JettyMapTab>& out);
 int QuerySyncRecordAll(std::vector<SyncRecordTab>& out);
 int QueryCcuInstrResAll(std::vector<CcuInstrResTab>& out);
-int QueryNewestOpDeatailIdByPid(uint64_t pid, uint32_t& OpDetailId);
-int QueryCurrentOpMemInfoByRank(uint32_t rankId, OpMemInfoTab& out);
+int QueryCcuResourceMetaCount(uint32_t& instrLoadCnt, uint32_t& channelCnt);
+int QueryOpDetailIdentity(uint32_t opDetailId, uint64_t& commId, uint32_t& rankId, uint32_t& deviceId);
+int QueryCurrentOpMemInfo(uint64_t commId, uint32_t deviceId, OpMemInfoTab& out);
 int QuerySyncRecordByStatus(uint8_t status, std::vector<SyncRecordTab>& out);
+int QueryOpExecutionIndexEntries(std::vector<OpExecutionIndexEntry>& out);
 int QueryCompositeOpDetailBySyncIter(uint32_t syncIter, std::map<uint32_t, std::vector<CompositeOpDetail>>& detail);
+int QueryHalfRTTAll(std::vector<HalfRTTTab>& out);
+int QueryOpTaskTabNames(std::vector<std::string>& names);
+int QueryCompositeOpDetailByOpIter(
+    const std::string& commName, uint64_t commHash, uint32_t opIter, std::vector<CompositeOpDetail>& details);
+int QueryAllOpTasks(std::vector<OpTaskTab>& tasks, bool filterDone = false);
+int QueryOpTasksByStreamId(uint64_t streamId, std::vector<OpTaskTab>& tasks);
+int FinishOpTask(const OpTaskTab& task);
+int QueryHalfRTTAll(std::vector<HalfRTTTab>& out);
 } // namespace sim
 
 #endif

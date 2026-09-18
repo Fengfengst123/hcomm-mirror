@@ -8,13 +8,19 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: ccu executor -- reduce common
+ * Author: caiyifan
+ */
+
+#include "ccu_fp16.h"
+#include "ccu_microcode_common_v1.h"
+#include "ccu_resource_common.h"
+#include "ccu_simulator_base.h"
+#include "sim_log.h"
 #include <cstdint>
 #include <map>
-#include "ccu_resource_common.h"
-#include "ccu_microcode_common_v1.h"
-#include "sim_log.h"
-#include "ccu_simulator_base.h"
-#include "ccu_fp16.h"
 
 using namespace std;
 

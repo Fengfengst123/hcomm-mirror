@@ -17,8 +17,8 @@
 #include <sstream>
 #include <sys/stat.h>
 
-#include "topo_cluster_parser.h"
 #include "sim_log.h"
+#include "topo_cluster_parser.h"
 
 using json = nlohmann::json;
 
@@ -392,6 +392,7 @@ ParseStatus ClusterTopoParser::ParseRootinfoJson(const std::string& rootinfoPath
                                     port.layer = netLayer;
                                     port.eid = eid;
                                     port.planeId = planeId;
+                                    port.netInstanceId = netInstanceId;
                                     dev->ports.push_back(port);
                                 } else if (portIds.size() == 1) {
                                     Port port;
@@ -400,6 +401,7 @@ ParseStatus ClusterTopoParser::ParseRootinfoJson(const std::string& rootinfoPath
                                     port.portId = portIds[0];
                                     port.dieId = ExtractDieIdFromPortId(portIds[0]);
                                     port.planeId = planeId;
+                                    port.netInstanceId = netInstanceId;
                                     dev->ports.push_back(port);
                                 } else {
                                     for (const auto& pid : portIds) {
@@ -409,6 +411,7 @@ ParseStatus ClusterTopoParser::ParseRootinfoJson(const std::string& rootinfoPath
                                         port.portId = pid;
                                         port.dieId = ExtractDieIdFromPortId(pid);
                                         port.planeId = planeId;
+                                        port.netInstanceId = netInstanceId;
                                         dev->ports.push_back(port);
                                     }
                                 }

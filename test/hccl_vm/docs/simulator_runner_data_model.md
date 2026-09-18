@@ -786,7 +786,7 @@ erDiagram
     EventTask {
         typ task-id FK
         typ event-id FK
-        typ excute-time
+        typ execute-time
         typ finish-time 
         typ first-capture-taskid  FK  
     }
@@ -797,23 +797,23 @@ erDiagram
 
     EventSyncTask {
         typ event-id FK
-        typ excute-time
+        typ execute-time
         typ finish-time 
         typ op-timeout-s 
     }
     EventRecordTask {
         typ event-id FK
-        typ excute-time
+        typ execute-time
         typ finish-time 
     }
     EventWaitTask {
         typ event-id FK
-        typ excute-time
+        typ execute-time
         typ finish-time 
     }    
     EventTimeTask {
         typ event-id FK
-        typ excute-time     
+        typ execute-time     
     }
     EventTraceTask {
         typ event-id FK

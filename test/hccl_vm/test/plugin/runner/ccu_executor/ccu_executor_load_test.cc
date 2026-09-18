@@ -8,6 +8,12 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: merged unit test for load_type
+ * CCU executors Author: xx
+ */
+
 #include <cstdint>
 #include <cstring>
 #include <gtest/gtest.h>
@@ -48,6 +54,7 @@ TEST_F(LoadGsaGsaExecutorTest, DefaultConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     LoadGsaGsaExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -56,6 +63,7 @@ TEST_F(LoadGsaGsaExecutorTest, ParameterizedConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     LoadGsaGsaExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -64,6 +72,7 @@ TEST_F(LoadGsaGsaExecutorTest, ParserZeroValues)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     LoadGsaGsaExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -73,6 +82,7 @@ TEST_F(LoadGsaGsaExecutorTest, ParserMaxValues)
     CcuInstr instr;
     memset(&instr, 0xFF, sizeof(instr));
     LoadGsaGsaExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -85,6 +95,7 @@ TEST_F(LoadGsaGsaExecutorTest, ParserGsaParameters)
     instr.v1.loadGSAGSA.gsAmId = 50;
     instr.v1.loadGSAGSA.gsAnId = 25;
     LoadGsaGsaExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -102,6 +113,7 @@ TEST_F(LoadGsaGsaExecutorTest, DifferentGsaIdCombinations)
                 instr.v1.loadGSAGSA.gsAmId = gsAmId;
                 instr.v1.loadGSAGSA.gsAnId = gsAnId;
                 LoadGsaGsaExecutor executor(0, 0, 0, instr, nullptr);
+                executor.SetVersion(RunnerCcuVersion::CCU_V1);
                 EXPECT_NO_THROW(executor.Parser());
                 EXPECT_NO_THROW(executor.Describe());
             }
@@ -117,6 +129,7 @@ TEST_F(LoadGsaGsaExecutorTest, DescribeContent)
     instr.v1.loadGSAGSA.gsAmId = 20;
     instr.v1.loadGSAGSA.gsAnId = 30;
     LoadGsaGsaExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -128,6 +141,7 @@ TEST_F(LoadGsaGsaExecutorTest, InheritanceCheck)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     LoadGsaGsaExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     CcuExecutorBase* base = &executor;
     EXPECT_NE(base, nullptr);
 }
@@ -140,6 +154,7 @@ TEST_F(LoadGsaGsaExecutorTest, SameSourceAndDestination)
     instr.v1.loadGSAGSA.gsAmId = 100;
     instr.v1.loadGSAGSA.gsAnId = 100;
     LoadGsaGsaExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -155,6 +170,7 @@ TEST_F(LoadGsaGsaExecutorTest, Run_BasicAddition)
     mgr.UpdateGsaValue(0, 0, 10, 100);
     mgr.UpdateGsaValue(0, 0, 20, 200);
     LoadGsaGsaExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     executor.Run();
     uint64_t result = mgr.GetGsaValue(0, 0, 5);
@@ -172,6 +188,7 @@ TEST_F(LoadGsaGsaExecutorTest, Run_ZeroValues)
     mgr.UpdateGsaValue(0, 0, 2, 0);
     mgr.UpdateGsaValue(0, 0, 3, 0);
     LoadGsaGsaExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     executor.Run();
     uint64_t result = mgr.GetGsaValue(0, 0, 1);
@@ -189,6 +206,7 @@ TEST_F(LoadGsaGsaExecutorTest, Run_LargeValues)
     mgr.UpdateGsaValue(0, 0, 1, 0xFFFFFFFFFFFFFFFFULL);
     mgr.UpdateGsaValue(0, 0, 2, 1);
     LoadGsaGsaExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     executor.Run();
     uint64_t result = mgr.GetGsaValue(0, 0, 0);
@@ -215,6 +233,7 @@ TEST_F(LoadGsaXnExecutorTest, DefaultConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     LoadGsaXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -223,6 +242,7 @@ TEST_F(LoadGsaXnExecutorTest, ParameterizedConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     LoadGsaXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -231,6 +251,7 @@ TEST_F(LoadGsaXnExecutorTest, ParserZeroValues)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     LoadGsaXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -240,6 +261,7 @@ TEST_F(LoadGsaXnExecutorTest, ParserMaxValues)
     CcuInstr instr;
     memset(&instr, 0xFF, sizeof(instr));
     LoadGsaXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -252,6 +274,7 @@ TEST_F(LoadGsaXnExecutorTest, ParserSpecificParameters)
     instr.v1.loadGSAXn.gsAmId = 50;
     instr.v1.loadGSAXn.xnId = 25;
     LoadGsaXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -269,6 +292,7 @@ TEST_F(LoadGsaXnExecutorTest, DifferentIdCombinations)
                 instr.v1.loadGSAXn.gsAmId = gsAmId;
                 instr.v1.loadGSAXn.xnId = xnId;
                 LoadGsaXnExecutor executor(0, 0, 0, instr, nullptr);
+                executor.SetVersion(RunnerCcuVersion::CCU_V1);
                 EXPECT_NO_THROW(executor.Parser());
                 EXPECT_NO_THROW(executor.Describe());
             }
@@ -284,6 +308,7 @@ TEST_F(LoadGsaXnExecutorTest, DescribeContent)
     instr.v1.loadGSAXn.gsAmId = 20;
     instr.v1.loadGSAXn.xnId = 30;
     LoadGsaXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -296,6 +321,7 @@ TEST_F(LoadGsaXnExecutorTest, InheritanceCheck)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     LoadGsaXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     CcuExecutorBase* base = &executor;
     EXPECT_NE(base, nullptr);
 }
@@ -311,6 +337,7 @@ TEST_F(LoadGsaXnExecutorTest, Run_BasicAddition)
     mgr.UpdateGsaValue(0, 0, 10, 100);
     mgr.UpdateXnValue(0, 0, 20, 200);
     LoadGsaXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     executor.Run();
     uint64_t result = mgr.GetGsaValue(0, 0, 5);
@@ -328,6 +355,7 @@ TEST_F(LoadGsaXnExecutorTest, Run_ZeroValues)
     mgr.UpdateGsaValue(0, 0, 2, 0);
     mgr.UpdateXnValue(0, 0, 3, 0);
     LoadGsaXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     executor.Run();
     uint64_t result = mgr.GetGsaValue(0, 0, 1);
@@ -345,6 +373,7 @@ TEST_F(LoadGsaXnExecutorTest, Run_LargeValues)
     mgr.UpdateGsaValue(0, 0, 1, 0xFFFFFFFFFFFFFFFFULL);
     mgr.UpdateXnValue(0, 0, 2, 1);
     LoadGsaXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     executor.Run();
     uint64_t result = mgr.GetGsaValue(0, 0, 0);
@@ -371,6 +400,7 @@ TEST_F(LoadImdToGSAExecutorTest, DefaultConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     LoadImdToGSAExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -379,6 +409,7 @@ TEST_F(LoadImdToGSAExecutorTest, ParameterizedConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     LoadImdToGSAExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -387,6 +418,7 @@ TEST_F(LoadImdToGSAExecutorTest, ParserZeroValues)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     LoadImdToGSAExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -396,6 +428,7 @@ TEST_F(LoadImdToGSAExecutorTest, ParserMaxValues)
     CcuInstr instr;
     memset(&instr, 0xFF, sizeof(instr));
     LoadImdToGSAExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -407,6 +440,7 @@ TEST_F(LoadImdToGSAExecutorTest, ParserSpecificParameters)
     instr.v1.loadImdToGSA.gsaId = 100;
     instr.v1.loadImdToGSA.immediate = 0x12345678;
     LoadImdToGSAExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -421,6 +455,7 @@ TEST_F(LoadImdToGSAExecutorTest, DifferentGsaIdCombinations)
         instr.v1.loadImdToGSA.gsaId = gsaId;
         instr.v1.loadImdToGSA.immediate = gsaId * 10;
         LoadImdToGSAExecutor executor(0, 0, 0, instr, nullptr);
+        executor.SetVersion(RunnerCcuVersion::CCU_V1);
         EXPECT_NO_THROW(executor.Parser());
         EXPECT_NO_THROW(executor.Describe());
     }
@@ -433,6 +468,7 @@ TEST_F(LoadImdToGSAExecutorTest, DescribeContent)
     instr.v1.loadImdToGSA.gsaId = 10;
     instr.v1.loadImdToGSA.immediate = 0xABCD;
     LoadImdToGSAExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -444,6 +480,7 @@ TEST_F(LoadImdToGSAExecutorTest, InheritanceCheck)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     LoadImdToGSAExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     CcuExecutorBase* base = &executor;
     EXPECT_NE(base, nullptr);
 }
@@ -456,6 +493,7 @@ TEST_F(LoadImdToGSAExecutorTest, Run_BasicImmediate)
     instr.v1.loadImdToGSA.gsaId = 5;
     instr.v1.loadImdToGSA.immediate = 12345;
     LoadImdToGSAExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     executor.Run();
     uint64_t result = mgr.GetGsaValue(0, 0, 5);
@@ -470,6 +508,7 @@ TEST_F(LoadImdToGSAExecutorTest, Run_ZeroImmediate)
     instr.v1.loadImdToGSA.gsaId = 10;
     instr.v1.loadImdToGSA.immediate = 0;
     LoadImdToGSAExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     executor.Run();
     uint64_t result = mgr.GetGsaValue(0, 0, 10);
@@ -484,6 +523,7 @@ TEST_F(LoadImdToGSAExecutorTest, Run_LargeImmediate)
     instr.v1.loadImdToGSA.gsaId = 0;
     instr.v1.loadImdToGSA.immediate = 0xFFFFFFFFFFFFFFFFULL;
     LoadImdToGSAExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     executor.Run();
     uint64_t result = mgr.GetGsaValue(0, 0, 0);
@@ -506,6 +546,7 @@ TEST_F(LoadImdToXnExecutorTest, DefaultConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     LoadImdToXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -514,6 +555,7 @@ TEST_F(LoadImdToXnExecutorTest, ParameterizedConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     LoadImdToXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -522,6 +564,7 @@ TEST_F(LoadImdToXnExecutorTest, ParserZeroValues)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     LoadImdToXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -531,6 +574,7 @@ TEST_F(LoadImdToXnExecutorTest, ParserMaxValues)
     CcuInstr instr;
     memset(&instr, 0xFF, sizeof(instr));
     LoadImdToXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -542,6 +586,7 @@ TEST_F(LoadImdToXnExecutorTest, ParserSpecificParameters)
     instr.v1.loadImdToXn.xnId = 100;
     instr.v1.loadImdToXn.immediate = 0x12345678ABCDEF00ULL;
     LoadImdToXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -556,6 +601,7 @@ TEST_F(LoadImdToXnExecutorTest, DifferentImmediateValues)
         instr.v1.loadImdToXn.xnId = 10;
         instr.v1.loadImdToXn.immediate = imm;
         LoadImdToXnExecutor executor(0, 0, 0, instr, nullptr);
+        executor.SetVersion(RunnerCcuVersion::CCU_V1);
         EXPECT_NO_THROW(executor.Parser());
         EXPECT_NO_THROW(executor.Describe());
     }
@@ -569,6 +615,7 @@ TEST_F(LoadImdToXnExecutorTest, DifferentXnIds)
     for (auto xnId : xnIds) {
         instr.v1.loadImdToXn.xnId = xnId;
         LoadImdToXnExecutor executor(0, 0, 0, instr, nullptr);
+        executor.SetVersion(RunnerCcuVersion::CCU_V1);
         EXPECT_NO_THROW(executor.Parser());
         EXPECT_NO_THROW(executor.Describe());
     }
@@ -581,6 +628,7 @@ TEST_F(LoadImdToXnExecutorTest, DescribeContent)
     instr.v1.loadImdToXn.xnId = 10;
     instr.v1.loadImdToXn.immediate = 12345;
     LoadImdToXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -593,6 +641,7 @@ TEST_F(LoadImdToXnExecutorTest, InheritanceCheck)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     LoadImdToXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     CcuExecutorBase* base = &executor;
     EXPECT_NE(base, nullptr);
 }
@@ -613,6 +662,7 @@ TEST_F(LoadSqeArgsToGsaExecutorTest, DefaultConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     LoadSqeArgsToGsaExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -621,6 +671,7 @@ TEST_F(LoadSqeArgsToGsaExecutorTest, ParameterizedConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     LoadSqeArgsToGsaExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -629,6 +680,7 @@ TEST_F(LoadSqeArgsToGsaExecutorTest, ParserZeroValues)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     LoadSqeArgsToGsaExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -638,6 +690,7 @@ TEST_F(LoadSqeArgsToGsaExecutorTest, ParserMaxValues)
     CcuInstr instr;
     memset(&instr, 0xFF, sizeof(instr));
     LoadSqeArgsToGsaExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -649,6 +702,7 @@ TEST_F(LoadSqeArgsToGsaExecutorTest, ParserSpecificParameters)
     instr.v1.loadSqeArgsToXn.xnId = 100;
     instr.v1.loadSqeArgsToXn.sqeArgsId = 50;
     LoadSqeArgsToGsaExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -661,6 +715,7 @@ TEST_F(LoadSqeArgsToGsaExecutorTest, DescribeContent)
     instr.v1.loadSqeArgsToXn.xnId = 10;
     instr.v1.loadSqeArgsToXn.sqeArgsId = 5;
     LoadSqeArgsToGsaExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -672,6 +727,7 @@ TEST_F(LoadSqeArgsToGsaExecutorTest, InheritanceCheck)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     LoadSqeArgsToGsaExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     CcuExecutorBase* base = &executor;
     EXPECT_NE(base, nullptr);
 }
@@ -695,6 +751,7 @@ TEST_F(LoadSqeArgsToXnExecutorTest, DefaultConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     LoadSqeArgsToXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -703,6 +760,7 @@ TEST_F(LoadSqeArgsToXnExecutorTest, ParameterizedConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     LoadSqeArgsToXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -711,6 +769,7 @@ TEST_F(LoadSqeArgsToXnExecutorTest, ParserZeroValues)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     LoadSqeArgsToXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -720,6 +779,7 @@ TEST_F(LoadSqeArgsToXnExecutorTest, ParserMaxValues)
     CcuInstr instr;
     memset(&instr, 0xFF, sizeof(instr));
     LoadSqeArgsToXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -731,6 +791,7 @@ TEST_F(LoadSqeArgsToXnExecutorTest, ParserSpecificParameters)
     instr.v1.loadSqeArgsToXn.xnId = 100;
     instr.v1.loadSqeArgsToXn.sqeArgsId = 50;
     LoadSqeArgsToXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -746,6 +807,7 @@ TEST_F(LoadSqeArgsToXnExecutorTest, DifferentIdCombinations)
             instr.v1.loadSqeArgsToXn.xnId = xnId;
             instr.v1.loadSqeArgsToXn.sqeArgsId = sqeArgId;
             LoadSqeArgsToXnExecutor executor(0, 0, 0, instr, nullptr);
+            executor.SetVersion(RunnerCcuVersion::CCU_V1);
             EXPECT_NO_THROW(executor.Parser());
             EXPECT_NO_THROW(executor.Describe());
         }
@@ -759,6 +821,7 @@ TEST_F(LoadSqeArgsToXnExecutorTest, DescribeContent)
     instr.v1.loadSqeArgsToXn.xnId = 10;
     instr.v1.loadSqeArgsToXn.sqeArgsId = 5;
     LoadSqeArgsToXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -771,6 +834,7 @@ TEST_F(LoadSqeArgsToXnExecutorTest, InheritanceCheck)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     LoadSqeArgsToXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     CcuExecutorBase* base = &executor;
     EXPECT_NE(base, nullptr);
 }
@@ -791,6 +855,7 @@ TEST_F(LoadXnXnExecutorTest, DefaultConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     LoadXnXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -799,6 +864,7 @@ TEST_F(LoadXnXnExecutorTest, ParameterizedConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     LoadXnXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -807,6 +873,7 @@ TEST_F(LoadXnXnExecutorTest, ParserZeroValues)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     LoadXnXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -816,6 +883,7 @@ TEST_F(LoadXnXnExecutorTest, ParserMaxValues)
     CcuInstr instr;
     memset(&instr, 0xFF, sizeof(instr));
     LoadXnXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -828,6 +896,7 @@ TEST_F(LoadXnXnExecutorTest, ParserSpecificParameters)
     instr.v1.loadXX.xmId = 50;
     instr.v1.loadXX.xnId = 25;
     LoadXnXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -845,6 +914,7 @@ TEST_F(LoadXnXnExecutorTest, DifferentXnIdCombinations)
                 instr.v1.loadXX.xmId = xmId;
                 instr.v1.loadXX.xnId = xnId;
                 LoadXnXnExecutor executor(0, 0, 0, instr, nullptr);
+                executor.SetVersion(RunnerCcuVersion::CCU_V1);
                 EXPECT_NO_THROW(executor.Parser());
                 EXPECT_NO_THROW(executor.Describe());
             }
@@ -860,6 +930,7 @@ TEST_F(LoadXnXnExecutorTest, DescribeContent)
     instr.v1.loadXX.xmId = 20;
     instr.v1.loadXX.xnId = 30;
     LoadXnXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -871,6 +942,7 @@ TEST_F(LoadXnXnExecutorTest, InheritanceCheck)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     LoadXnXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     CcuExecutorBase* base = &executor;
     EXPECT_NE(base, nullptr);
 }
@@ -883,6 +955,7 @@ TEST_F(LoadXnXnExecutorTest, SameSourceIds)
     instr.v1.loadXX.xmId = 50;
     instr.v1.loadXX.xnId = 50;
     LoadXnXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }

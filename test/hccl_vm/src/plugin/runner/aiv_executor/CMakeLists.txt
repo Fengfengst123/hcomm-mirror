@@ -9,13 +9,11 @@
 # -----------------------------------------------------------------------------------------------------------
 
 set(AIV_EXECUTOR_SOURCES
-    aiv_resource_manager.cc
     aiv_graph_executor.cc
-    aiv_graph_executor_mgr.cc
     aiv_task_snapshot_loader.cc
-    ${PROJECT_SOURCE_DIR}/src/proxy/aiv_kernel/ascendc_stub/ascendc_base_stub.cc
-    ${PROJECT_SOURCE_DIR}/src/proxy/aiv_kernel/aiv_mode_stub/ai_core_stub.cc
-    ${PROJECT_SOURCE_DIR}/src/proxy/aiv_kernel/aiv_mode_stub/aiv_task.cc
+    ${PROJECT_SOURCE_DIR}/src/proxy/level2/aiv_kernel/ascendc_stub/ascendc_base_stub.cc
+    ${PROJECT_SOURCE_DIR}/src/proxy/level2/aiv_kernel/aiv_mode_stub/ai_core_stub.cc
+    ${PROJECT_SOURCE_DIR}/src/proxy/level2/aiv_kernel/aiv_mode_stub/aiv_task.cc
 )
 
 add_library(aiv_executor STATIC ${AIV_EXECUTOR_SOURCES})
@@ -29,8 +27,8 @@ target_include_directories(aiv_executor
         ${PROJECT_SOURCE_DIR}/include
         ${PROJECT_SOURCE_DIR}/include/runnerdb
         ${PROJECT_SOURCE_DIR}/include/store
-        ${PROJECT_SOURCE_DIR}/src/proxy/aiv_kernel/aiv_mode_stub
-        ${PROJECT_SOURCE_DIR}/src/proxy/aiv_kernel/ascendc_stub
+        ${PROJECT_SOURCE_DIR}/src/proxy/level2/aiv_kernel/aiv_mode_stub
+        ${PROJECT_SOURCE_DIR}/src/proxy/level2/aiv_kernel/ascendc_stub
 
         ${ASCEND_CANN_PACKAGE_PATH}/include/hccl
         ${HCOMM_CODE_ROOT}/src/base_comm/resources/ccu/ccu_microcode

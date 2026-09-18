@@ -11,6 +11,7 @@
 #ifndef SIM_IP_ADDRESS_H
 #define SIM_IP_ADDRESS_H
 
+#include "sim_common_defs.h"
 #include <arpa/inet.h>
 #include <cstdint>
 #include <cstring>
@@ -19,8 +20,14 @@
 #include <stdexcept>
 #include <string>
 
-#include "hccl/base.h"
-#include "sim_common_defs.h"
+typedef signed char s8;
+typedef signed short s16;
+typedef signed int s32;
+typedef signed long long s64;
+typedef unsigned char u8;
+typedef unsigned short u16;
+typedef unsigned int u32;
+typedef unsigned long long u64;
 
 namespace HcclSim {
 constexpr uint32_t URMA_EID_IPV4_PREFIX = 0x0;

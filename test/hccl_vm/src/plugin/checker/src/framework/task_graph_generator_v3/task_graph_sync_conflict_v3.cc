@@ -40,7 +40,7 @@ namespace TaskGraphGeneratorV3 {
         struct SyncResourceKey {
             SyncResourceKind kind{SyncResourceKind::AICPU_NOTIFY};
             uint32_t notifyId{0};
-            RankId rankId{INVALID_RANK_ID};
+            DeviceId deviceId{INVALID_DEVICE_ID};
             uint32_t dieId{INVALID_DIE_ID};
             uint16_t ckeId{INVALID_CCU_CKE};
             uint8_t ckeBit{0};
@@ -55,10 +55,10 @@ namespace TaskGraphGeneratorV3 {
             bool operator<(const SyncResourceKey& rhs) const
             {
                 return std::tie(
-                           kind, notifyId, rankId, dieId, ckeId, ckeBit, launchIdx, blockId, srcPipe, dstPipe, eventId,
-                           commInfoOffset, flagValue)
+                           kind, notifyId, deviceId, dieId, ckeId, ckeBit, launchIdx, blockId, srcPipe, dstPipe,
+                           eventId, commInfoOffset, flagValue)
                        < std::tie(
-                           rhs.kind, rhs.notifyId, rhs.rankId, rhs.dieId, rhs.ckeId, rhs.ckeBit, rhs.launchIdx,
+                           rhs.kind, rhs.notifyId, rhs.deviceId, rhs.dieId, rhs.ckeId, rhs.ckeBit, rhs.launchIdx,
                            rhs.blockId, rhs.srcPipe, rhs.dstPipe, rhs.eventId, rhs.commInfoOffset, rhs.flagValue);
             }
 
@@ -105,14 +105,14 @@ namespace TaskGraphGeneratorV3 {
         };
 
         struct AivFlagCellKey {
-            RankId rankId{INVALID_RANK_ID};
+            DeviceId deviceId{INVALID_DEVICE_ID};
             uint64_t launchIdx{0};
             uint64_t commInfoOffset{0};
 
             bool operator<(const AivFlagCellKey& rhs) const
             {
-                return std::tie(rankId, launchIdx, commInfoOffset)
-                       < std::tie(rhs.rankId, rhs.launchIdx, rhs.commInfoOffset);
+                return std::tie(deviceId, launchIdx, commInfoOffset)
+                       < std::tie(rhs.deviceId, rhs.launchIdx, rhs.commInfoOffset);
             }
         };
 
@@ -182,14 +182,14 @@ namespace TaskGraphGeneratorV3 {
             if (resource.kind == SyncResourceKind::AICPU_NOTIFY) {
                 os << ", notifyId=" << resource.notifyId;
             } else if (resource.kind == SyncResourceKind::CCU_CKE) {
-                os << ", waitRankId=" << resource.rankId << ", dieId=" << resource.dieId << ", ckeId=" << resource.ckeId
-                   << ", bit=" << static_cast<uint32_t>(resource.ckeBit);
+                os << ", waitRankId=" << resource.deviceId << ", dieId=" << resource.dieId
+                   << ", ckeId=" << resource.ckeId << ", bit=" << static_cast<uint32_t>(resource.ckeBit);
             } else if (resource.kind == SyncResourceKind::AIV_EVENT) {
-                os << ", rankId=" << resource.rankId << ", launchIdx=" << resource.launchIdx
+                os << ", rankId=" << resource.deviceId << ", launchIdx=" << resource.launchIdx
                    << ", blockId=" << resource.blockId << ", srcPipe=" << resource.srcPipe
                    << ", dstPipe=" << resource.dstPipe << ", eventId=" << resource.eventId;
             } else {
-                os << ", flagOwnerRank=" << resource.rankId << ", launchIdx=" << resource.launchIdx
+                os << ", flagOwnerDevice=" << resource.deviceId << ", launchIdx=" << resource.launchIdx
                    << ", commInfoOffset=0x" << std::hex << resource.commInfoOffset << std::dec
                    << ", value=" << resource.flagValue;
             }
@@ -219,9 +219,9 @@ namespace TaskGraphGeneratorV3 {
         }
 
         // 推导节点所生产（post）或消费（wait）的同步资源 key。
-        // 一个节点可能映射到多个资源：带 16 位 ckeMask 的 CCU Record/Wait 会按每个置位 bit
-        // 展开成一个资源；其余 kind 各映射到单个资源。
-        // 对非同步或非法节点返回空 vector。
+        // 一个节点可能映射到多个资源：带 16 位 ckeMask 的 CCU Record/Wait 会按每个置位
+        // bit 展开成一个资源；其余 kind 各映射到单个资源。 对非同步或非法节点返回空
+        // vector。
         std::vector<SyncResourceKey> GetSyncResources(const TaskNode* node)
         {
             std::vector<SyncResourceKey> resources;
@@ -258,7 +258,7 @@ namespace TaskGraphGeneratorV3 {
                     }
                     SyncResourceKey resource;
                     resource.kind = SyncResourceKind::CCU_CKE;
-                    resource.rankId = notify.waitRankId;
+                    resource.deviceId = notify.waitDeviceId;
                     resource.dieId = notify.dieId;
                     resource.ckeId = notify.ckeId;
                     resource.ckeBit = static_cast<uint8_t>(bit);
@@ -277,7 +277,7 @@ namespace TaskGraphGeneratorV3 {
                     }
                     SyncResourceKey resource;
                     resource.kind = SyncResourceKind::CCU_CKE;
-                    resource.rankId = notify.waitRankId;
+                    resource.deviceId = notify.waitDeviceId;
                     resource.dieId = notify.dieId;
                     resource.ckeId = notify.ckeId;
                     resource.ckeBit = static_cast<uint8_t>(bit);
@@ -287,11 +287,12 @@ namespace TaskGraphGeneratorV3 {
             }
             if (const auto* setFlag = dynamic_cast<const TaskAivSetFlag*>(node)) {
                 const AivPipeEvent& event = setFlag->GetEvent();
+                const TaskPosition& position = node->GetPosition();
                 SyncResourceKey resource;
                 resource.kind = SyncResourceKind::AIV_EVENT;
-                resource.rankId = event.rankId;
-                resource.launchIdx = event.launchIdx;
-                resource.blockId = event.blockId;
+                resource.deviceId = position.deviceId;
+                resource.launchIdx = position.launchIdx;
+                resource.blockId = position.blockId;
                 resource.srcPipe = event.srcPipe;
                 resource.dstPipe = event.dstPipe;
                 resource.eventId = event.eventId;
@@ -300,11 +301,12 @@ namespace TaskGraphGeneratorV3 {
             }
             if (const auto* waitFlag = dynamic_cast<const TaskAivWaitFlag*>(node)) {
                 const AivPipeEvent& event = waitFlag->GetEvent();
+                const TaskPosition& position = node->GetPosition();
                 SyncResourceKey resource;
                 resource.kind = SyncResourceKind::AIV_EVENT;
-                resource.rankId = event.rankId;
-                resource.launchIdx = event.launchIdx;
-                resource.blockId = event.blockId;
+                resource.deviceId = position.deviceId;
+                resource.launchIdx = position.launchIdx;
+                resource.blockId = position.blockId;
                 resource.srcPipe = event.srcPipe;
                 resource.dstPipe = event.dstPipe;
                 resource.eventId = event.eventId;
@@ -315,8 +317,8 @@ namespace TaskGraphGeneratorV3 {
                 const AivFlagSync& flag = sendFlag->GetFlag();
                 SyncResourceKey resource;
                 resource.kind = SyncResourceKind::AIV_FLAG;
-                resource.rankId = flag.flagOwnerRank;
-                resource.launchIdx = flag.launchIdx;
+                resource.deviceId = flag.flagOwnerDevice;
+                resource.launchIdx = node->GetPosition().launchIdx;
                 resource.commInfoOffset = flag.commInfoOffset;
                 resource.flagValue = flag.value;
                 resources.push_back(resource);
@@ -326,8 +328,8 @@ namespace TaskGraphGeneratorV3 {
                 const AivFlagSync& flag = recvFlag->GetFlag();
                 SyncResourceKey resource;
                 resource.kind = SyncResourceKind::AIV_FLAG;
-                resource.rankId = flag.flagOwnerRank;
-                resource.launchIdx = flag.launchIdx;
+                resource.deviceId = flag.flagOwnerDevice;
+                resource.launchIdx = node->GetPosition().launchIdx;
                 resource.commInfoOffset = flag.commInfoOffset;
                 resource.flagValue = flag.value;
                 resources.push_back(resource);
@@ -362,7 +364,8 @@ namespace TaskGraphGeneratorV3 {
                 for (const TaskNode* child : node->GetChildren()) {
                     if (child == nullptr) {
                         HCCL_VM_ERROR(
-                            "{} Sync DAG is invalid because a child node is null, parent={}",
+                            "{} Sync DAG is invalid because a child node is "
+                            "null, parent={}",
                             MakeErrorCodeText(ErrorCode::SYNC_DAG_INVALID), node->Describe());
                         return HCCL_E_PTR;
                     }
@@ -376,11 +379,12 @@ namespace TaskGraphGeneratorV3 {
 
         // 基于遍历结果构建 post/wait 配对模型：
         //  1. 把每个 Post 节点按其投递的每个资源注册到 originalPosts。
-        //  2. 对每个 Wait 节点，按其消费的每个资源注册到 originalWaits；并对每个 Post 类型
-        //     且其资源与该 Wait 消费资源匹配的父节点，同时在 bucket 中记录 (post,wait) 的
-        //     SyncPair，并把该父节点记入 syncParents[wait]。
-        // 单个 Post 合法地可与多个 Wait 配对（如 AIV SendFlag 的扇出），因此配对本身是多对多
-        // 的；顺序正确性留待后续校验。
+        //  2. 对每个 Wait 节点，按其消费的每个资源注册到 originalWaits；并对每个 Post
+        //  类型
+        //     且其资源与该 Wait 消费资源匹配的父节点，同时在 bucket 中记录 (post,wait)
+        //     的 SyncPair，并把该父节点记入 syncParents[wait]。
+        // 单个 Post 合法地可与多个 Wait 配对（如 AIV SendFlag
+        // 的扇出），因此配对本身是多对多 的；顺序正确性留待后续校验。
         HcclResult
         BuildSyncPairs(const std::vector<const TaskNode*>& nodes, SyncBuckets& buckets, SyncParentMap& syncParents)
         {
@@ -407,7 +411,8 @@ namespace TaskGraphGeneratorV3 {
                 for (const TaskNode* parent : wait->GetParents()) {
                     if (parent == nullptr) {
                         HCCL_VM_ERROR(
-                            "{} Sync DAG is invalid because a parent node is null, childWait={}",
+                            "{} Sync DAG is invalid because a parent node is "
+                            "null, childWait={}",
                             MakeErrorCodeText(ErrorCode::SYNC_DAG_INVALID), wait->Describe());
                         return HCCL_E_PTR;
                     }
@@ -428,7 +433,8 @@ namespace TaskGraphGeneratorV3 {
         }
 
         // 定位代表原始节点"完成点"的拷贝节点：
-        // wait 节点返回 ReceiveWait 拷贝（被等待资源已到达的时刻），其余返回唯一的 normal 拷贝。
+        // wait 节点返回 ReceiveWait 拷贝（被等待资源已到达的时刻），其余返回唯一的
+        // normal 拷贝。
         CopyNode* FindCompletionCopy(const CopiedGraph& graph, const TaskNode* node)
         {
             if (IsWaitNode(node)) {
@@ -460,7 +466,7 @@ namespace TaskGraphGeneratorV3 {
             }
             const TaskPosition& lhsPosition = lhs->GetPosition();
             const TaskPosition& rhsPosition = rhs->GetPosition();
-            return lhsPosition.rankId == rhsPosition.rankId && lhsPosition.streamId == rhsPosition.streamId
+            return lhsPosition.deviceId == rhsPosition.deviceId && lhsPosition.streamId == rhsPosition.streamId
                    && lhsPosition.queueId == rhsPosition.queueId;
         }
 
@@ -479,12 +485,13 @@ namespace TaskGraphGeneratorV3 {
         }
 
         // 构造可达性检查所用的"拷贝"DAG。
-        // 每个 wait 节点被拆成两份拷贝：StartWait（wait 可开始的时刻）与 ReceiveWait（被等待
-        // 资源已到达的时刻），并固定连一条 StartWait->ReceiveWait 边，使"经过 wait 可达"即意味
-        // 着"等待已完成"；非 wait 节点只生成一份 normal 拷贝。
-        // 随后按父节点是否为该 wait 的匹配生产者、以及是否与 wait 同通道，独立地为 parent 连
-        // 到 StartWait 和/或 ReceiveWait 的边：
-        //   - 匹配生产者且同通道 -> 同时连 StartWait 和 ReceiveWait（post 完成既解锁 wait 开始，
+        // 每个 wait 节点被拆成两份拷贝：StartWait（wait 可开始的时刻）与
+        // ReceiveWait（被等待 资源已到达的时刻），并固定连一条 StartWait->ReceiveWait
+        // 边，使"经过 wait 可达"即意味 着"等待已完成"；非 wait 节点只生成一份 normal
+        // 拷贝。 随后按父节点是否为该 wait 的匹配生产者、以及是否与 wait
+        // 同通道，独立地为 parent 连 到 StartWait 和/或 ReceiveWait 的边：
+        //   - 匹配生产者且同通道 -> 同时连 StartWait 和 ReceiveWait（post 完成既解锁
+        //   wait 开始，
         //     又送达资源）；
         //   - 匹配生产者但不同通道 -> 只连 ReceiveWait（资源远端到达）；
         //   - 非匹配父节点 -> 只连 StartWait（纯控制序，回退到开始点）。
@@ -544,7 +551,8 @@ namespace TaskGraphGeneratorV3 {
                         const bool isSyncParent = syncIter != syncParents.end() && syncIter->second.count(parent) != 0;
                         const bool isSameRankStreamQueue = IsSameRankStreamQueue(parent, child);
 
-                        // 独立决定连向 StartWait 与 ReceiveWait 的边。配对 post 若与 wait 同通道，
+                        // 独立决定连向 StartWait 与 ReceiveWait 的边。配对 post 若与
+                        // wait 同通道，
                         // 则有意同时连到两份拷贝；非匹配父节点则只回退连到 StartWait。
                         if (isSameRankStreamQueue || !isSyncParent) {
                             AddCopyEdge(parentCopy, graph.startWaitNodes.at(child));
@@ -602,7 +610,8 @@ namespace TaskGraphGeneratorV3 {
             }
             if (topoOrder.size() != graph.nodes.size()) {
                 HCCL_VM_ERROR(
-                    "{} Sync conflict check failed because the copied sync DAG contains a cycle, "
+                    "{} Sync conflict check failed because the copied sync "
+                    "DAG contains a cycle, "
                     "copiedNodeCount={}, topoNodeCount={}",
                     MakeErrorCodeText(ErrorCode::SYNC_DAG_INVALID), graph.nodes.size(), topoOrder.size());
                 return HCCL_E_INTERNAL;
@@ -610,9 +619,10 @@ namespace TaskGraphGeneratorV3 {
             return HCCL_SUCCESS;
         }
 
-        // 拷贝 DAG 上的可达性 oracle。预计算的拓扑索引使每次查询都能剪掉拓扑位置 >= 目标
-        // 的后继（它们不可能到达目标），把每次 IsReachable 退化为有界前向 DFS。单调递增的
-        // query stamp 避免在查询之间反复清零 visited 数组（仅溢出时重置）。
+        // 拷贝 DAG 上的可达性 oracle。预计算的拓扑索引使每次查询都能剪掉拓扑位置 >=
+        // 目标 的后继（它们不可能到达目标），把每次 IsReachable 退化为有界前向
+        // DFS。单调递增的 query stamp 避免在查询之间反复清零 visited
+        // 数组（仅溢出时重置）。
         class ReachabilityChecker {
         public:
             ReachabilityChecker(size_t nodeCount, const std::vector<size_t>& topoIndex)
@@ -674,8 +684,8 @@ namespace TaskGraphGeneratorV3 {
             size_t queryStamp_{0};
         };
 
-        // 薄包装：使调用点写作 IsReachable(from, to, checker) 而非 checker.IsReachable(from, to)，
-        // 仅为下方校验点的可读性保留。
+        // 薄包装：使调用点写作 IsReachable(from, to, checker) 而非
+        // checker.IsReachable(from, to)， 仅为下方校验点的可读性保留。
         bool IsReachable(const CopyNode* from, const CopyNode* to, ReachabilityChecker& reachable)
         {
             return reachable.IsReachable(from, to);
@@ -693,9 +703,10 @@ namespace TaskGraphGeneratorV3 {
             return count;
         }
 
-        // 检测同一 bucket 内是否有单个 Post（byPost=true）或 ReceiveWait（byPost=false）
-        // 被配对了多于一个对端。对 CheckBuckets 处理的通用 1:1 资源而言，这种多对一配对是非法的
-        // （AIV SendFlag 扇出已在别处单独处理，不进入此处）。
+        // 检测同一 bucket 内是否有单个 Post（byPost=true）或
+        // ReceiveWait（byPost=false） 被配对了多于一个对端。对 CheckBuckets 处理的通用
+        // 1:1 资源而言，这种多对一配对是非法的 （AIV SendFlag
+        // 扇出已在别处单独处理，不进入此处）。
         bool HasMultiplePeer(const std::vector<SyncPair>& pairs, bool byPost)
         {
             std::map<const CopyNode*, std::set<const CopyNode*>> peers;
@@ -712,22 +723,23 @@ namespace TaskGraphGeneratorV3 {
             });
         }
 
-        // 判断资源是否为 AIV SendFlag/RecvFlag（基于 flag cell 的）类型，该类型由专用扇出
-        // 检查器校验，而非通用 bucket 检查器。
+        // 判断资源是否为 AIV SendFlag/RecvFlag（基于 flag cell
+        // 的）类型，该类型由专用扇出 检查器校验，而非通用 bucket 检查器。
         bool IsAivFlagResource(SyncResourceKind kind) { return kind == SyncResourceKind::AIV_FLAG; }
 
-        // 构造 flag cell 标识（rank + launchIdx + commInfoOffset），所有仅在 flagValue 上不同的
-        // bucket 共享此标识。cell 把同一逻辑 flag 位置的不同取值聚合起来，用于跨取值的顺序校验。
+        // 构造 flag cell 标识（rank + launchIdx + commInfoOffset），所有仅在 flagValue
+        // 上不同的 bucket 共享此标识。cell 把同一逻辑 flag
+        // 位置的不同取值聚合起来，用于跨取值的顺序校验。
         AivFlagCellKey MakeAivFlagCellKey(const SyncResourceKey& resource)
         {
-            return AivFlagCellKey{resource.rankId, resource.launchIdx, resource.commInfoOffset};
+            return AivFlagCellKey{resource.deviceId, resource.launchIdx, resource.commInfoOffset};
         }
 
         // flag cell 的单行描述，供 AIV 专用错误日志使用。
         std::string DescribeAivFlagCell(const AivFlagCellKey& cell)
         {
             std::ostringstream os;
-            os << "flagOwnerRank=" << cell.rankId << ", launchIdx=" << cell.launchIdx << ", commInfoOffset=0x"
+            os << "flagOwnerDevice=" << cell.deviceId << ", launchIdx=" << cell.launchIdx << ", commInfoOffset=0x"
                << std::hex << cell.commInfoOffset << std::dec;
             return os.str();
         }
@@ -747,7 +759,8 @@ namespace TaskGraphGeneratorV3 {
                 HCCL_VM_ERROR(
                     "{} AIV flag resource has a many-to-one ordering conflict, "
                     "conflictType=many-to-one, producerTaskType=AIV_SEND_FLAG, "
-                    "consumerTaskType=AIV_RECV_FLAG, cell={}, recvFlag={}, previousSendFlag={}, "
+                    "consumerTaskType=AIV_RECV_FLAG, cell={}, recvFlag={}, "
+                    "previousSendFlag={}, "
                     "nextSendFlag={}",
                     MakeErrorCodeText(ErrorCode::SYNC_RESOURCE_CONFLICT), DescribeAivFlagCell(cell),
                     previousPair->wait->Describe(), previousPair->post->Describe(), nextGroup.post->Describe());
@@ -775,7 +788,8 @@ namespace TaskGraphGeneratorV3 {
                     HCCL_VM_ERROR(
                         "{} AIV flag resource has a one-to-many ordering conflict, "
                         "conflictType=one-to-many, producerTaskType=AIV_SEND_FLAG, "
-                        "consumerTaskType=AIV_RECV_FLAG, cell={}, flagValue={}, sendFlag={}, previousRecvFlag={}, "
+                        "consumerTaskType=AIV_RECV_FLAG, cell={}, flagValue={}, "
+                        "sendFlag={}, previousRecvFlag={}, "
                         "nextRecvFlag={}",
                         MakeErrorCodeText(ErrorCode::SYNC_RESOURCE_CONFLICT), DescribeAivFlagCell(cell),
                         nextGroup.flagValue, previousPair->post->Describe(), previousPair->wait->Describe(),
@@ -786,20 +800,23 @@ namespace TaskGraphGeneratorV3 {
             return HCCL_SUCCESS;
         }
 
-        // AIV SendFlag/RecvFlag 资源的专用校验器。该类型允许一对多扇出（一个 SendFlag 可满足
-        // 多个 RecvFlag），因此不能用通用 1:1 的 CheckBuckets 规则。flag cell = (flagOwnerRank,
-        // launchIdx, commInfoOffset) 把所有仅在 flagValue 上不同的 bucket 聚合在一起。不同 value
-        // 之间只检查上一轮消费者到下一轮生产者的覆盖顺序；一对多的消费者启动顺序只在同 value
-        // 的跨组之间检查。
+        // AIV SendFlag/RecvFlag 资源的专用校验器。该类型允许一对多扇出（一个 SendFlag
+        // 可满足 多个 RecvFlag），因此不能用通用 1:1 的 CheckBuckets 规则。flag cell =
+        // (flagOwnerDevice, launchIdx, commInfoOffset) 把所有仅在 flagValue 上不同的
+        // bucket 聚合在一起。不同 value
+        // 之间只检查上一轮消费者到下一轮生产者的覆盖顺序；一对多的消费者启动顺序只在同
+        // value 的跨组之间检查。
         //
         // 每个 cell 的检查分两阶段：
-        //   1. 配对校验：在每个有等待方的 bucket 内，每个 RecvFlag 必须恰好匹配一个 SendFlag
-        //      （无匹配或多匹配均判为冲突）。整个 cell 内没有任何 RecvFlag 的 SendFlag 是合法的
-        //      仅生产方操作，跳过。
-        //   2. 跨组顺序：把配对按 Post 折叠成带 value 的组，再按 post 的拓扑序排序后遍历。全局
-        //      检查每个已匹配组的 ReceiveWait 是否能到达下一组的 Post；同一 value 内再检查其
-        //      ReceiveWait 是否能到达下一组各 RecvFlag 的 StartWait。残留的（无 wait）post 也
-        //      必须排在上一已匹配组之后。
+        //   1. 配对校验：在每个有等待方的 bucket 内，每个 RecvFlag 必须恰好匹配一个
+        //   SendFlag
+        //      （无匹配或多匹配均判为冲突）。整个 cell 内没有任何 RecvFlag 的 SendFlag
+        //      是合法的 仅生产方操作，跳过。
+        //   2. 跨组顺序：把配对按 Post 折叠成带 value 的组，再按 post
+        //   的拓扑序排序后遍历。全局
+        //      检查每个已匹配组的 ReceiveWait 是否能到达下一组的 Post；同一 value
+        //      内再检查其 ReceiveWait 是否能到达下一组各 RecvFlag 的
+        //      StartWait。残留的（无 wait）post 也 必须排在上一已匹配组之后。
         HcclResult CheckAivFlagBuckets(
             const SyncBuckets& buckets, const std::vector<size_t>& topoIndex, ReachabilityChecker& reachable,
             SyncConflictCheckStats& stats)
@@ -836,7 +853,8 @@ namespace TaskGraphGeneratorV3 {
                             if (iter == waitPosts.end() || iter->second.empty()) {
                                 ++stats.conflictCount;
                                 HCCL_VM_ERROR(
-                                    "{} AIV flag resource has an unmatched consumer task, cell={}, "
+                                    "{} AIV flag resource has an unmatched consumer "
+                                    "task, cell={}, "
                                     "consumerTaskType=AIV_RECV_FLAG, recvFlag={}",
                                     MakeErrorCodeText(ErrorCode::SYNC_RESOURCE_CONFLICT), DescribeAivFlagCell(cell),
                                     wait->Describe());
@@ -846,8 +864,10 @@ namespace TaskGraphGeneratorV3 {
                                 ++stats.conflictCount;
                                 HCCL_VM_ERROR(
                                     "{} AIV flag resource has a many-to-one conflict, "
-                                    "conflictType=many-to-one, producerTaskType=AIV_SEND_FLAG, "
-                                    "consumerTaskType=AIV_RECV_FLAG, cell={}, recvFlag={}, matchingSendFlagCount={}",
+                                    "conflictType=many-to-one, "
+                                    "producerTaskType=AIV_SEND_FLAG, "
+                                    "consumerTaskType=AIV_RECV_FLAG, cell={}, "
+                                    "recvFlag={}, matchingSendFlagCount={}",
                                     MakeErrorCodeText(ErrorCode::SYNC_RESOURCE_CONFLICT), DescribeAivFlagCell(cell),
                                     wait->Describe(), iter->second.size());
                                 return HCCL_E_INTERNAL;
@@ -862,8 +882,9 @@ namespace TaskGraphGeneratorV3 {
                     continue;
                 }
 
-                // 阶段 2：跨组顺序。把该 cell 的所有配对按共享的 Post 折叠成 AivFlagGroup
-                // （每个 Post 一组），再按 post 的拓扑序排序，以便按执行顺序遍历生产方组。
+                // 阶段 2：跨组顺序。把该 cell 的所有配对按共享的 Post 折叠成
+                // AivFlagGroup （每个 Post 一组），再按 post
+                // 的拓扑序排序，以便按执行顺序遍历生产方组。
                 for (const SyncBucket* bucket : cellEntry.second) {
                     for (const SyncPair& pair : bucket->pairs) {
                         auto iter = groupsByPost.find(pair.post);
@@ -897,20 +918,24 @@ namespace TaskGraphGeneratorV3 {
                     return lhs->post->GetNodeId() < rhs->post->GetNodeId();
                 });
 
-                // `lastMatchedGroup` 用于保留同一 cell 上全局的生产顺序检查；不同 value 的 RecvFlag
-                // 可以并发启动，因此一对多顺序单独按 value 记录最近的 matched group。
+                // `lastMatchedGroup` 用于保留同一 cell 上全局的生产顺序检查；不同 value
+                // 的 RecvFlag 可以并发启动，因此一对多顺序单独按 value 记录最近的
+                // matched group。
                 const AivFlagGroup* lastMatchedGroup = nullptr;
                 std::map<int32_t, const AivFlagGroup*> lastMatchedGroupByValue;
                 for (const AivFlagGroup* group : groups) {
-                    // 一组是否"已匹配"取决于其配对是否携带 wait。由构造（groupsByPost）可知同组所有
-                    // 配对共享同一 Post 且 wait 是否存在一致，故检查首条配对即可判定整组。
+                    // 一组是否"已匹配"取决于其配对是否携带
+                    // wait。由构造（groupsByPost）可知同组所有 配对共享同一 Post 且
+                    // wait 是否存在一致，故检查首条配对即可判定整组。
                     const bool hasWait = !group->pairs.empty() && group->pairs.front()->wait != nullptr;
                     if (!hasWait) {
                         if (lastMatchedGroup == nullptr) {
                             ++stats.conflictCount;
                             HCCL_VM_ERROR(
-                                "{} AIV flag resource has an unmatched producer task before the first "
-                                "matched pair, producerTaskType=AIV_SEND_FLAG, consumerTaskType=AIV_RECV_FLAG, "
+                                "{} AIV flag resource has an unmatched producer task "
+                                "before the first "
+                                "matched pair, producerTaskType=AIV_SEND_FLAG, "
+                                "consumerTaskType=AIV_RECV_FLAG, "
                                 "cell={}, sendFlag={}",
                                 MakeErrorCodeText(ErrorCode::SYNC_RESOURCE_CONFLICT), DescribeAivFlagCell(cell),
                                 group->post->Describe());
@@ -947,14 +972,16 @@ namespace TaskGraphGeneratorV3 {
             return HCCL_SUCCESS;
         }
 
-        // 针对 1:1 严格 post/wait 资源（AICPU Notify、CCU CKE、AIV pipe-event SetFlag/WaitFlag）
-        // 的通用逐 bucket 校验器。对每个资源 bucket 强制：
+        // 针对 1:1 严格 post/wait 资源（AICPU Notify、CCU CKE、AIV pipe-event
+        // SetFlag/WaitFlag） 的通用逐 bucket 校验器。对每个资源 bucket 强制：
         //   - Post 数不少于 Wait 数；
         //   - 没有任何 Post/Wait 参与多于一个对端配对（HasMultiplePeer）；
-        //   - 顺序覆盖约束：每个已匹配对的 ReceiveWait 必须能到达下一对的 Post 以及下一对的
-        //     StartWait，使后继的生产/消费方不能越过先前同资源的操作；残留（未匹配）的 Post 也
-        //     必须排在上一已匹配对的 ReceiveWait 之后。
-        // AIV SendFlag/RecvFlag 因允许一对多扇出而在此排除（由 CheckAivFlagBuckets 处理）。
+        //   - 顺序覆盖约束：每个已匹配对的 ReceiveWait 必须能到达下一对的 Post
+        //   以及下一对的
+        //     StartWait，使后继的生产/消费方不能越过先前同资源的操作；残留（未匹配）的
+        //     Post 也 必须排在上一已匹配对的 ReceiveWait 之后。
+        // AIV SendFlag/RecvFlag 因允许一对多扇出而在此排除（由 CheckAivFlagBuckets
+        // 处理）。
         HcclResult
         CheckBuckets(const SyncBuckets& buckets, ReachabilityChecker& reachable, SyncConflictCheckStats& stats)
         {
@@ -975,8 +1002,10 @@ namespace TaskGraphGeneratorV3 {
                     ++stats.checkedBucketCount;
                     ++stats.conflictCount;
                     HCCL_VM_ERROR(
-                        "{} Sync resource has fewer producer tasks than consumer tasks, "
-                        "producerTaskType={}, consumerTaskType={}, resource={}, producerCount={}, consumerCount={}",
+                        "{} Sync resource has fewer producer tasks than "
+                        "consumer tasks, "
+                        "producerTaskType={}, consumerTaskType={}, "
+                        "resource={}, producerCount={}, consumerCount={}",
                         MakeErrorCodeText(ErrorCode::SYNC_RESOURCE_CONFLICT), SyncPostTaskTypeName(resource.kind),
                         SyncWaitTaskTypeName(resource.kind), DescribeResource(resource), postCount, waitCount);
                     return HCCL_E_INTERNAL;
@@ -991,7 +1020,8 @@ namespace TaskGraphGeneratorV3 {
                     ++stats.conflictCount;
                     HCCL_VM_ERROR(
                         "{} Sync resource has multiple producer/consumer peers, "
-                        "producerTaskType={}, consumerTaskType={}, resource={}, producerCount={}, consumerCount={}, "
+                        "producerTaskType={}, consumerTaskType={}, resource={}, "
+                        "producerCount={}, consumerCount={}, "
                         "pairCount={}",
                         MakeErrorCodeText(ErrorCode::SYNC_RESOURCE_CONFLICT), SyncPostTaskTypeName(resource.kind),
                         SyncWaitTaskTypeName(resource.kind), DescribeResource(resource), postCount, waitCount,
@@ -1005,8 +1035,10 @@ namespace TaskGraphGeneratorV3 {
                         if (lastPaired == nullptr) {
                             ++stats.conflictCount;
                             HCCL_VM_ERROR(
-                                "{} Sync resource has an unmatched producer task before the first matched "
-                                "pair, producerTaskType={}, consumerTaskType={}, resource={}, producer={}",
+                                "{} Sync resource has an unmatched producer task "
+                                "before the first matched "
+                                "pair, producerTaskType={}, consumerTaskType={}, "
+                                "resource={}, producer={}",
                                 MakeErrorCodeText(ErrorCode::SYNC_RESOURCE_CONFLICT),
                                 SyncPostTaskTypeName(resource.kind), SyncWaitTaskTypeName(resource.kind),
                                 DescribeResource(resource), pair.post->Describe());
@@ -1016,7 +1048,8 @@ namespace TaskGraphGeneratorV3 {
                             ++stats.conflictCount;
                             HCCL_VM_ERROR(
                                 "{} Sync resource has a many-to-one ordering conflict, "
-                                "conflictType=many-to-one, producerTaskType={}, consumerTaskType={}, resource={}, "
+                                "conflictType=many-to-one, producerTaskType={}, "
+                                "consumerTaskType={}, resource={}, "
                                 "consumer={}, previousProducer={}, nextProducer={}",
                                 MakeErrorCodeText(ErrorCode::SYNC_RESOURCE_CONFLICT),
                                 SyncPostTaskTypeName(resource.kind), SyncWaitTaskTypeName(resource.kind),
@@ -1037,8 +1070,10 @@ namespace TaskGraphGeneratorV3 {
                     if (current.receiveWaitCopy == nullptr) {
                         ++stats.conflictCount;
                         HCCL_VM_ERROR(
-                            "{} Sync conflict checker has an invalid pair without a consumer completion node, "
-                            "producerTaskType={}, consumerTaskType={}, resource={}, producer={}, consumer={}",
+                            "{} Sync conflict checker has an invalid pair without a "
+                            "consumer completion node, "
+                            "producerTaskType={}, consumerTaskType={}, resource={}, "
+                            "producer={}, consumer={}",
                             MakeErrorCodeText(ErrorCode::SYNC_RESOURCE_CONFLICT), SyncPostTaskTypeName(resource.kind),
                             SyncWaitTaskTypeName(resource.kind), DescribeResource(resource), current.post->Describe(),
                             current.wait->Describe());
@@ -1048,8 +1083,8 @@ namespace TaskGraphGeneratorV3 {
                         ++stats.conflictCount;
                         HCCL_VM_ERROR(
                             "{} Sync resource has a many-to-one ordering conflict, "
-                            "conflictType=many-to-one, producerTaskType={}, consumerTaskType={}, resource={}, "
-                            "order={}, "
+                            "conflictType=many-to-one, producerTaskType={}, "
+                            "consumerTaskType={}, resource={}, order={}, "
                             "consumer={}, previousProducer={}, nextProducer={}",
                             MakeErrorCodeText(ErrorCode::SYNC_RESOURCE_CONFLICT), SyncPostTaskTypeName(resource.kind),
                             SyncWaitTaskTypeName(resource.kind), DescribeResource(resource), next.order,
@@ -1060,8 +1095,8 @@ namespace TaskGraphGeneratorV3 {
                         ++stats.conflictCount;
                         HCCL_VM_ERROR(
                             "{} Sync resource has a one-to-many ordering conflict, "
-                            "conflictType=one-to-many, producerTaskType={}, consumerTaskType={}, resource={}, "
-                            "order={}, "
+                            "conflictType=one-to-many, producerTaskType={}, "
+                            "consumerTaskType={}, resource={}, order={}, "
                             "producer={}, previousConsumer={}, nextConsumer={}",
                             MakeErrorCodeText(ErrorCode::SYNC_RESOURCE_CONFLICT), SyncPostTaskTypeName(resource.kind),
                             SyncWaitTaskTypeName(resource.kind), DescribeResource(resource), next.order,
@@ -1076,9 +1111,9 @@ namespace TaskGraphGeneratorV3 {
     } // namespace
 
     // 同步资源冲突检查的入口。
-    // 流水线（从此处起最大调用深度 2）：收集遍历 -> 构建 post/wait bucket 与拷贝 DAG -> 对
-    // DAG 做拓扑排序 -> 为每个配对绑定其拷贝节点 -> 先运行 AIV flag 扇出校验器，再运行通用
-    // 1:1 校验器。统计经 `stats` 输出。
+    // 流水线（从此处起最大调用深度 2）：收集遍历 -> 构建 post/wait bucket 与拷贝
+    // DAG -> 对 DAG 做拓扑排序 -> 为每个配对绑定其拷贝节点 -> 先运行 AIV flag
+    // 扇出校验器，再运行通用 1:1 校验器。统计经 `stats` 输出。
     HcclResult CheckSyncResourceConflict(const TaskNode* start, SyncConflictCheckStats* stats)
     {
         SyncConflictCheckStats localStats;

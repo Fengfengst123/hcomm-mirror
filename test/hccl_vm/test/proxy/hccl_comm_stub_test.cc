@@ -11,9 +11,9 @@
 #include <cstdint>
 #include <gtest/gtest.h>
 
-#include "hccl/hccl.h"
 #include "acl/acl_base.h"
 #include "acl/acl_rt.h"
+#include "hccl/hccl.h"
 
 extern "C" {
 HcclResult HcclGetRootInfo(HcclRootInfo* rootInfo);

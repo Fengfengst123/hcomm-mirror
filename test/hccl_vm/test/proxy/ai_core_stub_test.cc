@@ -14,6 +14,7 @@
 #include "ai_core_stub.h"
 #include "aiv_task.h"
 #include "ascendc_base_stub.h"
+#include "sim_capacity_limits.h"
 
 using namespace AivSim;
 
@@ -46,10 +47,10 @@ TEST_F(AiCoreStubTest, Init_NormalParams_SetsFields)
     EXPECT_EQ(AivKernelExecutor::GetInstance().GetBlockNum(), 4);
 }
 
-TEST_F(AiCoreStubTest, Init_RankSizeExceedsMax_Clamped)
+TEST_F(AiCoreStubTest, Init_RankSizeExceedsMax_Rejected)
 {
-    AivKernelExecutor::GetInstance().Init(1, 2, MAX_RANK_NUM + 1);
-    EXPECT_EQ(AivKernelExecutor::GetInstance().GetRankSize(), MAX_RANK_NUM);
+    AivKernelExecutor::GetInstance().Init(1, 2, HcclSim::GetMaxRanks() + 1);
+    EXPECT_EQ(AivKernelExecutor::GetInstance().GetRankSize(), 0u);
 }
 
 TEST_F(AiCoreStubTest, Init_ZeroRankSize_NoClamp)
@@ -124,15 +125,15 @@ TEST_F(AiCoreStubTest, SetCommBuffer_ValidRankId_SetsBuffers)
 TEST_F(AiCoreStubTest, SetCommBuffer_RankIdOutOfRange_Skipped)
 {
     AivKernelExecutor::GetInstance().Init(0, 1, 1);
-    AivKernelExecutor::GetInstance().SetCommBuffer(MAX_RANK_NUM, 0x3000, 2048, 0x4000, 256);
-    EXPECT_EQ(AivKernelExecutor::GetInstance().GetCclBuffer(MAX_RANK_NUM).addr, 0u);
-    EXPECT_EQ(AivKernelExecutor::GetInstance().GetAivCommInfoBuffer(MAX_RANK_NUM).addr, 0u);
+    AivKernelExecutor::GetInstance().SetCommBuffer(HcclSim::GetMaxRanks(), 0x3000, 2048, 0x4000, 256);
+    EXPECT_EQ(AivKernelExecutor::GetInstance().GetCclBuffer(HcclSim::GetMaxRanks()).addr, 0u);
+    EXPECT_EQ(AivKernelExecutor::GetInstance().GetAivCommInfoBuffer(HcclSim::GetMaxRanks()).addr, 0u);
 }
 
 TEST_F(AiCoreStubTest, GetCclBuffer_RankIdOutOfRange_ReturnsEmpty)
 {
     AivKernelExecutor::GetInstance().Init(0, 1, 1);
-    auto mem = AivKernelExecutor::GetInstance().GetCclBuffer(MAX_RANK_NUM);
+    auto mem = AivKernelExecutor::GetInstance().GetCclBuffer(HcclSim::GetMaxRanks());
     EXPECT_EQ(mem.addr, 0u);
     EXPECT_EQ(mem.size, 0u);
 }
@@ -140,7 +141,7 @@ TEST_F(AiCoreStubTest, GetCclBuffer_RankIdOutOfRange_ReturnsEmpty)
 TEST_F(AiCoreStubTest, GetAivCommInfoBuffer_RankIdOutOfRange_ReturnsEmpty)
 {
     AivKernelExecutor::GetInstance().Init(0, 1, 1);
-    auto mem = AivKernelExecutor::GetInstance().GetAivCommInfoBuffer(MAX_RANK_NUM);
+    auto mem = AivKernelExecutor::GetInstance().GetAivCommInfoBuffer(HcclSim::GetMaxRanks());
     EXPECT_EQ(mem.addr, 0u);
     EXPECT_EQ(mem.size, 0u);
 }
@@ -395,11 +396,13 @@ TEST_F(AivTaskTest, AivTask_GetUUID_ReturnsExpectedValue)
 
 TEST_F(AivTaskTest, AivTask_Describe_ReturnsNonEmpty)
 {
-    AivTask task(AivTaskType::MEM_COPY, 10, 2, 0, AscendC::pipe_t::PIPE_S);
+    AivTask task(AivTaskType::MEM_COPY, 10, 2, 0, AscendC::pipe_t::PIPE_S, 99, 7);
     std::string desc = task.Describe();
     EXPECT_FALSE(desc.empty());
     EXPECT_NE(desc.find("MemCopy"), std::string::npos);
     EXPECT_NE(desc.find("RankId=2"), std::string::npos);
+    EXPECT_NE(desc.find("DeviceId=7"), std::string::npos);
+    EXPECT_NE(desc.find("CommId=99"), std::string::npos);
     EXPECT_NE(desc.find("TaskId=10"), std::string::npos);
     EXPECT_NE(desc.find("BlockId=0"), std::string::npos);
 }
@@ -413,64 +416,58 @@ TEST_F(AivTaskTest, AivTask_SetTaskType)
 
 TEST_F(AivTaskTest, AivTaskMemCopy_Describe_ContainsSrcAndDst)
 {
-    AivDataSlice src(AivBufferType::INPUT, 0, 100);
-    AivDataSlice dst(AivBufferType::OUTPUT, 0, 100);
-    AivTaskMemCopy task(0, src, 1, dst);
+    AivDataSlice src(AivBufferType::INPUT, 0, 0, 0x1000, 100);
+    AivDataSlice dst(AivBufferType::OUTPUT, 1, 0, 0x2000, 100);
+    AivTaskMemCopy task(src, dst);
     std::string desc = task.Describe();
     EXPECT_FALSE(desc.empty());
-    EXPECT_NE(desc.find("SrcRank=0"), std::string::npos);
-    EXPECT_NE(desc.find("DstRank=1"), std::string::npos);
+    EXPECT_NE(desc.find("deviceId=0"), std::string::npos);
+    EXPECT_NE(desc.find("deviceId=1"), std::string::npos);
     EXPECT_NE(desc.find("INPUT"), std::string::npos);
     EXPECT_NE(desc.find("OUTPUT"), std::string::npos);
 }
 
 TEST_F(AivTaskTest, AivTaskMemCopy_SetSrcAndDst)
 {
-    AivDataSlice src(AivBufferType::INPUT, 0, 100);
-    AivDataSlice dst(AivBufferType::OUTPUT, 0, 100);
-    AivTaskMemCopy task(0, src, 1, dst);
-    AivDataSlice newSrc(AivBufferType::CCL, 10, 50);
-    AivDataSlice newDst(AivBufferType::AIV_COMM, 20, 60);
+    AivDataSlice src(AivBufferType::INPUT, 0, 0, 0x1000, 100);
+    AivDataSlice dst(AivBufferType::OUTPUT, 1, 0, 0x2000, 100);
+    AivTaskMemCopy task(src, dst);
+    AivDataSlice newSrc(AivBufferType::CCL, 5, 10, 0x3010, 50);
+    AivDataSlice newDst(AivBufferType::AIV_COMM, 6, 20, 0x5020, 60);
     task.SetSrc(newSrc);
     task.SetDst(newDst);
-    task.SetSrcRank(5);
-    task.SetDstRank(6);
     EXPECT_EQ(task.GetSrc().GetType(), AivBufferType::CCL);
     EXPECT_EQ(task.GetDst().GetType(), AivBufferType::AIV_COMM);
-    EXPECT_EQ(task.GetSrcRank(), 5u);
-    EXPECT_EQ(task.GetDstRank(), 6u);
+    EXPECT_EQ(task.GetSrc().GetDeviceId(), 5u);
+    EXPECT_EQ(task.GetDst().GetDeviceId(), 6u);
 }
 
 TEST_F(AivTaskTest, AivTaskReduce_Describe_ContainsAllFields)
 {
-    AivDataSlice src(AivBufferType::INPUT, 0, 100);
-    AivDataSlice dst(AivBufferType::OUTPUT, 0, 100);
-    AivTaskReduce task(0, src, 1, dst, 1, static_cast<uint32_t>(ReduceOp::REDUCE_SUM));
+    AivDataSlice src(AivBufferType::INPUT, 0, 0, 0x1000, 100);
+    AivDataSlice dst(AivBufferType::OUTPUT, 1, 0, 0x2000, 100);
+    AivTaskReduce task(src, dst, 1, static_cast<uint32_t>(ReduceOp::REDUCE_SUM));
     std::string desc = task.Describe();
     EXPECT_NE(desc.find("Reduce"), std::string::npos);
-    EXPECT_NE(desc.find("SrcRank=0"), std::string::npos);
-    EXPECT_NE(desc.find("DstRank=1"), std::string::npos);
     EXPECT_NE(desc.find("DataType=1"), std::string::npos);
     EXPECT_NE(desc.find("SUM"), std::string::npos);
 }
 
 TEST_F(AivTaskTest, AivTaskReduce_Setters)
 {
-    AivDataSlice src(AivBufferType::INPUT, 0, 100);
-    AivDataSlice dst(AivBufferType::OUTPUT, 0, 100);
-    AivTaskReduce task(0, src, 1, dst, 1, 0);
-    AivDataSlice newSrc(AivBufferType::CCL, 10, 50);
-    AivDataSlice newDst(AivBufferType::AIV_COMM, 20, 60);
+    AivDataSlice src(AivBufferType::INPUT, 0, 0, 0x1000, 100);
+    AivDataSlice dst(AivBufferType::OUTPUT, 1, 0, 0x2000, 100);
+    AivTaskReduce task(src, dst, 1, 0);
+    AivDataSlice newSrc(AivBufferType::CCL, 3, 10, 0x3010, 50);
+    AivDataSlice newDst(AivBufferType::AIV_COMM, 4, 20, 0x5020, 60);
     task.SetSrc(newSrc);
     task.SetDst(newDst);
-    task.SetSrcRank(3);
-    task.SetDstRank(4);
     task.SetDataType(2);
     task.SetReduceOp(static_cast<uint32_t>(ReduceOp::REDUCE_MAX));
     EXPECT_EQ(task.GetSrc().GetType(), AivBufferType::CCL);
     EXPECT_EQ(task.GetDst().GetType(), AivBufferType::AIV_COMM);
-    EXPECT_EQ(task.GetSrcRank(), 3u);
-    EXPECT_EQ(task.GetDstRank(), 4u);
+    EXPECT_EQ(task.GetSrc().GetDeviceId(), 3u);
+    EXPECT_EQ(task.GetDst().GetDeviceId(), 4u);
     EXPECT_EQ(task.GetDataType(), 2u);
     EXPECT_EQ(task.GetReduceOp(), static_cast<uint32_t>(ReduceOp::REDUCE_MAX));
 }
@@ -560,42 +557,41 @@ TEST_F(AivTaskTest, AivTaskSyncAll_Describe_ReturnsNonEmpty)
 
 TEST_F(AivTaskTest, AivTaskSendFlag_Describe_ContainsRankOffsetValue)
 {
-    AivTaskSendFlag task(3, 0x100, 1);
+    AivTaskSendFlag task(3, AivDataSlice(AivBufferType::AIV_COMM, 3, 0x100, 0x5100, 4), 1);
     std::string desc = task.Describe();
     EXPECT_NE(desc.find("SendFlag"), std::string::npos);
-    EXPECT_NE(desc.find("Rank=3"), std::string::npos);
-    EXPECT_NE(desc.find("CommInfoOffset=256"), std::string::npos);
+    EXPECT_NE(desc.find("TargetRank=3"), std::string::npos);
     EXPECT_NE(desc.find("Value=1"), std::string::npos);
 }
 
 TEST_F(AivTaskTest, AivTaskSendFlag_Setters)
 {
-    AivTaskSendFlag task(0, 0, 0);
-    task.SetRank(5);
-    task.SetCommInfoOffset(0x200);
+    AivTaskSendFlag task(0, AivDataSlice(), 0);
+    task.SetTargetRank(5);
+    task.SetFlagBuffer(AivDataSlice(AivBufferType::AIV_COMM, 5, 0x200, 0x5200, 4));
     task.SetFlagValue(2);
-    EXPECT_EQ(task.GetRank(), 5u);
-    EXPECT_EQ(task.GetCommInfoOffset(), 0x200u);
+    EXPECT_EQ(task.GetTargetRank(), 5u);
+    EXPECT_EQ(task.GetFlagBuffer().GetOffset(), 0x200u);
     EXPECT_EQ(task.GetFlagValue(), 2);
 }
 
 TEST_F(AivTaskTest, AivTaskRecvFlag_Describe_ContainsRankOffsetValue)
 {
-    AivTaskRecvFlag task(2, 0x80, 1);
+    AivTaskRecvFlag task(2, AivDataSlice(AivBufferType::AIV_COMM, 2, 0x80, 0x5080, 4), 1);
     std::string desc = task.Describe();
     EXPECT_NE(desc.find("RecvFlag"), std::string::npos);
-    EXPECT_NE(desc.find("Rank=2"), std::string::npos);
+    EXPECT_NE(desc.find("TargetRank=2"), std::string::npos);
 }
 
 TEST_F(AivTaskTest, AivTaskRecvFlag_Setters)
 {
-    AivTaskRecvFlag task(0, 0, 0);
-    task.SetRank(4);
-    task.SetCommInfoOffset(0x400);
-    task.SetTargetValue(3);
-    EXPECT_EQ(task.GetRank(), 4u);
-    EXPECT_EQ(task.GetCommInfoOffset(), 0x400u);
-    EXPECT_EQ(task.GetTargetValue(), 3);
+    AivTaskRecvFlag task(0, AivDataSlice(), 0);
+    task.SetTargetRank(4);
+    task.SetFlagBuffer(AivDataSlice(AivBufferType::AIV_COMM, 4, 0x400, 0x5400, 4));
+    task.SetFlagValue(3);
+    EXPECT_EQ(task.GetTargetRank(), 4u);
+    EXPECT_EQ(task.GetFlagBuffer().GetOffset(), 0x400u);
+    EXPECT_EQ(task.GetFlagValue(), 3);
 }
 
 TEST_F(AivTaskTest, GetTypeName_AllTaskTypes)

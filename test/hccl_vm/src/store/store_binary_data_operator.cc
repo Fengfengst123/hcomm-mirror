@@ -10,13 +10,13 @@
 
 #include "store_binary_data_operator.h"
 
+#include "runtime_state/sim_models.h"
+#include "sim_log.h"
 #include <cstdint>
 #include <cstdlib> // strtoull
 #include <cstring>
 #include <iostream>
 #include <sys/stat.h>
-#include "sim_log.h"
-#include "sim_models.h"
 
 namespace HcclSim {
 static int WriteExact(FILE* fp, const void* ptr, size_t size, size_t n)
@@ -64,8 +64,10 @@ HcclVmResult HcclVmSynDataRead(FILE* fp, HcclVmSynData& synData, uint32_t magic)
         return HcclVmResult::HCCL_SIM_E_INTERNAL;
     }
 
-    bool isCcuMode = synData.model_info.comm.op_expansion_mode == sim::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_CCU;
-    bool isAivMode = synData.model_info.comm.op_expansion_mode == sim::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_AIV;
+    bool isCcuMode
+        = synData.model_info.comm.op_expansion_mode == sim::runtime::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_CCU;
+    bool isAivMode
+        = synData.model_info.comm.op_expansion_mode == sim::runtime::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_AIV;
     if (isCcuMode) {
         ret = ChannelInfoRead(fp, synData.channel_info);
     } else if (isAivMode) {
@@ -102,8 +104,10 @@ HcclVmResult HcclVmSynDataWrite(FILE* fp, const HcclVmSynData& synData)
         return HcclVmResult::HCCL_SIM_E_INTERNAL;
     }
 
-    bool isCcuMode = synData.model_info.comm.op_expansion_mode == sim::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_CCU;
-    bool isAivMode = synData.model_info.comm.op_expansion_mode == sim::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_AIV;
+    bool isCcuMode
+        = synData.model_info.comm.op_expansion_mode == sim::runtime::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_CCU;
+    bool isAivMode
+        = synData.model_info.comm.op_expansion_mode == sim::runtime::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_AIV;
     if (isCcuMode) {
         ret = ChannelInfoWrite(fp, synData.channel_info);
     } else if (isAivMode) {

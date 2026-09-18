@@ -24,27 +24,37 @@ constexpr uint8_t PIPE_CMD_EXEC_KERNEL = 0x01;
 constexpr uint8_t PIPE_CMD_GET_DEV_PTR = 0x02;
 constexpr uint8_t PIPE_CMD_SET_DEV_ID = 0x03;
 constexpr uint8_t PIPE_CMD_FREE_DEV_PTR = 0x04;
+constexpr uint8_t PIPE_CMD_GET_WQE_PTR = 0x05;
+constexpr uint8_t PIPE_CMD_FREE_WQE_PTR = 0x06;
+
 constexpr uint8_t PIPE_RSP_SHUTDOWN_ACK = 0x80;
 constexpr uint8_t PIPE_RSP_EXEC_KERNEL = 0x81;
 constexpr uint8_t PIPE_RSP_GET_DEV_PTR = 0x82;
 constexpr uint8_t PIPE_RSP_SET_DEV_ID = 0x83;
 constexpr uint8_t PIPE_RSP_FREE_DEV_PTR = 0x84;
-constexpr uint8_t PIPE_RSP_READY = 0x85;
+constexpr uint8_t PIPE_RSP_GET_WQE_PTR = 0x85;
+constexpr uint8_t PIPE_RSP_FREE_WQE_PTR = 0x86;
+
+constexpr uint8_t PIPE_RSP_READY = 0xA5;
+
 constexpr uint8_t PIPE_RSP_ERROR = 0xFF;
-constexpr uint8_t PAYLOAD_LEN_MAX = 253;
+constexpr uint32_t IPC_MSG_LEN_MAX = 128 * 1024; // 变长消息 payload 上限（容纳 64KB args）
 
 #pragma pack(push, 1)
 
+// 变长消息：头{cmd, len} + 柔性数组 payload，头体合一
 struct PipeMessage {
     uint8_t cmd;
-    uint16_t bufLen;
-    uint8_t payload[PAYLOAD_LEN_MAX];
+    uint32_t len;
+    uint8_t payload[0];
 };
 
 typedef struct {
     char kernelName[KERNEL_NAME_LEN_MAX];
     char soName[KERNEL_SO_NAME_LEN_MAX];
     uint64_t args;
+    // host 在算子记录完成后显式绑定的 opDetail；非 HCCL kernel 为 0。
+    uint32_t opDetailId;
 } ExecKernelPayload;
 
 typedef struct {
@@ -67,6 +77,10 @@ typedef struct {
     uint64_t rankId;
     uint64_t deviceKey;
 } SetDevIdPayload;
+
+typedef struct {
+    uint64_t ptr;
+} ReqDevPtrPayload;
 
 #pragma pack(pop)
 

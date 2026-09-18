@@ -13,15 +13,16 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <errno.h>
 #include <fcntl.h>
 #include <string>
 #include <sys/mman.h>
 #include <sys/shm.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <errno.h>
 
 #include "sim_log.h"
+#include "store_sim_resource_root.h"
 
 #define SHM_HEAD_SIZE sizeof(ShmHead)
 
@@ -94,17 +95,18 @@ void* ShmCreate(const char* name, size_t size)
         return nullptr;
     }
 
-    int shmFd = shm_open(name, O_CREAT | O_RDWR | O_EXCL, 0666);
+    std::string fullName = sim::SimResourceRoot::BuildName(name);
+    int shmFd = open(fullName.c_str(), O_CREAT | O_RDWR | O_EXCL, 0666);
     if (shmFd == -1) {
-        HCCL_VM_ERROR("create: shm_open failed, name: {} errno:{}", name, errno);
+        HCCL_VM_ERROR("create: open failed, name: {} errno:{}", fullName, errno);
         return nullptr;
     }
 
     size_t totalSize = GetShmTotalSize(size);
     if (ftruncate(shmFd, totalSize) == -1) {
-        HCCL_VM_ERROR("create: ftruncate failed, name: {} errno:{}", name, errno);
+        HCCL_VM_ERROR("create: ftruncate failed, name: {} errno:{}", fullName, errno);
         close(shmFd);
-        shm_unlink(name);
+        unlink(fullName.c_str());
         return nullptr;
     }
 
@@ -113,20 +115,20 @@ void* ShmCreate(const char* name, size_t size)
     close(shmFd);
 
     if (addr == MAP_FAILED) {
-        shm_unlink(name);
-        HCCL_VM_ERROR("create: mmap failed, name: {} errno:{}", name, err);
+        unlink(fullName.c_str());
+        HCCL_VM_ERROR("create: mmap failed, name: {} errno:{}", fullName, err);
         return nullptr;
     }
 
     ShmHead* head = (ShmHead*)addr;
     head->magic = ToLe32(SHM_MAGIC);
     head->version = ToLe32(SHM_VERSION);
-    strncpy(head->name, name, sizeof(head->name) - 1);
+    strncpy(head->name, fullName.c_str(), sizeof(head->name) - 1);
     head->name[sizeof(head->name) - 1] = '\0';
     head->size = ToLe64(size);
     head->lock = 0;
     head->refCount = 1;
-    HCCL_VM_INFO(
+    HCCL_VM_DEBUG(
         "create name: {}, size: {:d}, ptr: {:p} ref:{:d}", head->name, size, (char*)addr + SHM_HEAD_SIZE,
         (int)head->refCount);
     return (char*)addr + SHM_HEAD_SIZE;
@@ -139,15 +141,16 @@ void* ShmOpen(const char* name, size_t* size)
         return nullptr;
     }
 
-    int shmFd = shm_open(name, O_RDWR, 0666);
+    std::string fullName = sim::SimResourceRoot::BuildName(name);
+    int shmFd = open(fullName.c_str(), O_RDWR, 0666);
     if (shmFd == -1) {
-        HCCL_VM_ERROR("open: shm_open failed, name: {} errno:{}", name, errno);
+        HCCL_VM_ERROR("open: open failed, name: {} errno:{}", fullName, errno);
         return nullptr;
     }
 
     struct stat statBuf;
     if (fstat(shmFd, &statBuf) == -1) {
-        HCCL_VM_ERROR("open: fstat failed, name: {} errno:{}", name, errno);
+        HCCL_VM_ERROR("open: fstat failed, name: {} errno:{}", fullName, errno);
         close(shmFd);
         return nullptr;
     }
@@ -157,13 +160,13 @@ void* ShmOpen(const char* name, size_t* size)
     close(shmFd);
 
     if (addr == MAP_FAILED) {
-        HCCL_VM_ERROR("open: mmap failed, name: {} errno:{}", name, err);
+        HCCL_VM_ERROR("open: mmap failed, name: {} errno:{}", fullName, err);
         return nullptr;
     }
 
     ShmHead* head = (ShmHead*)addr;
     if (FromLe32(head->magic) != SHM_MAGIC) {
-        HCCL_VM_ERROR("open: invalid magic number, name: {}", name);
+        HCCL_VM_ERROR("open: invalid magic number, name: {}", fullName);
         munmap(addr, statBuf.st_size);
         return nullptr;
     }
@@ -176,7 +179,7 @@ void* ShmOpen(const char* name, size_t* size)
         current_count = FromLe32(head->refCount);
         new_count = current_count + 1;
     }
-    HCCL_VM_INFO("open name: {}, size: {:d}, ptr: {:p}", head->name, *size, (char*)addr + SHM_HEAD_SIZE);
+    HCCL_VM_DEBUG("open name: {}, size: {:d}, ptr: {:p}", head->name, *size, (char*)addr + SHM_HEAD_SIZE);
     return (void*)((char*)addr + SHM_HEAD_SIZE);
 }
 
@@ -190,7 +193,7 @@ void ShmClose(void* shm)
     ShmHead* head = (ShmHead*)GetShmHead(shm);
     size_t totalSize = GetShmTotalSize(FromLe64(head->size));
 
-    char tmp[64] = {0};
+    char tmp[256] = {0};
     strncpy(tmp, head->name, sizeof(tmp) - 1);
 
     int refCount = __sync_fetch_and_sub(&head->refCount, 1);
@@ -199,9 +202,9 @@ void ShmClose(void* shm)
     if (refCount == 1) {
         // 最后一个引用，删除共享内存
         HCCL_VM_INFO("close name: {}, ptr: {:p}", tmp, (char*)head);
-        shm_unlink(tmp);
+        unlink(tmp);
     } else {
-        HCCL_VM_INFO("close name: {}, ptr: {:p}, refCount: {} {}", tmp, (char*)head, refCount, ref);
+        HCCL_VM_DEBUG("close name: {}, ptr: {:p}, refCount: {} {}", tmp, (char*)head, refCount, ref);
     }
 }
 

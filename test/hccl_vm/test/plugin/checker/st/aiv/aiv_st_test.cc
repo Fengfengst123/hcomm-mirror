@@ -47,7 +47,7 @@
 #undef BufferType
 #include "storage_manager.h"
 
-std::map<RankId, std::map<u32, HcclSim::ChannelsPerDie>> g_allRankChannelInfo;
+extern std::map<RankId, std::map<u32, HcclSim::ChannelsPerDie>> g_allRankChannelInfo;
 
 namespace {
 using Json = nlohmann::json;
@@ -154,7 +154,8 @@ public:
 
     std::string TaskJsonPath(uint32_t rank, uint64_t launch) const
     {
-        return dataDir_ + "/hcclvm_aiv_rank" + std::to_string(rank) + "_launch" + std::to_string(launch) + "_task.json";
+        return dataDir_ + "/hcclvm_aiv_device" + std::to_string(rank) + "_launch" + std::to_string(launch)
+               + "_task.json";
     }
 
     void ClearData()
@@ -170,9 +171,14 @@ private:
     std::string oldEnv_;
 };
 
-Json Slice(uint32_t bufferType, uint64_t offset, uint64_t size)
+Json Slice(uint32_t bufferType, uint32_t deviceId, uint64_t offset, uint64_t size)
 {
-    return Json{{"bufferType", bufferType}, {"offset", offset}, {"size", size}};
+    return Json{
+        {"bufferType", bufferType},
+        {"deviceId", deviceId},
+        {"offset", offset},
+        {"virtualAddr", 0x100000ULL * (deviceId + 1ULL) + offset},
+        {"size", size}};
 }
 
 Json RuntimeTask(
@@ -194,11 +200,7 @@ Json MemCopy(
 {
     return RuntimeTask(
         TASK_MEM_COPY, "MemCopy", taskId, rank, block, pipe,
-        Json{
-            {"srcRank", srcRank},
-            {"dstRank", dstRank},
-            {"src", Slice(srcType, srcOffset, size)},
-            {"dst", Slice(dstType, dstOffset, size)}});
+        Json{{"src", Slice(srcType, srcRank, srcOffset, size)}, {"dst", Slice(dstType, dstRank, dstOffset, size)}});
 }
 
 Json Reduce(
@@ -209,10 +211,8 @@ Json Reduce(
     return RuntimeTask(
         TASK_REDUCE, "Reduce", taskId, rank, block, pipe,
         Json{
-            {"srcRank", srcRank},
-            {"dstRank", dstRank},
-            {"src", Slice(srcType, srcOffset, size)},
-            {"dst", Slice(dstType, dstOffset, size)},
+            {"src", Slice(srcType, srcRank, srcOffset, size)},
+            {"dst", Slice(dstType, dstRank, dstOffset, size)},
             {"dataType", dataType},
             {"reduceOp", reduceOp}});
 }
@@ -257,7 +257,10 @@ Json SendFlag(
 {
     return RuntimeTask(
         TASK_SEND_FLAG, "SendFlag", taskId, rank, block, pipe,
-        Json{{"rank", ownerRank}, {"commInfoOffset", offset}, {"flagValue", value}});
+        Json{
+            {"targetRank", ownerRank},
+            {"flagBuffer", Slice(BUFFER_AIV_COMM_INFO, ownerRank, offset, sizeof(int32_t))},
+            {"flagValue", value}});
 }
 
 Json RecvFlag(
@@ -265,7 +268,10 @@ Json RecvFlag(
 {
     return RuntimeTask(
         TASK_RECV_FLAG, "RecvFlag", taskId, rank, block, pipe,
-        Json{{"rank", ownerRank}, {"commInfoOffset", offset}, {"targetValue", value}});
+        Json{
+            {"targetRank", ownerRank},
+            {"flagBuffer", Slice(BUFFER_AIV_COMM_INFO, ownerRank, offset, sizeof(int32_t))},
+            {"flagValue", value}});
 }
 
 Json Block(uint32_t blockIdx, std::vector<Json> pipe0, std::vector<Json> pipe1, std::vector<Json> pipe2)
@@ -281,6 +287,7 @@ Json Snapshot(uint32_t rank, uint32_t rankSize, uint64_t launch, std::vector<Jso
 {
     return Json{
         {"rank", rank},
+        {"deviceId", rank},
         {"rankSize", rankSize},
         {"launchIndex", launch},
         {"inBufferSize", DEFAULT_BUFFER_SIZE},
@@ -468,6 +475,23 @@ Json SendRecvSnapshot(uint32_t rank, uint32_t rankSize, uint64_t launch)
             {NormalTask(12, rank, 0, 2)})});
 }
 
+Json SendRecvSnapshotWithUnalignedFlagVirtualAddr(uint32_t rank, uint32_t rankSize, uint64_t launch)
+{
+    Json snapshot = SendRecvSnapshot(rank, rankSize, launch);
+    for (Json& block : snapshot["aivCores"]) {
+        for (const char* pipeName : {"scalarTasks", "mte2Tasks", "mte3Tasks"}) {
+            for (Json& task : block[pipeName]) {
+                Json& payload = task["payload"];
+                if (payload.contains("flagBuffer")) {
+                    Json& flagBuffer = payload["flagBuffer"];
+                    flagBuffer["virtualAddr"] = 0x1000001ULL + flagBuffer["offset"].get<uint64_t>();
+                }
+            }
+        }
+    }
+    return snapshot;
+}
+
 Json CpGm2GMSnapshot(
     uint32_t rank, uint32_t rankSize, uint64_t launch, uint32_t iterationCount, bool reduceOut, bool flagMem = false,
     bool externalGap = false)
@@ -497,6 +521,33 @@ Json CpGm2GMSnapshot(
         mte3.push_back(SetFlag(base + 4, rank, 0, PIPE_MTE3, PIPE_MTE3, PIPE_MTE2, 1));
     }
     return Snapshot(rank, rankSize, launch, {Block(0, {}, std::move(mte2), std::move(mte3))});
+}
+
+Json CpGm2GMCrossDeviceSnapshot(uint32_t rank, uint32_t rankSize, uint64_t launch)
+{
+    Json snapshot = CpGm2GMSnapshot(rank, rankSize, launch, 2, false);
+    Json& mte2Copy = snapshot["aivCores"][0]["mte2Tasks"][3]["payload"]["src"];
+    Json& mte3Copy = snapshot["aivCores"][0]["mte3Tasks"][4]["payload"]["dst"];
+
+    // Device virtual address spaces can overlap. Keep the address unchanged
+    // while changing ownership to prove CpGM merging keys memory by device as
+    // well.
+    mte2Copy["deviceId"] = rank + 100U;
+    mte3Copy["deviceId"] = rank + 100U;
+    return snapshot;
+}
+
+Json CpGm2GMVirtualAddrGapSnapshot(uint32_t rank, uint32_t rankSize, uint64_t launch)
+{
+    Json snapshot = CpGm2GMSnapshot(rank, rankSize, launch, 2, false);
+    Json& mte2Copy = snapshot["aivCores"][0]["mte2Tasks"][3]["payload"]["src"];
+    Json& mte3Copy = snapshot["aivCores"][0]["mte3Tasks"][4]["payload"]["dst"];
+
+    // The logical ranges are adjacent, but they do not form one physical
+    // virtual-address interval and therefore cannot become one batch copy.
+    mte2Copy["virtualAddr"] = mte2Copy["virtualAddr"].get<uint64_t>() + 0x1000ULL;
+    mte3Copy["virtualAddr"] = mte3Copy["virtualAddr"].get<uint64_t>() + 0x1000ULL;
+    return snapshot;
 }
 
 Json CpGm2GMPipeBoundarySnapshot(uint32_t rank, uint32_t rankSize, uint64_t launch)
@@ -859,6 +910,27 @@ TEST_F(AivStTest, AIV_ST_4P_003_SendRecvFlagCrossRankPositive)
     EXPECT_EQ(CountDirectEdges(*result.graph, V3::TaskType::AIV_SEND_FLAG, V3::TaskType::AIV_RECV_FLAG), 3U);
 }
 
+TEST_F(AivStTest, AIV_ST_4P_003A_SendRecvFlagUsesBufferOffsetNotVirtualAddress)
+{
+    RunResult result = RunAivCase({"AIV_ST_4P_003A", 4, {0}, [](uint32_t rank, uint64_t launch) {
+                                       return SendRecvSnapshotWithUnalignedFlagVirtualAddr(rank, 4, launch);
+                                   }});
+    ASSERT_EQ(result.genRet, HCCL_SUCCESS);
+
+    V3::SingleTaskCheckStats stats;
+    EXPECT_EQ(V3::CheckTaskMem(result.graph->GetMainStartNode(), &stats), HCCL_SUCCESS);
+    EXPECT_EQ(result.graph->GetAivExpandStats().sendRecvEdgeCount, 3U);
+
+    const auto sendFlags = CollectNodesByType(*result.graph, V3::TaskType::AIV_SEND_FLAG);
+    ASSERT_EQ(sendFlags.size(), 3U);
+    for (const V3::TaskNode* node : sendFlags) {
+        const auto* sendFlag = dynamic_cast<const V3::TaskAivSendFlag*>(node);
+        ASSERT_NE(sendFlag, nullptr);
+        EXPECT_EQ(sendFlag->GetFlag().commInfoOffset % AIV_COMM_INFO_SYNC_CELL_BYTES, 0U);
+        EXPECT_LT(sendFlag->GetFlag().commInfoOffset, AIV_COMM_INFO_SIZE);
+    }
+}
+
 TEST_F(AivStTest, AIV_ST_4P_004_UbParallelWriteConflict)
 {
     RunResult result = RunAivCase(
@@ -1055,6 +1127,26 @@ TEST_F(AivStTest, AIV_ST_2P_018_CpGm2GMExternalGapNoMerge)
 {
     RunResult result = RunAivCase({"AIV_ST_2P_018", 2, {0}, [](uint32_t rank, uint64_t launch) {
                                        return CpGm2GMSnapshot(rank, 2, launch, 2, false, false, true);
+                                   }});
+    ASSERT_EQ(result.genRet, HCCL_SUCCESS);
+    EXPECT_EQ(result.graph->GetAivExpandStats().cpGmLoopMergeCount, 0U);
+    EXPECT_EQ(CollectNodesByType(*result.graph, V3::TaskType::BATCH_TRANS_MEM).size(), 0U);
+}
+
+TEST_F(AivStTest, AIV_ST_2P_020_CpGm2GMCrossDeviceNoMerge)
+{
+    RunResult result = RunAivCase({"AIV_ST_2P_020", 2, {0}, [](uint32_t rank, uint64_t launch) {
+                                       return CpGm2GMCrossDeviceSnapshot(rank, 2, launch);
+                                   }});
+    ASSERT_EQ(result.genRet, HCCL_SUCCESS);
+    EXPECT_EQ(result.graph->GetAivExpandStats().cpGmLoopMergeCount, 0U);
+    EXPECT_EQ(CollectNodesByType(*result.graph, V3::TaskType::BATCH_TRANS_MEM).size(), 0U);
+}
+
+TEST_F(AivStTest, AIV_ST_2P_021_CpGm2GMVirtualAddrGapNoMerge)
+{
+    RunResult result = RunAivCase({"AIV_ST_2P_021", 2, {0}, [](uint32_t rank, uint64_t launch) {
+                                       return CpGm2GMVirtualAddrGapSnapshot(rank, 2, launch);
                                    }});
     ASSERT_EQ(result.genRet, HCCL_SUCCESS);
     EXPECT_EQ(result.graph->GetAivExpandStats().cpGmLoopMergeCount, 0U);

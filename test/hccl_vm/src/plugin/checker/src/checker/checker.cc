@@ -21,34 +21,17 @@
 #include <utility>
 #include <vector>
 
-#include "ccu_task_common.h"
-#include "check_rank_mem.h"
-#include "check_utils.h"
-#include "checker_def.h"
-#include "dag_graphviz_dump.h"
-#include "dump/dump_graph.h"
-#include "dump/validation_issue_recorder.h"
 #include "dump_v3/dump_v3_dag.h"
 #include "dump_v3/dump_v3_manager.h"
 #include "framework/task_graph_generator_v3/task_graph_generator_v3.h"
 #include "framework/task_graph_generator_v3/task_graph_mem_conflict_v3.h"
-#include "framework/task_graph_generator_v3/task_graph_sync_conflict_v3.h"
 #include "framework/task_graph_generator_v3/task_graph_semantic_check_v3.h"
 #include "framework/task_graph_generator_v3/task_graph_single_task_check_v3.h"
+#include "framework/task_graph_generator_v3/task_graph_sync_conflict_v3.h"
 #include "framework/task_graph_generator_v3/task_meta_translator_v3.h"
+#include "log.h"
 #include "sim_log.h"
-#include "mem_conflict_check_utils.h"
-#include "sim_task.h"
-#include "singletask_check.h"
 #include "storage_manager.h"
-#include "task_ccu.h"
-#include "task_check_op_semantics.h"
-#include "task_def.h"
-#include "task_graph_generator.h"
-#include "task_graph_revamp.h"
-#include "task_graph_revamp_bilateral_ccu.h"
-#include "task_graph_revamp_parallel.h"
-#include "task_utils.h"
 
 using namespace std;
 
@@ -168,15 +151,21 @@ namespace {
         // 1. 先把 task meta 翻译成中间节点；
         // 2. 做一次从流合法性检查；
         // 3. 再生成 V3 图并在日志里记录成图/CCU 展开耗时。
-        HcclResult ret = taskMetaTranslatorV3.Translate(storage, TaskGraphGeneratorV3::INVALID_OPERATOR_ID);
-        if (ret != HCCL_SUCCESS) {
-            HCCL_VM_WARN(
-                "Failed to translate one task into the V3 internal format, V3 graph generation is "
-                "stopped, ret={}",
-                static_cast<uint32_t>(ret));
-            return nullptr;
+        {
+            V3StageTimer translateTimer("TranslateTask");
+            HcclResult ret = taskMetaTranslatorV3.Translate(storage, TaskGraphGeneratorV3::INVALID_OPERATOR_ID);
+            if (ret != HCCL_SUCCESS) {
+                HCCL_VM_WARN(
+                    "Failed to translate one task into the V3 internal "
+                    "format, V3 graph generation is "
+                    "stopped, ret={}",
+                    static_cast<uint32_t>(ret));
+                return nullptr;
+            }
+            translateTimer.SetStatus("success");
         }
 
+        HcclResult ret = HCCL_SUCCESS;
         auto translatedNodes = taskMetaTranslatorV3.TakeNodes();
         auto translatedTaskQueues = taskMetaTranslatorV3.TakeTaskQueues();
         ret = TaskGraphGeneratorV3::CheckSlaveTaskQueue(translatedNodes, translatedTaskQueues);
@@ -192,13 +181,18 @@ namespace {
             return nullptr;
         }
 
-        ret = graphGeneratorV3->GenGraph(std::move(translatedNodes), std::move(translatedTaskQueues));
-        if (ret != HCCL_SUCCESS) {
-            HCCL_VM_WARN(
-                "Failed to build the graph from translated tasks, ret={}, rankCount={}, nodeCount={}",
-                static_cast<uint32_t>(ret), graphGeneratorV3->GetTaskQueues().size(),
-                graphGeneratorV3->GetNodes().size());
-            return nullptr;
+        {
+            V3StageTimer buildGraphTimer("BuildGraph");
+            ret = graphGeneratorV3->GenGraph(std::move(translatedNodes), std::move(translatedTaskQueues));
+            if (ret != HCCL_SUCCESS) {
+                HCCL_VM_WARN(
+                    "Failed to build the graph from translated tasks, "
+                    "ret={}, rankCount={}, nodeCount={}",
+                    static_cast<uint32_t>(ret), graphGeneratorV3->GetTaskQueues().size(),
+                    graphGeneratorV3->GetNodes().size());
+                return nullptr;
+            }
+            buildGraphTimer.SetStatus("success");
         }
         const auto& ccuExpandStats = graphGeneratorV3->GetCcuExpandStats();
         const auto& aivExpandStats = graphGeneratorV3->GetAivExpandStats();
@@ -278,6 +272,8 @@ namespace {
                 return "START";
             case TaskGraphGeneratorV3::TaskType::END:
                 return "END";
+            case TaskGraphGeneratorV3::TaskType::SYNC_STREAM:
+                return "SYNC_STREAM";
             default:
                 return "INVALID";
         }
@@ -340,17 +336,6 @@ namespace {
         }
 
         const auto v3BfsNodes = BfsGraphV3(start);
-        std::string dumpPath;
-        const HcclResult dumpRet = DumpDagGraphvizDot(start, &dumpPath);
-        if (dumpRet != HCCL_SUCCESS) {
-            HCCL_VM_WARN(
-                "[TaskGraphGeneratorV3][GraphvizDot][v3] Failed to dump DAG dot file, ret={}",
-                static_cast<uint32_t>(dumpRet));
-        } else {
-            HCCL_VM_INFO(
-                "[TaskGraphGeneratorV3][GraphvizDot][v3] Dump V3 DAG dot file, path={}, nodeCount={}", dumpPath,
-                v3BfsNodes.size());
-        }
         LogAivExpandedDagTasks(v3BfsNodes);
     }
 
@@ -400,7 +385,8 @@ namespace {
     {
         V3StageTimer timer("SingleTaskCheck");
         if (start == nullptr) {
-            HCCL_VM_WARN("Skip single-task memory check because the graph start node is null");
+            HCCL_VM_WARN("Skip single-task memory check because the graph start "
+                         "node is null");
             timer.SetStatus("skipped");
             return HCCL_SUCCESS;
         }
@@ -488,25 +474,6 @@ namespace {
     }
 } // namespace
 
-Checker::~Checker()
-{
-    for (auto& ele : toDeleteCopyTaskNodeResource_) {
-        if (ele == nullptr) {
-            continue;
-        }
-        delete ele;
-    }
-
-    for (auto& ele : toDeleteCopyTaskResource_) {
-        if (ele == nullptr) {
-            continue;
-        }
-        delete ele;
-    }
-}
-
-void Checker::CloseRankMemCheck() { closeRankMemCheck_ = true; }
-
 HcclResult GenAndCheckGraphV3()
 {
     auto graphGeneratorV3 = GenGraphV3FromTaskMeta();
@@ -534,239 +501,5 @@ HcclResult GenAndCheckGraphV3()
         CHK_RET(CheckGraphV3Semantic(dummyStartV3));
     }
     return HCCL_SUCCESS;
-}
-
-void PrintSQEGraph(TaskNodePtr dummyStart);
-HcclResult Checker::GenAndCheckGraph(AllRankTaskQueues& allRankTaskQueues, TaskCheckOpSemantics& opSemanticsChecker)
-{
-    ValidationIssueRecorder::GetInstance().Reset();
-
-    u32 rankIdx = 0;
-    uint32_t rankNum = 0;
-    for (auto& iter : allRankTaskQueues) {
-        rankIdx = iter.first;
-        rankNum++;
-        HCCL_VM_INFO("=======================================================");
-        HCCL_VM_INFO("rankId is : {:d}", rankIdx);
-        const SingleTaskQueue& taskQueue = iter.second;
-        for (int i = 0; i < taskQueue.size(); i++) {
-            if (taskQueue[i].size() == 0) {
-                continue;
-            }
-
-            u32 taskIdx = 0;
-            HCCL_VM_INFO("streamIdx : {:d}, taskNum : {:d}", i, taskQueue[i].size());
-            HCCL_VM_INFO("-------------------------------------------------------");
-            for (auto& task : taskQueue[i]) {
-                std::string tempStr = task->Describe();
-                HCCL_VM_INFO(
-                    "rankIdx:{:d}, taskIdx:{:d}, {:s}, pointer: {:p}", rankIdx, taskIdx, tempStr,
-                    static_cast<void*>(task.get()));
-                taskIdx++;
-            }
-        }
-    }
-    {
-        const HcclResult dumpRet = DumpInputTaskQueues(allRankTaskQueues);
-        if (dumpRet != HcclResult::HCCL_SUCCESS) {
-            HCCL_VM_WARN("Failed to dump the old checker input task queues, ret={}", static_cast<u32>(dumpRet));
-        }
-    }
-
-    // 1. 检查从流
-    HCCL_VM_INFO("1. 检查从流");
-    SingleTaskCheck taskChecker;
-    CHK_RET(taskChecker.CheckSlaveTaskQueue(allRankTaskQueues));
-
-    // 2. 成图
-    HCCL_VM_INFO("2. 成图");
-    TaskNode dummyStart = TaskNode(nullptr, -1, 0, 0);
-    TaskNode dummyStartCopy = TaskNode(nullptr, -1, 0, 0);
-    TaskGraphGenerator graphGenerator;
-    CHK_RET(graphGenerator.GenGraph(allRankTaskQueues, &dummyStart));
-
-    // 3. Task内存校验
-    // 是否可以复用 taskChecker
-    HCCL_VM_INFO("3. Task内存校验");
-    CHK_RET(taskChecker.CheckTaskMem(&dummyStart));
-    HCCL_VM_INFO("3. Task内存校验 END: {}", closeRankMemCheck_);
-
-    if (!closeRankMemCheck_) {
-        // 4. 图复制
-        HCCL_VM_INFO("4. 图复制");
-        if (dummyStart.hasCcuTask) {
-            CHK_RET(CopyCcuTaskGraph(&dummyStart, &dummyStartCopy, rankNum));
-            dummyStartCopy.hasCcuTask = true;
-        } else {
-            CopyTaskGraph(&dummyStart, &dummyStartCopy);
-        }
-
-        // 5. 图改造
-        HCCL_VM_INFO("5. 图改造");
-        GraphRevampBilateralSemantics graphRevamp;
-
-        // ccu图改造
-        GraphRevampParallel parallelRevamp;
-        GraphRevampBilateralCcu ccuBilateralRevamp;
-        if (dummyStartCopy.hasCcuTask) {
-            HcclResult ret = HcclResult::HCCL_SUCCESS;
-            // 并行化改造：异步节点、Loop指令块
-            ret = parallelRevamp.Revamp(&dummyStartCopy);
-            if (ret != HcclResult::HCCL_SUCCESS) {
-                return ret;
-            }
-
-            // 单边->双边语义: CCU子图
-            ret = ccuBilateralRevamp.Revamp(&dummyStartCopy);
-            if (ret != HcclResult::HCCL_SUCCESS) {
-                return ret;
-            }
-        }
-        // 主图改造
-        CHK_RET(graphRevamp.Revamp(&dummyStartCopy));
-
-        // 6. Rank内存校验
-        HCCL_VM_INFO("6. Rank内存校验");
-        CheckRankMem checkRankmem(&dummyStartCopy);
-        CHK_RET(checkRankmem.Execute());
-    }
-
-    // 7. 语义校验
-    HCCL_VM_INFO("7. 语义校验");
-    // PrintCcuGraph(&dummyStart);
-    opSemanticsChecker.SetGraphHead(&dummyStart);
-    CHK_RET(opSemanticsChecker.Execute());
-    HCCL_VM_INFO("8. 语义校验 END");
-
-    // 成图及校验成功
-    return HCCL_SUCCESS;
-}
-
-void Checker::CopyTaskGraph(TaskNodePtr originNode, TaskNodePtr copyNode)
-{
-    // 该函数无修改
-    // 遍历两遍，先将所有节点拷贝出来，再建立父子关系
-    std::map<TaskNodePtr, TaskNodePtr> originNode2copyNode; // 用来收录原节点到新节点的映射
-    std::vector<TaskNodePtr> candTaskNodePtr;
-    std::set<TaskNodePtr> isVisited;
-
-    originNode2copyNode[originNode] = copyNode;
-    for (int i = 0; i < originNode->children.size(); i++) {
-        candTaskNodePtr.push_back(originNode->children[i]);
-        isVisited.insert(originNode->children[i]);
-    }
-
-    while (!candTaskNodePtr.empty()) {
-        TaskNodePtr curNode = candTaskNodePtr[0];
-        candTaskNodePtr.erase(candTaskNodePtr.begin());
-
-        TaskNodePtr newNodePtr = new TaskNode(curNode->task, curNode->rankIdx, curNode->queIdx, curNode->pos);
-        toDeleteCopyTaskNodeResource_.push_back(newNodePtr);
-        originNode2copyNode[curNode] = newNodePtr;
-
-        for (auto& child : curNode->children) {
-            if (isVisited.find(child) == isVisited.end()) {
-                isVisited.insert(child);
-                candTaskNodePtr.push_back(child);
-            }
-        }
-    }
-
-    isVisited.clear();
-    for (int i = 0; i < originNode->children.size(); i++) {
-        candTaskNodePtr.push_back(originNode->children[i]);
-        isVisited.insert(originNode->children[i]);
-        copyNode->children.push_back(originNode2copyNode[originNode->children[i]]);
-    }
-    while (!candTaskNodePtr.empty()) {
-        TaskNodePtr curNode = candTaskNodePtr[0];
-        candTaskNodePtr.erase(candTaskNodePtr.begin());
-        for (auto& parent : curNode->parents) {
-            originNode2copyNode[curNode]->parents.push_back(originNode2copyNode[parent]);
-        }
-        for (auto& child : curNode->children) {
-            originNode2copyNode[curNode]->children.push_back(originNode2copyNode[child]);
-            if (isVisited.count(child) == 0) {
-                isVisited.insert(child);
-                candTaskNodePtr.push_back(child);
-            }
-        }
-    }
-}
-
-HcclResult Checker::CopyCcuTaskGraph(TaskNodePtr originNode, TaskNodePtr copyNode, uint32_t rankNum)
-{
-    // 遍历两遍，先将所有节点拷贝出来，再建立父子关系
-    std::map<TaskNodePtr, TaskNodePtr> originNode2copyNode; // 用来收录原节点到新节点的映射
-    std::vector<TaskNodePtr> candTaskNodePtr;
-    std::set<TaskNodePtr> isVisited;
-
-    originNode2copyNode[originNode] = copyNode;
-    for (int i = 0; i < originNode->children.size(); i++) {
-        candTaskNodePtr.push_back(originNode->children[i]);
-        isVisited.insert(originNode->children[i]);
-    }
-
-    // 记录ccu子图旧->新节点映射关系
-    // 复用taskStub资源，新建taskNode资源
-    std::vector<CcuOri2NewNodeMap> ccuOrigin2CopyNodes;
-    std::vector<std::unordered_map<TaskStubPtr, TaskStubPtr>> ccuGraphs;
-    ccuOrigin2CopyNodes.resize(rankNum);
-    ccuGraphs.resize(rankNum);
-
-    while (!candTaskNodePtr.empty()) {
-        TaskNodePtr curNode = candTaskNodePtr[0];
-        candTaskNodePtr.erase(candTaskNodePtr.begin());
-
-        TaskStub* newNode = curNode->task;
-        if (newNode->GetType() == TaskTypeStub::CCU_GRAPH) {
-            TaskStub* newCcu = nullptr;
-            CHK_RET(CopyCcuSubGraphNode(newNode, &newCcu, ccuGraphs, ccuOrigin2CopyNodes));
-            newNode = newCcu;
-            toDeleteCopyTaskResource_.push_back(newNode);
-        }
-        TaskNodePtr newNodePtr = new TaskNode(newNode, curNode->rankIdx, curNode->queIdx, curNode->pos);
-        toDeleteCopyTaskNodeResource_.push_back(newNodePtr);
-        originNode2copyNode[curNode] = newNodePtr;
-
-        for (auto& child : curNode->children) {
-            if (isVisited.find(child) == isVisited.end()) {
-                isVisited.insert(child);
-                candTaskNodePtr.push_back(child);
-            }
-        }
-    }
-
-    // 恢复ccu子图内部的连接关系
-    CHK_RET(CopyCcuSubGraphConnection(ccuGraphs, ccuOrigin2CopyNodes));
-    // 恢复外层拓扑图的连接关系
-    isVisited.clear();
-    for (int i = 0; i < originNode->children.size(); i++) {
-        candTaskNodePtr.push_back(originNode->children[i]);
-        isVisited.insert(originNode->children[i]);
-        copyNode->children.push_back(originNode2copyNode[originNode->children[i]]);
-    }
-    while (!candTaskNodePtr.empty()) {
-        TaskNodePtr curNode = candTaskNodePtr[0];
-        candTaskNodePtr.erase(candTaskNodePtr.begin());
-        for (auto& parent : curNode->parents) {
-            originNode2copyNode[curNode]->parents.push_back(originNode2copyNode[parent]);
-        }
-        for (auto& child : curNode->children) {
-            originNode2copyNode[curNode]->children.push_back(originNode2copyNode[child]);
-            if (isVisited.count(child) == 0) {
-                isVisited.insert(child);
-                candTaskNodePtr.push_back(child);
-            }
-        }
-    }
-
-    for (auto& ccuGraph : ccuGraphs) {
-        for (auto ccuPair : ccuGraph) {
-            g_ccuGraphTaskOri2New.insert(ccuPair);
-        }
-    }
-
-    return HcclResult::HCCL_SUCCESS;
 }
 } // namespace HcclSim

@@ -14,9 +14,11 @@
 #include <gtest/gtest.h>
 
 #include "ascend_hal.h"
-#include "db_sim_runner_common.h"
-#include "db_sim_runner_db.h"
-#include "db_sim_sqlite_db.h"
+#include "runtime_state/db_sim_runner_common.h"
+#include "runtime_state/db_sim_runner_ops.h"
+#include "simulation_storage_test_helper.h"
+#include "storage/internal/process_storage_context.h"
+#include "storage/storage_session.h"
 
 extern uint64_t g_cur_server_key;
 
@@ -33,26 +35,27 @@ void CleanUpDb()
 void SetupTestData()
 {
     CleanUpDb();
-    sim::SqliteDatabase::SetDbPath(kTestDbPath);
-    SimRunnerSqliteDB::Instance().ClearAll();
+    // 迁移前 SetDbPath + ClearAll
+    // 的等价语义：以本用例数据库路径重建进程存储会话。
+    (void)runnerdb_test::ResetTestSession(kTestDbPath, kTestDbPath);
 
-    sim::Server server{};
+    sim::runtime::Server server{};
     server.pod_id = 100;
     snprintf(server.version, sizeof(server.version), "v1.0");
-    RunnerDB::Add<sim::Server>(server);
+    runnerdb_test::InsertRecord<sim::runtime::Server>(server);
 
-    sim::Host host{};
+    sim::runtime::Host host{};
     host.server_id = 1;
     snprintf(host.ip_addr, sizeof(host.ip_addr), "192.168.1.100");
     host.arch = 1;
-    RunnerDB::Add<sim::Host>(host);
+    runnerdb_test::InsertRecord<sim::runtime::Host>(host);
 
-    sim::Device device{};
+    sim::runtime::Device device{};
     device.server_id = 1;
     device.logic_id = 0;
     device.physical_id = 0;
     device.super_device_id = 0;
-    RunnerDB::Add<sim::Device>(device);
+    runnerdb_test::InsertRecord<sim::runtime::Device>(device);
 
     g_cur_server_key = 1;
 }

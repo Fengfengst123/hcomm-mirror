@@ -8,9 +8,10 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
-add_subdirectory(mem_conflict_check)
+target_sources(checker PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/composite_op_grouping.cc
+)
+
 add_subdirectory(semantics_check)
-add_subdirectory(singletask_check)
-add_subdirectory(task_graph_generator)
 add_subdirectory(task_graph_generator_v3)
 add_subdirectory(big_graph_check)

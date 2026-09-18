@@ -7,7 +7,6 @@
 ## 1 Checker 是什么
 
 Checker 是一个静态验证工具，它不介入算子运行，而是通过读取算子执行后留下的记录，重建执行图并进行静态分析，判断本次算子执行在逻辑上是否正确。
-
 - Checker 输入：算子信息 + 各 Rank 的任务数据 + CCU指令序列
 - Checker 输出：校验结论(成功/失败) + 错误日志
 
@@ -50,7 +49,6 @@ flowchart TD
 ---
 
 ## 3 任务图
-
 任务图是 Checker 的核心数据结构，它用来表达一个算子执行所生成的任务节点及其依赖关系，任务图是在成图阶段基于 Checker 输入生成的
 
 ### 3.1 节点与边
@@ -101,14 +99,13 @@ flowchart LR
 ### 3.2 任务图示例
 
 #### 3.2.1 AICPU模式
-
 AICPU 模式下，任务图通常由 `RECORD`、`WAIT` 和 `TRANS_MEM` 这几类节点组合而成。下面给出一个典型的 2-rank、每个 rank 含两条 stream 的 `AllGather` 示例，按实际执行序列展示 stream 内顺序边，并用虚线表示 `RECORD` 到 `WAIT` 的同步依赖。
 
 ```mermaid
 flowchart LR
     subgraph R0["rank0"]
         direction TB
-        subgraph R0S0["stream0 主流"]
+        subgraph R0S0["算子主流（streamId 由 opDetails.streamId 指定）"]
             direction LR
             R0REC0["RECORD\nnotifyId=101"] --> R0WAI1S0["WAIT\nnotifyId=101"]
         end
@@ -120,7 +117,7 @@ flowchart LR
 
     subgraph R1["rank1"]
         direction TB
-        subgraph R1S0["stream0 主流"]
+        subgraph R1S0["算子主流（streamId 由 opDetails.streamId 指定）"]
             direction LR
             R1REC6["RECORD\nnotifyId=106"] --> R1WAI7["WAIT\nnotifyId=107"]
         end
@@ -141,7 +138,6 @@ flowchart LR
 ```
 
 #### 3.2.2 CCU模式
-
 在 CCU 模式下，Checker 会把 CCU 指令展开成 CCU 子图。下面沿用 2-rank `AllReduce` 的数据流，省略了 CCU 子图外部的同步操作，只保留 CCU 子图内部的任务序列。CCU 使用同步字段从 `notifyId` 变为 `cke` / `mask`，中间缓冲区使用的是 CCU 的 `MS` 类型。
 
 ```mermaid
@@ -169,57 +165,51 @@ flowchart LR
 ```
 
 #### 3.2.3 Graphviz 简易可视化
-
 Checker 提供了任务图导出能力，用于把任务图输出成 Graphviz 的 `.dot` 文件。
 
 它导出的内容不只是“有哪些节点”，还会尽量把调试时常用的信息直接放进图里：
-
 - 按 `rank / stream` 排布节点，便于观察同一执行队列上的顺序关系
 - 用实线表示普通依赖边，用虚线表示 `RECORD -> WAIT` 这类同步依赖边
 - 节点标签中会带上任务类型、`nodeId`、位置信息，以及内存片段、`notifyId` 或 `cke/mask` 等关键字段
 
 使用方式如下：
-
 - Checker 在成图完成后会自动尝试导出该 `.dot` 文件，不需要额外开关
 - 导出成功后，可在日志中搜索 `[GraphvizDot]`，日志里会打印最终落盘路径，通常为`hccl_vm_install/data/`
 - 输出文件名格式为 `TaskGraph_YYYYMMDDHHMMSS.dot`
 
 > 拿到 `.dot` 文件后，可使用 `Microsoft VS Code` 相关的插件如 `Graphviz Interactive Preview` 来实现即时浏览。
 
+
 ---
 
 ## 4. 单任务校验
-
 此阶段主要检查单条任务的内存区间是否合法，并校验从流的头尾结构
 
 ### 4.1 内存区间 (MemSlice)
 
 内存搬运与规约类的任务中最重要的信息就是内存区间 (MemSlice)，一个内存区间由以下信息组成：
 
-```text
+```
 MemSlice = { rankId, type, offset, len }
 ```
 
 - `rankId` 表示内存属于哪个 rank
 - `type` 表示内存类型
-
   | 内存类型 | 用途 |
   |----------|------|
   | INPUT | 算子输入BUFFER |
   | OUTPUT | 算子输出BUFFER |
   | CCL | CCL_BUFFER |
   | MS_CCU | CCU MS |
-
 - `offset` 和 `len` 共同确定内存访问区间
   - `offset` 表示本次访问在该内存片段上的起始地址
   - `len` 表示本次内存访问的长度
   - 访问区间采用半开表示，即 `[offset, offset + length)` 为本次访问的内存段
 
+
 单条任务内存区间的校验点如下：
-
-- `offset + length` 不能溢出 `uint64` 上界，否则会报错。
-- 同一任务内部的多个 MemSlice 在相同 `(rankId, memType)` 下不能有区间重叠，否则会报错。
-
+- `offset + length` 不能溢出 `uint64` 上界，否则会报错
+- 同一任务内部的多个 MemSlice 在相同 `(rankId, memType)` 下不能有区间重叠，否则会报错
     ```mermaid
     gantt
         title MemSlice 区间对比
@@ -235,10 +225,8 @@ MemSlice = { rankId, type, offset, len }
         Slice A  0x000-0x600 : crit, 0, 600
         Slice B  0x400-0x800 : crit, 400, 800
     ```
-
-- 不同 `type` 是相互独立的地址空间，同一 `offset` 在不同 `type` 下不视为重叠。
-- `offset + length` 不能越过当前 `type` 地址空间的边界。
-
+- 不同 `type` 是相互独立的地址空间，同一 `offset` 在不同 `type` 下不视为重叠
+- `offset + length` 不能越过当前 `type` 地址空间的边界
     ```mermaid
     gantt
         title MemSlice 边界检查
@@ -257,15 +245,14 @@ MemSlice = { rankId, type, offset, len }
 
 ### 4.2 从流（slave stream）结构校验
 
-从流用于执行算子的辅助任务，例如数据预搬运。在HCCL编程模型中主流通过同步任务 `RECORD -> WAIT` 触发从流，从流完成后，再通过另一组同步任务通知主流，所以从流必须满足固定的首尾结构：首任务为 `WAIT` && 末任务为 `RECORD`。
+从流用于执行算子的辅助任务，例如数据预搬运。当前算子的主流由 `opDetails.streamId` 指定，不再假定为 `stream0`。在HCCL编程模型中主流通过同步任务 `RECORD -> WAIT` 触发从流，从流完成后，再通过另一组同步任务通知主流，所以从流必须满足固定的首尾结构：首任务为 `WAIT` && 末任务为 `RECORD`
 
 下图为一个错误示例，标红的节点都是违规节点：
-
 ```mermaid
 flowchart LR
     START(["start"])
 
-    subgraph MAIN["rank0 / stream0（主流）"]
+    subgraph MAIN["rank0 / 算子主流（streamId 由 opDetails.streamId 指定）"]
         M0["TRANS_MEM"]
         M1["RECORD\nnotifyId=10\n触发从流"]
         M2["WAIT\nnotifyId=11\n等待从流完成"]
@@ -297,7 +284,6 @@ flowchart LR
 ### 5.1 内存冲突的判定标准
 
 两个内存访问类任务节点同时满足以下三个条件时，会判定为内存冲突：
-
 1. 两个节点可能并发执行 (任务图上两个节点之间不存在路径)
 2. 访问的内存地址区间重叠
 3. 至少一方是写操作
@@ -305,7 +291,6 @@ flowchart LR
 Checker会高效地校验每一对内存访问类任务节点，保证不发生漏报
 
 ### 5.2 内存冲突示例
-
 下图为一个存在内存冲突的任务图示例：
 
 ```mermaid
@@ -366,7 +351,6 @@ flowchart LR
 | `node X, action=read/write` | 任务图中的节点 ID 与本次访问的读写类型。只要两条访问中至少一条是 `write`，就可能报冲突 |
 | `access range : [start,end)` | 这条访问自身覆盖的完整地址区间，不一定与 `Overlap range` 完全相同 |
 | `task :` | 具体任务详情（任务类型、节点 ID、位置、src/dst 内存区间等） |
-
 ---
 
 ## 6. 语义校验
@@ -377,7 +361,7 @@ flowchart LR
 
 语义校验过程中，Checker 会为每段内存维护数据来源记录：
 
-```text
+```
 BufferSemantic = {
   startAddr:  内存区间起始地址（offset）
   size:       内存区间长度（len）
@@ -618,7 +602,7 @@ flowchart LR
 
 以 4-rank `AllReduce` 为例：
 
-```text
+```
 rank0.OUTPUT[0,L) 期望：
   sources    = { rank0.INPUT, rank1.INPUT, rank2.INPUT, rank3.INPUT }
   reduceType = SUM
@@ -635,7 +619,7 @@ rank0.OUTPUT[0,L) 期望：
 
 每个 rank 的 INPUT 已有自己的初始语义（来源指向自身）：
 
-```text
+```
 rank0.INPUT[0, 100):  srcBufs = { (rank0, INPUT, 0) }
 rank1.INPUT[0, 100):  srcBufs = { (rank1, INPUT, 0) }
 rank0.OUTPUT:         空

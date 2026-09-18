@@ -14,18 +14,18 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <sstream>
 #include <vector>
 
 #include "binary_data_type_pub.h"
 #include "checker_def.h"
 #include "enum_factory.h"
 #include "log.h"
+#include "sim_common.h"
 #include "string_util.h"
-#include "task_graph_generator.h"
+#include "task_def_v3.h"
 
 namespace HcclSim {
-const std::string FOUR_INDENT_SPACE = "    ";
-
 inline std::string BufferTypeToString(BufferType bufferType)
 {
     switch (bufferType) {
@@ -139,16 +139,16 @@ inline std::string ReduceOpToString(HcclReduceOp reduceOp)
 }
 
 struct SrcBufDes {
-    RankId rankId;      // 数据源的rankId
+    DeviceId deviceId;  // 数据源的deviceId
     BufferType bufType; // 数据源的内存类型
     u64 srcAddr;        // 数据源的地址
-    SrcBufDes(RankId id, BufferType type, u64 addr) : rankId(id), bufType(type), srcAddr(addr) {}
-    inline bool operator<(const SrcBufDes& another) const { return rankId < another.rankId; }
+    SrcBufDes(DeviceId id, BufferType type, u64 addr) : deviceId(id), bufType(type), srcAddr(addr) {}
+    inline bool operator<(const SrcBufDes& another) const { return deviceId < another.deviceId; }
 
     std::string Describe() const
     {
         std::stringstream ret;
-        ret << "    - sourceRank=" << rankId << ", sourceBufferType=" << BufferTypeToString(bufType)
+        ret << "    - sourceDevice=" << deviceId << ", sourceBufferType=" << BufferTypeToString(bufType)
             << ", sourceAddr=0x" << std::hex << srcAddr << std::dec << '\n';
         return ret.str();
     }
@@ -197,20 +197,70 @@ struct BufferSemantic {
     }
 };
 
-using RankMemorySemantics = std::map<BufferType, std::set<BufferSemantic>>;
+using BufferSemanticMap = std::map<u64, BufferSemantic>;
+using RankMemorySemantics = std::map<BufferType, BufferSemanticMap>;
+
+// 在 rankToDevice 中查找 deviceId 对应的 rank 下标；找不到返回
+// INVALID_RANK_ID。
+inline RankId FindRankIndexByDeviceId(const std::vector<DeviceId>& rankToDevice, DeviceId deviceId)
+{
+    for (size_t rank = 0; rank < rankToDevice.size(); ++rank) {
+        if (rankToDevice[rank] == deviceId) {
+            return static_cast<RankId>(rank);
+        }
+    }
+    return TaskGraphGeneratorV3::INVALID_RANK_ID;
+}
 
 // SrcBufDes 会放进 std::set 里，地址平移时必须重建集合，不能原地修改 key。
 std::set<SrcBufDes> OffsetSrcBufs(const std::set<SrcBufDes>& srcBufs, u64 offset);
 
-TaskTypeStub GetNodeType(const TaskNode* node);
+inline std::string DeviceIdListToString(const std::vector<DeviceId>& devices)
+{
+    std::stringstream ret;
+    ret << "[";
+    for (size_t i = 0; i < devices.size(); ++i) {
+        if (i != 0) {
+            ret << ",";
+        }
+        ret << devices[i];
+    }
+    ret << "]";
+    return ret.str();
+}
+
+inline std::string SrcBufDeviceListToString(const std::set<SrcBufDes>& srcBufs)
+{
+    std::vector<DeviceId> devices;
+    devices.reserve(srcBufs.size());
+    for (const auto& srcBuf : srcBufs) {
+        devices.push_back(srcBuf.deviceId);
+    }
+    return DeviceIdListToString(devices);
+}
+
+// 与 device/rank 顺序无关：srcBufs 的来源设备集合是否恰好等于 rankToDevice
+// 覆盖的设备集合。
+inline bool CoversAllRankDevices(const std::set<SrcBufDes>& srcBufs, const std::vector<DeviceId>& rankToDevice)
+{
+    const std::set<DeviceId> expectedDevices(rankToDevice.begin(), rankToDevice.end());
+    if (srcBufs.size() != expectedDevices.size()) {
+        return false;
+    }
+    for (const auto& srcBuf : srcBufs) {
+        if (expectedDevices.find(srcBuf.deviceId) == expectedDevices.end()) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void CalcInputOutputSize(
     HcclCMDType opType, uint32_t rankSize, uint64_t count, HcclDataType dataType, u64& inputSize, u64& outputSize,
     RankId myRank, RankId srcRank = 0, RankId dstRank = 0, VDataDesTagInner vDataDes = VDataDesTagInner{},
     All2AllDataDesTagInner all2AllDataDes = All2AllDataDesTagInner{});
 void CalcDataSize(HcclCMDType opType, uint64_t count, HcclDataType dataType, u64& dataSize);
 bool IsAllToAllSeries(HcclCMDType opType);
-void GenTopoMeta(TopoMeta& topoMate, int superPodNum, int serverNum, int rankNum);
-u32 CalRankSize(const TopoMeta& topoMeta);
 } // namespace HcclSim
 
 #endif

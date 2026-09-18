@@ -15,11 +15,13 @@
 #include <unistd.h>
 #include <vector>
 
-#include "store_sim_store_pub.h"
+#include "operation_data/operation_data_ops.h"
+#include "runtime_state/db_sim_runner_ops.h"
+#include "simulation_storage_test_helper.h"
+#include "storage/internal/process_storage_context.h"
+#include "storage/storage_session.h"
 #include "store_sim_memory_manager.h"
-#include "db_sim_op_db_ops.h"
-#include "db_sim_runner_db.h"
-#include "db_sim_sqlite_db.h"
+#include "store_sim_store_pub.h"
 
 using namespace HcclSim;
 
@@ -46,20 +48,21 @@ class HcclShmPubTest : public testing::Test {
 protected:
     void SetUp() override
     {
-        SimRunnerSqliteDB::Instance().ClearAll();
+        // 迁移前单库 ClearAll() 的等价语义：重建干净会话。
+        (void)runnerdb_test::ResetTestSession("/tmp/test_hccl_shm_pub.db", "/tmp/test_hccl_shm_pub_op.db");
         CleanupTestMem();
     }
 
     void TearDown() override
     {
         CleanupTestMem();
-        SimRunnerSqliteDB::Instance().ClearAll();
+        (void)runnerdb_test::ResetTestSession("/tmp/test_hccl_shm_pub.db", "/tmp/test_hccl_shm_pub_op.db");
     }
 };
 
 TEST_F(HcclShmPubTest, GetAddrByOffset_ReturnsErrorWhenOutputAlreadyHoldsPointer)
 {
-    VmUniquePtr addrPtr(reinterpret_cast<void*>(0x1), VmPtrReleaser{sim::PhyMemBlock{}});
+    VmUniquePtr addrPtr(reinterpret_cast<void*>(0x1), VmPtrReleaser{sim::runtime::PhyMemBlock{}});
     EXPECT_EQ(GetAddrByOffset(TEST_DEV_BASE, addrPtr), HcclVmResult::HCCL_SIM_E_PARA);
 }
 
@@ -76,22 +79,22 @@ TEST_F(HcclShmPubTest, GetAddrByOffset_MapsRunnerDbVirtualAddressToSharedMemory)
     ASSERT_NE(shm, nullptr);
     static_cast<uint8_t*>(shm)[TEST_DEV_OFFSET] = 0x5a;
 
-    sim::PhyMemBlock phyMem{};
+    sim::runtime::PhyMemBlock phyMem{};
     phyMem.device_id = 0;
     std::strncpy(phyMem.name, TEST_MEM_NAME, sizeof(phyMem.name) - 1);
     phyMem.size = TEST_MEM_SIZE;
     phyMem.type = 0;
     phyMem.ref_count = 1;
-    uint64_t phyMemId = RunnerDB::Add(phyMem);
+    uint64_t phyMemId = runnerdb_test::InsertRecord(phyMem);
     ASSERT_NE(phyMemId, 0U);
 
-    sim::VirtualMemBlock virMem{};
+    sim::runtime::VirtualMemBlock virMem{};
     virMem.start_ptr = TEST_DEV_BASE;
     virMem.size = TEST_MEM_SIZE;
     virMem.phy_mem_id = phyMemId;
     virMem.owner_pid = static_cast<uint64_t>(getpid());
-    virMem.src_type = static_cast<uint8_t>(sim::VIR_MEM_TYPE_DEV);
-    uint64_t virMemId = RunnerDB::Add(virMem);
+    virMem.src_type = static_cast<uint8_t>(sim::runtime::VIR_MEM_TYPE_DEV);
+    uint64_t virMemId = runnerdb_test::InsertRecord(virMem);
     ASSERT_NE(virMemId, 0U);
 
     VmUniquePtr addrPtr(nullptr);
@@ -114,20 +117,32 @@ TEST_F(HcclShmPubTest, InsertTaskToCollection_ReturnsErrorForNullIndex)
 
 TEST_F(HcclShmPubTest, InsertTaskToCollection_InsertsSerializedTaskIntoOpDb)
 {
-    ASSERT_EQ(sim::InitOpDataDb(), 0);
+    ASSERT_EQ(sim::operation::EnsureProcessStorageSession(), 0);
 
     HcclTaskMetaData task{};
-    task.rankId = 7;
+    task.deviceId = 7;
     task.streamId = 3;
-    task.taskType = HccLTaskMetaType::MEM_CPY;
-    task.taskData.transMem.srcRankId = 0;
-    task.taskData.transMem.dstRankId = 1;
-    task.taskData.transMem.len = 1024;
+    task.taskType = HccLTaskMetaType::SYNC_STREAM;
+    task.taskData.syncStreamTask.syncIdx = 1;
 
     uint32_t index = 0;
     EXPECT_EQ(InsertTaskToCollection(&task, &index), HcclVmResult::HCCL_SIM_SUCCESS);
 
-    sim::OpTaskTab expected{};
+    sim::operation::OpTaskTab expected{};
     expected.optaskMeta = ToBlob(task);
     EXPECT_EQ(expected.optaskMeta.size(), sizeof(HcclTaskMetaData));
+}
+
+TEST_F(HcclShmPubTest, InsertTaskToCollection_RejectsNonSyncTaskWithoutCommunicator)
+{
+    // 迁移前 sim::InitOpDataDb() 的建库语义已由夹具 ResetTestSession
+    // 覆盖（惰性建表）。
+
+    HcclTaskMetaData task{};
+    task.deviceId = 0;
+    task.streamId = 3;
+    task.taskType = HccLTaskMetaType::MEM_CPY;
+
+    uint32_t index = 0;
+    EXPECT_EQ(InsertTaskToCollection(&task, &index), HcclVmResult::HCCL_SIM_E_PARA);
 }

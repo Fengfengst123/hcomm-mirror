@@ -8,9 +8,9 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#include <cstdint>
-#include "dump/dump_manager.h"
 #include "dump/dump_run_manifest.h"
+#include "dump/dump_manager.h"
+#include <cstdint>
 
 namespace HcclSim {
 static const std::string RUN_MANIFEST_PATH = "manifest.json";

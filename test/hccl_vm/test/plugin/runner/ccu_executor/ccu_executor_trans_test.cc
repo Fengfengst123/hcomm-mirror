@@ -8,6 +8,12 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: Merged unit test for
+ * trans_type executors Author: xx
+ */
+
 #include <cstdint>
 #include <cstring>
 #include <gtest/gtest.h>
@@ -57,6 +63,7 @@ TEST_F(SyncCkeExecutorTest, DefaultConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     SyncCkeExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -65,6 +72,7 @@ TEST_F(SyncCkeExecutorTest, ParserZeroValues)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     SyncCkeExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -74,6 +82,7 @@ TEST_F(SyncCkeExecutorTest, ParserMaxValues)
     CcuInstr instr;
     memset(&instr, 0xFF, sizeof(instr));
     SyncCkeExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -91,6 +100,7 @@ TEST_F(SyncCkeExecutorTest, ParserSpecificParameters)
     instr.v1.syncCKE.waitCKEId = 3;
     instr.v1.syncCKE.waitCKEMask = 0x01;
     SyncCkeExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -104,6 +114,7 @@ TEST_F(SyncCkeExecutorTest, DescribeContent)
     instr.v1.syncCKE.locCKEId = 20;
     instr.v1.syncCKE.channelId = 5;
     SyncCkeExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -115,6 +126,7 @@ TEST_F(SyncCkeExecutorTest, InheritanceCheck)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     SyncCkeExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     CcuExecutorBase* base = &executor;
     EXPECT_NE(base, nullptr);
 }
@@ -134,6 +146,7 @@ TEST_F(SyncCkeExecutorTest, ProcessWithValidChannel)
     instr.v1.syncCKE.setCKEMask = 0;
     CcuSimulator sim(0, 0, 0, 1, 1, RunnerCcuVersion::CCU_V1);
     SyncCkeExecutor executor(0, 0, 0, instr, &sim);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     EXPECT_NO_THROW(executor.Process(mgr));
 }
@@ -148,6 +161,7 @@ TEST_F(SyncCkeExecutorTest, RunWithCkeNotSatisfied)
     instr.v1.syncCKE.clearType = 0;
     CcuSimulator sim(0, 0, 0, 1, 1, RunnerCcuVersion::CCU_V1);
     SyncCkeExecutor executor(0, 0, 0, instr, &sim);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     EXPECT_NO_THROW(executor.Run());
 }
@@ -175,6 +189,7 @@ TEST_F(SyncGsaExecutorTest, DefaultConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     SyncGsaExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -183,6 +198,7 @@ TEST_F(SyncGsaExecutorTest, ParserZeroValues)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     SyncGsaExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -192,6 +208,7 @@ TEST_F(SyncGsaExecutorTest, ParserMaxValues)
     CcuInstr instr;
     memset(&instr, 0xFF, sizeof(instr));
     SyncGsaExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -210,6 +227,7 @@ TEST_F(SyncGsaExecutorTest, ParserSpecificParameters)
     instr.v1.syncGSA.waitCKEId = 7;
     instr.v1.syncGSA.waitCKEMask = 0x02;
     SyncGsaExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -223,6 +241,7 @@ TEST_F(SyncGsaExecutorTest, DescribeContent)
     instr.v1.syncGSA.locGSAId = 20;
     instr.v1.syncGSA.channelId = 5;
     SyncGsaExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -234,6 +253,7 @@ TEST_F(SyncGsaExecutorTest, InheritanceCheck)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     SyncGsaExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     CcuExecutorBase* base = &executor;
     EXPECT_NE(base, nullptr);
 }
@@ -253,6 +273,7 @@ TEST_F(SyncGsaExecutorTest, ProcessWithValidChannel)
     instr.v1.syncGSA.setCKEMask = 0;
     CcuSimulator sim(0, 0, 0, 1, 1, RunnerCcuVersion::CCU_V1);
     SyncGsaExecutor executor(0, 0, 0, instr, &sim);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     EXPECT_NO_THROW(executor.Process(mgr));
 }
@@ -267,6 +288,7 @@ TEST_F(SyncGsaExecutorTest, RunWithCkeNotSatisfied)
     instr.v1.syncGSA.clearType = 0;
     CcuSimulator sim(0, 0, 0, 1, 1, RunnerCcuVersion::CCU_V1);
     SyncGsaExecutor executor(0, 0, 0, instr, &sim);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     EXPECT_NO_THROW(executor.Run());
 }
@@ -297,6 +319,7 @@ TEST_F(SyncXnExecutorTest, DefaultConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     SyncXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -307,6 +330,7 @@ TEST_F(SyncXnExecutorTest, ParameterizedConstructor)
     memset(&instr, 0, sizeof(instr));
 
     SyncXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -317,6 +341,7 @@ TEST_F(SyncXnExecutorTest, ParserZeroValues)
     memset(&instr, 0, sizeof(instr));
 
     SyncXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -328,6 +353,7 @@ TEST_F(SyncXnExecutorTest, ParserMaxValues)
     memset(&instr, 0xFF, sizeof(instr));
 
     SyncXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -345,6 +371,7 @@ TEST_F(SyncXnExecutorTest, ParserXnParameters)
     instr.v1.syncXn.setRmtCKEMask = 0xFF;
 
     SyncXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -362,6 +389,7 @@ TEST_F(SyncXnExecutorTest, DifferentXnIds)
         instr.v1.syncXn.locXnId = xnId;
         instr.v1.syncXn.rmtXnId = xnId;
         SyncXnExecutor executor(0, 0, 0, instr, nullptr);
+        executor.SetVersion(RunnerCcuVersion::CCU_V1);
         EXPECT_NO_THROW(executor.Parser());
         EXPECT_NO_THROW(executor.Describe());
     }
@@ -377,6 +405,7 @@ TEST_F(SyncXnExecutorTest, DescribeContent)
     instr.v1.syncXn.channelId = 5;
 
     SyncXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -390,6 +419,7 @@ TEST_F(SyncXnExecutorTest, InheritanceCheck)
     memset(&instr, 0, sizeof(instr));
 
     SyncXnExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     CcuExecutorBase* base = &executor;
     EXPECT_NE(base, nullptr);
 }
@@ -409,6 +439,7 @@ TEST_F(SyncXnExecutorTest, ProcessWithValidChannel)
     instr.v1.syncXn.setRmtCKEMask = 0;
     CcuSimulator sim(0, 0, 0, 1, 1, RunnerCcuVersion::CCU_V1);
     SyncXnExecutor executor(0, 0, 0, instr, &sim);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     EXPECT_NO_THROW(executor.Process(mgr));
 }
@@ -423,6 +454,7 @@ TEST_F(SyncXnExecutorTest, RunWithCkeNotSatisfied)
     instr.v1.syncXn.clearType = 0;
     CcuSimulator sim(0, 0, 0, 1, 1, RunnerCcuVersion::CCU_V1);
     SyncXnExecutor executor(0, 0, 0, instr, &sim);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     EXPECT_NO_THROW(executor.Run());
 }
@@ -448,6 +480,7 @@ TEST_F(TransLocMemToLocMemExecutorTest, DefaultConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     TransLocMemToLocMemExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -458,6 +491,7 @@ TEST_F(TransLocMemToLocMemExecutorTest, ParameterizedConstructor)
     memset(&instr, 0, sizeof(instr));
 
     TransLocMemToLocMemExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -468,6 +502,7 @@ TEST_F(TransLocMemToLocMemExecutorTest, ParserZeroValues)
     memset(&instr, 0, sizeof(instr));
 
     TransLocMemToLocMemExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -479,6 +514,7 @@ TEST_F(TransLocMemToLocMemExecutorTest, ParserMaxValues)
     memset(&instr, 0xFF, sizeof(instr));
 
     TransLocMemToLocMemExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -497,12 +533,14 @@ TEST_F(TransLocMemToLocMemExecutorTest, ParserSpecificParameters)
     instr.v1.transLocMemToLocMem.lengthEn = 1;
 
     TransLocMemToLocMemExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
 }
 
-// Test: TransLocMemToLocMemExecutor with different source and destination GSA IDs
+// Test: TransLocMemToLocMemExecutor with different source and destination GSA
+// IDs
 TEST_F(TransLocMemToLocMemExecutorTest, DifferentGsaIds)
 {
     CcuInstr instr;
@@ -515,6 +553,7 @@ TEST_F(TransLocMemToLocMemExecutorTest, DifferentGsaIds)
             instr.v1.transLocMemToLocMem.srcGSAId = srcGsaId;
             instr.v1.transLocMemToLocMem.dstGSAId = dstGsaId;
             TransLocMemToLocMemExecutor executor(0, 0, 0, instr, nullptr);
+            executor.SetVersion(RunnerCcuVersion::CCU_V1);
             EXPECT_NO_THROW(executor.Parser());
             EXPECT_NO_THROW(executor.Describe());
         }
@@ -530,6 +569,7 @@ TEST_F(TransLocMemToLocMemExecutorTest, DescribeContent)
     instr.v1.transLocMemToLocMem.dstGSAId = 100;
 
     TransLocMemToLocMemExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -543,6 +583,7 @@ TEST_F(TransLocMemToLocMemExecutorTest, InheritanceCheck)
     memset(&instr, 0, sizeof(instr));
 
     TransLocMemToLocMemExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     CcuExecutorBase* base = &executor;
     EXPECT_NE(base, nullptr);
 }
@@ -564,6 +605,7 @@ TEST_F(TransLocMemToLocMSExecutorTest, DefaultConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     TransLocMemToLocMSExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -574,6 +616,7 @@ TEST_F(TransLocMemToLocMSExecutorTest, ParameterizedConstructor)
     memset(&instr, 0, sizeof(instr));
 
     TransLocMemToLocMSExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -584,6 +627,7 @@ TEST_F(TransLocMemToLocMSExecutorTest, ParserZeroValues)
     memset(&instr, 0, sizeof(instr));
 
     TransLocMemToLocMSExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -595,6 +639,7 @@ TEST_F(TransLocMemToLocMSExecutorTest, ParserMaxValues)
     memset(&instr, 0xFF, sizeof(instr));
 
     TransLocMemToLocMSExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -612,6 +657,7 @@ TEST_F(TransLocMemToLocMSExecutorTest, ParserSpecificParameters)
     instr.v1.transLocMemToLocMS.lengthEn = 0;
 
     TransLocMemToLocMSExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -628,6 +674,7 @@ TEST_F(TransLocMemToLocMSExecutorTest, DifferentGsaIds)
     for (auto gsaId : gsaIds) {
         instr.v1.transLocMemToLocMS.locGSAId = gsaId;
         TransLocMemToLocMSExecutor executor(0, 0, 0, instr, nullptr);
+        executor.SetVersion(RunnerCcuVersion::CCU_V1);
         EXPECT_NO_THROW(executor.Parser());
         EXPECT_NO_THROW(executor.Describe());
     }
@@ -642,6 +689,7 @@ TEST_F(TransLocMemToLocMSExecutorTest, DescribeContent)
     instr.v1.transLocMemToLocMS.locMSId = 100;
 
     TransLocMemToLocMSExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -655,6 +703,7 @@ TEST_F(TransLocMemToLocMSExecutorTest, InheritanceCheck)
     memset(&instr, 0, sizeof(instr));
 
     TransLocMemToLocMSExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     CcuExecutorBase* base = &executor;
     EXPECT_NE(base, nullptr);
 }
@@ -676,6 +725,7 @@ TEST_F(TransLocMemToRmtMemExecutorTest, DefaultConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     TransLocMemToRmtMemExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -686,6 +736,7 @@ TEST_F(TransLocMemToRmtMemExecutorTest, ParameterizedConstructor)
     memset(&instr, 0, sizeof(instr));
 
     TransLocMemToRmtMemExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -696,6 +747,7 @@ TEST_F(TransLocMemToRmtMemExecutorTest, ParserZeroValues)
     memset(&instr, 0, sizeof(instr));
 
     TransLocMemToRmtMemExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -707,6 +759,7 @@ TEST_F(TransLocMemToRmtMemExecutorTest, ParserMaxValues)
     memset(&instr, 0xFF, sizeof(instr));
 
     TransLocMemToRmtMemExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -725,6 +778,7 @@ TEST_F(TransLocMemToRmtMemExecutorTest, ParserSpecificParameters)
     instr.v1.transLocMemToRmtMem.channelId = 1;
 
     TransLocMemToRmtMemExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -737,6 +791,7 @@ TEST_F(TransLocMemToRmtMemExecutorTest, InheritanceCheck)
     memset(&instr, 0, sizeof(instr));
 
     TransLocMemToRmtMemExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     CcuExecutorBase* base = &executor;
     EXPECT_NE(base, nullptr);
 }
@@ -758,6 +813,7 @@ TEST_F(TransLocMSToLocMemExecutorTest, DefaultConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     TransLocMSToLocMemExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -768,6 +824,7 @@ TEST_F(TransLocMSToLocMemExecutorTest, ParameterizedConstructor)
     memset(&instr, 0, sizeof(instr));
 
     TransLocMSToLocMemExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -778,6 +835,7 @@ TEST_F(TransLocMSToLocMemExecutorTest, ParserZeroValues)
     memset(&instr, 0, sizeof(instr));
 
     TransLocMSToLocMemExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -789,6 +847,7 @@ TEST_F(TransLocMSToLocMemExecutorTest, ParserMaxValues)
     memset(&instr, 0xFF, sizeof(instr));
 
     TransLocMSToLocMemExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -807,6 +866,7 @@ TEST_F(TransLocMSToLocMemExecutorTest, ParserSpecificParameters)
     instr.v1.transLocMSToLocMem.lengthEn = 1;
 
     TransLocMSToLocMemExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -821,6 +881,7 @@ TEST_F(TransLocMSToLocMemExecutorTest, DifferentLengthEnValues)
     for (uint16_t lenEn = 0; lenEn <= 1; lenEn++) {
         instr.v1.transLocMSToLocMem.lengthEn = lenEn;
         TransLocMSToLocMemExecutor executor(0, 0, 0, instr, nullptr);
+        executor.SetVersion(RunnerCcuVersion::CCU_V1);
         EXPECT_NO_THROW(executor.Parser());
         EXPECT_NO_THROW(executor.Describe());
     }
@@ -837,6 +898,7 @@ TEST_F(TransLocMSToLocMemExecutorTest, DifferentMsIds)
     for (auto msId : msIds) {
         instr.v1.transLocMSToLocMem.locMSId = msId;
         TransLocMSToLocMemExecutor executor(0, 0, 0, instr, nullptr);
+        executor.SetVersion(RunnerCcuVersion::CCU_V1);
         EXPECT_NO_THROW(executor.Parser());
         EXPECT_NO_THROW(executor.Describe());
     }
@@ -851,6 +913,7 @@ TEST_F(TransLocMSToLocMemExecutorTest, DescribeContent)
     instr.v1.transLocMSToLocMem.locMSId = 100;
 
     TransLocMSToLocMemExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -864,6 +927,7 @@ TEST_F(TransLocMSToLocMemExecutorTest, InheritanceCheck)
     memset(&instr, 0, sizeof(instr));
 
     TransLocMSToLocMemExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     CcuExecutorBase* base = &executor;
     EXPECT_NE(base, nullptr);
 }
@@ -885,6 +949,7 @@ TEST_F(TransLocMSToLocMSExecutorTest, DefaultConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     TransLocMSToLocMSExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -895,6 +960,7 @@ TEST_F(TransLocMSToLocMSExecutorTest, ParameterizedConstructor)
     memset(&instr, 0, sizeof(instr));
 
     TransLocMSToLocMSExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -905,6 +971,7 @@ TEST_F(TransLocMSToLocMSExecutorTest, ParserZeroValues)
     memset(&instr, 0, sizeof(instr));
 
     TransLocMSToLocMSExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -916,6 +983,7 @@ TEST_F(TransLocMSToLocMSExecutorTest, ParserMaxValues)
     memset(&instr, 0xFF, sizeof(instr));
 
     TransLocMSToLocMSExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -932,6 +1000,7 @@ TEST_F(TransLocMSToLocMSExecutorTest, ParserSpecificParameters)
     instr.v1.transLocMSToLocMS.lengthEn = 1;
 
     TransLocMSToLocMSExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -950,6 +1019,7 @@ TEST_F(TransLocMSToLocMSExecutorTest, DifferentMsIds)
             instr.v1.transLocMSToLocMS.srcMSId = srcMsId;
             instr.v1.transLocMSToLocMS.dstMSId = dstMsId;
             TransLocMSToLocMSExecutor executor(0, 0, 0, instr, nullptr);
+            executor.SetVersion(RunnerCcuVersion::CCU_V1);
             EXPECT_NO_THROW(executor.Parser());
             EXPECT_NO_THROW(executor.Describe());
         }
@@ -965,6 +1035,7 @@ TEST_F(TransLocMSToLocMSExecutorTest, DescribeContent)
     instr.v1.transLocMSToLocMS.dstMSId = 100;
 
     TransLocMSToLocMSExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -978,6 +1049,7 @@ TEST_F(TransLocMSToLocMSExecutorTest, InheritanceCheck)
     memset(&instr, 0, sizeof(instr));
 
     TransLocMSToLocMSExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     CcuExecutorBase* base = &executor;
     EXPECT_NE(base, nullptr);
 }
@@ -999,6 +1071,7 @@ TEST_F(TransLocMSToRmtMemExecutorTest, DefaultConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     TransLocMSToRmtMemExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -1009,6 +1082,7 @@ TEST_F(TransLocMSToRmtMemExecutorTest, ParameterizedConstructor)
     memset(&instr, 0, sizeof(instr));
 
     TransLocMSToRmtMemExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -1019,6 +1093,7 @@ TEST_F(TransLocMSToRmtMemExecutorTest, ParserZeroValues)
     memset(&instr, 0, sizeof(instr));
 
     TransLocMSToRmtMemExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -1030,6 +1105,7 @@ TEST_F(TransLocMSToRmtMemExecutorTest, ParserMaxValues)
     memset(&instr, 0xFF, sizeof(instr));
 
     TransLocMSToRmtMemExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -1047,6 +1123,7 @@ TEST_F(TransLocMSToRmtMemExecutorTest, ParserSpecificParameters)
     instr.v1.transLocMSToRmtMem.channelId = 1;
 
     TransLocMSToRmtMemExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -1061,6 +1138,7 @@ TEST_F(TransLocMSToRmtMemExecutorTest, DescribeContent)
     instr.v1.transLocMSToRmtMem.rmtGSAId = 100;
 
     TransLocMSToRmtMemExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -1074,6 +1152,7 @@ TEST_F(TransLocMSToRmtMemExecutorTest, InheritanceCheck)
     memset(&instr, 0, sizeof(instr));
 
     TransLocMSToRmtMemExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     CcuExecutorBase* base = &executor;
     EXPECT_NE(base, nullptr);
 }
@@ -1095,6 +1174,7 @@ TEST_F(TransLocMSToRmtMSExecutorTest, DefaultConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     TransLocMSToRmtMSExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -1105,6 +1185,7 @@ TEST_F(TransLocMSToRmtMSExecutorTest, ParameterizedConstructor)
     memset(&instr, 0, sizeof(instr));
 
     TransLocMSToRmtMSExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -1115,6 +1196,7 @@ TEST_F(TransLocMSToRmtMSExecutorTest, ParserZeroValues)
     memset(&instr, 0, sizeof(instr));
 
     TransLocMSToRmtMSExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -1126,6 +1208,7 @@ TEST_F(TransLocMSToRmtMSExecutorTest, ParserMaxValues)
     memset(&instr, 0xFF, sizeof(instr));
 
     TransLocMSToRmtMSExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -1144,6 +1227,7 @@ TEST_F(TransLocMSToRmtMSExecutorTest, ParserSpecificParameters)
     instr.v1.transLocMSToRmtMS.setRmtCKEMask = 0xFF;
 
     TransLocMSToRmtMSExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -1158,6 +1242,7 @@ TEST_F(TransLocMSToRmtMSExecutorTest, DifferentChannelIds)
     for (uint16_t ch = 0; ch < 16; ch++) {
         instr.v1.transLocMSToRmtMS.channelId = ch;
         TransLocMSToRmtMSExecutor executor(0, 0, 0, instr, nullptr);
+        executor.SetVersion(RunnerCcuVersion::CCU_V1);
         EXPECT_NO_THROW(executor.Parser());
         EXPECT_NO_THROW(executor.Describe());
     }
@@ -1173,6 +1258,7 @@ TEST_F(TransLocMSToRmtMSExecutorTest, DescribeContent)
     instr.v1.transLocMSToRmtMS.channelId = 5;
 
     TransLocMSToRmtMSExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -1186,6 +1272,7 @@ TEST_F(TransLocMSToRmtMSExecutorTest, InheritanceCheck)
     memset(&instr, 0, sizeof(instr));
 
     TransLocMSToRmtMSExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     CcuExecutorBase* base = &executor;
     EXPECT_NE(base, nullptr);
 }
@@ -1205,6 +1292,7 @@ TEST_F(TransRmtMSToLocMSExecutorTest, DefaultConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     TransRmtMSToLocMSExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -1213,6 +1301,7 @@ TEST_F(TransRmtMSToLocMSExecutorTest, ParameterizedConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     TransRmtMSToLocMSExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -1221,6 +1310,7 @@ TEST_F(TransRmtMSToLocMSExecutorTest, ParserZeroValues)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     TransRmtMSToLocMSExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -1230,6 +1320,7 @@ TEST_F(TransRmtMSToLocMSExecutorTest, ParserMaxValues)
     CcuInstr instr;
     memset(&instr, 0xFF, sizeof(instr));
     TransRmtMSToLocMSExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -1239,6 +1330,7 @@ TEST_F(TransRmtMSToLocMSExecutorTest, InheritanceCheck)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     TransRmtMSToLocMSExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     CcuExecutorBase* base = &executor;
     EXPECT_NE(base, nullptr);
 }
@@ -1258,6 +1350,7 @@ TEST_F(TransRmtMSToLocMemExecutorTest, DefaultConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     TransRmtMSToLocMemExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -1266,6 +1359,7 @@ TEST_F(TransRmtMSToLocMemExecutorTest, ParameterizedConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     TransRmtMSToLocMemExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -1274,6 +1368,7 @@ TEST_F(TransRmtMSToLocMemExecutorTest, ParserZeroValues)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     TransRmtMSToLocMemExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -1283,6 +1378,7 @@ TEST_F(TransRmtMSToLocMemExecutorTest, ParserMaxValues)
     CcuInstr instr;
     memset(&instr, 0xFF, sizeof(instr));
     TransRmtMSToLocMemExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -1292,6 +1388,7 @@ TEST_F(TransRmtMSToLocMemExecutorTest, InheritanceCheck)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     TransRmtMSToLocMemExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     CcuExecutorBase* base = &executor;
     EXPECT_NE(base, nullptr);
 }
@@ -1311,6 +1408,7 @@ TEST_F(TransRmtMemToLocMSExecutorTest, DefaultConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     TransRmtMemToLocMSExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -1319,6 +1417,7 @@ TEST_F(TransRmtMemToLocMSExecutorTest, ParameterizedConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     TransRmtMemToLocMSExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -1327,6 +1426,7 @@ TEST_F(TransRmtMemToLocMSExecutorTest, ParserZeroValues)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     TransRmtMemToLocMSExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -1336,6 +1436,7 @@ TEST_F(TransRmtMemToLocMSExecutorTest, ParserMaxValues)
     CcuInstr instr;
     memset(&instr, 0xFF, sizeof(instr));
     TransRmtMemToLocMSExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -1345,6 +1446,7 @@ TEST_F(TransRmtMemToLocMSExecutorTest, InheritanceCheck)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     TransRmtMemToLocMSExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     CcuExecutorBase* base = &executor;
     EXPECT_NE(base, nullptr);
 }
@@ -1364,6 +1466,7 @@ TEST_F(TransRmtMemToLocMemExecutorTest, DefaultConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     TransRmtMemToLocMemExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -1372,6 +1475,7 @@ TEST_F(TransRmtMemToLocMemExecutorTest, ParameterizedConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     TransRmtMemToLocMemExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -1380,6 +1484,7 @@ TEST_F(TransRmtMemToLocMemExecutorTest, ParserZeroValues)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     TransRmtMemToLocMemExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -1389,6 +1494,7 @@ TEST_F(TransRmtMemToLocMemExecutorTest, ParserMaxValues)
     CcuInstr instr;
     memset(&instr, 0xFF, sizeof(instr));
     TransRmtMemToLocMemExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -1398,6 +1504,7 @@ TEST_F(TransRmtMemToLocMemExecutorTest, InheritanceCheck)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     TransRmtMemToLocMemExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     CcuExecutorBase* base = &executor;
     EXPECT_NE(base, nullptr);
 }
@@ -1419,6 +1526,7 @@ TEST_F(TransLocMemToLocMemExecutorTest, ProcessWithZeroValues)
     instr.v1.transLocMemToLocMem.setCKEMask = 0;
     CcuSimulator sim(0, 0, 0, 1, 1, RunnerCcuVersion::CCU_V1);
     TransLocMemToLocMemExecutor executor(0, 0, 0, instr, &sim);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     EXPECT_NO_THROW(executor.Process(mgr));
 }
@@ -1432,6 +1540,7 @@ TEST_F(TransLocMemToLocMemExecutorTest, RunWithCkeNotSatisfied)
     instr.v1.transLocMemToLocMem.clearType = 0;
     CcuSimulator sim(0, 0, 0, 1, 1, RunnerCcuVersion::CCU_V1);
     TransLocMemToLocMemExecutor executor(0, 0, 0, instr, &sim);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     executor.Run();
 }
@@ -1450,6 +1559,7 @@ TEST_F(TransLocMemToLocMSExecutorTest, ProcessWithZeroValues)
     instr.v1.transLocMemToLocMS.setCKEMask = 0;
     CcuSimulator sim(0, 0, 0, 1, 1, RunnerCcuVersion::CCU_V1);
     TransLocMemToLocMSExecutor executor(0, 0, 0, instr, &sim);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     EXPECT_NO_THROW(executor.Process(mgr));
 }
@@ -1463,6 +1573,7 @@ TEST_F(TransLocMemToLocMSExecutorTest, RunWithCkeNotSatisfied)
     instr.v1.transLocMemToLocMS.clearType = 0;
     CcuSimulator sim(0, 0, 0, 1, 1, RunnerCcuVersion::CCU_V1);
     TransLocMemToLocMSExecutor executor(0, 0, 0, instr, &sim);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     executor.Run();
 }
@@ -1486,6 +1597,7 @@ TEST_F(TransLocMemToRmtMemExecutorTest, ProcessWithZeroValues)
     instr.v1.transLocMemToRmtMem.setCKEMask = 0;
     CcuSimulator sim(0, 0, 0, 1, 1, RunnerCcuVersion::CCU_V1);
     TransLocMemToRmtMemExecutor executor(0, 0, 0, instr, &sim);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     EXPECT_NO_THROW(executor.Process(mgr));
 }
@@ -1499,6 +1611,7 @@ TEST_F(TransLocMemToRmtMemExecutorTest, RunWithCkeNotSatisfied)
     instr.v1.transLocMemToRmtMem.clearType = 0;
     CcuSimulator sim(0, 0, 0, 1, 1, RunnerCcuVersion::CCU_V1);
     TransLocMemToRmtMemExecutor executor(0, 0, 0, instr, &sim);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     executor.Run();
 }
@@ -1517,6 +1630,7 @@ TEST_F(TransLocMSToLocMemExecutorTest, ProcessWithZeroValues)
     instr.v1.transLocMSToLocMem.setCKEMask = 0;
     CcuSimulator sim(0, 0, 0, 1, 1, RunnerCcuVersion::CCU_V1);
     TransLocMSToLocMemExecutor executor(0, 0, 0, instr, &sim);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     EXPECT_NO_THROW(executor.Process(mgr));
 }
@@ -1530,6 +1644,7 @@ TEST_F(TransLocMSToLocMemExecutorTest, RunWithCkeNotSatisfied)
     instr.v1.transLocMSToLocMem.clearType = 0;
     CcuSimulator sim(0, 0, 0, 1, 1, RunnerCcuVersion::CCU_V1);
     TransLocMSToLocMemExecutor executor(0, 0, 0, instr, &sim);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     executor.Run();
 }
@@ -1547,6 +1662,7 @@ TEST_F(TransLocMSToLocMSExecutorTest, ProcessWithZeroValues)
     instr.v1.transLocMSToLocMS.setCKEMask = 0;
     CcuSimulator sim(0, 0, 0, 1, 1, RunnerCcuVersion::CCU_V1);
     TransLocMSToLocMSExecutor executor(0, 0, 0, instr, &sim);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     EXPECT_NO_THROW(executor.Process(mgr));
 }
@@ -1560,6 +1676,7 @@ TEST_F(TransLocMSToLocMSExecutorTest, RunWithCkeNotSatisfied)
     instr.v1.transLocMSToLocMS.clearType = 0;
     CcuSimulator sim(0, 0, 0, 1, 1, RunnerCcuVersion::CCU_V1);
     TransLocMSToLocMSExecutor executor(0, 0, 0, instr, &sim);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     executor.Run();
 }
@@ -1578,6 +1695,7 @@ TEST_F(TransLocMSToRmtMemExecutorTest, ProcessWithZeroValues)
     instr.v1.transLocMSToRmtMem.setCKEMask = 0;
     CcuSimulator sim(0, 0, 0, 1, 1, RunnerCcuVersion::CCU_V1);
     TransLocMSToRmtMemExecutor executor(0, 0, 0, instr, &sim);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     EXPECT_NO_THROW(executor.Process(mgr));
 }
@@ -1591,6 +1709,7 @@ TEST_F(TransLocMSToRmtMemExecutorTest, RunWithCkeNotSatisfied)
     instr.v1.transLocMSToRmtMem.clearType = 0;
     CcuSimulator sim(0, 0, 0, 1, 1, RunnerCcuVersion::CCU_V1);
     TransLocMSToRmtMemExecutor executor(0, 0, 0, instr, &sim);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     executor.Run();
 }
@@ -1615,6 +1734,7 @@ TEST_F(TransLocMSToRmtMSExecutorTest, ProcessWithInvalidChannelId)
     instr.v1.transLocMSToRmtMS.setRmtCKEMask = 0;
     CcuSimulator sim(0, 0, 0, 1, 1, RunnerCcuVersion::CCU_V1);
     TransLocMSToRmtMSExecutor executor(0, 0, 0, instr, &sim);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     EXPECT_NO_THROW(executor.Process(mgr));
 }
@@ -1628,6 +1748,7 @@ TEST_F(TransLocMSToRmtMSExecutorTest, RunWithCkeNotSatisfied)
     instr.v1.transLocMSToRmtMS.clearType = 0;
     CcuSimulator sim(0, 0, 0, 1, 1, RunnerCcuVersion::CCU_V1);
     TransLocMSToRmtMSExecutor executor(0, 0, 0, instr, &sim);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     executor.Run();
 }
@@ -1641,6 +1762,7 @@ TEST_F(TransRmtMemToLocMemExecutorTest, RunWithCkeNotSatisfied)
     instr.v1.transRmtMemToLocMem.clearType = 0;
     CcuSimulator sim(0, 0, 0, 1, 1, RunnerCcuVersion::CCU_V1);
     TransRmtMemToLocMemExecutor executor(0, 0, 0, instr, &sim);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     executor.Run();
 }
@@ -1659,6 +1781,7 @@ TEST_F(TransRmtMemToLocMSExecutorTest, ProcessWithZeroValues)
     instr.v1.transRmtMemToLocMS.setCKEMask = 0;
     CcuSimulator sim(0, 0, 0, 1, 1, RunnerCcuVersion::CCU_V1);
     TransRmtMemToLocMSExecutor executor(0, 0, 0, instr, &sim);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     EXPECT_NO_THROW(executor.Process(mgr));
 }
@@ -1672,6 +1795,7 @@ TEST_F(TransRmtMemToLocMSExecutorTest, RunWithCkeNotSatisfied)
     instr.v1.transRmtMemToLocMS.clearType = 0;
     CcuSimulator sim(0, 0, 0, 1, 1, RunnerCcuVersion::CCU_V1);
     TransRmtMemToLocMSExecutor executor(0, 0, 0, instr, &sim);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     executor.Run();
 }
@@ -1695,6 +1819,7 @@ TEST_F(TransRmtMSToLocMemExecutorTest, ProcessWithInvalidChannelId)
     instr.v1.transRmtMSToLocMem.setCKEMask = 0;
     CcuSimulator sim(0, 0, 0, 1, 1, RunnerCcuVersion::CCU_V1);
     TransRmtMSToLocMemExecutor executor(0, 0, 0, instr, &sim);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     EXPECT_NO_THROW(executor.Process(mgr));
 }
@@ -1708,6 +1833,7 @@ TEST_F(TransRmtMSToLocMemExecutorTest, RunWithCkeNotSatisfied)
     instr.v1.transRmtMSToLocMem.clearType = 0;
     CcuSimulator sim(0, 0, 0, 1, 1, RunnerCcuVersion::CCU_V1);
     TransRmtMSToLocMemExecutor executor(0, 0, 0, instr, &sim);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     executor.Run();
 }
@@ -1730,6 +1856,7 @@ TEST_F(TransRmtMSToLocMSExecutorTest, ProcessWithInvalidChannelId)
     instr.v1.transRmtMSToLocMS.setCKEMask = 0;
     CcuSimulator sim(0, 0, 0, 1, 1, RunnerCcuVersion::CCU_V1);
     TransRmtMSToLocMSExecutor executor(0, 0, 0, instr, &sim);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     EXPECT_NO_THROW(executor.Process(mgr));
 }
@@ -1743,6 +1870,7 @@ TEST_F(TransRmtMSToLocMSExecutorTest, RunWithCkeNotSatisfied)
     instr.v1.transRmtMSToLocMS.clearType = 0;
     CcuSimulator sim(0, 0, 0, 1, 1, RunnerCcuVersion::CCU_V1);
     TransRmtMSToLocMSExecutor executor(0, 0, 0, instr, &sim);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     executor.Run();
 }

@@ -22,12 +22,9 @@
 #include <unistd.h>
 #include <vector>
 
-#include "aiv_task_snapshot_loader.h"
-#include "aiv_graph_executor_mgr.h"
-#include "aiv_resource_manager.h"
-#include "store_binary_data_operator.h"
 #include "ccu_resource_manager.h"
 #include "sim_log.h"
+#include "store_binary_data_operator.h"
 
 namespace HcclSim {
 static const std::string PLUGIN_PATH = "/plugin";
@@ -62,12 +59,12 @@ void StorageManager::ReleasePhyMem()
 
 HcclVmResult StorageManager::PrintAllRankInputBuffer()
 {
-    std::vector<sim::PhyMemBlock> allPhyMem;
+    std::vector<sim::runtime::PhyMemBlock> allPhyMem;
     for (uint32_t i = 0; i < m_synData.memory_info.count; i++) {
         if (m_synData.memory_info.data[i].buffer_type == 0) {
             auto startAddr = m_synData.memory_info.data[i].start_addr;
 
-            sim::PhyMemBlock srcPhyMem{};
+            sim::runtime::PhyMemBlock srcPhyMem{};
             auto srcAddr = sim::AcquireDevPtrInNoHostProcess((void*)startAddr, srcPhyMem);
             if (srcAddr == nullptr) {
                 HCCL_VM_ERROR(
@@ -87,7 +84,7 @@ HcclVmResult StorageManager::PrintAllRankInputBuffer()
     return HcclVmResult::HCCL_SIM_SUCCESS;
 }
 
-HcclVmResult StorageManager::Trans2CheckerParam(sim::OpDetailTab& detailTab, ::OpDetails& detail)
+HcclVmResult StorageManager::Trans2CheckerParam(sim::operation::OpDetailTab& detailTab, ::OpDetails& detail)
 {
     devType_ = static_cast<DevType>(detailTab.devType);
     m_checker_param.cmdType = static_cast<HcclCMDType>(detail.opType);
@@ -125,8 +122,8 @@ HcclVmResult StorageManager::Trans2CheckerParam(sim::OpDetailTab& detailTab, ::O
     return HcclVmResult::HCCL_SIM_SUCCESS;
 }
 
-HcclVmResult
-StorageManager::LoadHcclVmSynthesisData(sim::OpDetailTab& detailTab, std::vector<sim::CcuChannelTab>& channels)
+HcclVmResult StorageManager::LoadHcclVmSynthesisData(
+    sim::operation::OpDetailTab& detailTab, std::vector<sim::operation::CcuChannelTab>& channels)
 {
     if (detailTab.opDetail.size() < sizeof(::OpDetails)) {
         HCCL_VM_ERROR("opDetail BLOB too small");
@@ -145,7 +142,8 @@ StorageManager::LoadHcclVmSynthesisData(sim::OpDetailTab& detailTab, std::vector
         rmtDieInfo1.rankId = channel.dstRankId;
         rmtDieInfo1.dieId = channel.dstDieId;
         HCCL_VM_INFO(
-            "[Channel info] channelId={}, srcRank={}, srcDie={}, dstRank={}, dstDie={} srcEid={}, dstEid={}",
+            "[Channel info] channelId={}, srcRank={}, srcDie={}, "
+            "dstRank={}, dstDie={} srcEid={}, dstEid={}",
             channel.channelId, channel.srcRankId, static_cast<uint32_t>(channel.srcDieId), channel.dstRankId,
             channel.dstDieId, EidToHexString(channel.leid), EidToHexString(channel.reid));
         m_allRankChannelInfo[channel.srcRankId][channel.srcDieId][channel.channelId] = rmtDieInfo1;
@@ -154,16 +152,16 @@ StorageManager::LoadHcclVmSynthesisData(sim::OpDetailTab& detailTab, std::vector
     return HcclVmResult::HCCL_SIM_SUCCESS;
 }
 
-HcclVmResult StorageManager::LoadHcclVmInstrData(std::vector<sim::CcuInstrResTab>& instrRes)
+HcclVmResult StorageManager::LoadHcclVmInstrData(std::vector<sim::operation::CcuInstrResTab>& instrRes)
 {
     for (auto& ccuInstr : instrRes) {
-        HCCL_VM_DEBUG("rankId={}, dieId={}, count={}", ccuInstr.rankId, ccuInstr.dieId, ccuInstr.instrCount);
+        HCCL_VM_DEBUG("deviceId={}, dieId={}, count={}", ccuInstr.deviceId, ccuInstr.dieId, ccuInstr.instrCount);
     }
 
     return HcclVmResult::HCCL_SIM_SUCCESS;
 }
 
-HcclVmResult StorageManager::LoadHcclVmTaskMetaData(std::vector<sim::OpTaskTab>& tasks)
+HcclVmResult StorageManager::LoadHcclVmTaskMetaData(std::vector<sim::operation::OpTaskTab>& tasks)
 {
     HcclVmTaskMetaData taskMeataData;
     for (const auto& task : tasks) {
@@ -172,9 +170,7 @@ HcclVmResult StorageManager::LoadHcclVmTaskMetaData(std::vector<sim::OpTaskTab>&
             std::memcpy(&metaData, task.optaskMeta.data(), sizeof(HcclTaskMetaData));
             taskMeataData.task_meta.push_back(metaData);
         } else {
-            HCCL_VM_WARN(
-                "optaskMeta too small, taskSeq={} src:{:d}, dst:{:d}", task.taskSeq, task.optaskMeta.size(),
-                sizeof(HcclTaskMetaData));
+            HCCL_VM_WARN("optaskMeta too small, src:{:d}, dst:{:d}", task.optaskMeta.size(), sizeof(HcclTaskMetaData));
         }
     }
     for (auto& taskMeta : taskMeataData.task_meta) {
@@ -311,15 +307,13 @@ HcclVmInstrData StorageManager::GetHvmInstrData() const { return m_instrData; }
 
 AllRankTaskQueues& StorageManager::GetAllRankTaskQueues() { return m_allRankTaskQueues; }
 
-HcclVmResult StorageManager::InitCcuResource(std::vector<sim::CcuInstrResTab>& instrRes)
+HcclVmResult StorageManager::InitCcuResource(std::vector<sim::operation::CcuInstrResTab>& instrRes)
 {
     RunnerCcuVersion ccuVersion{RunnerCcuVersion::CCU_INVALID};
     if (devType_ == DevType::DEV_TYPE_950) {
         ccuVersion = RunnerCcuVersion::CCU_V1;
-#ifdef BUILD_A6_CCU_INSTR
     } else if (devType_ == DevType::DEV_TYPE_960) {
         ccuVersion = RunnerCcuVersion::CCU_V2;
-#endif
     } else {
         HCCL_VM_ERROR("Wrong devive type: {:d}", static_cast<int>(devType_));
         return HcclVmResult::HCCL_SIM_E_INTERNAL;
@@ -343,31 +337,13 @@ HcclVmResult StorageManager::InitCcuResource(std::vector<sim::CcuInstrResTab>& i
             std::memcpy(&tmp, instr.instrSpace[i], sizeof(hcomm::CcuRep::CcuInstr));
             ccuInstr.instrData.push_back(tmp);
         }
-        ccuResMgr.InitInstrInfo(instr.rankId, instr.dieId, ccuInstr);
+        ccuResMgr.InitInstrInfo(instr.deviceId, instr.dieId, ccuInstr);
     }
     return HcclVmResult::HCCL_SIM_SUCCESS;
 }
 
-HcclVmResult StorageManager::InitAivResourceFromCompositeOpDetail(const sim::CompositeOpDetail& opDetail)
-{
-    auto ret = AivResourceManager::GetInstance().Init(opDetail.rankId, opDetail.memInfo, GetRankSize());
-    if (ret != HcclVmResult::HCCL_SIM_SUCCESS) {
-        HCCL_VM_ERROR(
-            "init aiv resource failed, "
-            "rankId={}, opDetailId={}, memInfoId={}, ret={}",
-            opDetail.rankId, opDetail.detail.id, opDetail.memInfo.id, static_cast<int>(ret));
-        return ret;
-    }
-    return HcclVmResult::HCCL_SIM_SUCCESS;
-}
-
-void StorageManager::ResetAivResource()
-{
-    AivGraphExecutorMgr::GetInstance().Reset();
-    AivResourceManager::GetInstance().Reset();
-}
-
-void StorageManager::DumpAllRankInputOutput(std::vector<std::map<uint32_t, sim::CompositeOpDetail>>& compositeDataMap)
+void StorageManager::DumpAllRankInputOutput(
+    std::vector<std::map<uint32_t, sim::operation::CompositeOpDetail>>& compositeDataMap)
 {
     const char* enableDumpData = std::getenv("HCCLVM_ENABLE_DUMP_DATA");
     if (enableDumpData == nullptr || std::string(enableDumpData).empty() || std::string(enableDumpData) == "0") {
@@ -391,7 +367,7 @@ void StorageManager::DumpAllRankInputOutput(std::vector<std::map<uint32_t, sim::
         return;
     }
 
-    HCCL_VM_INFO("Dump All Rank Input Output Data. rankSize={}", rankSize);
+    HCCL_VM_INFO("Dump All Rank Input Output Data. rankSize={}, fullPath={}", rankSize, fullPath);
     for (size_t opIdx = 0; opIdx < compositeDataMap.size(); opIdx++) {
         auto& rankTask = compositeDataMap[opIdx];
         if (rankTask.empty()) {
@@ -402,7 +378,7 @@ void StorageManager::DumpAllRankInputOutput(std::vector<std::map<uint32_t, sim::
         for (auto& it : rankTask) {
             auto& memInfo = it.second.memInfo;
             if (memInfo.inputAddr != 0 && memInfo.inputSize > 0) {
-                sim::PhyMemBlock srcPhyMem{};
+                sim::runtime::PhyMemBlock srcPhyMem{};
                 auto startAddr = sim::AcquireDevPtrInNoHostProcess((void*)(memInfo.inputAddr), srcPhyMem);
                 if (startAddr == nullptr) {
                     HCCL_VM_ERROR(
@@ -419,7 +395,7 @@ void StorageManager::DumpAllRankInputOutput(std::vector<std::map<uint32_t, sim::
             }
 
             if (memInfo.outputAddr != 0 && memInfo.outputSize > 0) {
-                sim::PhyMemBlock srcPhyMem{};
+                sim::runtime::PhyMemBlock srcPhyMem{};
                 auto startAddr = sim::AcquireDevPtrInNoHostProcess((void*)(memInfo.outputAddr), srcPhyMem);
                 if (startAddr == nullptr) {
                     HCCL_VM_ERROR(
@@ -468,18 +444,17 @@ void StorageManager::DumpAllRankInputOutput(std::vector<std::map<uint32_t, sim::
 void StorageManager::FlexiblePrintData(std::ofstream& ofs, const BufferInfo& buffer)
 {
     if (buffer.size <= PRINT_DATA_SIZE_THRESHOLD) {
-        for (uint32_t i = 0; i < buffer.size; i++) {
+        for (uint64_t i = 0; i < buffer.size; i++) {
             ofs << std::hex << static_cast<int>(static_cast<unsigned char>(buffer.phyAddr[i]));
         }
         return;
     }
 
-    // 大数据量，只打印数据的前后各1024字节
     for (uint32_t i = 0; i < PRINT_DATA_PREFIX; i++) {
         ofs << std::hex << static_cast<int>(static_cast<unsigned char>(buffer.phyAddr[i]));
     }
     ofs << "\n...[skipped " << std::dec << buffer.size - PRINT_DATA_SIZE_THRESHOLD << " bytes]...\n";
-    for (uint32_t i = buffer.size - PRINT_DATA_SUFFIX; i < buffer.size; i++) {
+    for (uint64_t i = buffer.size - PRINT_DATA_SUFFIX; i < buffer.size; i++) {
         ofs << std::hex << static_cast<int>(static_cast<unsigned char>(buffer.phyAddr[i]));
     }
 }

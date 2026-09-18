@@ -8,12 +8,18 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: ccu executor -- trans rmt ms
+ * to loc ms Author: caiyifan
+ */
+
 #include "trans_rmt_ms_to_loc_ms_executor.h"
 
 #include "ccu_executor_manager.h"
 #include "ccu_microcode_common_v1.h"
-#include "sim_log.h"
 #include "ccu_string_util.h"
+#include "sim_log.h"
 
 using namespace std;
 using namespace hcomm::CcuRep;
@@ -45,8 +51,9 @@ void TransRmtMSToLocMSExecutor::Process(CcuResourceManager& ccuResMgr)
     auto rmtCcu = ccuResMgr.GetRmtCcu(rankId_, dieId_, channelId_);
     if (rmtCcu.second != rmtDieId_) {
         HCCL_VM_WARN(
-            "dieId[{}] from channel is not same as rmtDieId[{}]. curCcu[{}:{}], rmtCcu[{}:{}]", rmtCcu.second,
-            rmtDieId_, rankId_, dieId_, rmtCcu.first, rmtCcu.second);
+            "dieId[{}] from channel is not same as rmtDieId[{}]. "
+            "curCcu[{}:{}], rmtCcu[{}:{}]",
+            rmtCcu.second, rmtDieId_, rankId_, dieId_, rmtCcu.first, rmtCcu.second);
         return;
     }
     // 2.判断是否在Loop循环内GSA地址需偏移
@@ -77,7 +84,8 @@ void TransRmtMSToLocMSExecutor::Run() { WaitCkeProcess(waitCKEId_, waitCKEMask_,
 std::string TransRmtMSToLocMSExecutor::Describe()
 {
     return HcclSim::StringFormat(
-        "ParseTransLocMSToLocMemInstr Wait CKE[%u:%04x], Trans RmtMS[%u:%u] To LocMS[%u:%u] With "
+        "ParseTransLocMSToLocMemInstr Wait CKE[%u:%04x], Trans RmtMS[%u:%u] To "
+        "LocMS[%u:%u] With "
         "LengthXn[%u] Use Channel[%u], "
         "Set CKE[%u:%04x], "
         "clearType[%u], lengthEn[%u]",

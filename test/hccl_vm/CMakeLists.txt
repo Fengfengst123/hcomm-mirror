@@ -45,12 +45,6 @@ if(ENABLE_COVERAGE)
 endif()
 
 option(BUILD_DEVICE_ARM "Build device_arm (ARM cross-compile)" OFF)
-option(BUILD_A6_CCU_INSTR "Build A6 ccu instruction (ARM cross-compile)" ON)
-
-if(BUILD_A6_CCU_INSTR)
-    add_definitions(-DBUILD_A6_CCU_INSTR)
-endif()
-
 set(HCOMM_VM_ROOT_PATH ${CMAKE_CURRENT_SOURCE_DIR})
 
 if(NOT DEFINED ASCEND_CANN_PACKAGE_PATH)
@@ -181,12 +175,59 @@ include(CPack)
 # 编译DEVICE-ARM-交叉编译版本
 if(BUILD_DEVICE_ARM)
     message(STATUS "BUILD_DEVICE_ARM start")
-    set(DEVICE_ARM_BUILD_DIR ${CMAKE_SOURCE_DIR}/build_device)
+    include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/cann_hcc_validation.cmake")
+
+    if(NOT DEFINED CANN_HCC_ROOT OR CANN_HCC_ROOT STREQUAL "")
+        set(_cann_hcc_candidates
+            "${ASCEND_CANN_PACKAGE_PATH}/tools/hcc"
+            "${ASCEND_CANN_PACKAGE_PATH}/toolkit/toolchain/hcc"
+        )
+        set(_cann_hcc_candidate_errors "")
+        foreach(_candidate IN LISTS _cann_hcc_candidates)
+            hcclvm_validate_cann_hcc("${_candidate}" _candidate_is_complete _candidate_missing_path)
+            if(_candidate_is_complete)
+                set(CANN_HCC_ROOT "${_candidate}")
+                break()
+            endif()
+            list(APPEND _cann_hcc_candidate_errors
+                "${_candidate}: missing ${_candidate_missing_path}"
+            )
+        endforeach()
+    endif()
+
+    if(NOT DEFINED CANN_HCC_ROOT OR CANN_HCC_ROOT STREQUAL "")
+        list(JOIN _cann_hcc_candidate_errors "\n  " _cann_hcc_error_details)
+        message(FATAL_ERROR
+            "Complete CANN HCC toolchain was not found under ${ASCEND_CANN_PACKAGE_PATH}.\n"
+            "Tried:\n  ${_cann_hcc_error_details}\n"
+            "Expected tools/hcc or toolkit/toolchain/hcc, or set CANN_HCC_ROOT explicitly.")
+    endif()
+
+    hcclvm_validate_cann_hcc("${CANN_HCC_ROOT}" _cann_hcc_is_complete _cann_hcc_missing_path)
+    if(NOT _cann_hcc_is_complete)
+        message(FATAL_ERROR "Incomplete CANN HCC toolchain: ${_cann_hcc_missing_path} was not found")
+    endif()
+
+    message(STATUS "CANN HCC root: ${CANN_HCC_ROOT}")
+    message(STATUS "CANN HCC sysroot: ${CANN_HCC_ROOT}/sysroot")
+
+    # 交叉编译 aarch64 版 yaml-cpp 静态库, 供 bin/device 直接读取 log_config.yaml
+    include(cmake/third_party/yaml-cpp-aarch64.cmake)
+    if(TARGET third_party_yaml_cpp_aarch64)
+        set(_yaml_cpp_aarch64_dep third_party_yaml_cpp_aarch64)
+    else()
+        set(_yaml_cpp_aarch64_dep "")
+    endif()
+
+    # 与旧系统交叉 GCC 的 CMake cache 隔离，避免 CMake 忽略首次配置后传入的 toolchain file。
+    set(DEVICE_ARM_BUILD_DIR ${CMAKE_SOURCE_DIR}/build_device/hcc)
     set(DEVICE_ARM_INSTALL_DIR ${CMAKE_SOURCE_DIR}/hccl_vm_install)
     include(ExternalProject)
     ExternalProject_Add(device_arm_external
         SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/device_arm
         CMAKE_ARGS
+            -DCMAKE_TOOLCHAIN_FILE=${CMAKE_SOURCE_DIR}/cmake/toolchains/aarch64-cann-hcc.cmake
+            -DCANN_HCC_ROOT=${CANN_HCC_ROOT}
             -DCMAKE_INSTALL_PREFIX=${DEVICE_ARM_INSTALL_DIR}
             -DHCCL_VM_SRC=${HCCL_VM_SRC}
             -DTHRID_PARTY_DIR=${THRID_PARTY_DIR}
@@ -195,7 +236,8 @@ if(BUILD_DEVICE_ARM)
             -DCANN_ARCH_DIR=${CANN_ARCH_DIR}
             -DHCOMM_CODE_ROOT=${HCOMM_CODE_ROOT}
             -DHCCL_CODE_ROOT=${HCCL_CODE_ROOT}
-
+            -DYAMLCPP_AARCH64_INSTALL_PATH=${YAMLCPP_AARCH64_INSTALL_PATH}
+        DEPENDS ${_yaml_cpp_aarch64_dep}
         BINARY_DIR ${DEVICE_ARM_BUILD_DIR}
         INSTALL_DIR ${DEVICE_ARM_INSTALL_DIR}
         BUILD_ALWAYS ON

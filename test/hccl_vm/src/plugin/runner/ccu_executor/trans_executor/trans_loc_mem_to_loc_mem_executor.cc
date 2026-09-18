@@ -8,13 +8,19 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: ccu executor -- trans loc mem
+ * to loc mem Author: caiyifan
+ */
+
 #include "trans_loc_mem_to_loc_mem_executor.h"
 
 #include <cstdint>
 
 #include "ccu_executor_manager.h"
-#include "sim_log.h"
 #include "ccu_string_util.h"
+#include "sim_log.h"
 
 using namespace std;
 using namespace hcomm::CcuRep;
@@ -69,7 +75,8 @@ void TransLocMemToLocMemExecutor::Process(CcuResourceManager& ccuResMgr)
             "locCcu[{}:{}], Get gsa addr offset = [{:x}], cke id offset = [{}]", rankId_, dieId_, gsaOffset, ckeOffset);
     }
     HCCL_VM_DEBUG(
-        "locCcu[{}:{}] Trans data from srcLocGSAId_[{}] srcLocAddr[{:x}] to dstLocGSAId_[{}] "
+        "locCcu[{}:{}] Trans data from srcLocGSAId_[{}] "
+        "srcLocAddr[{:x}] to dstLocGSAId_[{}] "
         "dstLocAddr[{:x}], with lengthXnId[{}] transLength[{}].",
         rankId_, dieId_, srcGSAId_, srcLocAddr, dstGSAId_, dstLocAddr, lengthXnId_, transLength_);
     ccuResMgr.TransMemToMem(
@@ -132,14 +139,16 @@ std::string TransLocMemToLocMemExecutor::Describe()
 {
     if (version_ == RunnerCcuVersion::CCU_V1) {
         return HcclSim::StringFormat(
-            "[Simulation Execute] Wait CKE[%u:%04x], Trans LocMem[%u:%u] To LocMem[%u:%u] With "
+            "[Simulation Execute] Wait CKE[%u:%04x], Trans LocMem[%u:%u] To "
+            "LocMem[%u:%u] With "
             "LengthXn[%u] Use Channel[%u], Set "
             "CKE[%u:%04x], clearType[%u], lengthEn[%u]\n",
             waitCKEId_, waitCKEMask_, srcGSAId_, srcXnId_, dstGSAId_, dstXnId_, lengthXnId_, channelId_, setCKEId_,
             setCKEMask_, clearType_, lengthEn_);
     } else {
         return HcclSim::StringFormat(
-            "[TransLocMemToLocMemExecutor] xdId[%u] xdtId[%u] xsId[%u] xstId[%u] "
+            "[TransLocMemToLocMemExecutor] xdId[%u] xdtId[%u] xsId[%u] "
+            "xstId[%u] "
             "xlId[%u] usedMSId[%u] msNum[%u] setCKEId[%u] setCKEMask[0x%04x]\n",
             xdId_, xdtId_, xsId_, xstId_, xlId_, usedMSId_, msNum_, setCKEId_, setCKEMask_);
     }

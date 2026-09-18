@@ -52,7 +52,8 @@ constexpr s32 LOG_TMPBUF_SIZE = 512;
 
 bool HcclCheckLogLevel(int logType, int moduleId = HCCL);
 
-void SetErrToWarnSwitch(bool flag); // 设置True时修改日志级别：ERROR -> RUN_WARNING，设置False恢复日志级别
+void SetErrToWarnSwitch(bool flag); // 设置True时修改日志级别：ERROR ->
+                                    // RUN_WARNING，设置False恢复日志级别
 
 bool IsErrorToWarn();
 

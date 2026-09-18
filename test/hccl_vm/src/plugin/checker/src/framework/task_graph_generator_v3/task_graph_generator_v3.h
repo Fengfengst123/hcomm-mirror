@@ -24,13 +24,22 @@ namespace HcclSim {
 class StorageManager;
 namespace TaskGraphGeneratorV3 {
     using RankNodeQueues = std::vector<std::vector<NodeId>>;
-    using AllRankNodeQueues = std::map<RankId, RankNodeQueues>;
+    using AllRankNodeQueues = std::map<DeviceId, RankNodeQueues>;
 
     struct CcuExpandStats {
         size_t graphCount{0};
         size_t internalNodeCount{0};
         size_t recordWaitEdgeCount{0};
         uint64_t totalExpandNs{0};
+    };
+
+    struct SyncCompactStats {
+        size_t syncNodeCount{0};
+        size_t syncGroupCount{0};
+        size_t mergedGroupCount{0};
+        size_t removedNodeCount{0};
+        size_t rewiredEdgeCount{0};
+        size_t bypassEdgeCount{0};
     };
 
     struct AivExpandStats {
@@ -63,6 +72,7 @@ namespace TaskGraphGeneratorV3 {
 
         HcclResult
         GenGraph(std::vector<std::unique_ptr<TaskNode>> translatedNodes, AllRankNodeQueues translatedTaskQueues);
+        HcclResult CompactSyncNodes(SyncCompactStats* stats = nullptr);
         void Reset();
         void SetStorageManager(StorageManager* storage) { storage_ = storage; }
         StorageManager& GetStorageManager() const;
@@ -93,8 +103,8 @@ namespace TaskGraphGeneratorV3 {
         HcclResult ValidateTranslatedNodes() const;
         HcclResult BuildDagEdges();
 
-        HcclResult GenGraph4Rank(RankId rankId, const RankNodeQueues& rankTaskQueues);
-        HcclResult AddLocalNotifyEdges(RankId rankId, const RankNodeQueues& rankTaskQueues);
+        HcclResult GenGraph4Rank(DeviceId deviceId, const RankNodeQueues& rankTaskQueues);
+        HcclResult AddLocalNotifyEdges(DeviceId deviceId, const RankNodeQueues& rankTaskQueues);
         HcclResult AddInterRankNotifyEdges();
         HcclResult ExpandAivSubGraphs();
         HcclResult ExpandCcuSubGraphs();

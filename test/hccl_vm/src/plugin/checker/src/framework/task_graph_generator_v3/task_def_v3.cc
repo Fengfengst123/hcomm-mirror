@@ -73,7 +73,7 @@ namespace TaskGraphGeneratorV3 {
         std::string DescribePosition(const TaskPosition& position)
         {
             std::ostringstream os;
-            os << "rank=" << position.rankId << ", stream=" << position.streamId;
+            os << "device=" << position.deviceId << ", rank=" << position.rankId << ", stream=" << position.streamId;
             if (position.queueId != INVALID_QUEUE_ID) {
                 os << ", queue=" << position.queueId;
             }
@@ -95,16 +95,16 @@ namespace TaskGraphGeneratorV3 {
         std::string DescribeMemSlice(const MemSlice& slice)
         {
             std::ostringstream os;
-            os << "rank " << slice.rankId << ", " << ToString(slice.memType) << ", [0x" << std::hex << slice.offset
-               << ",0x" << (slice.offset + slice.len) << ")" << std::dec;
+            os << "device " << slice.deviceId << " rank " << slice.rankId << ", " << ToString(slice.memType) << ", [0x"
+               << std::hex << slice.offset << ",0x" << (slice.offset + slice.len) << ")" << std::dec;
             return os.str();
         }
 
         std::string DescribeAivLocation(const TaskPosition& location)
         {
             std::ostringstream os;
-            os << "rank=" << location.rankId << ", launch=" << location.launchIdx << ", block=" << location.blockId
-               << ", pipe=" << location.pipe << ", taskId=" << location.taskId;
+            os << "device=" << location.deviceId << ", rank=" << location.rankId << ", launch=" << location.launchIdx
+               << ", block=" << location.blockId << ", pipe=" << location.pipe << ", taskId=" << location.taskId;
             return os.str();
         }
 
@@ -125,7 +125,7 @@ namespace TaskGraphGeneratorV3 {
         std::string DescribeAicpuNotify(const AicpuNotify& notify)
         {
             std::ostringstream os;
-            os << "{recordRank=" << notify.recordRankId << ", waitRank=" << notify.waitRankId
+            os << "{recordDevice=" << notify.recordDeviceId << ", waitDevice=" << notify.waitDeviceId
                << ", notifyId=" << notify.notifyId << "}";
             return os.str();
         }
@@ -322,7 +322,7 @@ namespace TaskGraphGeneratorV3 {
         std::ostringstream os;
         os << "[TaskRecordCCU] node=" << nodeId_ << ", " << DescribePosition(loc_)
            << ", protocol=" << ToString(protocol_) << ", channelId=" << notify_.channelId
-           << ", recordRank=" << notify_.recordRankId << ", waitRank=" << notify_.waitRankId
+           << ", recordDevice=" << notify_.recordDeviceId << ", waitDevice=" << notify_.waitDeviceId
            << ", dieId=" << notify_.dieId << ", ckeId=" << notify_.ckeId << ", ckeMask=0x" << std::hex
            << notify_.ckeMask << std::dec;
         if (HasCcuTrace()) {
@@ -335,8 +335,8 @@ namespace TaskGraphGeneratorV3 {
     {
         std::ostringstream os;
         os << "[TaskWaitCCU] node=" << nodeId_ << ", " << DescribePosition(loc_) << ", protocol=" << ToString(protocol_)
-           << ", channelId=" << notify_.channelId << ", recordRank=" << notify_.recordRankId
-           << ", waitRank=" << notify_.waitRankId << ", dieId=" << notify_.dieId << ", ckeId=" << notify_.ckeId
+           << ", channelId=" << notify_.channelId << ", recordDevice=" << notify_.recordDeviceId
+           << ", waitDevice=" << notify_.waitDeviceId << ", dieId=" << notify_.dieId << ", ckeId=" << notify_.ckeId
            << ", ckeMask=0x" << std::hex << notify_.ckeMask << std::dec;
         if (HasCcuTrace()) {
             os << DescribeCcuTrace(GetCcuTrace());
@@ -347,7 +347,7 @@ namespace TaskGraphGeneratorV3 {
     std::string TaskCcuGraph::Describe() const
     {
         std::ostringstream os;
-        os << "[TaskCcuGraph] node=" << nodeId_ << ", " << DescribePosition(loc_) << ", rank=" << ccuDesc_.rankId
+        os << "[TaskCcuGraph] node=" << nodeId_ << ", " << DescribePosition(loc_) << ", device=" << ccuDesc_.deviceId
            << ", queueNum=" << ccuDesc_.ccuParams.size();
         for (size_t i = 0; i < ccuDesc_.ccuParams.size(); ++i) {
             os << ", q" << i << "SqeNum=" << ccuDesc_.ccuParams[i].size();
@@ -361,7 +361,7 @@ namespace TaskGraphGeneratorV3 {
     std::string TaskAivGraph::Describe() const
     {
         std::ostringstream os;
-        os << "[TaskAivGraph] node=" << nodeId_ << ", " << DescribePosition(loc_) << ", rank=" << rankId_
+        os << "[TaskAivGraph] node=" << nodeId_ << ", " << DescribePosition(loc_) << ", device=" << deviceId_
            << ", launch=" << launchIdx_ << ", hostStream=" << hostStreamId_;
         return os.str();
     }
@@ -376,10 +376,8 @@ namespace TaskGraphGeneratorV3 {
     std::string TaskAivSetFlag::Describe() const
     {
         std::ostringstream os;
-        os << "[TaskAivSetFlag] node=" << nodeId_ << ", " << DescribePosition(loc_) << ", rank=" << event_.rankId
-           << ", launch=" << event_.launchIdx << ", block=" << event_.blockId << ", taskId=" << event_.taskId
-           << ", curPipe=" << event_.curPipe << ", srcPipe=" << event_.srcPipe << ", dstPipe=" << event_.dstPipe
-           << ", eventId=" << event_.eventId;
+        os << "[TaskAivSetFlag] node=" << nodeId_ << ", " << DescribePosition(loc_) << ", srcPipe=" << event_.srcPipe
+           << ", dstPipe=" << event_.dstPipe << ", eventId=" << event_.eventId;
         return os.str();
     }
     std::string TaskAivSetFlag::DescribeShort() const
@@ -395,10 +393,8 @@ namespace TaskGraphGeneratorV3 {
     std::string TaskAivWaitFlag::Describe() const
     {
         std::ostringstream os;
-        os << "[TaskAivWaitFlag] node=" << nodeId_ << ", " << DescribePosition(loc_) << ", rank=" << event_.rankId
-           << ", launch=" << event_.launchIdx << ", block=" << event_.blockId << ", taskId=" << event_.taskId
-           << ", curPipe=" << event_.curPipe << ", srcPipe=" << event_.srcPipe << ", dstPipe=" << event_.dstPipe
-           << ", eventId=" << event_.eventId;
+        os << "[TaskAivWaitFlag] node=" << nodeId_ << ", " << DescribePosition(loc_) << ", srcPipe=" << event_.srcPipe
+           << ", dstPipe=" << event_.dstPipe << ", eventId=" << event_.eventId;
         return os.str();
     }
     std::string TaskAivWaitFlag::DescribeShort() const
@@ -414,8 +410,8 @@ namespace TaskGraphGeneratorV3 {
     std::string TaskAivPipeBarrier::Describe() const
     {
         std::ostringstream os;
-        os << "[TaskAivPipeBarrier] node=" << nodeId_ << ", " << DescribePosition(loc_) << ", "
-           << DescribeAivLocation(info_.taskLoc) << ", pipeType=" << info_.pipeType << ", merged=" << info_.merged
+        os << "[TaskAivPipeBarrier] node=" << nodeId_ << ", " << DescribePosition(loc_)
+           << ", pipeType=" << info_.pipeType << ", merged=" << info_.merged
            << ", memberTaskIds=" << DescribeTaskIds(info_.memberTaskIds);
         return os.str();
     }
@@ -431,9 +427,8 @@ namespace TaskGraphGeneratorV3 {
     std::string TaskAivSyncAll::Describe() const
     {
         std::ostringstream os;
-        os << "[TaskAivSyncAll] node=" << nodeId_ << ", " << DescribePosition(loc_) << ", "
-           << DescribeAivLocation(info_.taskLoc) << ", syncRound=" << info_.syncRound << ", merged=" << info_.merged
-           << ", memberTaskIds=" << DescribeTaskIds(info_.memberTaskIds);
+        os << "[TaskAivSyncAll] node=" << nodeId_ << ", " << DescribePosition(loc_) << ", syncRound=" << info_.syncRound
+           << ", merged=" << info_.merged << ", memberTaskIds=" << DescribeTaskIds(info_.memberTaskIds);
         return os.str();
     }
     std::string TaskAivSyncAll::DescribeShort() const
@@ -449,9 +444,8 @@ namespace TaskGraphGeneratorV3 {
     {
         std::ostringstream os;
         os << "[TaskAivSendFlag] node=" << nodeId_ << ", " << DescribePosition(loc_)
-           << ", currentRank=" << flag_.currentRank << ", flagOwnerRank=" << flag_.flagOwnerRank
-           << ", launch=" << flag_.launchIdx << ", block=" << flag_.blockId << ", pipe=" << flag_.curPipe
-           << ", taskId=" << flag_.taskId << ", commInfoOffset=" << flag_.commInfoOffset << ", value=" << flag_.value;
+           << ", flagOwnerDevice=" << flag_.flagOwnerDevice << ", commInfoOffset=" << flag_.commInfoOffset
+           << ", value=" << flag_.value;
         return os.str();
     }
     std::string TaskAivSendFlag::DescribeShort() const
@@ -459,7 +453,7 @@ namespace TaskGraphGeneratorV3 {
         std::ostringstream os;
         os << "[TaskAivSendFlag] node=" << nodeId_ << "\n"
            << DescribePosition(loc_) << "\n"
-           << "flagOwnerRank=" << flag_.flagOwnerRank << "\n"
+           << "flagOwnerDevice=" << flag_.flagOwnerDevice << "\n"
            << "commInfoOffset=" << flag_.commInfoOffset << ", value=" << flag_.value;
         return os.str();
     }
@@ -468,9 +462,8 @@ namespace TaskGraphGeneratorV3 {
     {
         std::ostringstream os;
         os << "[TaskAivRecvFlag] node=" << nodeId_ << ", " << DescribePosition(loc_)
-           << ", currentRank=" << flag_.currentRank << ", flagOwnerRank=" << flag_.flagOwnerRank
-           << ", launch=" << flag_.launchIdx << ", block=" << flag_.blockId << ", pipe=" << flag_.curPipe
-           << ", taskId=" << flag_.taskId << ", commInfoOffset=" << flag_.commInfoOffset << ", value=" << flag_.value;
+           << ", flagOwnerDevice=" << flag_.flagOwnerDevice << ", commInfoOffset=" << flag_.commInfoOffset
+           << ", value=" << flag_.value;
         return os.str();
     }
     std::string TaskAivRecvFlag::DescribeShort() const
@@ -478,8 +471,24 @@ namespace TaskGraphGeneratorV3 {
         std::ostringstream os;
         os << "[TaskAivRecvFlag] node=" << nodeId_ << "\n"
            << DescribePosition(loc_) << "\n"
-           << "flagOwnerRank=" << flag_.flagOwnerRank << "\n"
+           << "flagOwnerDevice=" << flag_.flagOwnerDevice << "\n"
            << "commInfoOffset=" << flag_.commInfoOffset << ", value=" << flag_.value;
+        return os.str();
+    }
+
+    std::string TaskSyncStream::Describe() const
+    {
+        std::ostringstream os;
+        os << "[TaskSyncStream] node=" << nodeId_ << ", " << DescribePosition(loc_) << ", syncIdx=" << syncIdx_;
+        return os.str();
+    }
+
+    std::string TaskSyncStream::DescribeShort() const
+    {
+        std::ostringstream os;
+        os << "[TaskSyncStream] node=" << nodeId_ << "\n"
+           << DescribePosition(loc_) << "\n"
+           << "syncIdx=" << syncIdx_;
         return os.str();
     }
 

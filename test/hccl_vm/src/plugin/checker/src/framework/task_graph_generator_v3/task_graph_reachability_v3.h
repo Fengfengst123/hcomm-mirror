@@ -48,7 +48,8 @@ namespace TaskGraphGeneratorV3 {
         size_t unreachablePairCount{0};
     };
 
-    // topoOrder is the full graph topo order: mainStart(-1) first, followed by normal task nodes.
+    // topoOrder is the full graph topo order: mainStart(-1) first, followed by
+    // normal task nodes.
     HcclResult GenReachabilityClosure(
         const TaskNode* start, ReachabilityClosure& closure, std::vector<NodeId>* topoOrder = nullptr);
     HcclResult IsReachable(const ReachabilityClosure& closure, NodeId fromNodeId, NodeId toNodeId, bool& isReachable);

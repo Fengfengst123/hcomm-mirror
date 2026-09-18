@@ -8,6 +8,12 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: ccu executor -- set cke
+ * Author: caiyifan
+ */
+
 #include "set_cke_executor.h"
 
 #include "ccu_executor_manager.h"
@@ -52,8 +58,9 @@ void SetCkeExecutor::Run() { WaitCkeProcess(waitCKEId_, waitCKEMask_, clearType_
 std::string SetCkeExecutor::Describe()
 {
     return HcclSim::StringFormat(
-        "[Simulation Execute] Wait CKE[%u:%04x], Set CKE[%u:%04x], clearType[%u]\n", waitCKEId_, waitCKEMask_,
-        setCKEId_, setCKEMask_, clearType_);
+        "[Simulation Execute] Wait CKE[%u:%04x], Set "
+        "CKE[%u:%04x], clearType[%u]\n",
+        waitCKEId_, waitCKEMask_, setCKEId_, setCKEMask_, clearType_);
 }
 
 CcuTrace::CcuInstrTraceDetail SetCkeExecutor::CollectTraceDetail()

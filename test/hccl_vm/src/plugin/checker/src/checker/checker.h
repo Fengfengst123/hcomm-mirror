@@ -10,29 +10,10 @@
 
 #ifndef CHECKER_H
 #define CHECKER_H
-#include <cstdint>
-#include "checker_def.h"
 #include "hccl_types.h"
-#include "task_check_op_semantics.h"
-#include "task_def.h"
+#include <cstdint>
 
 namespace HcclSim {
 HcclResult GenAndCheckGraphV3();
-
-class Checker {
-public:
-    Checker() = default;
-    ~Checker();
-    HcclResult GenAndCheckGraph(AllRankTaskQueues& allRankTaskQueues, TaskCheckOpSemantics& opSemanticsChcker);
-    void CloseRankMemCheck();
-
-private:
-    void CopyTaskGraph(TaskNodePtr originNode, TaskNodePtr copyNode);
-    HcclResult CopyCcuTaskGraph(TaskNodePtr originNode, TaskNodePtr copyNode, uint32_t rankNum);
-    // 空实现
-    vector<HcclSim::TaskStub*> toDeleteCopyTaskResource_;
-    vector<TaskNodePtr> toDeleteCopyTaskNodeResource_;
-    bool closeRankMemCheck_ = true;
-};
-} // namespace HcclSim
+}
 #endif

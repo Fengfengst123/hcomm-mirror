@@ -19,8 +19,8 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/src/plugin/runner/ccu_executor/reduce_executor
     ${CMAKE_SOURCE_DIR}/src/plugin/runner/runner_utils
     ${CMAKE_SOURCE_DIR}/src/plugin/runner/aiv_executor
-    ${CMAKE_SOURCE_DIR}/src/proxy/aiv_kernel/aiv_mode_stub
-    ${CMAKE_SOURCE_DIR}/src/proxy/aiv_kernel/ascendc_stub
+    ${CMAKE_SOURCE_DIR}/src/proxy/level2/aiv_kernel/aiv_mode_stub
+    ${CMAKE_SOURCE_DIR}/src/proxy/level2/aiv_kernel/ascendc_stub
     ${CMAKE_SOURCE_DIR}/src/plugin/checker/header/external
     ${CMAKE_SOURCE_DIR}/src/plugin/checker/header/external/nlohmann
     ${CMAKE_SOURCE_DIR}/src/store

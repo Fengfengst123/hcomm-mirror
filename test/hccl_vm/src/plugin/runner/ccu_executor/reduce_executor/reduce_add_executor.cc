@@ -8,6 +8,12 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: ccu executor -- reduce add
+ * Author: caiyifan
+ */
+
 #include "reduce_add_executor.h"
 
 #include <cstdint>
@@ -16,10 +22,10 @@
 
 #include "ccu_executor_manager.h"
 #include "ccu_microcode_common_v1.h"
-#include "sim_log.h"
 #include "ccu_reduce_operator.h"
 #include "ccu_simulator_base.h"
 #include "ccu_string_util.h"
+#include "sim_log.h"
 
 using namespace std;
 using namespace hcomm::CcuRep;
@@ -58,8 +64,9 @@ void ReduceAddExecutor::Parser()
 void ReduceAddExecutor::Process(CcuResourceManager& ccuResMgr)
 {
     HCCL_VM_DEBUG(
-        "Reduce Add info, locCcu[{}:{}], count=[{}], castEn=[{}], dataType=[{}]", rankId_, dieId_, count_, castEn_,
-        dataType_);
+        "Reduce Add info, locCcu[{}:{}], count=[{}], castEn=[{}], "
+        "dataType=[{}]",
+        rankId_, dieId_, count_, castEn_, dataType_);
     for (uint32_t i = 0; i < CCU_REDUCE_MAX_MS; i++) {
         HCCL_VM_TRACE("msId_[{}]:dieId[{}], msId[{}]", i, msId_[i] >> 15, msId_[i] & 0x7FFF);
         msId_[i] = msId_[i] & 0x7FFF;
@@ -91,8 +98,9 @@ void ReduceAddExecutor::Process(CcuResourceManager& ccuResMgr)
 void ReduceAddExecutor::RunV2()
 {
     HCCL_VM_DEBUG(
-        "Reduce Add info, locCcu[{}:{}], count=[{}], castEn=[{}], dataType=[{}]", rankId_, dieId_, count_, castEn_,
-        dataType_);
+        "Reduce Add info, locCcu[{}:{}], count=[{}], castEn=[{}], "
+        "dataType=[{}]",
+        rankId_, dieId_, count_, castEn_, dataType_);
     auto& ccuResMgr = CcuResourceManager::GetInstance();
     for (uint32_t i = 0; i < CCU_REDUCE_MAX_MS; i++) {
         HCCL_VM_TRACE("msId_[{}]:dieId[{}], msId[{}]", i, msId_[i] >> 15, msId_[i] & 0x7FFF);
@@ -131,7 +139,8 @@ void ReduceAddExecutor::Run()
 std::string ReduceAddExecutor::Describe()
 {
     return HcclSim::StringFormat(
-        "[Simulation Execute] Wait CKE[%u:%04x], Add %s with Count[%u], DataType[%u] and "
+        "[Simulation Execute] Wait CKE[%u:%04x], Add %s with Count[%u], "
+        "DataType[%u] and "
         "CastEn[%u], Set CKE[%u:%04x], clearType[%u]\n",
         waitCKEId_, waitCKEMask_, ParseMSList().c_str(), count_, dataType_, castEn_, setCKEId_, setCKEMask_,
         clearType_);

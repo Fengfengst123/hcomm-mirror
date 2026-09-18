@@ -48,6 +48,7 @@ add_executable(test_hccl_plugin_manager
 target_link_libraries(test_hccl_plugin_manager PRIVATE
     gtest
     gtest_main
+    store
     log
     pthread
     dl

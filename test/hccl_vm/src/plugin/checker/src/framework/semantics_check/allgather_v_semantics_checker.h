@@ -8,6 +8,11 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: AllGatherV语义校验文件头
+ */
+
 #ifndef HCCLV1_ALLGATHER_V_SEMANTICS_CHECKER_H
 #define HCCLV1_ALLGATHER_V_SEMANTICS_CHECKER_H
 
@@ -15,8 +20,9 @@
 #include "hccl_types.h"
 
 namespace HcclSim {
-HcclResult
-TaskCheckAllGatherVSemantics(std::map<RankId, RankMemorySemantics>& allRankMemSemantics, VDataDesTagInner& vDataDes);
+HcclResult TaskCheckAllGatherVSemantics(
+    std::map<DeviceId, RankMemorySemantics>& allRankMemSemantics, VDataDesTagInner& vDataDes,
+    const std::vector<DeviceId>& rankToDevice);
 }
 
 #endif

@@ -11,15 +11,23 @@
 #ifndef HCCL_VM_TOPO_ASCEND_CLUSTER_PARSER_H
 #define HCCL_VM_TOPO_ASCEND_CLUSTER_PARSER_H
 
+#include <cstdint>
 #include <cstring>
 #include <json.hpp>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
-#include "topo_cluster_parser.h"
 #include "cmd_cluster_model_utils.h"
 #include "sim_common_defs.h"
+#include "topo_cluster_parser.h"
+
+namespace HcclSim {
+namespace Storage {
+    class Transaction;
+} // namespace Storage
+} // namespace HcclSim
 
 using namespace HcclSim;
 using namespace std;
@@ -64,15 +72,15 @@ private:
     HcclVmResult InitDynamicModelData(const TopoMeta& topoMeta);
     HcclVmResult BuildLevelList(
         const Server& server, int srcDevPhyId, const std::set<int>& commDomainLocalIds, uint32_t spIdx, uint32_t srvIdx,
-        json& levelList);
+        json& levelList, bool skipLayerAbove2, const std::set<int>& allowedNetLayers);
     json BuildRankEntry(
         const Server& server, int srcDevPhyId, const std::set<int>& commDomainLocalIds, uint32_t spIdx, uint32_t srvIdx,
-        uint32_t rankId);
-    uint64_t InitServer(uint32_t superPodId, const Server& server);
-    uint64_t InitDevice(uint64_t serverKey, const Device& device);
-    uint64_t InitPort(uint64_t deviceKey, const Port& port);
-    uint64_t InitCcu(uint64_t deviceKey, uint32_t dieId);
+        uint32_t rankId, bool skipLayerAbove2, const std::set<int>& allowedNetLayers);
+    uint64_t InitServer(uint32_t superPodId, const Server& server, HcclSim::Storage::Transaction& txn);
     uint64_t InitCcuResource(uint64_t ccuKey);
+    // 按IP查EndPoint id: 优先查内存索引ipToEndpointId_(静态拓扑初始化时构建),
+    // 未命中回退DB全表查询。返回0表示未找到
+    uint64_t FindEndPointIdByIp(const std::string& ip);
     HcclVmResult AddLinkInfo(
         const LinkPortRef* srcPort, const LinkPortRef* dstPort, uint32_t netLayer,
         const std::vector<Protocol>& protocols);
@@ -85,6 +93,11 @@ private:
     Network network_;
     std::map<uint32_t, std::map<uint32_t, uint64_t>> serverIdx2Key_;
     HvmClusterStatus status_{HvmClusterStatus::COMM_DOMAIN_UNINIT};
+    // ip -> EndPoint id内存索引: InitPort写入EndPoint时同步构建,
+    // 同一IP(portGroup多物理端口共享EID)保留最先插入的id, 与全表查询按rowid序
+    // 首个命中(GetOneByPred)的语义一致; 供AddLinkInfo等高频查询使用,
+    // 避免全表扫描
+    std::unordered_map<std::string, uint64_t> ipToEndpointId_;
 };
 
 #endif // HCCL_VM_TOPO_ASCEND_CLUSTER_PARSER_H

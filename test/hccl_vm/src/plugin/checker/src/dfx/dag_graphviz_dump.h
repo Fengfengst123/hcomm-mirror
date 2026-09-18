@@ -13,9 +13,9 @@
 
 #include <string>
 
-#include "hccl_types.h"
-#include "framework/task_graph_generator_v3/task_graph_generator_v3.h"
 #include "framework/task_graph_generator_v3/task_def_v3.h"
+#include "framework/task_graph_generator_v3/task_graph_generator_v3.h"
+#include "hccl_types.h"
 
 namespace HcclSim {
 

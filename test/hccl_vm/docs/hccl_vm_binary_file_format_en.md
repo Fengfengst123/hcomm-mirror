@@ -328,8 +328,8 @@ Each MicrocodeInstrInner contains:
 |  1    | ROCE    | RDMA over Converged Ethernet       |
 |  2    | PCIE    | PCIe communication                 |
 |  3    | SIO     | Socket I/O                         |
-|  4    | UB_CTP  | UB CTP protocol                    |
-|  5    | UBC_TP  | UBC TP protocol (legacy compatibility value, not recommended for new development) |
+|  4    | UBC_CTP | UBC CTP protocol                   |
+|  5    | UBC_TP  | UBC TP protocol                    |
 |  6    | UB_MEM  | UB memory protocol                 |
 
 ### 6.3 Buffer Type (BufferType)

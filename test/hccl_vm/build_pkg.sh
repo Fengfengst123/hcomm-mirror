@@ -235,9 +235,6 @@ echo "--------------------------"
 # 第二步：构建并安装 HCOMM
 # ==========================================
 
-# 关闭 Linux 系统对 Python 的保护锁，解决 pip 装包时报错
-sudo rm -f /usr/lib/python3.*/EXTERNALLY-MANAGED
-
 if [ "$BUILD_HCOMM" = true ]; then
     echo "正在开始构建 HCOMM..."
     cd "$HCOMM_CODE_HOME" || exit 1
@@ -255,7 +252,7 @@ if [ "$BUILD_HCOMM" = true ]; then
         fi
         
         echo "找到安装包: $CANN_HCOMM_PACKAGE"
-        yes y | "$CANN_HCOMM_PACKAGE" --full --install-path="$ASCEND_INSTALL_PATH"
+        yes y | "$CANN_HCOMM_PACKAGE" --full --pylocal --install-path="$ASCEND_INSTALL_PATH"
     else
         echo "错误: HCOMM 构建失败"
         exit 1
@@ -284,7 +281,7 @@ if [ "$BUILD_HCCL" = true ]; then
         fi
         
         echo "找到安装包: $CANN_HCCL_PACKAGE"
-        yes y | "$CANN_HCCL_PACKAGE" --full --install-path="$ASCEND_INSTALL_PATH"
+        yes y | "$CANN_HCCL_PACKAGE" --full --pylocal --install-path="$ASCEND_INSTALL_PATH"
     else
         echo "错误: HCCL 构建失败"
         exit 1
@@ -322,7 +319,7 @@ else
     echo "跳过 aicpu_hcomm.tar.gz 处理..."
 fi
 
-# 修正目录和文件的权限，确保 .so 有足够权限被 dlopen 加载
-sudo chmod -R 755 "$AICPU_DEPLOY_DIR"
+# 确保当前用户可以读写目录内容，并保留必要的执行权限
+chmod -R u+rwX "$AICPU_DEPLOY_DIR"
 
 echo "所有任务均已执行完成！"

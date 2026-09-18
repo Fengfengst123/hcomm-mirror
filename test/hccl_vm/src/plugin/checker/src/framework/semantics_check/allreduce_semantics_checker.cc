@@ -20,81 +20,76 @@
 
 namespace HcclSim {
 HcclResult TaskCheckAllReduceSemantics(
-    std::map<RankId, RankMemorySemantics>& allRankMemSemantics, u64 dataSize, HcclReduceOp reduceType)
+    std::map<DeviceId, RankMemorySemantics>& allRankMemSemantics, u64 dataSize, HcclReduceOp reduceType,
+    const std::vector<DeviceId>& rankToDevice)
 {
     u32 rankSize = allRankMemSemantics.size();
+    if (allRankMemSemantics.size() != rankSize) {
+        HCCL_VM_ERROR(
+            "{} AllReduce rank set size mismatch: expected {}, actual {}.",
+            MakeErrorCodeText(ErrorCode::SEMANTIC_FINAL_MISSING), rankSize, allRankMemSemantics.size());
+        return HcclResult::HCCL_E_PARA;
+    }
 
-    for (RankId rankId = 0; rankId < rankSize; rankId++) {
-        // 对应的rank不存在需要报错
-        if (allRankMemSemantics.count(rankId) == 0) {
-            HCCL_VM_ERROR(
-                "{} AllReduce produced no result data for rank {}, but this rank is expected to hold "
-                "a full reduced result of 0x{:x} bytes from all {} participating ranks.",
-                MakeErrorCodeText(ErrorCode::SEMANTIC_FINAL_MISSING), rankId, dataSize, rankSize);
-            return HcclResult::HCCL_E_PARA;
-        }
-
+    for (auto& [deviceId, mem] : allRankMemSemantics) {
         u64 totalSize = 0;
-        for (auto& ele : allRankMemSemantics[rankId][BufferType::OUTPUT]) {
+        for (auto& [eleAddr, ele] : mem[BufferType::OUTPUT]) {
             const u64 rangeEnd = ele.startAddr + ele.size;
             if (ele.startAddr != totalSize) {
                 HCCL_VM_ERROR(
-                    "{} AllReduce output for rank {} should continue at 0x{:x}, "
-                    "but the next actual range starts at 0x{:x} (actual range: [0x{:x},0x{:x}))."
+                    "{} AllReduce output for device {} should continue at "
+                    "0x{:x}, "
+                    "but the next actual range starts at 0x{:x} (actual range: "
+                    "[0x{:x},0x{:x}))."
                     "\nCurrent result range detail:\n{}",
-                    MakeErrorCodeText(ErrorCode::SEMANTIC_FINAL_MISSING), rankId, totalSize, ele.startAddr,
+                    MakeErrorCodeText(ErrorCode::SEMANTIC_FINAL_MISSING), deviceId, totalSize, ele.startAddr,
                     ele.startAddr, rangeEnd, ele.Describe());
                 return HcclResult::HCCL_E_PARA;
             }
 
             if (ele.srcBufs.size() > 1 && ele.reduceType != reduceType) {
                 HCCL_VM_ERROR(
-                    "{} AllReduce result range [0x{:x},0x{:x}) for rank {} was reduced with mode {}, "
+                    "{} AllReduce result range [0x{:x},0x{:x}) for device {} "
+                    "was reduced with mode {}, "
                     "but the operator expects reduce mode {}."
                     "\nCurrent result range detail:\n{}",
-                    MakeErrorCodeText(ErrorCode::SEMANTIC_FINAL_REDUCE_ERROR), ele.startAddr, rangeEnd, rankId,
+                    MakeErrorCodeText(ErrorCode::SEMANTIC_FINAL_REDUCE_ERROR), ele.startAddr, rangeEnd, deviceId,
                     DumpReduceOpToString(ele.reduceType), DumpReduceOpToString(reduceType), ele.Describe());
                 return HcclResult::HCCL_E_PARA;
             }
 
             if (ele.srcBufs.size() != rankSize) {
                 HCCL_VM_ERROR(
-                    "{} AllReduce result range [0x{:x},0x{:x}) for rank {} should combine inputs "
+                    "{} AllReduce result range [0x{:x},0x{:x}) for device {} "
+                    "should combine inputs "
                     "from {} source ranks, but it actually combines {}."
                     "\nCurrent result range detail:\n{}",
-                    MakeErrorCodeText(ErrorCode::SEMANTIC_FINAL_REDUCE_ERROR), ele.startAddr, rangeEnd, rankId,
+                    MakeErrorCodeText(ErrorCode::SEMANTIC_FINAL_REDUCE_ERROR), ele.startAddr, rangeEnd, deviceId,
                     rankSize, ele.srcBufs.size(), ele.Describe());
-                return HcclResult::HCCL_E_PARA;
-            }
-
-            if (ele.srcBufs.begin()->rankId != 0 or ele.srcBufs.rbegin()->rankId != (rankSize - 1)) {
-                HCCL_VM_ERROR(
-                    "{} AllReduce result range [0x{:x},0x{:x}) for rank {} should combine "
-                    "source ranks [0,{}], but the actual source ranks only span [{},{}]."
-                    "\nCurrent result range detail:\n{}",
-                    MakeErrorCodeText(ErrorCode::SEMANTIC_FINAL_SRC_ERROR), ele.startAddr, rangeEnd, rankId,
-                    rankSize - 1, ele.srcBufs.begin()->rankId, ele.srcBufs.rbegin()->rankId, ele.Describe());
                 return HcclResult::HCCL_E_PARA;
             }
 
             for (auto& srcBuf : ele.srcBufs) {
                 if (srcBuf.bufType != BufferType::INPUT) {
                     HCCL_VM_ERROR(
-                        "{} AllReduce result range [0x{:x},0x{:x}) for rank {} should come from INPUT, "
-                        "but source rank {} actually provides buffer type {}."
+                        "{} AllReduce result range [0x{:x},0x{:x}) for device "
+                        "{} should come from INPUT, "
+                        "but source device {} actually provides buffer type {}."
                         "\nCurrent result range detail:\n{}",
-                        MakeErrorCodeText(ErrorCode::SEMANTIC_FINAL_SRC_ERROR), ele.startAddr, rangeEnd, rankId,
-                        srcBuf.rankId, BufferTypeToString(srcBuf.bufType), ele.Describe());
+                        MakeErrorCodeText(ErrorCode::SEMANTIC_FINAL_SRC_ERROR), ele.startAddr, rangeEnd, deviceId,
+                        srcBuf.deviceId, BufferTypeToString(srcBuf.bufType), ele.Describe());
                     return HcclResult::HCCL_E_PARA;
                 }
 
                 if (srcBuf.srcAddr != totalSize) {
                     HCCL_VM_ERROR(
-                        "{} AllReduce result range [0x{:x},0x{:x}) for rank {} should read "
-                        "source rank {} at 0x{:x}, but the actual source address is 0x{:x}."
+                        "{} AllReduce result range [0x{:x},0x{:x}) for device "
+                        "{} should read "
+                        "source device {} at 0x{:x}, but the actual source "
+                        "address is 0x{:x}."
                         "\nCurrent result range detail:\n{}",
-                        MakeErrorCodeText(ErrorCode::SEMANTIC_FINAL_SRC_ERROR), ele.startAddr, rangeEnd, rankId,
-                        srcBuf.rankId, totalSize, srcBuf.srcAddr, ele.Describe());
+                        MakeErrorCodeText(ErrorCode::SEMANTIC_FINAL_SRC_ERROR), ele.startAddr, rangeEnd, deviceId,
+                        srcBuf.deviceId, totalSize, srcBuf.srcAddr, ele.Describe());
                     return HcclResult::HCCL_E_PARA;
                 }
             }
@@ -102,9 +97,9 @@ HcclResult TaskCheckAllReduceSemantics(
         }
         if (totalSize != dataSize) {
             HCCL_VM_ERROR(
-                "{} AllReduce result for rank {} ends at 0x{:x} bytes, "
+                "{} AllReduce result for device {} ends at 0x{:x} bytes, "
                 "but the expected total size is 0x{:x}.",
-                MakeErrorCodeText(ErrorCode::SEMANTIC_FINAL_MISSING), rankId, totalSize, dataSize);
+                MakeErrorCodeText(ErrorCode::SEMANTIC_FINAL_MISSING), deviceId, totalSize, dataSize);
             return HcclResult::HCCL_E_PARA;
         }
     }

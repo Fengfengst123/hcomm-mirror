@@ -53,9 +53,10 @@ namespace TaskGraphGeneratorV3 {
             }
         }
 
-        MemSlice MakeMemSlice(RankId rankId, const DataSlice& slice)
+        MemSlice MakeMemSlice(DeviceId deviceId, RankId rankId, const DataSlice& slice)
         {
             MemSlice memSlice;
+            memSlice.deviceId = deviceId;
             memSlice.rankId = rankId;
             memSlice.memType = ConvertMemType(slice.GetType());
             memSlice.offset = slice.GetOffset();
@@ -64,15 +65,52 @@ namespace TaskGraphGeneratorV3 {
             return memSlice;
         }
 
-        HcclResult MakeTaskPosition(const HcclTaskMetaData& taskMeta, OperatorId operatorId, TaskPosition& position)
+        bool ResolveTaskIdentity(
+            const HcclTaskMetaData& taskMeta, StorageManager& storage, DeviceId& deviceId, RankId& rankId)
+        {
+            if (taskMeta.deviceId > std::numeric_limits<DeviceId>::max()) {
+                return false;
+            }
+            deviceId = static_cast<DeviceId>(taskMeta.deviceId);
+
+            if (taskMeta.rankId == INVALID_RANK_ID) {
+                const auto mappings = storage.GetDeviceRankMappings();
+                const auto iter = mappings.find(deviceId);
+                if (iter == mappings.end()) {
+                    return false;
+                }
+                rankId = iter->second;
+                return true;
+            }
+
+            DeviceId mappedDeviceId = INVALID_DEVICE_ID;
+            if (!storage.GetDeviceIdByCommRank(taskMeta.commId, taskMeta.rankId, mappedDeviceId)
+                || mappedDeviceId != deviceId) {
+                return false;
+            }
+            rankId = taskMeta.rankId;
+            return true;
+        }
+
+        HcclResult MakeTaskPosition(
+            const HcclTaskMetaData& taskMeta, StorageManager& storage, OperatorId operatorId, TaskPosition& position)
         {
             if (taskMeta.streamId > std::numeric_limits<StreamId>::max()) {
                 return HCCL_E_PARA;
             }
 
             position.operatorId = operatorId;
-            position.rankId = taskMeta.rankId;
+            position.commId = taskMeta.commId;
+            if (!ResolveTaskIdentity(taskMeta, storage, position.deviceId, position.rankId)) {
+                return HCCL_E_PARA;
+            }
             position.streamId = static_cast<StreamId>(taskMeta.streamId);
+            if (!storage.GetMainStreamId(position.deviceId, position.mainStreamId)) {
+                HCCL_VM_ERROR(
+                    "Cannot resolve operator main stream, deviceId={}, streamId={}", position.deviceId,
+                    position.streamId);
+                return HCCL_E_PARA;
+            }
             return HCCL_SUCCESS;
         }
 
@@ -85,13 +123,13 @@ namespace TaskGraphGeneratorV3 {
             return HCCL_SUCCESS;
         }
 
-        HcclResult EnsureStream(AllRankNodeQueues& taskQueues, RankId rankId, StreamId streamId)
+        HcclResult EnsureStream(AllRankNodeQueues& taskQueues, DeviceId deviceId, StreamId streamId)
         {
             if (streamId == INVALID_STREAM_ID) {
                 return HCCL_E_PARA;
             }
 
-            auto& rankStreams = taskQueues[rankId];
+            auto& rankStreams = taskQueues[deviceId];
             if (rankStreams.size() <= streamId) {
                 rankStreams.resize(static_cast<size_t>(streamId) + 1);
             }
@@ -123,8 +161,8 @@ namespace TaskGraphGeneratorV3 {
                << ", streamId=" << taskMeta.streamId;
             switch (taskMeta.taskType) {
                 case HccLTaskMetaType::MEM_CPY:
-                    os << ", srcRankId=" << taskMeta.taskData.transMem.srcRankId
-                       << ", dstRankId=" << taskMeta.taskData.transMem.dstRankId << ", src=[0x" << std::hex
+                    os << ", srcDeviceId=" << taskMeta.taskData.transMem.srcDeviceId
+                       << ", dstDeviceId=" << taskMeta.taskData.transMem.dstDeviceId << ", src=[0x" << std::hex
                        << taskMeta.taskData.transMem.srcOffset << ",0x"
                        << (taskMeta.taskData.transMem.srcOffset + taskMeta.taskData.transMem.len) << ")"
                        << ", dst=[0x" << taskMeta.taskData.transMem.dstOffset << ",0x"
@@ -133,8 +171,8 @@ namespace TaskGraphGeneratorV3 {
                     break;
                 case HccLTaskMetaType::REDUCE:
                     // 此处的 datacount 实际为 size
-                    os << ", srcRankId=" << taskMeta.taskData.reduce.srcRankId
-                       << ", dstRankId=" << taskMeta.taskData.reduce.dstRankId << ", src=[0x" << std::hex
+                    os << ", srcDeviceId=" << taskMeta.taskData.reduce.srcDeviceId
+                       << ", dstDeviceId=" << taskMeta.taskData.reduce.dstDeviceId << ", src=[0x" << std::hex
                        << taskMeta.taskData.reduce.srcOffset << ",0x"
                        << (taskMeta.taskData.reduce.srcOffset + taskMeta.taskData.reduce.dataCount) << ")"
                        << ", dst=[0x" << taskMeta.taskData.reduce.dstOffset << ",0x"
@@ -144,8 +182,8 @@ namespace TaskGraphGeneratorV3 {
                     break;
                 case HccLTaskMetaType::NOTIFY_RECORD:
                 case HccLTaskMetaType::NOTIFY_WAIT:
-                    os << ", srcRankId=" << taskMeta.taskData.notify.srcRankId
-                       << ", dstRankId=" << taskMeta.taskData.notify.dstRankId
+                    os << ", recordDeviceId=" << taskMeta.taskData.notify.srcDeviceId
+                       << ", waitDeviceId=" << taskMeta.taskData.notify.dstDeviceId
                        << ", notifyId=" << taskMeta.taskData.notify.notifyId
                        << ", notifyCount=" << taskMeta.taskData.notify.notifyCount
                        << ", protocol=" << static_cast<uint32_t>(taskMeta.taskData.notify.protocol);
@@ -158,6 +196,9 @@ namespace TaskGraphGeneratorV3 {
                     break;
                 case HccLTaskMetaType::AIV_GRAPH:
                     os << ", launchId=" << taskMeta.taskData.aiv.launchIdx;
+                    break;
+                case HccLTaskMetaType::SYNC_STREAM:
+                    os << ", syncIdx=" << taskMeta.taskData.syncStreamTask.syncIdx;
                     break;
                 default:
                     break;
@@ -186,17 +227,20 @@ namespace TaskGraphGeneratorV3 {
         }
 
         HcclResult GetTaskDataSlice(
-            StorageManager& storage, RankId expectedRank, uint64_t addr, uint64_t size, DataSlice& dataSlice)
+            StorageManager& storage, const std::string& commName, uint64_t commHash, uint32_t opIter,
+            DeviceId expectedDeviceId, uint64_t addr, uint64_t size, DataSlice& dataSlice)
         {
-            RankId actualRank = 0;
-            HcclResult ret = storage.GetSlice(addr, size, dataSlice, &actualRank);
+            DeviceId actualDeviceId = INVALID_DEVICE_ID;
+            HcclResult ret = storage.GetSlice(commName, commHash, opIter, addr, size, dataSlice, &actualDeviceId);
             if (ret != HCCL_SUCCESS) {
                 return ret;
             }
-            if (actualRank != expectedRank) {
+
+            if (actualDeviceId != expectedDeviceId) {
                 HCCL_VM_ERROR(
-                    "{} Resolved data slice rank mismatch, expectedRank={}, actualRank={}, addr={}, size={}",
-                    MakeErrorCodeText(ErrorCode::GRAPH_ADDRESS_INVALID), expectedRank, actualRank, addr, size);
+                    "{} Resolved data slice device mismatch, expectedDeviceId={}, "
+                    "actualDeviceId={}, addr={}, size={}",
+                    MakeErrorCodeText(ErrorCode::GRAPH_ADDRESS_INVALID), expectedDeviceId, actualDeviceId, addr, size);
                 return HCCL_E_MEMORY;
             }
             return HCCL_SUCCESS;
@@ -224,8 +268,16 @@ namespace TaskGraphGeneratorV3 {
         return result;
     }
 
-    HcclResult TaskMetaTranslatorV3::Translate(StorageManager& storage, OperatorId operatorId)
+    HcclResult TaskMetaTranslatorV3::Translate(
+        StorageManager& storage, OperatorId operatorId, const std::string& commName, uint64_t commHash, uint32_t opIter)
     {
+        const std::string effectiveCommName = commName.empty() ? storage.GetCurrentCommName() : commName;
+        const uint64_t effectiveCommHash = commName.empty() ? storage.GetCurrentCommHash() : commHash;
+        const uint32_t effectiveOpIter = commName.empty() ? storage.GetCurrentOpIter() : opIter;
+        if (effectiveCommName.empty() || effectiveCommHash == std::numeric_limits<uint64_t>::max()) {
+            HCCL_VM_ERROR("Missing communicator identity for task metadata translation");
+            return HCCL_E_PARA;
+        }
         Reset();
 
         const HcclVmTaskMetaData& taskMetaData = storage.GetHvmTaskMetaData();
@@ -233,10 +285,12 @@ namespace TaskGraphGeneratorV3 {
         HCCL_VM_INFO("Start converting task metadata into graph nodes, taskMetaCount={}", taskMetaVec.size());
         for (uint32_t i = 0; i < taskMetaVec.size(); ++i) {
             NodeId nodeId = INVALID_NODE_ID;
-            const HcclResult ret = TranslateOneTaskMeta(taskMetaVec[i], storage, i, operatorId, nodeId);
+            const HcclResult ret = TranslateOneTaskMeta(
+                taskMetaVec[i], storage, i, operatorId, effectiveCommName, effectiveCommHash, effectiveOpIter, nodeId);
             if (ret != HCCL_SUCCESS) {
                 HCCL_VM_ERROR(
-                    "{} Failed to convert one task into a graph node, taskIndex={}, "
+                    "{} Failed to convert one task into a graph node, "
+                    "taskIndex={}, "
                     "ret={}, taskMeta={}",
                     MakeErrorCodeText(ErrorCode::GRAPH_TRANSLATE_FAILED), i, static_cast<uint32_t>(ret),
                     DescribeTaskMetaForLog(taskMetaVec[i]));
@@ -252,8 +306,14 @@ namespace TaskGraphGeneratorV3 {
                 }
             }
         }
+        for (const auto& node : nodes_) {
+            HCCL_VM_INFO(
+                "Translated task node, nodeId={}, task={}", node == nullptr ? INVALID_NODE_ID : node->GetNodeId(),
+                node == nullptr ? "null" : node->Describe());
+        }
         HCCL_VM_INFO(
-            "Finished converting task metadata into graph nodes, taskMetaCount={}, nodeCount={}, "
+            "Finished converting task metadata into graph nodes, "
+            "taskMetaCount={}, nodeCount={}, "
             "rankCount={}, nonEmptyStreamCount={}",
             taskMetaVec.size(), nodes_.size(), taskQueues_.size(), streamCount);
         return HCCL_SUCCESS;
@@ -269,7 +329,7 @@ namespace TaskGraphGeneratorV3 {
             return HCCL_E_MEMORY;
         }
 
-        HcclResult ret = EnsureStream(taskQueues_, position.rankId, position.streamId);
+        HcclResult ret = EnsureStream(taskQueues_, position.deviceId, position.streamId);
         if (ret != HCCL_SUCCESS) {
             return ret;
         }
@@ -278,74 +338,119 @@ namespace TaskGraphGeneratorV3 {
         node->SetNodeId(nodeId);
         node->SetPosition(position);
         nodes_.emplace_back(std::move(node));
-        taskQueues_[position.rankId][position.streamId].push_back(nodeId);
+        taskQueues_[position.deviceId][position.streamId].push_back(nodeId);
         return HCCL_SUCCESS;
     }
 
     HcclResult TaskMetaTranslatorV3::TranslateOneTaskMeta(
         const HcclTaskMetaData& taskMeta, StorageManager& storage, uint32_t taskIndex, OperatorId operatorId,
-        NodeId& nodeId)
+        const std::string& commName, uint64_t commHash, uint32_t opIter, NodeId& nodeId)
     {
+        // SYNC_STREAM has no communicator, but it still occupies its host stream
+        // and must therefore participate in stream-order edges in the task graph.
+        if (taskMeta.taskType == HccLTaskMetaType::SYNC_STREAM) {
+            // The proxy records this host task without a communicator. Resolve its
+            // rank using the communicator of the enclosing operator instead.
+            HcclTaskMetaData positionTaskMeta = taskMeta;
+            positionTaskMeta.commId = storage.GetCheckerParam(operatorId).commId;
+            TaskPosition position;
+            HcclResult ret = MakeTaskPosition(positionTaskMeta, storage, operatorId, position);
+            if (ret != HCCL_SUCCESS) {
+                HCCL_VM_ERROR(
+                    "Failed to resolve SYNC_STREAM task position, "
+                    "taskIndex={}, deviceId={}, streamId={}",
+                    taskIndex, taskMeta.deviceId, taskMeta.streamId);
+                return ret;
+            }
+            position.commName = commName;
+            position.opIter = opIter;
+            auto node = std::make_unique<TaskSyncStream>(taskMeta.taskData.syncStreamTask.syncIdx);
+            return AddTaskNode(position, std::move(node), nodeId);
+        }
+
+        if (taskMeta.commId == 0) {
+            HCCL_VM_ERROR(
+                "reject non-SYNC_STREAM task without a communicator, "
+                "taskIndex={}, taskType={}, "
+                "deviceId={}, streamId={}",
+                taskIndex, static_cast<uint32_t>(taskMeta.taskType), taskMeta.deviceId, taskMeta.streamId);
+            return HCCL_E_PARA;
+        }
+
         TaskPosition position;
-        HcclResult ret = MakeTaskPosition(taskMeta, operatorId, position);
+        HcclResult ret = MakeTaskPosition(taskMeta, storage, operatorId, position);
         if (ret != HCCL_SUCCESS) {
             return ret;
         }
+        position.commName = commName;
+        position.commHash = commHash;
+        position.opIter = opIter;
 
         switch (taskMeta.taskType) {
             case HccLTaskMetaType::MEM_CPY: {
                 const auto& transMem = taskMeta.taskData.transMem;
-                const RankId srcRank = transMem.srcRankId;
-                const RankId dstRank = transMem.dstRankId;
                 DataSlice srcSlice;
-                ret = GetTaskDataSlice(storage, srcRank, transMem.srcOffset, transMem.len, srcSlice);
+                DeviceId srcDeviceId = INVALID_DEVICE_ID;
+                srcDeviceId = transMem.srcDeviceId;
+                ret = GetTaskDataSlice(
+                    storage, commName, commHash, opIter, srcDeviceId, transMem.srcOffset, transMem.len, srcSlice);
                 if (ret != HCCL_SUCCESS) {
                     return ret;
                 }
                 DataSlice dstSlice;
-                ret = GetTaskDataSlice(storage, dstRank, transMem.dstOffset, transMem.len, dstSlice);
+                DeviceId dstDeviceId = INVALID_DEVICE_ID;
+                dstDeviceId = transMem.dstDeviceId;
+                ret = GetTaskDataSlice(
+                    storage, commName, commHash, opIter, dstDeviceId, transMem.dstOffset, transMem.len, dstSlice);
                 if (ret != HCCL_SUCCESS) {
                     return ret;
                 }
 
                 const ProtocolType protocol
-                    = (srcRank == dstRank) ? ProtocolType::SDMA : ConvertProtocol(transMem.protocol);
+                    = (srcDeviceId == dstDeviceId) ? ProtocolType::SDMA : ConvertProtocol(transMem.protocol);
                 auto node = std::make_unique<TaskTransMem>(
-                    MakeMemSlice(srcRank, srcSlice), MakeMemSlice(dstRank, dstSlice), protocol);
+                    MakeMemSlice(srcDeviceId, position.rankId, srcSlice),
+                    MakeMemSlice(dstDeviceId, position.rankId, dstSlice), protocol);
                 return AddTaskNode(position, std::move(node), nodeId);
             }
             case HccLTaskMetaType::REDUCE: {
                 const auto& reduce = taskMeta.taskData.reduce;
-                const RankId srcRank = reduce.srcRankId;
-                const RankId dstRank = reduce.dstRankId;
                 // 此处的 datacount 实际为 size
                 DataSlice srcSlice;
-                ret = GetTaskDataSlice(storage, srcRank, reduce.srcOffset, reduce.dataCount, srcSlice);
+                DeviceId srcDeviceId = INVALID_DEVICE_ID;
+                srcDeviceId = reduce.srcDeviceId;
+                ret = GetTaskDataSlice(
+                    storage, commName, commHash, opIter, srcDeviceId, reduce.srcOffset, reduce.dataCount, srcSlice);
                 if (ret != HCCL_SUCCESS) {
                     return ret;
                 }
                 DataSlice dstSlice;
-                ret = GetTaskDataSlice(storage, dstRank, reduce.dstOffset, reduce.dataCount, dstSlice);
+                DeviceId dstDeviceId = INVALID_DEVICE_ID;
+                dstDeviceId = reduce.dstDeviceId;
+                ret = GetTaskDataSlice(
+                    storage, commName, commHash, opIter, dstDeviceId, reduce.dstOffset, reduce.dataCount, dstSlice);
                 if (ret != HCCL_SUCCESS) {
                     return ret;
                 }
+                // ReduceTask 与 TransMemTask 共用联合体，此分支必须读取
+                // reduce.protocol。
                 const ProtocolType protocol
-                    = (srcRank == dstRank) ? ProtocolType::SDMA : ConvertProtocol(taskMeta.taskData.transMem.protocol);
+                    = (srcDeviceId == dstDeviceId) ? ProtocolType::SDMA : ConvertProtocol(reduce.protocol);
                 auto node = std::make_unique<TaskReduce>(
-                    MakeMemSlice(srcRank, srcSlice), MakeMemSlice(dstRank, dstSlice), reduce.dataType, reduce.reduceOp,
-                    protocol);
+                    MakeMemSlice(srcDeviceId, position.rankId, srcSlice),
+                    MakeMemSlice(dstDeviceId, position.rankId, dstSlice), reduce.dataType, reduce.reduceOp, protocol);
                 return AddTaskNode(position, std::move(node), nodeId);
             }
             case HccLTaskMetaType::NOTIFY_RECORD: {
                 AicpuNotify notify;
-                notify.recordRankId = taskMeta.rankId;
-                notify.waitRankId = taskMeta.taskData.notify.dstRankId;
+                notify.recordDeviceId = position.deviceId;
+                notify.waitDeviceId = taskMeta.taskData.notify.dstDeviceId;
                 ret = GetNotifyId(taskMeta.taskData.notify.notifyId, notify.notifyId);
                 if (ret != HCCL_SUCCESS) {
                     return ret;
                 }
 
-                const ProtocolType protocol = (notify.recordRankId == notify.waitRankId) ?
+                const ProtocolType protocol = (notify.recordDeviceId == notify.waitDeviceId) ?
                                                   ProtocolType::INVALID :
                                                   ConvertProtocol(taskMeta.taskData.notify.protocol);
                 auto node = std::make_unique<TaskRecordAICPU>(notify, protocol);
@@ -353,14 +458,14 @@ namespace TaskGraphGeneratorV3 {
             }
             case HccLTaskMetaType::NOTIFY_WAIT: {
                 AicpuNotify notify;
-                notify.recordRankId = taskMeta.taskData.notify.srcRankId;
-                notify.waitRankId = taskMeta.rankId;
+                notify.recordDeviceId = taskMeta.taskData.notify.srcDeviceId;
+                notify.waitDeviceId = position.deviceId;
                 ret = GetNotifyId(taskMeta.taskData.notify.notifyId, notify.notifyId);
                 if (ret != HCCL_SUCCESS) {
                     return ret;
                 }
 
-                const ProtocolType protocol = (notify.recordRankId == notify.waitRankId) ?
+                const ProtocolType protocol = (notify.recordDeviceId == notify.waitDeviceId) ?
                                                   ProtocolType::INVALID :
                                                   ConvertProtocol(taskMeta.taskData.notify.protocol);
                 auto node = std::make_unique<TaskWaitAICPU>(notify, protocol);
@@ -373,7 +478,7 @@ namespace TaskGraphGeneratorV3 {
 
                 const CcuSqeParam sqe = MakeCcuSqeParam(taskMeta.taskData.ccu);
                 CcuMissionKey key;
-                key.rankId = position.rankId;
+                key.deviceId = position.deviceId;
                 key.dieId = sqe.dieId;
                 key.missionId = sqe.missionId;
                 auto missionIter = ccuMissionNodes_.find(key);
@@ -394,7 +499,8 @@ namespace TaskGraphGeneratorV3 {
                 }
 
                 CcuSubGraphDesc desc;
-                desc.rankId = taskMeta.rankId;
+                desc.commId = taskMeta.commId;
+                desc.deviceId = position.deviceId;
                 desc.ccuParams.resize(1);
                 desc.ccuParams[0].push_back(sqe);
 
@@ -409,14 +515,13 @@ namespace TaskGraphGeneratorV3 {
             case HccLTaskMetaType::AIV_GRAPH: {
                 position.launchIdx = taskMeta.taskData.aiv.launchIdx;
                 auto node = std::make_unique<TaskAivGraph>(
-                    taskMeta.rankId, taskMeta.taskData.aiv.launchIdx, taskMeta.streamId);
+                    position.deviceId, taskMeta.taskData.aiv.launchIdx, taskMeta.streamId);
                 return AddTaskNode(position, std::move(node), nodeId);
             }
-            case HccLTaskMetaType::EVENT_WAIT:
-            case HccLTaskMetaType::EVENT_RECORD:
             default:
                 HCCL_VM_WARN(
-                    "{} This task type is not supported for CheckerV3 graph generation, "
+                    "{} This task type is not supported for CheckerV3 graph "
+                    "generation, "
                     "taskIndex={}, taskMeta={}",
                     MakeErrorCodeText(ErrorCode::GRAPH_UNSUPPORTED), taskIndex, DescribeTaskMetaForLog(taskMeta));
                 return HCCL_E_NOT_SUPPORT;

@@ -26,10 +26,8 @@ target_include_directories(checker PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/src/checker
     ${CMAKE_CURRENT_SOURCE_DIR}/src/framework
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/framework/mem_conflict_check
     ${CMAKE_CURRENT_SOURCE_DIR}/src/framework/semantics_check
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/framework/singletask_check
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/framework/task_graph_generator
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/framework/task_graph_generator_v3
     ${CMAKE_CURRENT_SOURCE_DIR}/src/utils
     ${CMAKE_CURRENT_SOURCE_DIR}/src/dfx
 

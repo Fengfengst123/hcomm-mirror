@@ -38,7 +38,7 @@ protected:
     std::string WriteTaskFile(uint32_t rankId, uint32_t launchIndex, const json& content)
     {
         std::string fileName
-            = "hcclvm_aiv_rank" + std::to_string(rankId) + "_launch" + std::to_string(launchIndex) + "_task.json";
+            = "hcclvm_aiv_device" + std::to_string(rankId) + "_launch" + std::to_string(launchIndex) + "_task.json";
         fs::path filePath = testDir_ / "data" / fileName;
         std::ofstream ofs(filePath);
         ofs << content.dump();
@@ -47,20 +47,24 @@ protected:
 
     static json MakeDataSlice(uint32_t bufferType, uint64_t offset, uint64_t size)
     {
-        return {{"bufferType", bufferType}, {"offset", offset}, {"size", size}};
+        return {
+            {"bufferType", bufferType},
+            {"deviceId", 0},
+            {"offset", offset},
+            {"virtualAddr", 0x1000 + offset},
+            {"size", size}};
     }
 
     static json MakeMemCopyPayload(uint32_t srcRank, uint32_t dstRank, const json& src, const json& dst)
     {
-        return {{"srcRank", srcRank}, {"dstRank", dstRank}, {"src", src}, {"dst", dst}};
+        return {{"src", src}, {"dst", dst}};
     }
 
     static json MakeReducePayload(
         uint32_t srcRank, uint32_t dstRank, const json& src, const json& dst, uint32_t dataType = 0,
         uint32_t reduceOp = 0)
     {
-        return {{"srcRank", srcRank}, {"dstRank", dstRank},   {"src", src},
-                {"dst", dst},         {"dataType", dataType}, {"reduceOp", reduceOp}};
+        return {{"src", src}, {"dst", dst}, {"dataType", dataType}, {"reduceOp", reduceOp}};
     }
 
     static json MakeSetFlagPayload(uint32_t srcPipe, uint32_t dstPipe, int32_t eventId)
@@ -80,12 +84,18 @@ protected:
 
     static json MakeSendFlagPayload(uint32_t rank, uint64_t commInfoOffset, int32_t flagValue)
     {
-        return {{"rank", rank}, {"commInfoOffset", commInfoOffset}, {"flagValue", flagValue}};
+        return {
+            {"targetRank", rank},
+            {"flagBuffer", MakeDataSlice(4, commInfoOffset, sizeof(int32_t))},
+            {"flagValue", flagValue}};
     }
 
     static json MakeRecvFlagPayload(uint32_t rank, uint64_t commInfoOffset, int32_t targetValue)
     {
-        return {{"rank", rank}, {"commInfoOffset", commInfoOffset}, {"targetValue", targetValue}};
+        return {
+            {"targetRank", rank},
+            {"flagBuffer", MakeDataSlice(4, commInfoOffset, sizeof(int32_t))},
+            {"flagValue", targetValue}};
     }
 
     static json MakeTaskJson(
@@ -135,7 +145,8 @@ TEST_F(AivTaskSnapshotLoaderTest, IsAivExpansionModeEnabled_EnvEmpty_ReturnsFals
     unsetenv("HCCL_OP_EXPANSION_MODE");
 }
 
-// ==================== LoadRuntimeTaskSnapshotByLaunchDirect Success Tests ====================
+// ==================== LoadRuntimeTaskSnapshotByLaunchDirect Success Tests
+// ====================
 
 TEST_F(AivTaskSnapshotLoaderTest, LoadByLaunchDirect_MemCopy_Success)
 {
@@ -149,10 +160,7 @@ TEST_F(AivTaskSnapshotLoaderTest, LoadByLaunchDirect_MemCopy_Success)
 
     AivRuntimeTaskSnapshot snapshot;
     std::string errorMsg;
-    EXPECT_TRUE(AivTaskSnapshotLoader::LoadRuntimeTaskSnapshotByLaunchDirect(0, 0, snapshot, &errorMsg));
-    EXPECT_EQ(snapshot.rankId, 0u);
-    EXPECT_EQ(snapshot.rankSize, 4u);
-    EXPECT_EQ(snapshot.launchIndex, 0u);
+    EXPECT_TRUE(AivTaskSnapshotLoader::LoadRuntimeTasks(0, 0, snapshot, &errorMsg));
     ASSERT_EQ(snapshot.blocks.size(), 1u);
     ASSERT_EQ(snapshot.blocks[0].scalarTasks.size(), 1u);
     EXPECT_EQ(snapshot.blocks[0].scalarTasks[0]->GetTaskType(), AivSim::AivTaskType::MEM_COPY);
@@ -170,7 +178,7 @@ TEST_F(AivTaskSnapshotLoaderTest, LoadByLaunchDirect_Reduce_Success)
 
     AivRuntimeTaskSnapshot snapshot;
     std::string errorMsg;
-    EXPECT_TRUE(AivTaskSnapshotLoader::LoadRuntimeTaskSnapshotByLaunchDirect(1, 1, snapshot, &errorMsg));
+    EXPECT_TRUE(AivTaskSnapshotLoader::LoadRuntimeTasks(1, 1, snapshot, &errorMsg));
     ASSERT_EQ(snapshot.blocks.size(), 1u);
     ASSERT_EQ(snapshot.blocks[0].mte2Tasks.size(), 1u);
     EXPECT_EQ(snapshot.blocks[0].mte2Tasks[0]->GetTaskType(), AivSim::AivTaskType::REDUCE);
@@ -185,7 +193,7 @@ TEST_F(AivTaskSnapshotLoaderTest, LoadByLaunchDirect_SetFlag_Success)
     WriteTaskFile(0, 0, content);
 
     AivRuntimeTaskSnapshot snapshot;
-    EXPECT_TRUE(AivTaskSnapshotLoader::LoadRuntimeTaskSnapshotByLaunchDirect(0, 0, snapshot));
+    EXPECT_TRUE(AivTaskSnapshotLoader::LoadRuntimeTasks(0, 0, snapshot));
     ASSERT_EQ(snapshot.blocks[0].scalarTasks.size(), 1u);
     EXPECT_EQ(snapshot.blocks[0].scalarTasks[0]->GetTaskType(), AivSim::AivTaskType::SET_FLAG);
 }
@@ -199,7 +207,7 @@ TEST_F(AivTaskSnapshotLoaderTest, LoadByLaunchDirect_WaitFlag_Success)
     WriteTaskFile(0, 0, content);
 
     AivRuntimeTaskSnapshot snapshot;
-    EXPECT_TRUE(AivTaskSnapshotLoader::LoadRuntimeTaskSnapshotByLaunchDirect(0, 0, snapshot));
+    EXPECT_TRUE(AivTaskSnapshotLoader::LoadRuntimeTasks(0, 0, snapshot));
     ASSERT_EQ(snapshot.blocks[0].scalarTasks.size(), 1u);
     EXPECT_EQ(snapshot.blocks[0].scalarTasks[0]->GetTaskType(), AivSim::AivTaskType::WAIT_FLAG);
 }
@@ -213,7 +221,7 @@ TEST_F(AivTaskSnapshotLoaderTest, LoadByLaunchDirect_PipeBarrier_Success)
     WriteTaskFile(0, 0, content);
 
     AivRuntimeTaskSnapshot snapshot;
-    EXPECT_TRUE(AivTaskSnapshotLoader::LoadRuntimeTaskSnapshotByLaunchDirect(0, 0, snapshot));
+    EXPECT_TRUE(AivTaskSnapshotLoader::LoadRuntimeTasks(0, 0, snapshot));
     ASSERT_EQ(snapshot.blocks[0].scalarTasks.size(), 1u);
     EXPECT_EQ(snapshot.blocks[0].scalarTasks[0]->GetTaskType(), AivSim::AivTaskType::PIPE_BARRIER);
 }
@@ -227,7 +235,7 @@ TEST_F(AivTaskSnapshotLoaderTest, LoadByLaunchDirect_SendFlag_Success)
     WriteTaskFile(1, 0, content);
 
     AivRuntimeTaskSnapshot snapshot;
-    EXPECT_TRUE(AivTaskSnapshotLoader::LoadRuntimeTaskSnapshotByLaunchDirect(1, 0, snapshot));
+    EXPECT_TRUE(AivTaskSnapshotLoader::LoadRuntimeTasks(1, 0, snapshot));
     ASSERT_EQ(snapshot.blocks[0].scalarTasks.size(), 1u);
     EXPECT_EQ(snapshot.blocks[0].scalarTasks[0]->GetTaskType(), AivSim::AivTaskType::SEND_FLAG);
 }
@@ -241,7 +249,7 @@ TEST_F(AivTaskSnapshotLoaderTest, LoadByLaunchDirect_RecvFlag_Success)
     WriteTaskFile(0, 2, content);
 
     AivRuntimeTaskSnapshot snapshot;
-    EXPECT_TRUE(AivTaskSnapshotLoader::LoadRuntimeTaskSnapshotByLaunchDirect(0, 2, snapshot));
+    EXPECT_TRUE(AivTaskSnapshotLoader::LoadRuntimeTasks(0, 2, snapshot));
     ASSERT_EQ(snapshot.blocks[0].mte3Tasks.size(), 1u);
     EXPECT_EQ(snapshot.blocks[0].mte3Tasks[0]->GetTaskType(), AivSim::AivTaskType::RECV_FLAG);
 }
@@ -263,8 +271,7 @@ TEST_F(AivTaskSnapshotLoaderTest, LoadByLaunchDirect_AllTaskTypes_Success)
     WriteTaskFile(0, 0, content);
 
     AivRuntimeTaskSnapshot snapshot;
-    EXPECT_TRUE(AivTaskSnapshotLoader::LoadRuntimeTaskSnapshotByLaunchDirect(0, 0, snapshot));
-    EXPECT_EQ(snapshot.rankSize, 8u);
+    EXPECT_TRUE(AivTaskSnapshotLoader::LoadRuntimeTasks(0, 0, snapshot));
     ASSERT_EQ(snapshot.blocks.size(), 1u);
     EXPECT_EQ(snapshot.blocks[0].scalarTasks.size(), 6u);
     EXPECT_EQ(snapshot.blocks[0].mte2Tasks.size(), 1u);
@@ -282,7 +289,7 @@ TEST_F(AivTaskSnapshotLoaderTest, LoadByLaunchDirect_MultiBlock_Success)
     WriteTaskFile(0, 0, content);
 
     AivRuntimeTaskSnapshot snapshot;
-    EXPECT_TRUE(AivTaskSnapshotLoader::LoadRuntimeTaskSnapshotByLaunchDirect(0, 0, snapshot));
+    EXPECT_TRUE(AivTaskSnapshotLoader::LoadRuntimeTasks(0, 0, snapshot));
     ASSERT_EQ(snapshot.blocks.size(), 3u);
     EXPECT_EQ(snapshot.blocks[0].blockIdx, 0u);
     EXPECT_EQ(snapshot.blocks[1].blockIdx, 1u);
@@ -298,7 +305,7 @@ TEST_F(AivTaskSnapshotLoaderTest, LoadByLaunchDirect_BarrierGroup_Success)
     WriteTaskFile(0, 0, content);
 
     AivRuntimeTaskSnapshot snapshot;
-    EXPECT_TRUE(AivTaskSnapshotLoader::LoadRuntimeTaskSnapshotByLaunchDirect(0, 0, snapshot));
+    EXPECT_TRUE(AivTaskSnapshotLoader::LoadRuntimeTasks(0, 0, snapshot));
     ASSERT_EQ(snapshot.blocks[0].scalarTasks.size(), 2u);
 }
 
@@ -313,51 +320,30 @@ TEST_F(AivTaskSnapshotLoaderTest, LoadByLaunchDirect_ErrorNullPointer_Succeeds)
     WriteTaskFile(0, 0, content);
 
     AivRuntimeTaskSnapshot snapshot;
-    EXPECT_TRUE(AivTaskSnapshotLoader::LoadRuntimeTaskSnapshotByLaunchDirect(0, 0, snapshot, nullptr));
+    EXPECT_TRUE(AivTaskSnapshotLoader::LoadRuntimeTasks(0, 0, snapshot, nullptr));
 }
 
-// ==================== LoadRuntimeTaskSnapshotByLaunchDirect Error Tests ====================
+// ==================== LoadRuntimeTaskSnapshotByLaunchDirect Error Tests
+// ====================
 
 TEST_F(AivTaskSnapshotLoaderTest, LoadByLaunchDirect_FileNotExist_ReturnsFalse)
 {
     AivRuntimeTaskSnapshot snapshot;
     std::string errorMsg;
-    EXPECT_FALSE(AivTaskSnapshotLoader::LoadRuntimeTaskSnapshotByLaunchDirect(99, 0, snapshot, &errorMsg));
+    EXPECT_FALSE(AivTaskSnapshotLoader::LoadRuntimeTasks(99, 0, snapshot, &errorMsg));
     EXPECT_FALSE(errorMsg.empty());
 }
 
 TEST_F(AivTaskSnapshotLoaderTest, LoadByLaunchDirect_InvalidJson_ReturnsFalse)
 {
-    std::ofstream ofs(testDir_ / "data" / "hcclvm_aiv_rank0_launch0_task.json");
+    std::ofstream ofs(testDir_ / "data" / "hcclvm_aiv_device0_launch0_task.json");
     ofs << "not valid json";
     ofs.close();
 
     AivRuntimeTaskSnapshot snapshot;
     std::string errorMsg;
-    EXPECT_FALSE(AivTaskSnapshotLoader::LoadRuntimeTaskSnapshotByLaunchDirect(0, 0, snapshot, &errorMsg));
+    EXPECT_FALSE(AivTaskSnapshotLoader::LoadRuntimeTasks(0, 0, snapshot, &errorMsg));
     EXPECT_FALSE(errorMsg.empty());
-}
-
-TEST_F(AivTaskSnapshotLoaderTest, LoadByLaunchDirect_RankIdMismatch_ReturnsFalse)
-{
-    json content = {{"rank", 1}, {"rankSize", 1}, {"launchIndex", 0}, {"aivCores", json::array()}};
-    WriteTaskFile(0, 0, content);
-
-    AivRuntimeTaskSnapshot snapshot;
-    std::string errorMsg;
-    EXPECT_FALSE(AivTaskSnapshotLoader::LoadRuntimeTaskSnapshotByLaunchDirect(0, 0, snapshot, &errorMsg));
-    EXPECT_TRUE(errorMsg.find("rank id mismatch") != std::string::npos);
-}
-
-TEST_F(AivTaskSnapshotLoaderTest, LoadByLaunchDirect_LaunchIndexMismatch_ReturnsFalse)
-{
-    json content = {{"rank", 0}, {"rankSize", 1}, {"launchIndex", 5}, {"aivCores", json::array()}};
-    WriteTaskFile(0, 3, content);
-
-    AivRuntimeTaskSnapshot snapshot;
-    std::string errorMsg;
-    EXPECT_FALSE(AivTaskSnapshotLoader::LoadRuntimeTaskSnapshotByLaunchDirect(0, 3, snapshot, &errorMsg));
-    EXPECT_TRUE(errorMsg.find("launchIndex mismatch") != std::string::npos);
 }
 
 TEST_F(AivTaskSnapshotLoaderTest, LoadByLaunchDirect_MissingAivCores_ReturnsFalse)
@@ -367,7 +353,7 @@ TEST_F(AivTaskSnapshotLoaderTest, LoadByLaunchDirect_MissingAivCores_ReturnsFals
 
     AivRuntimeTaskSnapshot snapshot;
     std::string errorMsg;
-    EXPECT_FALSE(AivTaskSnapshotLoader::LoadRuntimeTaskSnapshotByLaunchDirect(0, 0, snapshot, &errorMsg));
+    EXPECT_FALSE(AivTaskSnapshotLoader::LoadRuntimeTasks(0, 0, snapshot, &errorMsg));
     EXPECT_TRUE(errorMsg.find("missing aivCores") != std::string::npos);
 }
 
@@ -378,7 +364,7 @@ TEST_F(AivTaskSnapshotLoaderTest, LoadByLaunchDirect_AivCoresNotArray_ReturnsFal
 
     AivRuntimeTaskSnapshot snapshot;
     std::string errorMsg;
-    EXPECT_FALSE(AivTaskSnapshotLoader::LoadRuntimeTaskSnapshotByLaunchDirect(0, 0, snapshot, &errorMsg));
+    EXPECT_FALSE(AivTaskSnapshotLoader::LoadRuntimeTasks(0, 0, snapshot, &errorMsg));
     EXPECT_TRUE(errorMsg.find("missing aivCores") != std::string::npos);
 }
 
@@ -394,7 +380,7 @@ TEST_F(AivTaskSnapshotLoaderTest, LoadByLaunchDirect_TaskArrayNotArray_ReturnsFa
 
     AivRuntimeTaskSnapshot snapshot;
     std::string errorMsg;
-    EXPECT_FALSE(AivTaskSnapshotLoader::LoadRuntimeTaskSnapshotByLaunchDirect(0, 0, snapshot, &errorMsg));
+    EXPECT_FALSE(AivTaskSnapshotLoader::LoadRuntimeTasks(0, 0, snapshot, &errorMsg));
     EXPECT_TRUE(errorMsg.find("not array") != std::string::npos);
 }
 
@@ -407,15 +393,13 @@ TEST_F(AivTaskSnapshotLoaderTest, LoadByLaunchDirect_UnsupportedTaskType_Returns
 
     AivRuntimeTaskSnapshot snapshot;
     std::string errorMsg;
-    EXPECT_FALSE(AivTaskSnapshotLoader::LoadRuntimeTaskSnapshotByLaunchDirect(0, 0, snapshot, &errorMsg));
+    EXPECT_FALSE(AivTaskSnapshotLoader::LoadRuntimeTasks(0, 0, snapshot, &errorMsg));
     EXPECT_TRUE(errorMsg.find("unsupported AIV runtime task type") != std::string::npos);
 }
 
 TEST_F(AivTaskSnapshotLoaderTest, LoadByLaunchDirect_MemCopyMissingSrcSlice_ReturnsFalse)
 {
     auto payload = json::object();
-    payload["srcRank"] = 0;
-    payload["dstRank"] = 1;
     payload["dst"] = MakeDataSlice(1, 0, 64);
     auto task = MakeTaskJson(0, 1, 0, 0, 0, payload);
     json content
@@ -427,7 +411,7 @@ TEST_F(AivTaskSnapshotLoaderTest, LoadByLaunchDirect_MemCopyMissingSrcSlice_Retu
 
     AivRuntimeTaskSnapshot snapshot;
     std::string errorMsg;
-    EXPECT_FALSE(AivTaskSnapshotLoader::LoadRuntimeTaskSnapshotByLaunchDirect(0, 0, snapshot, &errorMsg));
+    EXPECT_FALSE(AivTaskSnapshotLoader::LoadRuntimeTasks(0, 0, snapshot, &errorMsg));
     EXPECT_TRUE(errorMsg.find("missing data slice pipe") != std::string::npos);
 }
 
@@ -435,8 +419,6 @@ TEST_F(AivTaskSnapshotLoaderTest, LoadByLaunchDirect_ReduceMissingDstSlice_Retur
 {
     auto dsS = MakeDataSlice(0, 0, 64);
     auto payload = json::object();
-    payload["srcRank"] = 0;
-    payload["dstRank"] = 1;
     payload["src"] = dsS;
     // dst missing
     auto task = MakeTaskJson(1, 2, 0, 0, 0, payload);
@@ -449,7 +431,7 @@ TEST_F(AivTaskSnapshotLoaderTest, LoadByLaunchDirect_ReduceMissingDstSlice_Retur
 
     AivRuntimeTaskSnapshot snapshot;
     std::string errorMsg;
-    EXPECT_FALSE(AivTaskSnapshotLoader::LoadRuntimeTaskSnapshotByLaunchDirect(0, 0, snapshot, &errorMsg));
+    EXPECT_FALSE(AivTaskSnapshotLoader::LoadRuntimeTasks(0, 0, snapshot, &errorMsg));
     EXPECT_TRUE(errorMsg.find("missing data slice pipe") != std::string::npos);
 }
 
@@ -466,19 +448,19 @@ TEST_F(AivTaskSnapshotLoaderTest, LoadByLaunchDirect_BarrierGroupUnresolvable_Re
 
     AivRuntimeTaskSnapshot snapshot;
     std::string errorMsg;
-    EXPECT_FALSE(AivTaskSnapshotLoader::LoadRuntimeTaskSnapshotByLaunchDirect(0, 0, snapshot, &errorMsg));
+    EXPECT_FALSE(AivTaskSnapshotLoader::LoadRuntimeTasks(0, 0, snapshot, &errorMsg));
     EXPECT_TRUE(errorMsg.find("failed to resolve barrier group taskId") != std::string::npos);
 }
 
 TEST_F(AivTaskSnapshotLoaderTest, LoadByLaunchDirect_EmptyFile_ReturnsFalse)
 {
-    std::ofstream ofs(testDir_ / "data" / "hcclvm_aiv_rank0_launch0_task.json");
+    std::ofstream ofs(testDir_ / "data" / "hcclvm_aiv_device0_launch0_task.json");
     ofs << "";
     ofs.close();
 
     AivRuntimeTaskSnapshot snapshot;
     std::string errorMsg;
-    EXPECT_FALSE(AivTaskSnapshotLoader::LoadRuntimeTaskSnapshotByLaunchDirect(0, 0, snapshot, &errorMsg));
+    EXPECT_FALSE(AivTaskSnapshotLoader::LoadRuntimeTasks(0, 0, snapshot, &errorMsg));
     EXPECT_TRUE(errorMsg.find("failed to parse file") != std::string::npos);
 }
 
@@ -489,15 +471,13 @@ TEST_F(AivTaskSnapshotLoaderTest, LoadByLaunchDirect_EmptyAivCores_Succeeds)
 
     AivRuntimeTaskSnapshot snapshot;
     std::string errorMsg;
-    EXPECT_TRUE(AivTaskSnapshotLoader::LoadRuntimeTaskSnapshotByLaunchDirect(0, 0, snapshot, &errorMsg));
+    EXPECT_TRUE(AivTaskSnapshotLoader::LoadRuntimeTasks(0, 0, snapshot, &errorMsg));
     EXPECT_TRUE(snapshot.blocks.empty());
 }
 
 TEST_F(AivTaskSnapshotLoaderTest, LoadByLaunchDirect_DataSliceDefaultValues)
 {
     auto payload = json::object();
-    payload["srcRank"] = 0;
-    payload["dstRank"] = 1;
     payload["src"] = json::object();
     payload["dst"] = json::object();
     auto task = MakeTaskJson(0, 1, 0, 0, 0, payload);
@@ -509,7 +489,7 @@ TEST_F(AivTaskSnapshotLoaderTest, LoadByLaunchDirect_DataSliceDefaultValues)
     WriteTaskFile(0, 0, content);
 
     AivRuntimeTaskSnapshot snapshot;
-    EXPECT_TRUE(AivTaskSnapshotLoader::LoadRuntimeTaskSnapshotByLaunchDirect(0, 0, snapshot));
+    EXPECT_TRUE(AivTaskSnapshotLoader::LoadRuntimeTasks(0, 0, snapshot));
     ASSERT_EQ(snapshot.blocks[0].scalarTasks.size(), 1u);
     EXPECT_EQ(snapshot.blocks[0].scalarTasks[0]->GetTaskType(), AivSim::AivTaskType::MEM_COPY);
 }
@@ -528,7 +508,7 @@ TEST_F(AivTaskSnapshotLoaderTest, LoadByLaunchDirect_TaskDefaultValues_Success)
     WriteTaskFile(0, 0, content);
 
     AivRuntimeTaskSnapshot snapshot;
-    EXPECT_TRUE(AivTaskSnapshotLoader::LoadRuntimeTaskSnapshotByLaunchDirect(0, 0, snapshot));
+    EXPECT_TRUE(AivTaskSnapshotLoader::LoadRuntimeTasks(0, 0, snapshot));
     ASSERT_EQ(snapshot.blocks[0].scalarTasks.size(), 1u);
     EXPECT_EQ(snapshot.blocks[0].scalarTasks[0]->GetTaskType(), AivSim::AivTaskType::SET_FLAG);
     EXPECT_EQ(snapshot.blocks[0].scalarTasks[0]->GetTaskId(), 0u);

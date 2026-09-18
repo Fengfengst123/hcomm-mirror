@@ -8,12 +8,14 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef HCCL_COMMON_DEFS_H
-#define HCCL_COMMON_DEFS_H
+#ifndef HCOMM_HCCL_VM_SIM_COMMON_DEFS_H
+#define HCOMM_HCCL_VM_SIM_COMMON_DEFS_H
 
 #include <array>
 #include <cstdint>
 #include <cstring>
+#include <map>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -48,8 +50,6 @@ using SimEid = std::array<uint8_t, URMA_EID_LEN>;
 constexpr uint8_t DEVICE_WAIT = 0;
 constexpr uint8_t DEVICE_RUN = 1;
 
-constexpr uint32_t AICPU_JETTY_NUM_MAX = 40960; // 暂定扩大至40960个
-
 typedef struct {
     uint8_t dieId;
     uint8_t missionId;
@@ -67,7 +67,7 @@ enum ProtocolType {
     SIM_PROTOCOL_ROCE = 1,
     SIM_PROTOCOL_PCIE = 2,
     SIM_PROTOCOL_SIO = 3,
-    SIM_PROTOCOL_UB_CTP = 4,
+    SIM_PROTOCOL_UBC_CTP = 4,
     SIM_PROTOCOL_UBC_TP = 5,
     SIM_PROTOCOL_UB_MEM = 6
 };
@@ -138,7 +138,8 @@ enum CcuVersion { CCU_V1 = 0, CCU_V2 = 1 };
 
 } // namespace HcclSim
 
-// AIV communication information buffer layout shared by the proxy, runner and checker.
+// AIV communication information buffer layout shared by the proxy, runner and
+// checker.
 namespace AivCommInfoLayout {
 constexpr uint64_t SIZE_BYTES = 65ULL * 1024ULL * 1024ULL;
 constexpr uint64_t GM_IN_TABLE_OFFSET = 0;
@@ -156,17 +157,17 @@ constexpr uint32_t FIXED_TAG = 1;
 
 using PhyDeviceId = uint32_t;
 using ServerMeta = std::vector<PhyDeviceId>;
-using SuperPodMeta = std::vector<ServerMeta>;
-using TopoMeta = std::vector<SuperPodMeta>;
+using SuperPodMeta = std::map<uint32_t, ServerMeta>;
+using TopoMeta = std::map<uint32_t, SuperPodMeta>;
 
 static inline uint32_t ShmGetPhyDeviceTotalCount(const TopoMeta& topo_meta)
 {
     uint32_t total_count = 0;
 
     // 第一层：遍历所有 SuperPod（超级节点）
-    for (const auto& super_pod : topo_meta) {
+    for (const auto& [pod_id, super_pod] : topo_meta) {
         // 第二层：遍历每个 SuperPod 中的所有 Server（服务器）
-        for (const auto& server : super_pod) {
+        for (const auto& [server_id, server] : super_pod) {
             // 第三层：累加每个 Server 中的 PhyDeviceId 数量
             total_count += static_cast<uint32_t>(server.size());
         }
@@ -181,8 +182,8 @@ enum class HccLTaskMetaType : char {
     MEM_CPY,
     CCU_GRAPH,
     AIV_GRAPH,
-    EVENT_WAIT,
-    EVENT_RECORD
+    SYNC_STREAM,
+    INVALID
 };
 
 typedef enum {
@@ -227,52 +228,67 @@ typedef struct {
 } OpDetails;
 
 typedef struct {
-    uint32_t srcRankId;
+    uint32_t srcDeviceId;
     uint64_t srcOffset;
-    uint32_t dstRankId;
+    uint32_t dstDeviceId;
     uint64_t dstOffset;
     uint64_t len;
     uint8_t protocol;
+
+    std::string Describe() const
+    {
+        std::ostringstream oss;
+        oss << "srcDeviceId=" << srcDeviceId << " srcOffset=" << srcOffset << " dstDeviceId=" << dstDeviceId
+            << " dstOffset=" << dstOffset << " len=" << len;
+        return oss.str();
+    }
 } TransMemTask;
 
 typedef struct {
-    uint32_t rankId;
-    uint32_t rankSize;
-    uint64_t commId;
-    uint64_t streamId;
-    uint64_t inputAddr;
-    uint64_t inputSize;
-    uint64_t outputAddr;
-    uint64_t outputSize;
-    uint64_t cclAddr;
-    uint64_t cclSize;
-} OpStartTask;
+    uint64_t syncIdx;
+
+    std::string Describe() const
+    {
+        std::ostringstream oss;
+        oss << "syncIdx=" << syncIdx;
+        return oss.str();
+    }
+} SyncStreamTask;
 
 typedef struct {
-    uint32_t rankId;
-    uint32_t rankSize;
-    uint64_t commId;
-    uint64_t streamId;
-} OpSyncTask;
-
-typedef struct {
-    uint32_t srcRankId;
+    uint32_t srcDeviceId;
     uint64_t srcOffset;
-    uint32_t dstRankId;
+    uint32_t dstDeviceId;
     uint64_t dstOffset;
     uint64_t dataCount;
     uint8_t dataType; // HcclDataType from hccl_types.h
     uint8_t reduceOp; // HcclReduceOp from hccl_types.h
     uint8_t protocol;
     uint8_t resv;
+
+    std::string Describe() const
+    {
+        std::ostringstream oss;
+        oss << "srcDeviceId=" << srcDeviceId << " srcOffset=" << srcOffset << " dstDeviceId=" << dstDeviceId
+            << " dstOffset=" << dstOffset << " dataCount=" << dataCount
+            << " dataType=" << static_cast<uint32_t>(dataType) << " reduceOp=" << static_cast<uint32_t>(reduceOp);
+        return oss.str();
+    }
 } ReduceTask;
 
 typedef struct {
-    uint32_t srcRankId;
+    uint32_t srcDeviceId;
     uint64_t notifyId;
-    uint32_t dstRankId;
+    uint32_t dstDeviceId;
     uint8_t notifyCount;
     uint8_t protocol;
+
+    std::string Describe() const
+    {
+        std::ostringstream oss;
+        oss << "srcDeviceId=" << srcDeviceId << " dstDeviceId=" << dstDeviceId << " notifyId=" << notifyId;
+        return oss.str();
+    }
 } NotifyTask;
 
 typedef struct {
@@ -284,16 +300,33 @@ typedef struct {
     uint32_t key;
     uint32_t argSize;
     uint64_t args[RT_CCU_SQE_ARGS_LEN];
+
+    std::string Describe() const
+    {
+        std::ostringstream oss;
+        oss << "dieId=" << static_cast<uint32_t>(dieId) << " missionId=" << static_cast<uint32_t>(missionId)
+            << " timeout=" << timeout << " instStart=" << instStartId << " instCnt=" << instCnt << " key=" << key
+            << " argSize=" << argSize;
+        return oss.str();
+    }
 } CcuTask;
 
 typedef struct {
     uint64_t launchIdx;
+
+    std::string Describe() const
+    {
+        std::ostringstream oss;
+        oss << "launchIdx=" << launchIdx;
+        return oss.str();
+    }
 } AivTask;
 
 typedef struct HcclTaskMetaData {
     HccLTaskMetaType taskType;
-    uint16_t commId;
+    uint64_t commId;
     uint32_t rankId;
+    uint64_t deviceId;
     uint64_t streamId;
     uint32_t jettyId;
     uint8_t rmEid[16];
@@ -303,13 +336,62 @@ typedef struct HcclTaskMetaData {
         NotifyTask notify;
         CcuTask ccu;
         AivTask aiv;
-        OpStartTask opStartTask;
-        OpSyncTask opSyncTask;
+        SyncStreamTask syncStreamTask;
     } taskData;
+
     HcclTaskMetaData()
     {
+        taskType = HccLTaskMetaType::INVALID;
+        commId = 0;
+        rankId = UINT32_MAX;
+        deviceId = UINT64_MAX;
+        streamId = UINT64_MAX;
         jettyId = UINT32_MAX;
         memset(rmEid, 0, sizeof(rmEid));
+        memset(&taskData, 0, sizeof(taskData));
+    }
+
+    std::string TaskTypeName() const
+    {
+        static const std::map<HccLTaskMetaType, std::string> TASK_NAMES{
+            {HccLTaskMetaType::NOTIFY_WAIT, "NOTIFY_WAIT"}, {HccLTaskMetaType::NOTIFY_RECORD, "NOTIFY_RECORD"},
+            {HccLTaskMetaType::REDUCE, "REDUCE"},           {HccLTaskMetaType::MEM_CPY, "MEM_CPY"},
+            {HccLTaskMetaType::CCU_GRAPH, "CCU_GRAPH"},     {HccLTaskMetaType::AIV_GRAPH, "AIV_GRAPH"},
+            {HccLTaskMetaType::SYNC_STREAM, "SYNC_STREAM"},
+        };
+        auto it = TASK_NAMES.find(taskType);
+        return it != TASK_NAMES.end() ? it->second : "INVALID";
+    }
+
+    std::string Describe() const
+    {
+        std::ostringstream oss;
+        oss << "taskType=" << TaskTypeName() << " commId=" << commId << " rankId=" << rankId << " deviceId=" << deviceId
+            << " streamId=" << streamId << " jettyId=" << jettyId;
+        switch (taskType) {
+            case HccLTaskMetaType::NOTIFY_WAIT:
+            case HccLTaskMetaType::NOTIFY_RECORD:
+                oss << " taskData={" << taskData.notify.Describe() << "}";
+                break;
+            case HccLTaskMetaType::REDUCE:
+                oss << " taskData={" << taskData.reduce.Describe() << "}";
+                break;
+            case HccLTaskMetaType::MEM_CPY:
+                oss << " taskData={" << taskData.transMem.Describe() << "}";
+                break;
+            case HccLTaskMetaType::CCU_GRAPH:
+                oss << " taskData={" << taskData.ccu.Describe() << "}";
+                break;
+            case HccLTaskMetaType::AIV_GRAPH:
+                oss << " taskData={" << taskData.aiv.Describe() << "}";
+                break;
+            case HccLTaskMetaType::SYNC_STREAM:
+                oss << " taskData={" << taskData.syncStreamTask.Describe() << "}";
+                break;
+            default:
+                break;
+        }
+        return oss.str();
     }
 } HcclTaskMetaData;
 
@@ -368,4 +450,4 @@ inline std::string GetArchStr()
 #endif
 }
 
-#endif
+#endif // HCOMM_HCCL_VM_SIM_COMMON_DEFS_H

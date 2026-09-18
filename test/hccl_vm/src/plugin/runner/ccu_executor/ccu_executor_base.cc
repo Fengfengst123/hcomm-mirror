@@ -8,6 +8,12 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: ccu executor base Author:
+ * caiyifan
+ */
+
 #include "ccu_executor_base.h"
 
 #include <cstdint>
@@ -145,7 +151,8 @@ void CcuExecutorBase::WaitCkeProcess(
             auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - oldTime);
             if (duration.count() >= 1000) {
                 HCCL_VM_DEBUG(
-                    "instr[{}], ccuId=[{}:{}], waitCKE[{}:{:04x}], expect:[{:04x}], actual:[{:04x}], waitCKE:[{:04x}]",
+                    "instr[{}], ccuId=[{}:{}], waitCKE[{}:{:04x}], "
+                    "expect:[{:04x}], actual:[{:04x}], waitCKE:[{:04x}]",
                     instrName, rankId_, dieId_, newWaitCKEId, waitCKEMask, waitCKEMask, (waitCKE & waitCKEMask),
                     waitCKE);
                 oldTime = currentTime;

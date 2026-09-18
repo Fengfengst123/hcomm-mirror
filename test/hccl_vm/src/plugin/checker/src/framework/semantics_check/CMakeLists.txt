@@ -9,7 +9,6 @@
 # -----------------------------------------------------------------------------------------------------------
 
 target_sources(checker PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/task_check_op_semantics.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/allgather_semantics_checker.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/allgather_v_semantics_checker.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/allreduce_semantics_checker.cc

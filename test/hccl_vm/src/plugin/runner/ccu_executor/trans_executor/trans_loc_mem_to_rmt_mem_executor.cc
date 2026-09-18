@@ -8,14 +8,20 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: ccu executor -- trans loc mem
+ * to rmt mem Author: caiyifan
+ */
+
 #include "trans_loc_mem_to_rmt_mem_executor.h"
 
 #include <cstdint>
 
 #include "ccu_executor_manager.h"
 #include "ccu_microcode_common_v1.h"
-#include "sim_log.h"
 #include "ccu_string_util.h"
+#include "sim_log.h"
 
 using namespace std;
 using namespace hcomm::CcuRep;
@@ -80,9 +86,11 @@ void TransLocMemToRmtMemExecutor::Run() { WaitCkeProcess(waitCKEId_, waitCKEMask
 std::string TransLocMemToRmtMemExecutor::Describe()
 {
     return HcclSim::StringFormat(
-        "[Simulation Execute] Wait CKE[%u:%04x], Trans LocMem[%u:%u] To RmtMem[%u:%u] With "
+        "[Simulation Execute] Wait CKE[%u:%04x], "
+        "Trans LocMem[%u:%u] To RmtMem[%u:%u] With "
         "LengthXn[%u] Use Channel[%u], Set "
-        "CKE[%u:%04x], clearType[%u], lengthEn[%u], DataType[%u], ReduceType[%u] reduceEn[%u]\n",
+        "CKE[%u:%04x], clearType[%u], lengthEn[%u], "
+        "DataType[%u], ReduceType[%u] reduceEn[%u]\n",
         waitCKEId_, waitCKEMask_, locGSAId_, locXnId_, rmtGSAId_, rmtXnId_, lengthXnId_, channelId_, setCKEId_,
         setCKEMask_, clearType_, lengthEn_, reduceDataType_, reduceOpCode_, reduceEn_);
 }

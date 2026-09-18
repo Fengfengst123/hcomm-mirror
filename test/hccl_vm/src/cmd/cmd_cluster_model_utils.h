@@ -11,10 +11,10 @@
 #ifndef HCCL_VM_CMD_CLUSTER_MODEL_UTILS_H
 #define HCCL_VM_CMD_CLUSTER_MODEL_UTILS_H
 
+#include "sim_common_defs.h"
 #include <cstdint>
 #include <string>
 #include <vector>
-#include "sim_common_defs.h"
 
 using namespace HcclSim;
 

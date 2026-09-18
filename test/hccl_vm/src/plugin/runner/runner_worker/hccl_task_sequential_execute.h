@@ -25,8 +25,8 @@
 #include <unordered_map>
 #include <vector>
 
-#include "sim_common_defs.h"
 #include "hccl_task_thread.h"
+#include "sim_common_defs.h"
 #include "storage_manager.h"
 
 using namespace HcclSim;
@@ -34,10 +34,10 @@ using namespace HcclSim;
 namespace VirtualRunTime {
 using workerFunc = std::function<HcclSim::HcclVmResult(const HcclTaskMetaData&)>;
 
-class SqeuentialExecutor {
+class SequentialExecutor {
 public:
-    SqeuentialExecutor(AllRankTaskQueues& allRankTaskQueues, const std::string& rootPath);
-    ~SqeuentialExecutor() = default;
+    SequentialExecutor(AllRankTaskQueues& allRankTaskQueues, const std::string& rootPath);
+    ~SequentialExecutor() = default;
 
     HcclVmResult Execute();
 

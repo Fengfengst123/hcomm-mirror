@@ -11,6 +11,7 @@
 #include <gtest/gtest.h>
 
 #include "sim_models.h"
+#include "sim_op_db_types.h"
 
 using namespace sim;
 
@@ -21,7 +22,7 @@ protected:
 TEST_F(SimModelsTest, Server_StructSize)
 {
     static_assert(sizeof(Server) > 0, "Server struct should have size");
-    Server s{1, 100, 0, "v1"};
+    Server s{1, 100, 0, 1, "v1"};
     EXPECT_EQ(s.id, 1);
     EXPECT_EQ(s.pod_id, 100);
 }
@@ -39,4 +40,37 @@ TEST_F(SimModelsTest, Runner_StructSize)
     static_assert(sizeof(Runner) > 0, "Runner struct should have size");
     Runner r{1, 100, 1, 1, 1000, 1};
     EXPECT_EQ(r.id, 1);
+}
+
+TEST_F(SimModelsTest, OpExecutionKey_OrdersByCommunicatorThenIteration)
+{
+    sim::OpExecutionKey first{"comm_a", 7, 2};
+    sim::OpExecutionKey second{"comm_b", 0, 0};
+    sim::OpExecutionKey earlierIteration{"comm_a", 7, 1};
+    sim::OpExecutionKey sameNameAndIterationDifferentHash{"comm_a", 6, 2};
+
+    EXPECT_TRUE(first < second);
+    EXPECT_TRUE(earlierIteration < first);
+    EXPECT_FALSE(sameNameAndIterationDifferentHash < first);
+    EXPECT_FALSE(first < sameNameAndIterationDifferentHash);
+    EXPECT_FALSE(first < earlierIteration);
+}
+
+TEST_F(SimModelsTest, OpExecution_StoresNonContiguousDevicesWithTheirRanks)
+{
+    sim::OpExecution execution;
+    sim::DeviceOpExecutionRecord first;
+    first.deviceId = 17;
+    first.rankId = 0;
+    sim::DeviceOpExecutionRecord second;
+    second.deviceId = 3;
+    second.rankId = 1;
+    execution.deviceRecords.push_back(first);
+    execution.deviceRecords.push_back(second);
+
+    ASSERT_EQ(execution.deviceRecords.size(), 2);
+    EXPECT_EQ(execution.deviceRecords[0].deviceId, 17);
+    EXPECT_EQ(execution.deviceRecords[1].deviceId, 3);
+    EXPECT_EQ(execution.deviceRecords[0].rankId, 0);
+    EXPECT_EQ(execution.deviceRecords[1].rankId, 1);
 }

@@ -8,6 +8,12 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: unit test for
+ * ReduceAddExecutor Author: xx
+ */
+
 #include <cstdint>
 #include <cstring>
 #include <gtest/gtest.h>
@@ -33,6 +39,7 @@ TEST_F(ReduceAddExecutorTest, DefaultConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     ReduceAddExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -43,6 +50,7 @@ TEST_F(ReduceAddExecutorTest, ParameterizedConstructor)
     memset(&instr, 0, sizeof(instr));
 
     ReduceAddExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -53,6 +61,7 @@ TEST_F(ReduceAddExecutorTest, ParserZeroValues)
     memset(&instr, 0, sizeof(instr));
 
     ReduceAddExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -64,6 +73,7 @@ TEST_F(ReduceAddExecutorTest, ParserMaxValues)
     memset(&instr, 0xFF, sizeof(instr));
 
     ReduceAddExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -84,6 +94,7 @@ TEST_F(ReduceAddExecutorTest, ParserSpecificParameters)
     instr.v1.add.waitCKEMask = 0xF0;
 
     ReduceAddExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -98,6 +109,7 @@ TEST_F(ReduceAddExecutorTest, DifferentDataTypes)
     for (uint16_t dataType = 0; dataType <= 6; dataType++) {
         instr.v1.add.dataType = dataType;
         ReduceAddExecutor executor(0, 0, 0, instr, nullptr);
+        executor.SetVersion(RunnerCcuVersion::CCU_V1);
         EXPECT_NO_THROW(executor.Parser());
         EXPECT_NO_THROW(executor.Describe());
     }
@@ -114,6 +126,7 @@ TEST_F(ReduceAddExecutorTest, DifferentCountValues)
     for (auto count : counts) {
         instr.v1.add.count = count;
         ReduceAddExecutor executor(0, 0, 0, instr, nullptr);
+        executor.SetVersion(RunnerCcuVersion::CCU_V1);
         EXPECT_NO_THROW(executor.Parser());
         EXPECT_NO_THROW(executor.Describe());
     }
@@ -128,6 +141,7 @@ TEST_F(ReduceAddExecutorTest, DifferentCastEnValues)
     for (uint16_t castEn = 0; castEn <= 1; castEn++) {
         instr.v1.add.castEn = castEn;
         ReduceAddExecutor executor(0, 0, 0, instr, nullptr);
+        executor.SetVersion(RunnerCcuVersion::CCU_V1);
         EXPECT_NO_THROW(executor.Parser());
         EXPECT_NO_THROW(executor.Describe());
     }
@@ -142,6 +156,7 @@ TEST_F(ReduceAddExecutorTest, DescribeContent)
     instr.v1.add.dataType = 0;
 
     ReduceAddExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -155,6 +170,7 @@ TEST_F(ReduceAddExecutorTest, InheritanceCheck)
     memset(&instr, 0, sizeof(instr));
 
     ReduceAddExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     CcuExecutorBase* base = &executor;
     EXPECT_NE(base, nullptr);
 }
@@ -170,6 +186,7 @@ TEST_F(ReduceAddExecutorTest, VariousMsIds)
     }
 
     ReduceAddExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }

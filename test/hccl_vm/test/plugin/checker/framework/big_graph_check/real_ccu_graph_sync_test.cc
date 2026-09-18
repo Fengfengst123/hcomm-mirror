@@ -75,12 +75,12 @@ namespace {
         }
 
         static CcuNotify
-        MakeNotify(RankId recordRank, RankId waitRank, uint32_t dieId, uint16_t ckeId, uint16_t ckeMask)
+        MakeNotify(DeviceId recordDevice, DeviceId waitDevice, uint32_t dieId, uint16_t ckeId, uint16_t ckeMask)
         {
             CcuNotify notify;
             notify.channelId = INVALID_CHANNEL_ID;
-            notify.recordRankId = recordRank;
-            notify.waitRankId = waitRank;
+            notify.recordDeviceId = recordDevice;
+            notify.waitDeviceId = waitDevice;
             notify.dieId = dieId;
             notify.ckeId = ckeId;
             notify.ckeMask = ckeMask;
@@ -171,7 +171,7 @@ namespace {
             // Rank 0, ccuGraphNodeId=0. The first 0x3 wait is satisfied by rank 1.
             graph.rank0InitialPost = AddRecord(MakeNotify(0, 0, 1, 192, 0xffff), rank0Operator0, 25);
             graph.rank0PostBits01 = AddRecord(MakeNotify(0, 1, 1, 256, 0x3), rank0Operator0, 27);
-            graph.rank0WaitBits01 = AddWait(MakeNotify(INVALID_RANK_ID, 0, 1, 256, 0x3), rank0Operator1, 29);
+            graph.rank0WaitBits01 = AddWait(MakeNotify(INVALID_DEVICE_ID, 0, 1, 256, 0x3), rank0Operator1, 29);
             auto rank0Write = AddNode(
                 std::make_unique<TaskTransMem>(
                     Slice(0, MemType::INPUT, 0x800), Slice(1, MemType::OUTPUT, 0), ProtocolType::CCU),
@@ -190,7 +190,7 @@ namespace {
             TaskWaitCCU* rank0WaitBit1Local = AddWait(MakeNotify(0, 0, 1, 224, 0x2), rank0Operator1, 136);
             graph.rank0WaitBit1Local = rank0WaitBit1Local;
             graph.rank0PostBit3 = AddRecord(MakeNotify(0, 1, 1, 256, 0x8), rank0Operator2, 142);
-            graph.rank0WaitBit3 = AddWait(MakeNotify(INVALID_RANK_ID, 0, 1, 256, 0x8), rank0Operator2, 143);
+            graph.rank0WaitBit3 = AddWait(MakeNotify(INVALID_DEVICE_ID, 0, 1, 256, 0x8), rank0Operator2, 143);
 
             AddEdge(graph.mainStart, graph.rank0InitialPost);
             AddEdge(graph.rank0InitialPost, graph.rank0PostBits01);
@@ -212,9 +212,9 @@ namespace {
             // Rank 1, ccuGraphNodeId=1. Its 0x3 post satisfies rank 0's wait.
             TaskRecordCCU* rank1InitialPost = AddRecord(MakeNotify(1, 1, 1, 192, 0xffff), rank1Operator0, 17);
             graph.rank1PostBits01 = AddRecord(MakeNotify(1, 0, 1, 256, 0x3), rank1Operator0, 19);
-            graph.rank1WaitBits01 = AddWait(MakeNotify(INVALID_RANK_ID, 1, 1, 256, 0x3), rank1Operator1, 21);
+            graph.rank1WaitBits01 = AddWait(MakeNotify(INVALID_DEVICE_ID, 1, 1, 256, 0x3), rank1Operator1, 21);
             graph.rank1PostBit3 = AddRecord(MakeNotify(1, 0, 1, 256, 0x8), rank1Operator2, 33);
-            graph.rank1WaitBit3 = AddWait(MakeNotify(INVALID_RANK_ID, 1, 1, 256, 0x8), rank1Operator2, 34);
+            graph.rank1WaitBit3 = AddWait(MakeNotify(INVALID_DEVICE_ID, 1, 1, 256, 0x8), rank1Operator2, 34);
 
             AddEdge(graph.mainStart, rank1InitialPost);
             AddEdge(rank1InitialPost, graph.rank1PostBits01);
@@ -222,7 +222,8 @@ namespace {
             AddEdge(graph.rank1WaitBits01, graph.rank1PostBit3);
             AddEdge(graph.rank1PostBit3, graph.rank1WaitBit3);
 
-            // Cross-rank CCU dependencies. Each mask bit is an independent resource.
+            // Cross-rank CCU dependencies. Each mask bit is an independent
+            // resource.
             AddEdge(graph.rank1PostBits01, graph.rank0WaitBits01);
             AddEdge(graph.rank0PostBits01, graph.rank1WaitBits01);
             AddEdge(graph.rank0PostBit1Local, graph.rank0WaitBit1Local);
@@ -255,7 +256,7 @@ namespace {
     TEST_F(RealCcuGraphSyncTest, AddingWaitForExistingCcuMaskBitIsRejected)
     {
         Graph graph = BuildRealGraph();
-        TaskWaitCCU* extraWait = AddWait(MakeNotify(INVALID_RANK_ID, 1, 1, 256, 0x1), Position(3, 1), 35);
+        TaskWaitCCU* extraWait = AddWait(MakeNotify(INVALID_DEVICE_ID, 1, 1, 256, 0x1), Position(3, 1), 35);
         AddEdge(graph.mainStart, extraWait);
         AddEdge(graph.rank0PostBits01, extraWait);
 

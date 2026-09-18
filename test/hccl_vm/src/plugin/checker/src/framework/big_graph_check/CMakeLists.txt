@@ -10,5 +10,4 @@
 
 target_sources(checker PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/big_graph_checker.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/big_graph_data_loader.cc
 )

@@ -53,6 +53,9 @@ private:
     HcclPluginManager();
     ~HcclPluginManager();
 
+    void AddInstallRecordToDB(const std::string& pluginTag);
+    void RemoveInstallRecordFromDB(const std::string& pluginTag);
+
     void MonitorThread();
     std::atomic<bool> m_monitorThreadStop{false};
     std::thread m_monitorThread;

@@ -21,13 +21,14 @@ target_sources(test_aiv_st PRIVATE
     ${CHECKER_SRC}/framework/task_graph_generator_v3/task_graph_generator_v3.cc
     ${CHECKER_SRC}/framework/task_graph_generator_v3/task_graph_mem_conflict_v3.cc
     ${CHECKER_SRC}/framework/task_graph_generator_v3/task_graph_reachability_v3.cc
+    ${CHECKER_SRC}/framework/task_graph_generator_v3/task_graph_reachability_shard_v3.cc
     ${CHECKER_SRC}/framework/task_graph_generator_v3/task_graph_single_task_check_v3.cc
     ${CHECKER_SRC}/framework/task_graph_generator_v3/task_def_v3.cc
     ${CHECKER_SRC}/framework/task_graph_generator_v3/aiv_graph_generator_v3/aiv_snapshot_json_loader_v3.cc
     ${CHECKER_SRC}/framework/task_graph_generator_v3/aiv_graph_generator_v3/aiv_task_transform_v3.cc
     ${CHECKER_SRC}/utils/storage_manager.cc
     ${CHECKER_SRC}/utils/binary_data_operator.cc
-    ${CHECKER_SRC}/framework/task_graph_generator/ccu_all_rank_param_recorder.cc
+    ${CHECKER_SRC}/framework/task_graph_generator_v3/ccu_graph_generator_v3/ccu_all_rank_param_recorder_v3.cc
     ${CHECKER_SRC}/log/log_stub.cc
 )
 
@@ -35,7 +36,6 @@ target_include_directories(test_aiv_st BEFORE PRIVATE
     ${CHECKER_SRC}/utils
     ${CHECKER_SRC}/checker
     ${CHECKER_SRC}/log
-    ${CHECKER_SRC}/framework/task_graph_generator
     ${CHECKER_SRC}/framework/task_graph_generator_v3
     ${CHECKER_SRC}/framework/task_graph_generator_v3/aiv_graph_generator_v3
     ${CHECKER_SRC}/framework/task_graph_generator_v3/ccu_graph_generator_v3
@@ -52,6 +52,7 @@ target_include_directories(test_aiv_st BEFORE PRIVATE
 
 target_link_libraries(test_aiv_st PRIVATE
     log
+    runnerdb
     ${ASCEND_CANN_PACKAGE_PATH}/${CANN_ARCH_DIR}/lib64/libc_sec.a
 )
 

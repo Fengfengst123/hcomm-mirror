@@ -13,16 +13,21 @@
 #include <atomic>
 #include <cstdio>
 #include <cstring>
+#include <string>
 #include <sys/mman.h> // shm_unlink
 #include <thread>
+#include <unistd.h>
 #include <vector>
 
+#include "runtime_state/db_sim_runner_ops.h"
+#include "runtime_state/sim_models.h"
+#include "simulation_storage_test_helper.h"
+#include "storage/internal/process_storage_context.h"
+#include "storage/storage_session.h"
 #include "store_sim_comm_pool_policy.h"
 #include "store_sim_device_memory_manager.h"
 #include "store_sim_memory_manager.h"
 #include "store_sim_run_mode.h"
-#include "db_sim_runner_db.h"
-#include "sim_models.h"
 
 // 阈值和上界取自 CommPoolPolicy，下面纯判定用例用这两个短别名。
 static constexpr size_t kThr = sim::CommPoolPolicy::kBigBlockThreshold; // 200MB
@@ -84,18 +89,38 @@ static void* CreateCommPool()
 }
 static void DestroyCommPool() { sim::MemoryManager::GetInstance().FreeMemByName(sim::CommPoolPolicy::kPoolName); }
 
+// 本二进制私有的 PID 唯一临时库路径：不与正式安装目录或其他测试库共享。
+namespace {
+std::string RunnerDbPath() { return "/tmp/hccl_vm_sim_dmm_" + std::to_string(::getpid()) + "_runner.db"; }
+
+std::string OpDataDbPath() { return "/tmp/hccl_vm_sim_dmm_" + std::to_string(::getpid()) + "_opdata.db"; }
+} // namespace
+
 class DeviceMemoryManagerTest : public testing::Test {
 protected:
+    // 套件级一次装配：显式安装测试 Session（经 ResetTestSession 产生对
+    // composition bootstrap
+    // 的强符号引用）并写入仅校验模式前提；后续所有用例共享同一前提，
+    // IsCheckOnlyMode 进程内 latch 在首次读取时即命中 mode=1。
+    static void SetUpTestSuite()
+    {
+        ASSERT_TRUE(runnerdb_test::ResetTestSession(RunnerDbPath(), OpDataDbPath()));
+        ASSERT_TRUE(runnerdb_test::ClearRecords<sim::runtime::RunModeConfig>());
+
+        sim::runtime::RunModeConfig config{};
+        config.mode = 1;
+
+        ASSERT_NE(runnerdb_test::InsertRecord(config), 0U);
+        ASSERT_TRUE(sim::ProbeCheckOnlyMode()); // 数据库中的 mode=1 可被读取
+    }
+
+    static void TearDownTestSuite() { runnerdb_test::CleanUpDatabases(RunnerDbPath(), OpDataDbPath()); }
+
     void SetUp() override
     {
         // 清进程内和磁盘上残留的 HcclCommPool，保证乱序和重跑自洽。
         sim::MemoryManager::GetInstance().FreeMemByName(sim::CommPoolPolicy::kPoolName);
         shm_unlink(sim::CommPoolPolicy::kPoolName);
-        // 写入仅校验模式，让 IsCheckOnlyMode() 缓存为 true，大块引流集成用例才会命中复用区。
-        RunnerDB::DeleteAll<sim::RunModeConfig>();
-        sim::RunModeConfig cfg{};
-        cfg.mode = 1;
-        RunnerDB::Add<sim::RunModeConfig>(cfg);
     }
     void TearDown() override { sim::MemoryManager::GetInstance().FreeMemByName("dev_test_phy"); }
 };
@@ -221,12 +246,14 @@ TEST_F(DeviceMemoryManagerTest, GetHostPtrByDevPtr_NotExist_ReturnsNull)
     EXPECT_EQ(result, nullptr);
 }
 
-// SetUp 已写入仅校验模式，集成路径走仅校验模式开分支。仅校验模式关时不引流由 VmemDecisionTest 覆盖。
-// 池基址用大块 AllocPhyMem 的返回值获取，命中复用即返回池首址，不依赖内部 getter。
+// SetUp 已写入仅校验模式，集成路径走仅校验模式开分支。仅校验模式关时不引流由
+// VmemDecisionTest 覆盖。 池基址用大块 AllocPhyMem
+// 的返回值获取，命中复用即返回池首址，不依赖内部 getter。
 
 TEST_F(DeviceMemoryManagerTest, AllocPhyMem_BigBlocks_ShareSamePool)
 {
-    EXPECT_TRUE(sim::IsCheckOnlyMode()); // fixture 已写入仅校验模式，首次缓存须为 true。
+    EXPECT_TRUE(sim::IsCheckOnlyMode()); // fixture 已写入仅校验模式，首次缓存须为
+                                         // true。
     auto& mgr = sim::DeviceMemoryManager::GetInstance();
     ASSERT_NE(CreateCommPool(), nullptr);
     const size_t big = sim::CommPoolPolicy::kBigBlockThreshold; // 200MB
@@ -328,8 +355,9 @@ TEST_F(DeviceMemoryManagerTest, AllocPhyMem_ConcurrentBig_ThreadSafe)
 
 TEST_F(DeviceMemoryManagerTest, PoolCeiling_FullSpanAddressable_ContentCorrect)
 {
-    // 复用区 4GB。验证首址和紧贴 4GB 上界的末字节都能写读、内容正确，整段 4GB 在规格内可寻址。
-    // mmap 惰性提交，只触碰的页才落 /dev/shm，只占几页，不会真占 4GB。
+    // 复用区 4GB。验证首址和紧贴 4GB 上界的末字节都能写读、内容正确，整段 4GB
+    // 在规格内可寻址。 mmap 惰性提交，只触碰的页才落
+    // /dev/shm，只占几页，不会真占 4GB。
     auto& mgr = sim::DeviceMemoryManager::GetInstance();
     ASSERT_NE(CreateCommPool(), nullptr);
     char* base = static_cast<char*>(mgr.AllocPhyMem("ceiling_probe", 0, sim::CommPoolPolicy::kBigBlockThreshold));
@@ -353,9 +381,10 @@ TEST_F(DeviceMemoryManagerTest, PoolCeiling_FullSpanAddressable_ContentCorrect)
 
 TEST_F(DeviceMemoryManagerTest, AllocPhyMem_BigBlockOverwrite_NoContentGuarantee)
 {
-    // 两个不同名大块（两个 rank）都引流到同一池区，后写者覆盖先写者，内容不保证正确。
-    // 覆盖是共享后备存储的性质，与进程边界无关，每个 rank 都 Acquire 同一 HcclCommPool。
-    // 与小块各自独立分配对照。
+    // 两个不同名大块（两个
+    // rank）都引流到同一池区，后写者覆盖先写者，内容不保证正确。
+    // 覆盖是共享后备存储的性质，与进程边界无关，每个 rank 都 Acquire 同一
+    // HcclCommPool。 与小块各自独立分配对照。
     auto& mgr = sim::DeviceMemoryManager::GetInstance();
     ASSERT_NE(CreateCommPool(), nullptr);
     const size_t big = sim::CommPoolPolicy::kBigBlockThreshold; // 200MB

@@ -26,15 +26,17 @@
 
 #include "ccu_resource_manager.h"
 #include "device_resource_manager.h"
-#include "sim_models.h"
-#include "store_dump_shm_data.h"
+#include "hccl_task_sequential_execute.h"
+#include "hccl_task_sequential_execute_v2.h"
+#include "runtime_state/sim_models.h"
 #include "sim_common_defs.h"
 #include "sim_common_macro.h"
-#include "hccl_task_sequential_execute.h"
-#include "sim_log.h"
 #include "sim_loader.h"
-#include "sim_process_syncer.h"
+#include "sim_log.h"
 #include "storage_manager.h"
+#include "store_dump_shm_data.h"
+#include "store_sim_comm_memory_manager.h"
+#include "store_sim_resource_root.h"
 
 using json = nlohmann::json;
 
@@ -42,14 +44,14 @@ namespace {
 using RuntimeClock = std::chrono::steady_clock;
 constexpr uint64_t RUNTIME_NS_PER_MS = 1000000ULL;
 
-static std::vector<std::map<uint32_t, sim::CompositeOpDetail>>
-TransposeCompositeOpMap(const std::map<uint32_t, std::vector<sim::CompositeOpDetail>>& compositeDataMap)
+static std::vector<std::map<uint32_t, sim::operation::CompositeOpDetail>>
+TransposeCompositeOpMap(const std::map<uint32_t, std::vector<sim::operation::CompositeOpDetail>>& compositeDataMap)
 {
     size_t maxOps = 0;
     for (const auto& entry : compositeDataMap) {
         maxOps = std::max(maxOps, entry.second.size());
     }
-    std::vector<std::map<uint32_t, sim::CompositeOpDetail>> opGroups(maxOps);
+    std::vector<std::map<uint32_t, sim::operation::CompositeOpDetail>> opGroups(maxOps);
     for (const auto& entry : compositeDataMap) {
         uint32_t rankId = entry.first;
         const auto& ops = entry.second;
@@ -90,14 +92,15 @@ void DumpRunVirtualRuntimeTimeStats(const RunVirtualRuntimeTimeStats& stats)
         return;
     }
     HCCL_VM_INFO(
-        "RunVirtualRuntime summary, runCount={}, totalCostMs={}, lastCostMs={}, "
+        "RunVirtualRuntime summary, runCount={}, totalCostMs={}, "
+        "lastCostMs={}, "
         "maxCostMs={}",
         stats.runCount, stats.totalCostMs, stats.lastCostMs, stats.maxCostMs);
 }
 
 bool IsAivOpExpansionMode(uint32_t opExpansionMode)
 {
-    return opExpansionMode == static_cast<uint32_t>(sim::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_AIV);
+    return opExpansionMode == static_cast<uint32_t>(sim::runtime::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_AIV);
 }
 } // namespace
 
@@ -209,23 +212,22 @@ void ProcessCommand(const std::string& line)
 // --- 业务函数 ---
 void RunVirtualRuntime(HcclSim::StorageManager& storage)
 {
-    std::vector<sim::CcuChannelTab> channels;
+    std::vector<sim::operation::CcuChannelTab> channels;
     g_loader.GetCcuChannelInfo(channels);
 
-    std::vector<sim::SyncRecordTab> records;
+    std::vector<sim::operation::SyncRecordTab> records;
     g_loader.GetSyncRecordsByStatus(0, records);
     if (records.size() == 0) {
         HCCL_VM_ERROR("can not get one effective sync iter.");
         return;
     }
 
-    std::map<uint32_t, std::vector<sim::CompositeOpDetail>> compositeDataMap;
+    std::map<uint32_t, std::vector<sim::operation::CompositeOpDetail>> compositeDataMap;
     g_loader.LoadRunnerSingleSync(records[0].syncIter, compositeDataMap);
 
     // 清理CCU资源管理器状态，防止跨sync iter状态污染（KN/XN/MS/simulators）
     // 注意：instrSpace_ 也会被清理，但会在后续的 InitCcuResource 中重新设置
     CcuResourceManager::GetInstance().Reset();
-    storage.ResetAivResource();
 
     auto opTasks = TransposeCompositeOpMap(compositeDataMap);
     for (auto& rankTask : opTasks) {
@@ -233,18 +235,10 @@ void RunVirtualRuntime(HcclSim::StorageManager& storage)
             auto& opDetail = it.second;
             storage.LoadHcclVmSynthesisData(opDetail.detail, channels);
             storage.LoadHcclVmTaskMetaData(opDetail.tasks);
-            if (IsAivOpExpansionMode(opDetail.detail.opExpansionMode)) {
-                auto ret = storage.InitAivResourceFromCompositeOpDetail(opDetail);
-                if (ret != HcclVmResult::HCCL_SIM_SUCCESS) {
-                    storage.ResetAivResource();
-                    HCCL_VM_ERROR("Aiv resource init fail.");
-                    return;
-                }
-            }
         }
     }
 
-    std::vector<sim::CcuInstrResTab> instrRes;
+    std::vector<sim::operation::CcuInstrResTab> instrRes;
     g_loader.GetInstrResInfo(instrRes);
 
     // 初始化CCU资源
@@ -265,7 +259,7 @@ void RunVirtualRuntime(HcclSim::StorageManager& storage)
     // 获取所有rank的任务队列
     auto rootPath = storage.FindRootPath();
     HcclSim::AllRankTaskQueues& allRankTaskQueues = storage.GetAllRankTaskQueues();
-    VirtualRunTime::SqeuentialExecutor executor(allRankTaskQueues, rootPath);
+    VirtualRunTime::SequentialExecutor executor(allRankTaskQueues, rootPath);
     auto allTaskSize = allRankTaskQueues.size();
     executor.Execute();
     // 查看input/output的buffer数据
@@ -274,13 +268,15 @@ void RunVirtualRuntime(HcclSim::StorageManager& storage)
     storage.ReleasePhyMem();
     storage.Reset();
     HCCL_VM_INFO(
-        "==============Runner Success Iter :{:d} tasks:{:d}============================", records[0].syncIter,
-        allTaskSize);
+        "==============Runner Success Iter :{:d} "
+        "tasks:{:d}============================",
+        records[0].syncIter, allTaskSize);
 }
 
 void init_lock()
 {
-    int fd = open("/tmp/hccl_vm_runner.lock", O_CREAT | O_RDWR, 0666);
+    std::string lockPath = sim::SimResourceRoot::GetRunnerLockPath();
+    int fd = open(lockPath.c_str(), O_CREAT | O_RDWR, 0666);
     if (fd == -1) {
         HCCL_VM_ERROR("Failed to open lock file: {}", strerror(errno));
         exit(1);
@@ -308,17 +304,22 @@ int main(int argc, char* argv[])
 {
     (void)argc;
     (void)argv;
+    // 日志配置初始化
     LogConfig config = LoadLogConfig("runner");
     InitLogger(config);
+    // 初始化文件锁
     init_lock();
+    if (!sim::CommunicationMemoryManager::GetInstance().InitPool()) {
+        HCCL_VM_ERROR("InitPool failed");
+        return 1;
+    }
     HcclSim::StorageManager& storage = HcclSim::StorageManager::GetInstance();
     storage.SetDataId("runner");
-
-    sim::ProcessSyncer syncer;
-
+    // 数据库
     g_loader.LoadOpTaskFile();
-    // 启动 stdin 监听线程（与 checker 保持一致）
-    // 读取 Host 通过 pipe 发送的控制命令（如 "stop"）
+
+    // 启动 stdin 监听线程（与 checker 保持一致）读取 Host 通过 pipe
+    // 发送的控制命令（如 "stop"）
     std::thread([]() {
         std::string line;
         while (g_keep_running.load() && std::getline(std::cin, line)) {
@@ -332,22 +333,13 @@ int main(int argc, char* argv[])
         HCCL_VM_INFO("stdin reader thread exiting.");
     }).detach();
 
+    VirtualRunTime::SequentialExecutorV2 executor{g_loader};
+
     while (g_keep_running.load()) {
-        uint32_t targetRound = syncer.checkProxyReadySignal();
-        if (targetRound == 0) {
-            // 无任务，继续轮询
-            std::this_thread::sleep_for(std::chrono::seconds(1));
-            continue;
-        }
-        if (targetRound == sim::kRunnerExitSignal) {
-            HCCL_VM_INFO("Exit signal received from hccl-vm.");
-            break;
-        }
-        HCCL_VM_INFO("Task received, targetRound={}", targetRound);
-        RunVirtualRuntime(storage);
-        syncer.notifyProxyToContinue(targetRound);
-        HCCL_VM_INFO("Round {} completed.", targetRound);
-        FlushLog(); // 将本轮完整日志落盘
+        executor.Execute();
+
+        FlushLog(); // 将本轮日志完整落盘
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 
     HCCL_VM_INFO("Exiting...");

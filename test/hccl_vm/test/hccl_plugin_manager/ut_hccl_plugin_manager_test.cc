@@ -91,6 +91,7 @@ protected:
         CleanAll();
         ClearPlugins();
         g_binLocation = kTestBase;
+        setenv("HCCL_VM_INSTALL_ROOT", kTestBase.c_str(), 1);
     }
     void TearDown() override
     {

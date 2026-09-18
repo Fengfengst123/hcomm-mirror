@@ -15,8 +15,8 @@
 #include <string>
 #include <vector>
 
-#include "hccl_types.h"
 #include "../task_def_v3.h"
+#include "hccl_types.h"
 
 namespace HcclSim {
 namespace TaskGraphGeneratorV3 {
@@ -44,7 +44,9 @@ namespace TaskGraphGeneratorV3 {
 
     struct AivDataSliceV3 {
         AivBufferTypeV3 type{AivBufferTypeV3::INVALID};
+        DeviceId deviceId{INVALID_DEVICE_ID};
         uint64_t offset{0};
+        uint64_t virtualAddr{0};
         uint64_t size{0};
     };
 
@@ -54,10 +56,10 @@ namespace TaskGraphGeneratorV3 {
         RankId rankId{INVALID_RANK_ID};
         uint32_t blockId{0};
         uint32_t curPipe{0};
+        DeviceId deviceId{INVALID_DEVICE_ID};
+        uint64_t commId{0};
 
-        RankId srcRank{INVALID_RANK_ID};
         AivDataSliceV3 src;
-        RankId dstRank{INVALID_RANK_ID};
         AivDataSliceV3 dst;
         uint32_t dataType{0};
         uint32_t reduceOp{0};
@@ -70,8 +72,8 @@ namespace TaskGraphGeneratorV3 {
         std::vector<uint32_t> barrierGroupTaskIds;
         uint32_t syncRound{0};
 
-        RankId flagOwnerRank{INVALID_RANK_ID};
-        uint64_t commInfoOffset{0};
+        RankId targetRank{INVALID_RANK_ID};
+        AivDataSliceV3 flagBuffer;
         int32_t flagValue{0};
     };
 
@@ -84,6 +86,8 @@ namespace TaskGraphGeneratorV3 {
 
     struct AivRuntimeTaskSnapshotV3 {
         RankId rankId{INVALID_RANK_ID};
+        DeviceId deviceId{INVALID_DEVICE_ID};
+        uint64_t commId{0};
         uint64_t launchIndex{0};
         uint32_t rankSize{0};
         uint64_t inBufferSize{0};
@@ -100,8 +104,9 @@ namespace TaskGraphGeneratorV3 {
         AivSnapshotJsonLoaderV3() = default;
         ~AivSnapshotJsonLoaderV3() = default;
 
-        HcclResult LoadByRankAndLaunch(
-            RankId rankId, uint64_t launchIndex, AivRuntimeTaskSnapshotV3& snapshot, std::string& errorMessage) const;
+        HcclResult LoadByDeviceAndLaunch(
+            DeviceId deviceId, uint64_t launchIndex, AivRuntimeTaskSnapshotV3& snapshot,
+            std::string& errorMessage) const;
     };
 
 } // namespace TaskGraphGeneratorV3

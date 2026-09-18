@@ -8,6 +8,12 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: ccu executor -- loop Author:
+ * caiyifan
+ */
+
 #include "loop_executor.h"
 
 #include <cstdint>
@@ -84,8 +90,9 @@ void LoopExecutor::Run()
 std::string LoopExecutor::Describe()
 {
     return HcclSim::StringFormat(
-        "[Simulation Execute] Loop From startInstrId[%u] to endInstrId[%u] with loopXn[%u]\n", startInstrId_,
-        endInstrId_, xnId_);
+        "[Simulation Execute] Loop From startInstrId[%u] to endInstrId[%u] "
+        "with loopXn[%u]\n",
+        startInstrId_, endInstrId_, xnId_);
 }
 
 CcuTrace::CcuInstrTraceDetail LoopExecutor::CollectTraceDetail()

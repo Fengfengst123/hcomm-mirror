@@ -250,53 +250,6 @@ TEST_F(SimRunnerDbTest, MultipleAdd_MaintainsDataIntegrity)
     EXPECT_GE(results.size(), 11);
 }
 
-class SimRunnerDbRankTest : public testing::Test {
-protected:
-    void SetUp() override
-    {
-        SetupTestData();
-
-        sim::Device device{};
-        auto ret = RunnerDB::GetOneByPred<sim::Device>([](const sim::Device& d) {
-            return d.physical_id == 0;
-        });
-        ASSERT_TRUE(ret.second);
-
-        sim::Rank rank{};
-        rank.rank_id = 0;
-        rank.device_id = ret.first.id;
-        RunnerDB::Add<sim::Rank>(rank);
-    }
-
-    void TearDown() override { CleanUpDb(); }
-};
-
-TEST_F(SimRunnerDbRankTest, Add_And_GetById_Rank)
-{
-    auto results = RunnerDB::GetByPred<sim::Rank>([](const sim::Rank&) {
-        return true;
-    });
-
-    EXPECT_GE(results.size(), 1);
-    EXPECT_EQ(results[0].rank_id, 0);
-}
-
-TEST_F(SimRunnerDbRankTest, QueryRankByDeviceId)
-{
-    sim::Device device{};
-    auto ret = RunnerDB::GetOneByPred<sim::Device>([](const sim::Device& d) {
-        return d.physical_id == 0;
-    });
-    ASSERT_TRUE(ret.second);
-
-    auto rank = RunnerDB::GetOneByPred<sim::Rank>([devKey = ret.first.id](const sim::Rank& r) {
-        return r.device_id == devKey;
-    });
-
-    EXPECT_TRUE(rank.second);
-    EXPECT_EQ(rank.first.rank_id, 0);
-}
-
 class SimRunnerDbContextTest : public testing::Test {
 protected:
     void SetUp() override

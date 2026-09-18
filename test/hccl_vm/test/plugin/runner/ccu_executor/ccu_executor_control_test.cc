@@ -8,6 +8,12 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: merged unit tests for control
+ * type executors: Author: xx
+ */
+
 #include <cstdint>
 #include <cstring>
 #include <gtest/gtest.h>
@@ -43,6 +49,7 @@ TEST_F(ClearCkeExecutorTest, DefaultConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     ClearCkeExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -56,6 +63,7 @@ TEST_F(ClearCkeExecutorTest, ParameterizedConstructor)
     memset(&instr, 0, sizeof(instr));
 
     ClearCkeExecutor executor(streamId, rankId, dieId, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -69,6 +77,7 @@ TEST_F(ClearCkeExecutorTest, ParserZeroValues)
     memset(&instr, 0, sizeof(instr));
 
     ClearCkeExecutor executor(streamId, rankId, dieId, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -83,6 +92,7 @@ TEST_F(ClearCkeExecutorTest, ParserMaxValues)
     memset(&instr, 0xFF, sizeof(instr));
 
     ClearCkeExecutor executor(streamId, rankId, dieId, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -104,6 +114,7 @@ TEST_F(ClearCkeExecutorTest, ParserBoundaryValues)
     instr.v1.clearCKE.waitCKEMask = 0xFFFF;
 
     ClearCkeExecutor executor(streamId, rankId, dieId, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -118,6 +129,7 @@ TEST_F(ClearCkeExecutorTest, DifferentRankDieIds)
     for (int rankId = 0; rankId < 8; rankId++) {
         for (int dieId = 0; dieId < 4; dieId++) {
             ClearCkeExecutor executor(0, rankId, dieId, instr, nullptr);
+            executor.SetVersion(RunnerCcuVersion::CCU_V1);
             EXPECT_NO_THROW(executor.Parser());
             EXPECT_NO_THROW(executor.Describe());
         }
@@ -136,6 +148,7 @@ TEST_F(ClearCkeExecutorTest, DescribeNonEmpty)
     instr.v1.clearCKE.waitCKEMask = 0xFF00;
 
     ClearCkeExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -149,6 +162,7 @@ TEST_F(ClearCkeExecutorTest, InheritanceCheck)
     memset(&instr, 0, sizeof(instr));
 
     ClearCkeExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     CcuExecutorBase* base = &executor;
     EXPECT_NE(base, nullptr);
 }
@@ -167,6 +181,7 @@ TEST_F(JumpExecutorTest, DefaultConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     JumpExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -180,6 +195,7 @@ TEST_F(JumpExecutorTest, ParameterizedConstructor)
     memset(&instr, 0, sizeof(instr));
 
     JumpExecutor executor(streamId, rankId, dieId, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -190,6 +206,7 @@ TEST_F(JumpExecutorTest, ParserZeroValues)
     memset(&instr, 0, sizeof(instr));
 
     JumpExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -201,6 +218,7 @@ TEST_F(JumpExecutorTest, ParserMaxValues)
     memset(&instr, 0xFF, sizeof(instr));
 
     JumpExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -216,6 +234,7 @@ TEST_F(JumpExecutorTest, ParserBoundaryValues)
     instr.v1.jmp.expectData = 0xFFFFFFFFFFFFFFFFULL;
 
     JumpExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -232,6 +251,7 @@ TEST_F(JumpExecutorTest, DifferentExpectDataValues)
     for (auto val : testValues) {
         instr.v1.jmp.expectData = val;
         JumpExecutor executor(0, 0, 0, instr, nullptr);
+        executor.SetVersion(RunnerCcuVersion::CCU_V1);
         EXPECT_NO_THROW(executor.Parser());
         EXPECT_NO_THROW(executor.Describe());
     }
@@ -247,6 +267,7 @@ TEST_F(JumpExecutorTest, DescribeContent)
     instr.v1.jmp.expectData = 12345;
 
     JumpExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -261,6 +282,7 @@ TEST_F(JumpExecutorTest, DifferentStreamIds)
 
     for (int streamId = 0; streamId < 16; streamId++) {
         JumpExecutor executor(streamId, 0, 0, instr, nullptr);
+        executor.SetVersion(RunnerCcuVersion::CCU_V1);
         EXPECT_NO_THROW(executor.Parser());
         EXPECT_NO_THROW(executor.Describe());
     }
@@ -273,6 +295,7 @@ TEST_F(JumpExecutorTest, InheritanceCheck)
     memset(&instr, 0, sizeof(instr));
 
     JumpExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     CcuExecutorBase* base = &executor;
     EXPECT_NE(base, nullptr);
 }
@@ -285,6 +308,7 @@ TEST_F(JumpExecutorTest, MultipleParseCalls)
     instr.v1.jmp.dstInstrXnId = 100;
 
     JumpExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Parser());
@@ -304,6 +328,7 @@ TEST_F(LoopExecutorTest, DefaultConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     LoopExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -317,6 +342,7 @@ TEST_F(LoopExecutorTest, ParameterizedConstructor)
     memset(&instr, 0, sizeof(instr));
 
     LoopExecutor executor(streamId, rankId, dieId, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -327,6 +353,7 @@ TEST_F(LoopExecutorTest, ParserZeroValues)
     memset(&instr, 0, sizeof(instr));
 
     LoopExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -338,6 +365,7 @@ TEST_F(LoopExecutorTest, ParserMaxValues)
     memset(&instr, 0xFF, sizeof(instr));
 
     LoopExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -353,6 +381,7 @@ TEST_F(LoopExecutorTest, ParserLoopParameters)
     instr.v1.loop.xnId = 5;
 
     LoopExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -376,6 +405,7 @@ TEST_F(LoopExecutorTest, DifferentInstructionRanges)
         instr.v1.loop.endInstrId = range.end;
 
         LoopExecutor executor(0, 0, 0, instr, nullptr);
+        executor.SetVersion(RunnerCcuVersion::CCU_V1);
         EXPECT_NO_THROW(executor.Parser());
         EXPECT_NO_THROW(executor.Describe());
     }
@@ -392,6 +422,7 @@ TEST_F(LoopExecutorTest, DifferentXnIds)
     for (auto xnId : xnIds) {
         instr.v1.loop.xnId = xnId;
         LoopExecutor executor(0, 0, 0, instr, nullptr);
+        executor.SetVersion(RunnerCcuVersion::CCU_V1);
         EXPECT_NO_THROW(executor.Parser());
         EXPECT_NO_THROW(executor.Describe());
     }
@@ -407,6 +438,7 @@ TEST_F(LoopExecutorTest, DescribeContent)
     instr.v1.loop.xnId = 10;
 
     LoopExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -421,6 +453,7 @@ TEST_F(LoopExecutorTest, InheritanceCheck)
     memset(&instr, 0, sizeof(instr));
 
     LoopExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     CcuExecutorBase* base = &executor;
     EXPECT_NE(base, nullptr);
 }
@@ -437,6 +470,7 @@ TEST_F(LoopExecutorTest, VariousRankDieCombinations)
     for (int rank = 0; rank < 4; rank++) {
         for (int die = 0; die < 2; die++) {
             LoopExecutor executor(0, rank, die, instr, nullptr);
+            executor.SetVersion(RunnerCcuVersion::CCU_V1);
             EXPECT_NO_THROW(executor.Parser());
             EXPECT_NO_THROW(executor.Describe());
         }
@@ -457,6 +491,7 @@ TEST_F(LoopGroupExecutorTest, DefaultConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     LoopGroupExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -470,6 +505,7 @@ TEST_F(LoopGroupExecutorTest, ParameterizedConstructor)
     memset(&instr, 0, sizeof(instr));
 
     LoopGroupExecutor executor(streamId, rankId, dieId, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -480,6 +516,7 @@ TEST_F(LoopGroupExecutorTest, ParserZeroValues)
     memset(&instr, 0, sizeof(instr));
 
     LoopGroupExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -491,6 +528,7 @@ TEST_F(LoopGroupExecutorTest, ParserMaxValues)
     memset(&instr, 0xFF, sizeof(instr));
 
     LoopGroupExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -507,6 +545,7 @@ TEST_F(LoopGroupExecutorTest, ParserSpecificParameters)
     instr.v1.loopGroup.highPerfModeEn = 1;
 
     LoopGroupExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -521,6 +560,7 @@ TEST_F(LoopGroupExecutorTest, DifferentHighPerfModeValues)
     for (uint16_t mode = 0; mode <= 1; mode++) {
         instr.v1.loopGroup.highPerfModeEn = mode;
         LoopGroupExecutor executor(0, 0, 0, instr, nullptr);
+        executor.SetVersion(RunnerCcuVersion::CCU_V1);
         EXPECT_NO_THROW(executor.Parser());
         EXPECT_NO_THROW(executor.Describe());
     }
@@ -537,6 +577,7 @@ TEST_F(LoopGroupExecutorTest, DescribeContent)
     instr.v1.loopGroup.highPerfModeEn = 1;
 
     LoopGroupExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -550,6 +591,7 @@ TEST_F(LoopGroupExecutorTest, InheritanceCheck)
     memset(&instr, 0, sizeof(instr));
 
     LoopGroupExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     CcuExecutorBase* base = &executor;
     EXPECT_NE(base, nullptr);
 }
@@ -567,6 +609,7 @@ TEST_F(LoopGroupExecutorTest, VariousXnXmCombinations)
             instr.v1.loopGroup.xnId = xnId;
             instr.v1.loopGroup.xmId = xmId;
             LoopGroupExecutor executor(0, 0, 0, instr, nullptr);
+            executor.SetVersion(RunnerCcuVersion::CCU_V1);
             EXPECT_NO_THROW(executor.Parser());
             EXPECT_NO_THROW(executor.Describe());
         }
@@ -587,6 +630,7 @@ TEST_F(SetCkeExecutorTest, DefaultConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     SetCkeExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -600,6 +644,7 @@ TEST_F(SetCkeExecutorTest, ParameterizedConstructor)
     memset(&instr, 0, sizeof(instr));
 
     SetCkeExecutor executor(streamId, rankId, dieId, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -610,6 +655,7 @@ TEST_F(SetCkeExecutorTest, ParserZeroValues)
     memset(&instr, 0, sizeof(instr));
 
     SetCkeExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -621,6 +667,7 @@ TEST_F(SetCkeExecutorTest, ParserMaxValues)
     memset(&instr, 0xFF, sizeof(instr));
 
     SetCkeExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -638,6 +685,7 @@ TEST_F(SetCkeExecutorTest, ParserCkeParameters)
     instr.v1.setCKE.waitCKEMask = 0x00FF;
 
     SetCkeExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -652,6 +700,7 @@ TEST_F(SetCkeExecutorTest, DifferentClearTypeValues)
     for (uint16_t clearType = 0; clearType <= 2; clearType++) {
         instr.v1.setCKE.clearType = clearType;
         SetCkeExecutor executor(0, 0, 0, instr, nullptr);
+        executor.SetVersion(RunnerCcuVersion::CCU_V1);
         EXPECT_NO_THROW(executor.Parser());
         EXPECT_NO_THROW(executor.Describe());
     }
@@ -669,6 +718,7 @@ TEST_F(SetCkeExecutorTest, DifferentMaskPatterns)
         instr.v1.setCKE.setCKEMask = mask;
         instr.v1.setCKE.waitCKEMask = mask;
         SetCkeExecutor executor(0, 0, 0, instr, nullptr);
+        executor.SetVersion(RunnerCcuVersion::CCU_V1);
         EXPECT_NO_THROW(executor.Parser());
         EXPECT_NO_THROW(executor.Describe());
     }
@@ -685,6 +735,7 @@ TEST_F(SetCkeExecutorTest, DescribeContent)
     instr.v1.setCKE.waitCKEMask = 0xF0;
 
     SetCkeExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -698,6 +749,7 @@ TEST_F(SetCkeExecutorTest, InheritanceCheck)
     memset(&instr, 0, sizeof(instr));
 
     SetCkeExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     CcuExecutorBase* base = &executor;
     EXPECT_NE(base, nullptr);
 }
@@ -714,6 +766,7 @@ TEST_F(SetCkeExecutorTest, VariousCkeIds)
         instr.v1.setCKE.setCKEId = ckeId;
         instr.v1.setCKE.waitCKEId = ckeId;
         SetCkeExecutor executor(0, 0, 0, instr, nullptr);
+        executor.SetVersion(RunnerCcuVersion::CCU_V1);
         EXPECT_NO_THROW(executor.Parser());
         EXPECT_NO_THROW(executor.Describe());
     }

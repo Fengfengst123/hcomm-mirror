@@ -8,6 +8,12 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: ccu executor -- reduce min
+ * Author: caiyifan
+ */
+
 #ifndef HCCL_SIM_REDUCE_MIN_EXECUTOR_H
 #define HCCL_SIM_REDUCE_MIN_EXECUTOR_H
 

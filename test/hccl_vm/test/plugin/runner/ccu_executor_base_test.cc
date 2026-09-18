@@ -319,10 +319,9 @@ TEST_F(CcuExecutorBaseTest, WaitCkeProcess_LoopState_WithClearType)
     simulator_->InitLoopGroupInfo(loopGroupInfo);
 
     mgr.UpdateCkeValue(0, 0, 2, 0xFFFF);
-    mgr.UpdateCkeValue(0, 0, 4, 0xFFFF);
     executor_->WaitCkeProcess(0, 0xFFFF, 1, "test_instr_loop_clear");
     EXPECT_TRUE(executor_->processCalled);
-    uint16_t val = mgr.GetCkeValue(0, 0, 4);
+    uint16_t val = mgr.GetCkeValue(0, 0, 2);
     EXPECT_EQ(val, 0x0000);
 }
 

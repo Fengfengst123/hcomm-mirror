@@ -15,6 +15,7 @@
 
 #include "ccu_microcode_v1.h"
 #include "hccl_types.h"
+#include "sim_capacity_limits.h"
 #include "task_meta_defs.h"
 
 namespace HcclSim {
@@ -38,7 +39,8 @@ struct VDataDesTag {
     uint16_t dataType; // 数据类型
     uint32_t count;    // rank size
     uint64_t* displs;  // 每个rank的数据在sendBuf中的偏移量（单位为dataType）
-    uint64_t* counts; // 每个rank在sendBuf中的数据size，第i个元素表示需要向rank i发送/接受的数据量
+    uint64_t* counts;  // 每个rank在sendBuf中的数据size，第i个元素表示需要向rank
+                       // i发送/接受的数据量
 };
 
 struct All2AllDataDesTag {
@@ -47,7 +49,8 @@ struct All2AllDataDesTag {
     uint64_t sendCount;        // 发送数据量 (All2All)
     uint64_t recvCount;        // 接收数据量 (All2All)
     uint32_t count;            // count = rankSize * rankSize
-    uint64_t* sendCountMatrix; // (All2AllVC) sendCountMatrix[i * ranksize + j] 代表rank i发送到rank j的count参数
+    uint64_t* sendCountMatrix; // (All2AllVC) sendCountMatrix[i * ranksize + j]
+                               // 代表rank i发送到rank j的count参数
 };
 
 struct ModelInfo {
@@ -70,8 +73,8 @@ struct JettyData {
     uint8_t srcDieId;
     uint8_t dstDieId;
     uint16_t protocol;
-    uint32_t srcRank;
-    uint32_t dstRank;
+    uint32_t srcDeviceId;
+    uint32_t dstDeviceId;
     uint8_t leid[16];
     uint8_t reid[16];
 };
@@ -80,13 +83,13 @@ struct ChannelData {
     uint16_t channelId;
     uint8_t srcDieId;
     uint8_t dstDieId;
-    uint32_t srcRank;
-    uint32_t dstRank;
+    uint32_t srcDeviceId;
+    uint32_t dstDeviceId;
     uint8_t leid[16];
     uint8_t reid[16];
     uint16_t protocol;
     uint16_t jettyNum;
-    uint32_t jettyId[32];
+    uint32_t jettyId[HCCL_VM_MAX_CHANNEL_JETTIES];
 };
 
 struct ChannelInfo {
@@ -157,17 +160,17 @@ struct VDataDesTagInner {
     uint16_t dataType;            // 数据类型
     uint32_t count{0};            // rank size
     std::vector<uint64_t> displs; // 每个rank的数据在sendBuf中的偏移量（单位为dataType）
-    std::vector<uint64_t> counts; // 每个rank在sendBuf中的数据size，第i个元素表示需要向rank i发送/接受的数据量
+    std::vector<uint64_t> counts;
 };
 
 struct All2AllDataDesTagInner {
-    uint16_t sendType;  // 发送数据的数据类型
-    uint16_t recvType;  // 接收数据的数据类型
-    uint64_t sendCount; // 发送数据量 (All2All)
-    uint64_t recvCount; // 接收数据量 (All2All)
-    uint32_t count{0};  // count = rankSize * rankSize
-    std::vector<uint64_t>
-        sendCountMatrix; // (All2AllVC) sendCountMatrix[i * ranksize + j] 代表rank i发送到rank j的count参数
+    uint16_t sendType;                     // 发送数据的数据类型
+    uint16_t recvType;                     // 接收数据的数据类型
+    uint64_t sendCount;                    // 发送数据量 (All2All)
+    uint64_t recvCount;                    // 接收数据量 (All2All)
+    uint32_t count{0};                     // count = rankSize * rankSize
+    std::vector<uint64_t> sendCountMatrix; // (All2AllVC) sendCountMatrix[i * ranksize + j]
+                                           // 代表rank i发送到rank j的count参数
 };
 
 struct ModelInfoInner {

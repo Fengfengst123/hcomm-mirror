@@ -8,15 +8,21 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: ccu executor resource manager
+ * Author: caiyifan
+ */
+
 #include "ccu_resource_manager.h"
 
 #include <cstdint>
 #include <cstring>
 
 #include "ccu_microcode_v1.h"
-#include "sim_log.h"
 #include "ccu_reduce_operator.h"
-#include "sim_models.h"
+#include "runtime_state/sim_models.h"
+#include "sim_log.h"
 #include "store_sim_shm_memory_common.h"
 
 using namespace std;
@@ -67,6 +73,21 @@ void CcuResourceManager::InitInstrInfo(int rankId, int dieId, const CcuInstrData
     } else {
         HCCL_VM_ERROR("ccu version {} not supported", static_cast<int>(version));
     }
+}
+
+bool CcuResourceManager::HasResource(int index) const
+{
+    if (index < 0) {
+        return false;
+    }
+    auto version = ccuResData_.version;
+    if (version == RunnerCcuVersion::CCU_V1) {
+        return static_cast<size_t>(index) < ccuResData_.v1Res.size() && ccuResData_.v1Res[index] != nullptr;
+    }
+    if (version == RunnerCcuVersion::CCU_V2) {
+        return static_cast<size_t>(index) < ccuResData_.v2Res.size() && ccuResData_.v2Res[index] != nullptr;
+    }
+    return false;
 }
 
 void CcuResourceManager::InitChannelInfo(int rankId, const RankChannelInfo& channelInfo)
@@ -230,14 +251,14 @@ void CcuResourceManager::TransMemToMem(
         return;
     }
 
-    sim::PhyMemBlock srcPhyMem{};
+    sim::runtime::PhyMemBlock srcPhyMem{};
     auto srcAddr = sim::AcquireDevPtrInNoHostProcess((void*)srcBuf, srcPhyMem);
     if (srcAddr == nullptr) {
         HCCL_VM_ERROR("无法获取srcBuf的设备地址(addr= {:x})！", reinterpret_cast<uintptr_t>(srcBuf));
         return;
     }
 
-    sim::PhyMemBlock dstPhyMem{};
+    sim::runtime::PhyMemBlock dstPhyMem{};
     auto dstAddr = sim::AcquireDevPtrInNoHostProcess((void*)dstBuf, dstPhyMem);
     if (dstAddr == nullptr) {
         HCCL_VM_ERROR("无法获取dstBuf的设备地址(addr= {:x})！", reinterpret_cast<uintptr_t>(dstBuf));
@@ -267,7 +288,7 @@ bool CcuResourceManager::TransMSToMem(int rankId, int dieId, uint16_t msId, void
         return false;
     }
 
-    sim::PhyMemBlock dstPhyMem{};
+    sim::runtime::PhyMemBlock dstPhyMem{};
     auto dstAddr = sim::AcquireDevPtrInNoHostProcess((void*)buf, dstPhyMem);
     if (dstAddr == nullptr) {
         HCCL_VM_ERROR("无法获取buf的设备地址(addr= {:x})！", reinterpret_cast<uintptr_t>(buf));
@@ -282,7 +303,7 @@ bool CcuResourceManager::TransMSToMem(int rankId, int dieId, uint16_t msId, void
 
 bool CcuResourceManager::TransMemToXn(int rankId, int dieId, uint16_t xnId, uint64_t buf, uint16_t length)
 {
-    sim::PhyMemBlock srcPhyMem{};
+    sim::runtime::PhyMemBlock srcPhyMem{};
     auto srcAddr = sim::AcquireDevPtrInNoHostProcess((void*)buf, srcPhyMem);
     if (srcAddr == nullptr) {
         HCCL_VM_ERROR("无法获取buf的设备地址(addr= {:x})！", buf);
@@ -296,7 +317,7 @@ bool CcuResourceManager::TransMemToXn(int rankId, int dieId, uint16_t xnId, uint
 
 bool CcuResourceManager::TransXnToMem(int rankId, int dieId, uint16_t xnId, uint64_t buf, uint16_t length)
 {
-    sim::PhyMemBlock dstPhyMem{};
+    sim::runtime::PhyMemBlock dstPhyMem{};
     auto dstAddr = sim::AcquireDevPtrInNoHostProcess((void*)buf, dstPhyMem);
     if (dstAddr == nullptr) {
         HCCL_VM_ERROR("无法获取buf的设备地址(addr= {:x})！", buf);
@@ -315,7 +336,7 @@ bool CcuResourceManager::TransMemToMS(int rankId, int dieId, uint16_t msId, void
         return false;
     }
 
-    sim::PhyMemBlock srcPhyMem{};
+    sim::runtime::PhyMemBlock srcPhyMem{};
     auto srcAddr = sim::AcquireDevPtrInNoHostProcess((void*)buf, srcPhyMem);
     if (srcAddr == nullptr) {
         HCCL_VM_ERROR("无法获取buf的设备地址(addr= {:x})！", reinterpret_cast<uintptr_t>(buf));
@@ -472,8 +493,9 @@ bool CcuResourceManager::GetXnAndTypeIdByAddr(uint32_t dieId, uint64_t xnAddr, C
     type = findTypeByAddr(xnAddr - ccuResourceBaseAddr_[dieId]);
     if (type == CcuComponerntType::UNKNOWN) {
         HCCL_VM_ERROR(
-            "unknown type, addr=[{}],dieId=[{}],ccuResourceBaseAddr_[dieId]=[{}]", xnAddr, dieId,
-            ccuResourceBaseAddr_[dieId]);
+            "unknown type, "
+            "addr=[{}],dieId=[{}],ccuResourceBaseAddr_[dieId]=[{}]",
+            xnAddr, dieId, ccuResourceBaseAddr_[dieId]);
         return false;
     }
     uint64_t baseAddr = findBaseAddr(type) + ccuResourceBaseAddr_[dieId];
@@ -541,9 +563,11 @@ std::string CcuResourceManager::GetInstrDescribe(int rankId, int dieId, int inst
 #ifndef DEVICE_STUB
     auto version = ccuResData_.version;
     if (version == RunnerCcuVersion::CCU_V1) {
-        // return hcomm::CcuRep::ParseInstr(&(ccuResData_.v1Res[rankId]->instrSpace_[dieId].instrData[instrId]));
+        // return
+        // hcomm::CcuRep::ParseInstr(&(ccuResData_.v1Res[rankId]->instrSpace_[dieId].instrData[instrId]));
     } else if (ccuResData_.version == RunnerCcuVersion::CCU_V2) {
-        // return hcomm::CcuRep::ParseInstr(&(ccuResData_.v2Res[rankId]->instrSpace_[dieId].instrData[instrId]));
+        // return
+        // hcomm::CcuRep::ParseInstr(&(ccuResData_.v2Res[rankId]->instrSpace_[dieId].instrData[instrId]));
     } else {
         HCCL_VM_ERROR("ccu version {} not supported", static_cast<int>(version));
         return "";
@@ -555,6 +579,10 @@ std::string CcuResourceManager::GetInstrDescribe(int rankId, int dieId, int inst
 std::shared_ptr<CcuSimulator>
 CcuResourceManager::InitSimulator(int rankId, int dieId, uint16_t instrStartId, uint16_t endInstrId, uint16_t instCnt)
 {
+    if (dieId < 0 || dieId >= HcclSim::DIE_NUM || !HasResource(rankId)) {
+        HCCL_VM_ERROR("invalid CCU simulator resource: rankId={}, dieId={}", rankId, dieId);
+        return nullptr;
+    }
     auto version = ccuResData_.version;
     if (version == RunnerCcuVersion::CCU_V1) {
         if (ccuResData_.v1Res[rankId]->simulators_[dieId] == nullptr) {
@@ -588,7 +616,8 @@ void CcuResourceManager::DumpCcuInstructions(int rankId) const
 #ifndef DEVICE_STUB
     for (uint32_t dieId = 0; dieId < HcclSim::DIE_NUM; dieId++) {
         HCCL_VM_DEBUG(
-            "==========================print ccu instructions start: rank[{}], dieId[{}]==========================",
+            "==========================print ccu instructions start: "
+            "rank[{}], dieId[{}]==========================",
             rankId, dieId);
         auto instrInfoCnt = GetInstrCnt(rankId, dieId);
         HCCL_VM_DEBUG("*******************rankId=[{}], dieId=[{}], instrCnt=[{}]", rankId, dieId, instrInfoCnt);
@@ -597,7 +626,8 @@ void CcuResourceManager::DumpCcuInstructions(int rankId) const
             HCCL_VM_TRACE("ccu instruction info: {}: {}", i, GetInstrDescribe(rankId, dieId, i));
         }
         HCCL_VM_DEBUG(
-            "==========================print ccu instructions end: rank[{}], dieId[{}]==========================",
+            "==========================print ccu instructions end: "
+            "rank[{}], dieId[{}]==========================",
             rankId, dieId);
     }
 #endif
@@ -607,18 +637,26 @@ void CcuResourceManager::DumpCcuXnResouceInfo(int rankId) const
 {
     for (uint32_t dieId = 0; dieId < HcclSim::DIE_NUM; dieId++) {
         HCCL_VM_DEBUG(
-            "==========================All CCU XN Resouce Info Start: rank[{}], dieId[{}]===========================",
+            "==========================All CCU XN Resouce Info "
+            "Start: rank[{}], dieId[{}]===========================",
             rankId, dieId);
-        HCCL_VM_DEBUG("-------------------------DieId[{}] XN Resouce Info Start-------------------------", dieId);
+        HCCL_VM_DEBUG(
+            "-------------------------DieId[{}] XN Resouce Info "
+            "Start-------------------------",
+            dieId);
         for (uint32_t xnId = 0; xnId < SimCcuV1::CCU_RESOURCE_XN_MAX; xnId++) {
             auto xnValue = GetXnValue(rankId, dieId, xnId);
             if (xnValue != 0) {
                 HCCL_VM_TRACE("[XN: Id = {}, Value = {:x}]", xnId, xnValue);
             }
         }
-        HCCL_VM_DEBUG("-------------------------DieId[{}] XN Resouce Info End-------------------------", dieId);
         HCCL_VM_DEBUG(
-            "==========================All CCU XN Resouce Info End: rank[{}], dieId[{}]===========================",
+            "-------------------------DieId[{}] XN Resouce Info "
+            "End-------------------------",
+            dieId);
+        HCCL_VM_DEBUG(
+            "==========================All CCU XN Resouce Info End: "
+            "rank[{}], dieId[{}]===========================",
             rankId, dieId);
     }
 }
@@ -627,18 +665,26 @@ void CcuResourceManager::DumpCcuGsaResouceInfo(int rankId) const
 {
     for (uint32_t dieId = 0; dieId < HcclSim::DIE_NUM; dieId++) {
         HCCL_VM_DEBUG(
-            "==========================All CCU GSA Resouce Info Start: rank[{}], dieId[{}]===========================",
+            "==========================All CCU GSA Resouce Info "
+            "Start: rank[{}], dieId[{}]===========================",
             rankId, dieId);
-        HCCL_VM_DEBUG("-------------------------DieId[{}] GSA Resouce Info Start-------------------------", dieId);
+        HCCL_VM_DEBUG(
+            "-------------------------DieId[{}] GSA Resouce Info "
+            "Start-------------------------",
+            dieId);
         for (uint32_t gsaId = 0; gsaId < SimCcuV1::CCU_RESOURCE_GSA_MAX; gsaId++) {
             auto gsaValue = GetGsaValue(rankId, dieId, gsaId);
             if (gsaValue != 0) {
                 HCCL_VM_TRACE("[GSA: Id = {}, Value = {:x}]", gsaId, gsaValue);
             }
         }
-        HCCL_VM_DEBUG("-------------------------DieId[{}] GSA Resouce Info End-------------------------", dieId);
         HCCL_VM_DEBUG(
-            "==========================All CCU GSA Resouce Info End: rank[{}], dieId[{}]===========================",
+            "-------------------------DieId[{}] GSA Resouce Info "
+            "End-------------------------",
+            dieId);
+        HCCL_VM_DEBUG(
+            "==========================All CCU GSA Resouce Info End: "
+            "rank[{}], dieId[{}]===========================",
             rankId, dieId);
     }
 }
@@ -647,18 +693,26 @@ void CcuResourceManager::DumpCcuCkeResouceInfo(int rankId) const
 {
     for (uint32_t dieId = 0; dieId < HcclSim::DIE_NUM; dieId++) {
         HCCL_VM_DEBUG(
-            "==========================All CCU CKE Resouce Info Start: rank[{}], dieId[{}]===========================",
+            "==========================All CCU CKE Resouce Info "
+            "Start: rank[{}], dieId[{}]===========================",
             rankId, dieId);
-        HCCL_VM_DEBUG("-------------------------DieId[{}] CKE Resouce Info Start-------------------------", dieId);
+        HCCL_VM_DEBUG(
+            "-------------------------DieId[{}] CKE Resouce Info "
+            "Start-------------------------",
+            dieId);
         for (uint32_t ckeId = 0; ckeId < SimCcuV1::CCU_RESOURCE_MS_NUM; ckeId++) {
             auto ckeValue = GetCkeValue(rankId, dieId, ckeId);
             if (ckeValue != 0) {
                 HCCL_VM_TRACE("[CKE: Id = {}, Value = {:x}]", ckeId, ckeValue);
             }
         }
-        HCCL_VM_DEBUG("-------------------------DieId[{}] CKE Resouce Info End-------------------------", dieId);
         HCCL_VM_DEBUG(
-            "==========================All CCU CKE Resouce Info End: rank[{}], dieId[{}]===========================",
+            "-------------------------DieId[{}] CKE Resouce Info "
+            "End-------------------------",
+            dieId);
+        HCCL_VM_DEBUG(
+            "==========================All CCU CKE Resouce Info End: "
+            "rank[{}], dieId[{}]===========================",
             rankId, dieId);
     }
 }
@@ -667,10 +721,13 @@ void CcuResourceManager::DumpCcuChannelResouceInfo(int rankId) const
 {
     for (int dieId = 0; dieId < HcclSim::DIE_NUM; dieId++) {
         HCCL_VM_DEBUG(
-            "==========================All CCU CHANNEL Resouce Info Start: rank[{}], "
-            "dieId[{}]===========================",
+            "==========================All CCU CHANNEL Resouce Info "
+            "Start: rank[{}], dieId[{}]===========================",
             rankId, dieId);
-        HCCL_VM_DEBUG("-------------------------DieId[{}] CHANNEL Resouce Info Start-------------------------", dieId);
+        HCCL_VM_DEBUG(
+            "-------------------------DieId[{}] CHANNEL Resouce Info "
+            "Start-------------------------",
+            dieId);
         for (uint32_t chId = 0; chId < SimCcuV1::MAX_CCU_CHANNEL_NUM; chId++) {
             auto rmtCcu = GetRmtCcu(rankId, dieId, chId);
             if (rmtCcu.first != S32_INVALID && rmtCcu.second != S32_INVALID) {
@@ -679,10 +736,13 @@ void CcuResourceManager::DumpCcuChannelResouceInfo(int rankId) const
                     rmtCcu.second);
             }
         }
-        HCCL_VM_DEBUG("-------------------------DieId[{}] CHANNEL Resouce Info End-------------------------", dieId);
         HCCL_VM_DEBUG(
-            "==========================All CCU CHANNEL Resouce Info End: rank[{}], "
-            "dieId[{}]===========================",
+            "-------------------------DieId[{}] CHANNEL Resouce Info "
+            "End-------------------------",
+            dieId);
+        HCCL_VM_DEBUG(
+            "==========================All CCU CHANNEL Resouce Info "
+            "End: rank[{}], dieId[{}]===========================",
             rankId, dieId);
     }
 }

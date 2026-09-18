@@ -14,10 +14,10 @@
 #include <iostream>
 #include <map>
 
-#include "sim_log.h"
-#include "sim_models.h"
 #include "db_sim_runner_common.h"
 #include "db_sim_runner_db.h"
+#include "sim_log.h"
+#include "sim_models.h"
 
 uint32_t streamCnt = 0;
 std::map<uint64_t, uint32_t> stream2checkerStream;
@@ -106,32 +106,19 @@ uint64_t GetLastStreamIdTls() { return g_last_streamId; }
 
 uint64_t GetLastTaskIdTls() { return g_last_taskId; }
 
-uint64_t GetCurrRankId()
+uint64_t GetCurrDeviceId()
 {
     auto currCtx = RunnerDB::GetById<sim::Context>(g_runner.current_ctx_id);
     if (!currCtx.has_value()) {
-        // not find
         HCCL_VM_ERROR("can not get CurrContext: {:d}", g_runner.current_ctx_id);
         return 0;
     }
 
-    auto dev = RunnerDB::GetById<sim::Device>(currCtx->device_id);
-    if (!dev.has_value()) {
-        // not find
+    if (!RunnerDB::GetById<sim::Device>(currCtx->device_id).has_value()) {
         HCCL_VM_ERROR("can not get device: {:d}", currCtx->device_id);
         return 0;
     }
-
-    auto devKey = currCtx->device_id;
-    auto rank = RunnerDB::GetOneByPred<sim::Rank>([devKey](const sim::Rank& r) {
-        return r.device_id == devKey;
-    });
-    if (!rank.second) {
-        HCCL_VM_ERROR("can not find any rank");
-        return 0;
-    }
-
-    return rank.first.rank_id;
+    return currCtx->device_id;
 }
 
 uint64_t GetCurrDeviceKey()
@@ -146,7 +133,7 @@ uint64_t GetCurrDeviceKey()
     return currCtx->device_id;
 }
 
-uint64_t GetRankIdByCtxId(uint64_t ctxId)
+uint64_t GetDeviceIdByCtxId(uint64_t ctxId)
 {
     auto currCtx = RunnerDB::GetById<sim::Context>(ctxId);
     if (!currCtx.has_value()) {
@@ -155,24 +142,30 @@ uint64_t GetRankIdByCtxId(uint64_t ctxId)
         return 0;
     }
 
-    auto dev = RunnerDB::GetById<sim::Device>(currCtx->device_id);
-    if (!dev.has_value()) {
+    auto device = RunnerDB::GetById<sim::Device>(currCtx->device_id);
+    if (!device.has_value()) {
         // not find
         HCCL_VM_ERROR("can not get device: {:d}", currCtx->device_id);
         return 0;
     }
 
-    return dev->logic_id;
+    return device->id;
 }
 
 void SetTsDevice(int tsId) { g_tsId = tsId; }
 
 uint32_t GetRankSize()
 {
-    auto allRank = RunnerDB::GetByPred<sim::Rank>([](const sim::Rank& r) {
-        return true;
-    });
-    return allRank.size();
+    if (g_cur_comm_key == 0) {
+        HCCL_VM_ERROR("current communicator is not set");
+        return 0;
+    }
+    auto selfMember = RunnerDB::GetById<sim::Communicator>(g_cur_comm_key);
+    if (!selfMember.has_value()) {
+        HCCL_VM_ERROR("communicator member not found by id:{}", g_cur_comm_key);
+        return 0;
+    }
+    return selfMember->rank_size;
 }
 
 uint32_t GetHostSize()
@@ -181,18 +174,6 @@ uint32_t GetHostSize()
         return true;
     });
     return allHost.size();
-}
-
-uint32_t GetCurrentStreamId(uint64_t streamKey)
-{
-    auto cs = stream2checkerStream.find(streamKey);
-    if (cs != stream2checkerStream.end()) {
-        return cs->second;
-    } else {
-        auto stremId = streamCnt++;
-        stream2checkerStream[streamKey] = stremId;
-        return stremId;
-    }
 }
 
 uint64_t GetServerKeyById(uint32_t superPodIdx, uint32_t serverIdx)

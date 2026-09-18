@@ -12,27 +12,33 @@
 #include <cstring>
 #include <gtest/gtest.h>
 #include <sys/mman.h>
+#include <unistd.h>
 
 #include "device_sqe_parse_stub.h"
 #include "hccl_device_pub.h"
-#include "store_sim_memory_manager.h"
+#include "runtime_state/db_sim_runner_ops.h"
+#include "runtime_state/sim_models.h"
+#include "sim_capacity_limits.h"
+#include "sim_ip_address.h"
+#include "simulation_storage_test_helper.h"
 #include "sqe_v82_stub.h"
+#include "storage/internal/process_storage_context.h"
+#include "storage/storage_session.h"
+#include "store_sim_memory_manager.h"
 #include "udma_data_struct_stub.h"
-#include "db_sim_runner_db.h"
-#include "sim_models.h"
 
 class DeviceSqeParseTest : public testing::Test {
 protected:
     void SetUp() override
     {
         SetCurRankId(0);
-        RunnerDB::DeleteAll<sim::RaJetty>();
+        runnerdb_test::ClearRecords<sim::runtime::RaJetty>();
     }
 
     void TearDown() override
     {
         SetCurRankId(0);
-        RunnerDB::DeleteAll<sim::RaJetty>();
+        runnerdb_test::ClearRecords<sim::runtime::RaJetty>();
     }
 };
 
@@ -254,7 +260,7 @@ TEST_F(DeviceSqeParseTest, ParseDavidSDMASqe_Memcpy)
     sqe.u.strideMode0.dstAddrLow = 0x2000;
     sqe.u.strideMode0.dstAddrHigh = 0;
 
-    // This will call GetRankIdByDevAddr which requires database setup
+    // This will call GetDeviceIdByDevAddr which requires database setup
     // Just verify it doesn't crash
     EXPECT_NO_THROW(ParseDavidSDMASqe(0, &sqe));
 }
@@ -294,27 +300,33 @@ TEST_F(DeviceSqeParseTest, ParseDavidNotifySqe_Record)
     EXPECT_NO_THROW(ParseDavidNotifySqe(0, &sqe, true));
 }
 
-// ==================== GetRmtRankIdByEid Tests ====================
+// ==================== GetRmtDeviceIdByEid Tests ====================
 
-TEST_F(DeviceSqeParseTest, GetRmtRankIdByEid_Zero)
+TEST_F(DeviceSqeParseTest, GetRmtDeviceIdByEid_Zero)
 {
-    // eid = 0 should convert to IP "0.0.0.0"
-    uint32_t eid = 0;
-    EXPECT_NO_THROW(GetRmtRankIdByEid(eid));
+    uint8_t eid[URMA_EID_LEN] = {};
+    uint32_t deviceId = 0;
+    EXPECT_NO_THROW(GetRmtDeviceIdByEid(eid, deviceId));
 }
 
-TEST_F(DeviceSqeParseTest, GetRmtRankIdByEid_Localhost)
+TEST_F(DeviceSqeParseTest, GetRmtDeviceIdByEid_Localhost)
 {
-    // eid = 0x7F000001 should convert to IP "127.0.0.1"
-    uint32_t eid = 0x7F000001;
-    EXPECT_NO_THROW(GetRmtRankIdByEid(eid));
+    uint8_t eid[URMA_EID_LEN] = {};
+    eid[URMA_EID_LEN - 4] = 0x7F;
+    eid[URMA_EID_LEN - 1] = 0x01;
+    uint32_t deviceId = 0;
+    EXPECT_NO_THROW(GetRmtDeviceIdByEid(eid, deviceId));
 }
 
-TEST_F(DeviceSqeParseTest, GetRmtRankIdByEid_ClassA)
+TEST_F(DeviceSqeParseTest, GetRmtDeviceIdByEid_ClassA)
 {
-    // eid = 0x0A0A0A0A should convert to IP "10.10.10.10"
-    uint32_t eid = 0x0A0A0A0A;
-    EXPECT_NO_THROW(GetRmtRankIdByEid(eid));
+    uint8_t eid[URMA_EID_LEN] = {};
+    eid[URMA_EID_LEN - 4] = 0x0A;
+    eid[URMA_EID_LEN - 3] = 0x0A;
+    eid[URMA_EID_LEN - 2] = 0x0A;
+    eid[URMA_EID_LEN - 1] = 0x0A;
+    uint32_t deviceId = 0;
+    EXPECT_NO_THROW(GetRmtDeviceIdByEid(eid, deviceId));
 }
 
 // ==================== ParseA5SqeFromSqBuffer Tests ====================
@@ -428,7 +440,7 @@ TEST_F(DeviceSqeParseTest, ParseA5SqeFromSqBuffer_UBDMAType)
         Rt91095StarsUbdmaDBmodeSqe sqe;
         memset(&sqe, 0, sizeof(sqe));
         sqe.header.type = static_cast<int>(Rt91095StarsSqeType::RT_91095_SQE_TYPE_UBDMA);
-        sqe.jettyId1 = 1;
+        sqe.jettyId1 = HcclSim::HCCL_VM_AICPU_USER_CTL_JETTY_ID_BEGIN;
         sqe.piValue1 = 1;
         memcpy(sqBuf, &sqe, sizeof(sqe));
     }
@@ -530,7 +542,8 @@ TEST_F(DeviceSqeParseTest, ParseDavidUBReadWriteSqe_WriteReduce_WithUdfFlag_Read
     EXPECT_NO_THROW(ParseDavidUBReadWriteSqe(reinterpret_cast<uint64_t>(&ubWqe), 0, 1, true));
 }
 
-// ==================== ParseDavidUBWriteWithNotifySqe Tests ====================
+// ==================== ParseDavidUBWriteWithNotifySqe Tests
+// ====================
 
 TEST_F(DeviceSqeParseTest, ParseDavidUBWriteWithNotify_MemCpy)
 {
@@ -569,8 +582,9 @@ TEST_F(DeviceSqeParseTest, ParseDavidUBWriteWithNotify_Reduce)
 }
 
 // ==================== ParseDavidUDMASqe Tests ====================
-// With DB-based RaJetty lookup in device_sqe_parse_stub.cc, ParseDavidUDMASqe returns early
-// when no corresponding RaJetty exists. We test both missing-jetty and valid-jetty paths.
+// With DB-based RaJetty lookup in device_sqe_parse_stub.cc, ParseDavidUDMASqe
+// returns early when no corresponding RaJetty exists. We test both
+// missing-jetty and valid-jetty paths.
 
 TEST_F(DeviceSqeParseTest, ParseDavidUDMASqe_NoJettyInDb)
 {
@@ -578,7 +592,7 @@ TEST_F(DeviceSqeParseTest, ParseDavidUDMASqe_NoJettyInDb)
     // ParseDavidUDMASqe should return early with error log
     Rt91095StarsUbdmaDBmodeSqe ubSqe;
     memset(&ubSqe, 0, sizeof(ubSqe));
-    ubSqe.jettyId1 = 1;
+    ubSqe.jettyId1 = HcclSim::HCCL_VM_AICPU_USER_CTL_JETTY_ID_BEGIN;
     ubSqe.piValue1 = 2;
 
     EXPECT_NO_THROW(ParseDavidUDMASqe(0, &ubSqe));
@@ -587,10 +601,17 @@ TEST_F(DeviceSqeParseTest, ParseDavidUDMASqe_NoJettyInDb)
 TEST_F(DeviceSqeParseTest, ParseDavidUDMASqe_WriteOpcodeWithShm)
 {
     alignas(64) uint8_t wqeBuffer[HCCL_WQE_SIZE * 4] = {};
-    sim::RaJetty jetty{};
+    sim::runtime::RaJetty jetty{};
     jetty.id = 1;
+    // 新合同：SQE 的 jettyId1 是 USER_CTL_NORMAL(AICPU) 硬件编号
+    // [5312,9407]；设备按 （编号, 创建者 pid,
+    // 模式）复合查行。测试进程同时扮演创建者与解析者，创建者 pid
+    // 即本进程的父进程（设备视角的 rank host）。
+    jetty.jetty_id = HcclSim::HCCL_VM_AICPU_USER_CTL_JETTY_ID_BEGIN;
+    jetty.mode = HcclSim::HCCL_VM_JETTY_MODE_USER_CTL_NORMAL;
+    jetty.pid = static_cast<uint64_t>(getppid());
     jetty.sqBuffer = reinterpret_cast<uint64_t>(wqeBuffer);
-    RunnerDB::Add<sim::RaJetty>(jetty);
+    runnerdb_test::InsertRecord<sim::runtime::RaJetty>(jetty);
 
     // Setup WQE with WRITE opcode at ciVal=0
     UdmaSqeWrite* ubWqeWrite = reinterpret_cast<UdmaSqeWrite*>(wqeBuffer);
@@ -604,7 +625,7 @@ TEST_F(DeviceSqeParseTest, ParseDavidUDMASqe_WriteOpcodeWithShm)
 
     Rt91095StarsUbdmaDBmodeSqe ubSqe;
     memset(&ubSqe, 0, sizeof(ubSqe));
-    ubSqe.jettyId1 = 1;
+    ubSqe.jettyId1 = HcclSim::HCCL_VM_AICPU_USER_CTL_JETTY_ID_BEGIN;
     ubSqe.piValue1 = 2;
 
     EXPECT_NO_THROW(ParseDavidUDMASqe(0, &ubSqe));
@@ -613,10 +634,17 @@ TEST_F(DeviceSqeParseTest, ParseDavidUDMASqe_WriteOpcodeWithShm)
 TEST_F(DeviceSqeParseTest, ParseDavidUDMASqe_WriteWithNotifyOpcodeWithShm)
 {
     alignas(64) uint8_t wqeBuffer[HCCL_WQE_SIZE * 4] = {};
-    sim::RaJetty jetty{};
+    sim::runtime::RaJetty jetty{};
     jetty.id = 1;
+    // 新合同：SQE 的 jettyId1 是 USER_CTL_NORMAL(AICPU) 硬件编号
+    // [5312,9407]；设备按 （编号, 创建者 pid,
+    // 模式）复合查行。测试进程同时扮演创建者与解析者，创建者 pid
+    // 即本进程的父进程（设备视角的 rank host）。
+    jetty.jetty_id = HcclSim::HCCL_VM_AICPU_USER_CTL_JETTY_ID_BEGIN;
+    jetty.mode = HcclSim::HCCL_VM_JETTY_MODE_USER_CTL_NORMAL;
+    jetty.pid = static_cast<uint64_t>(getppid());
     jetty.sqBuffer = reinterpret_cast<uint64_t>(wqeBuffer);
-    RunnerDB::Add<sim::RaJetty>(jetty);
+    runnerdb_test::InsertRecord<sim::runtime::RaJetty>(jetty);
 
     // piValue1=2, ciVal = piValue1-2=0, first WQE has WRITE_WITH_NOTIFY
     UdmaSqeCommon* ubCommon = reinterpret_cast<UdmaSqeCommon*>(wqeBuffer);
@@ -634,7 +662,7 @@ TEST_F(DeviceSqeParseTest, ParseDavidUDMASqe_WriteWithNotifyOpcodeWithShm)
 
     Rt91095StarsUbdmaDBmodeSqe ubSqe;
     memset(&ubSqe, 0, sizeof(ubSqe));
-    ubSqe.jettyId1 = 1;
+    ubSqe.jettyId1 = HcclSim::HCCL_VM_AICPU_USER_CTL_JETTY_ID_BEGIN;
     ubSqe.piValue1 = 2;
 
     EXPECT_NO_THROW(ParseDavidUDMASqe(0, &ubSqe));
@@ -643,10 +671,17 @@ TEST_F(DeviceSqeParseTest, ParseDavidUDMASqe_WriteWithNotifyOpcodeWithShm)
 TEST_F(DeviceSqeParseTest, ParseDavidUDMASqe_ReadOpcodeWithShm)
 {
     alignas(64) uint8_t wqeBuffer[HCCL_WQE_SIZE * 4] = {};
-    sim::RaJetty jetty{};
+    sim::runtime::RaJetty jetty{};
     jetty.id = 1;
+    // 新合同：SQE 的 jettyId1 是 USER_CTL_NORMAL(AICPU) 硬件编号
+    // [5312,9407]；设备按 （编号, 创建者 pid,
+    // 模式）复合查行。测试进程同时扮演创建者与解析者，创建者 pid
+    // 即本进程的父进程（设备视角的 rank host）。
+    jetty.jetty_id = HcclSim::HCCL_VM_AICPU_USER_CTL_JETTY_ID_BEGIN;
+    jetty.mode = HcclSim::HCCL_VM_JETTY_MODE_USER_CTL_NORMAL;
+    jetty.pid = static_cast<uint64_t>(getppid());
     jetty.sqBuffer = reinterpret_cast<uint64_t>(wqeBuffer);
-    RunnerDB::Add<sim::RaJetty>(jetty);
+    runnerdb_test::InsertRecord<sim::runtime::RaJetty>(jetty);
 
     UdmaSqeWrite* ubWqeRead = reinterpret_cast<UdmaSqeWrite*>(wqeBuffer);
     memset(ubWqeRead, 0, sizeof(UdmaSqeWrite));
@@ -659,7 +694,7 @@ TEST_F(DeviceSqeParseTest, ParseDavidUDMASqe_ReadOpcodeWithShm)
 
     Rt91095StarsUbdmaDBmodeSqe ubSqe;
     memset(&ubSqe, 0, sizeof(ubSqe));
-    ubSqe.jettyId1 = 1;
+    ubSqe.jettyId1 = HcclSim::HCCL_VM_AICPU_USER_CTL_JETTY_ID_BEGIN;
     ubSqe.piValue1 = 2;
 
     EXPECT_NO_THROW(ParseDavidUDMASqe(0, &ubSqe));
@@ -668,10 +703,17 @@ TEST_F(DeviceSqeParseTest, ParseDavidUDMASqe_ReadOpcodeWithShm)
 TEST_F(DeviceSqeParseTest, ParseDavidUDMASqe_UnsupportedOpcodeWithShm)
 {
     alignas(64) uint8_t wqeBuffer[HCCL_WQE_SIZE * 4] = {};
-    sim::RaJetty jetty{};
+    sim::runtime::RaJetty jetty{};
     jetty.id = 1;
+    // 新合同：SQE 的 jettyId1 是 USER_CTL_NORMAL(AICPU) 硬件编号
+    // [5312,9407]；设备按 （编号, 创建者 pid,
+    // 模式）复合查行。测试进程同时扮演创建者与解析者，创建者 pid
+    // 即本进程的父进程（设备视角的 rank host）。
+    jetty.jetty_id = HcclSim::HCCL_VM_AICPU_USER_CTL_JETTY_ID_BEGIN;
+    jetty.mode = HcclSim::HCCL_VM_JETTY_MODE_USER_CTL_NORMAL;
+    jetty.pid = static_cast<uint64_t>(getppid());
     jetty.sqBuffer = reinterpret_cast<uint64_t>(wqeBuffer);
-    RunnerDB::Add<sim::RaJetty>(jetty);
+    runnerdb_test::InsertRecord<sim::runtime::RaJetty>(jetty);
 
     // Put unsupported opcode at ciVal position (adjusted: piValue1-1)
     UdmaSqeCommon* ubCommon = reinterpret_cast<UdmaSqeCommon*>(wqeBuffer + 1 * HCCL_WQE_SIZE);
@@ -680,7 +722,7 @@ TEST_F(DeviceSqeParseTest, ParseDavidUDMASqe_UnsupportedOpcodeWithShm)
 
     Rt91095StarsUbdmaDBmodeSqe ubSqe;
     memset(&ubSqe, 0, sizeof(ubSqe));
-    ubSqe.jettyId1 = 1;
+    ubSqe.jettyId1 = HcclSim::HCCL_VM_AICPU_USER_CTL_JETTY_ID_BEGIN;
     ubSqe.piValue1 = 2;
 
     EXPECT_NO_THROW(ParseDavidUDMASqe(0, &ubSqe));
@@ -689,10 +731,17 @@ TEST_F(DeviceSqeParseTest, ParseDavidUDMASqe_UnsupportedOpcodeWithShm)
 TEST_F(DeviceSqeParseTest, ParseDavidUDMASqe_AdjustCiValWithShm)
 {
     alignas(64) uint8_t wqeBuffer[HCCL_WQE_SIZE * 8] = {};
-    sim::RaJetty jetty{};
+    sim::runtime::RaJetty jetty{};
     jetty.id = 1;
+    // 新合同：SQE 的 jettyId1 是 USER_CTL_NORMAL(AICPU) 硬件编号
+    // [5312,9407]；设备按 （编号, 创建者 pid,
+    // 模式）复合查行。测试进程同时扮演创建者与解析者，创建者 pid
+    // 即本进程的父进程（设备视角的 rank host）。
+    jetty.jetty_id = HcclSim::HCCL_VM_AICPU_USER_CTL_JETTY_ID_BEGIN;
+    jetty.mode = HcclSim::HCCL_VM_JETTY_MODE_USER_CTL_NORMAL;
+    jetty.pid = static_cast<uint64_t>(getppid());
     jetty.sqBuffer = reinterpret_cast<uint64_t>(wqeBuffer);
-    RunnerDB::Add<sim::RaJetty>(jetty);
+    runnerdb_test::InsertRecord<sim::runtime::RaJetty>(jetty);
 
     // piValue1=3, first ciVal = 3-2=1, opcode at [1] is not WRITE_WITH_NOTIFY,
     // so adjusted ciVal = 3-1=2, reads WQE at [2]
@@ -711,7 +760,7 @@ TEST_F(DeviceSqeParseTest, ParseDavidUDMASqe_AdjustCiValWithShm)
 
     Rt91095StarsUbdmaDBmodeSqe ubSqe;
     memset(&ubSqe, 0, sizeof(ubSqe));
-    ubSqe.jettyId1 = 1;
+    ubSqe.jettyId1 = HcclSim::HCCL_VM_AICPU_USER_CTL_JETTY_ID_BEGIN;
     ubSqe.piValue1 = 3;
 
     EXPECT_NO_THROW(ParseDavidUDMASqe(0, &ubSqe));
@@ -720,14 +769,21 @@ TEST_F(DeviceSqeParseTest, ParseDavidUDMASqe_AdjustCiValWithShm)
 TEST_F(DeviceSqeParseTest, ParseDavidUDMASqe_NullWqeBuffer)
 {
     // RaJetty exists but sqBuffer=0, so wqeBuffer=0
-    sim::RaJetty jetty{};
+    sim::runtime::RaJetty jetty{};
     jetty.id = 1;
+    // 新合同：SQE 的 jettyId1 是 USER_CTL_NORMAL(AICPU) 硬件编号
+    // [5312,9407]；设备按 （编号, 创建者 pid,
+    // 模式）复合查行。测试进程同时扮演创建者与解析者，创建者 pid
+    // 即本进程的父进程（设备视角的 rank host）。
+    jetty.jetty_id = HcclSim::HCCL_VM_AICPU_USER_CTL_JETTY_ID_BEGIN;
+    jetty.mode = HcclSim::HCCL_VM_JETTY_MODE_USER_CTL_NORMAL;
+    jetty.pid = static_cast<uint64_t>(getppid());
     jetty.sqBuffer = 0;
-    RunnerDB::Add<sim::RaJetty>(jetty);
+    runnerdb_test::InsertRecord<sim::runtime::RaJetty>(jetty);
 
     Rt91095StarsUbdmaDBmodeSqe ubSqe;
     memset(&ubSqe, 0, sizeof(ubSqe));
-    ubSqe.jettyId1 = 1;
+    ubSqe.jettyId1 = HcclSim::HCCL_VM_AICPU_USER_CTL_JETTY_ID_BEGIN;
     ubSqe.piValue1 = 2;
 
     EXPECT_NO_THROW(ParseDavidUDMASqe(0, &ubSqe));
@@ -736,10 +792,17 @@ TEST_F(DeviceSqeParseTest, ParseDavidUDMASqe_NullWqeBuffer)
 TEST_F(DeviceSqeParseTest, ParseDavidUDMASqe_WriteWithNotifyWithShm_Reduce)
 {
     alignas(64) uint8_t wqeBuffer[HCCL_WQE_SIZE * 4] = {};
-    sim::RaJetty jetty{};
+    sim::runtime::RaJetty jetty{};
     jetty.id = 1;
+    // 新合同：SQE 的 jettyId1 是 USER_CTL_NORMAL(AICPU) 硬件编号
+    // [5312,9407]；设备按 （编号, 创建者 pid,
+    // 模式）复合查行。测试进程同时扮演创建者与解析者，创建者 pid
+    // 即本进程的父进程（设备视角的 rank host）。
+    jetty.jetty_id = HcclSim::HCCL_VM_AICPU_USER_CTL_JETTY_ID_BEGIN;
+    jetty.mode = HcclSim::HCCL_VM_JETTY_MODE_USER_CTL_NORMAL;
+    jetty.pid = static_cast<uint64_t>(getppid());
     jetty.sqBuffer = reinterpret_cast<uint64_t>(wqeBuffer);
-    RunnerDB::Add<sim::RaJetty>(jetty);
+    runnerdb_test::InsertRecord<sim::runtime::RaJetty>(jetty);
 
     UdmaSqeWriteWithNotify* ubWqe = reinterpret_cast<UdmaSqeWriteWithNotify*>(wqeBuffer);
     memset(ubWqe, 0, sizeof(UdmaSqeWriteWithNotify));
@@ -755,7 +818,120 @@ TEST_F(DeviceSqeParseTest, ParseDavidUDMASqe_WriteWithNotifyWithShm_Reduce)
 
     Rt91095StarsUbdmaDBmodeSqe ubSqe;
     memset(&ubSqe, 0, sizeof(ubSqe));
-    ubSqe.jettyId1 = 1;
+    ubSqe.jettyId1 = HcclSim::HCCL_VM_AICPU_USER_CTL_JETTY_ID_BEGIN;
+    ubSqe.piValue1 = 2;
+
+    EXPECT_NO_THROW(ParseDavidUDMASqe(0, &ubSqe));
+}
+
+// ==================== AICPU Jetty 编号合同回归（256p
+// 缺陷）==================== 背景：UBDMA SQE 的 jettyId1 仅 16
+// 位；旧实现把无界行主键当编号下发，行数超过 65535 后 经 16 位字段回绕（b4
+// 实测行主键 65536~65792 回绕为 0~256，命中错误行导致数据面 SQE
+// 丢弃）。新合同（sim_capacity_limits.h）：编号为 USER_CTL_NORMAL 硬件编号
+// [5312,9407]， 按 rank 进程内分配；设备按（编号, 创建者 pid, 模式）复合查行。
+
+TEST_F(DeviceSqeParseTest, GetWqebufferByJettyId_ResolvesByHwIdAndOwnerPidNotRowId)
+{
+    constexpr uint32_t kHwId = HcclSim::HCCL_VM_AICPU_USER_CTL_JETTY_ID_BEGIN; // 首个合法编号
+
+    // 另一进程（pid=1）的同编号行：设备按 owner 隔离，绝不能命中
+    sim::runtime::RaJetty foreign{};
+    foreign.id = kHwId;
+    foreign.jetty_id = kHwId;
+    foreign.mode = HcclSim::HCCL_VM_JETTY_MODE_USER_CTL_NORMAL;
+    foreign.pid = 1;
+    foreign.sqBuffer = 0;
+    runnerdb_test::InsertRecord<sim::runtime::RaJetty>(foreign);
+
+    // 本进程（解析者的父进程，即设备视角的 rank host）的 jetty：行主键 65629
+    // 与编号无关 （b4 实测形状：行主键可远超 16 位）
+    alignas(64) uint8_t myBuffer[HCCL_WQE_SIZE * 4] = {};
+    sim::runtime::RaJetty jetty{};
+    jetty.id = 65629;
+    jetty.jetty_id = kHwId;
+    jetty.mode = HcclSim::HCCL_VM_JETTY_MODE_USER_CTL_NORMAL;
+    jetty.pid = static_cast<uint64_t>(getppid());
+    jetty.sqBuffer = reinterpret_cast<uint64_t>(myBuffer);
+    runnerdb_test::InsertRecord<sim::runtime::RaJetty>(jetty);
+
+    uint64_t wqeBuffer = 0;
+    EXPECT_TRUE(GetWqebufferByJettyId(kHwId, wqeBuffer));
+    EXPECT_EQ(wqeBuffer, reinterpret_cast<uint64_t>(myBuffer));
+
+    // 同命名空间内未注册的编号不得串扰
+    uint64_t unregistered = 123;
+    EXPECT_FALSE(GetWqebufferByJettyId(kHwId + 1, unregistered));
+}
+
+TEST_F(DeviceSqeParseTest, GetWqebufferByJettyId_RejectsOutOfRangeBeforeNarrowing)
+{
+    // 入参在窄化转换前校验：越界值（含 uint64 大值）直接失败，不触库、不窄化
+    uint64_t out = 123;
+    EXPECT_FALSE(GetWqebufferByJettyId(HcclSim::HCCL_VM_AICPU_USER_CTL_JETTY_ID_BEGIN - 1, out));
+    EXPECT_FALSE(GetWqebufferByJettyId(HcclSim::HCCL_VM_AICPU_USER_CTL_JETTY_ID_END + 1, out));
+    EXPECT_FALSE(GetWqebufferByJettyId(0, out));
+    EXPECT_FALSE(GetWqebufferByJettyId(UINT32_MAX, out));
+    EXPECT_FALSE(GetWqebufferByJettyId(0xFFFFFFFFFFFFFFFFULL, out));
+    EXPECT_EQ(out, 123u); // 失败路径不污染出参
+}
+
+TEST_F(DeviceSqeParseTest, GetWqebufferByJettyId_ModeIsolationExcludesNonAicpuRows)
+{
+    // 同 owner、同编号、不同 mode 并存（假设性脏数据：CCU 行占用了 AICPU
+    // 编号）： AICPU 消费者必须只命中 USER_CTL_NORMAL 行，不得命中同 owner 的
+    // CCU 行。
+    constexpr uint32_t kHwId = HcclSim::HCCL_VM_AICPU_USER_CTL_JETTY_ID_BEGIN + 7;
+    alignas(64) uint8_t aicpuBuffer[HCCL_WQE_SIZE * 4] = {};
+    alignas(64) uint8_t ccuBuffer[HCCL_WQE_SIZE * 4] = {};
+
+    sim::runtime::RaJetty ccuRow{};
+    ccuRow.id = 1;
+    ccuRow.jetty_id = kHwId;
+    ccuRow.mode = 2; // CCU
+    ccuRow.pid = static_cast<uint64_t>(getppid());
+    ccuRow.sqBuffer = reinterpret_cast<uint64_t>(ccuBuffer);
+    runnerdb_test::InsertRecord<sim::runtime::RaJetty>(ccuRow);
+
+    sim::runtime::RaJetty aicpuRow{};
+    aicpuRow.id = 2;
+    aicpuRow.jetty_id = kHwId;
+    aicpuRow.mode = HcclSim::HCCL_VM_JETTY_MODE_USER_CTL_NORMAL;
+    aicpuRow.pid = static_cast<uint64_t>(getppid());
+    aicpuRow.sqBuffer = reinterpret_cast<uint64_t>(aicpuBuffer);
+    runnerdb_test::InsertRecord<sim::runtime::RaJetty>(aicpuRow);
+
+    uint64_t wqeBuffer = 0;
+    EXPECT_TRUE(GetWqebufferByJettyId(kHwId, wqeBuffer));
+    EXPECT_EQ(wqeBuffer, reinterpret_cast<uint64_t>(aicpuBuffer));
+}
+
+TEST_F(DeviceSqeParseTest, ParseDavidUDMASqe_RowIdBeyond16BitStillResolves)
+{
+    // b4 实测形状：本 rank 的 jetty 行主键 65629（超过 16 位），SQE
+    // 携带硬件编号
+    constexpr uint32_t kHwId = HcclSim::HCCL_VM_AICPU_USER_CTL_JETTY_ID_BEGIN + 93;
+    alignas(64) uint8_t wqeBuffer[HCCL_WQE_SIZE * 4] = {};
+    sim::runtime::RaJetty jetty{};
+    jetty.id = 65629;
+    jetty.jetty_id = kHwId;
+    jetty.mode = HcclSim::HCCL_VM_JETTY_MODE_USER_CTL_NORMAL;
+    jetty.pid = static_cast<uint64_t>(getppid());
+    jetty.sqBuffer = reinterpret_cast<uint64_t>(wqeBuffer);
+    runnerdb_test::InsertRecord<sim::runtime::RaJetty>(jetty);
+
+    UdmaSqeWrite* ubWqeWrite = reinterpret_cast<UdmaSqeWrite*>(wqeBuffer);
+    memset(ubWqeWrite, 0, sizeof(UdmaSqeWrite));
+    ubWqeWrite->comm.opcode = static_cast<int>(UdmaSqOpcode::UDMA_OPC_WRITE);
+    ubWqeWrite->comm.inlineEn = 0;
+    ubWqeWrite->comm.udfFlag = 0;
+    ubWqeWrite->comm.rmtAddrLow = 0x2000;
+    ubWqeWrite->u.sge.dataAddrLow = 0x1000;
+    ubWqeWrite->u.sge.length = 128;
+
+    Rt91095StarsUbdmaDBmodeSqe ubSqe;
+    memset(&ubSqe, 0, sizeof(ubSqe));
+    ubSqe.jettyId1 = kHwId;
     ubSqe.piValue1 = 2;
 
     EXPECT_NO_THROW(ParseDavidUDMASqe(0, &ubSqe));
@@ -1124,10 +1300,17 @@ TEST_F(DeviceSqeParseTest, ParseA5SqeFromSqBuffer_UBDMATypeWithSqeCnt)
     info.value[0] = 1;
     UpdateSqTail(0, 0);
 
-    sim::RaJetty jetty{};
+    sim::runtime::RaJetty jetty{};
     jetty.id = 1;
+    // 新合同：SQE 的 jettyId1 是 USER_CTL_NORMAL(AICPU) 硬件编号
+    // [5312,9407]；设备按 （编号, 创建者 pid,
+    // 模式）复合查行。测试进程同时扮演创建者与解析者，创建者 pid
+    // 即本进程的父进程（设备视角的 rank host）。
+    jetty.jetty_id = HcclSim::HCCL_VM_AICPU_USER_CTL_JETTY_ID_BEGIN;
+    jetty.mode = HcclSim::HCCL_VM_JETTY_MODE_USER_CTL_NORMAL;
+    jetty.pid = static_cast<uint64_t>(getppid());
     jetty.sqBuffer = 0;
-    RunnerDB::Add<sim::RaJetty>(jetty);
+    runnerdb_test::InsertRecord<sim::runtime::RaJetty>(jetty);
 
     uint8_t* sqBuf = nullptr;
     GetSqBufferAddr(&sqBuf);
@@ -1135,7 +1318,7 @@ TEST_F(DeviceSqeParseTest, ParseA5SqeFromSqBuffer_UBDMATypeWithSqeCnt)
         Rt91095StarsUbdmaDBmodeSqe sqe;
         memset(&sqe, 0, sizeof(sqe));
         sqe.header.type = static_cast<int>(Rt91095StarsSqeType::RT_91095_SQE_TYPE_UBDMA);
-        sqe.jettyId1 = 1;
+        sqe.jettyId1 = HcclSim::HCCL_VM_AICPU_USER_CTL_JETTY_ID_BEGIN;
         sqe.piValue1 = 1;
         memcpy(sqBuf, &sqe, sizeof(sqe));
     }
@@ -1271,16 +1454,44 @@ TEST_F(DeviceSqeParseTest, ParseA5SqeFromSqBuffer_SDMAReduceType)
     EXPECT_NO_THROW(ParseA5SqeFromSqBuffer(0, &info));
 }
 
-TEST_F(DeviceSqeParseTest, GetRmtRankIdByEid_MaxEid)
+TEST_F(DeviceSqeParseTest, GetRmtDeviceIdByEid_MaxEid)
 {
-    uint32_t eid = 0xFFFFFFFF;
-    EXPECT_NO_THROW(GetRmtRankIdByEid(eid));
+    uint8_t eid[URMA_EID_LEN];
+    memset(eid, 0xFF, sizeof(eid));
+    uint32_t deviceId = 0;
+    EXPECT_NO_THROW(GetRmtDeviceIdByEid(eid, deviceId));
 }
 
-TEST_F(DeviceSqeParseTest, GetRmtRankIdByEid_SpecificIp)
+TEST_F(DeviceSqeParseTest, GetRmtDeviceIdByEid_SpecificIp)
 {
-    uint32_t eid = 0xC0A80101;
-    EXPECT_NO_THROW(GetRmtRankIdByEid(eid));
+    uint8_t eid[URMA_EID_LEN] = {};
+    eid[0] = 0x09;
+    eid[1] = 0x01;
+    eid[2] = 0xA8;
+    eid[3] = 0xC0;
+
+    sim::runtime::EndPoint endPoint{};
+    endPoint.device_id = 9;
+    std::strncpy(endPoint.ip_addr, "192.168.1.9", sizeof(endPoint.ip_addr) - 1);
+    // 基线红修复：产品合同已改为按 EID 字节比较（GetEndPointByEid 用
+    // Eq(EndPoint::eid, ...)，见 device_sqe_parse_stub.cc 注释——新 EID 不再满足
+    // IPv4-compatible 格式，不能用 ip_addr strcmp 匹配）。旧用例只写 ip_addr
+    // 未写 eid 字段，在基线即失败。按 GetRmtDeviceIdByEid 相同变换
+    // （字节翻转 + IpAddress 编码）写入 eid，使行与查询合同一致。
+    HcclSim::Eid remoteEid{};
+    for (uint32_t i = 0; i < sizeof(remoteEid.raw); ++i) {
+        remoteEid.raw[i] = eid[sizeof(remoteEid.raw) - i - 1];
+    }
+    HcclSim::IpAddress address(remoteEid);
+    const HcclSim::Eid addrEid = address.GetEid();
+    std::memcpy(endPoint.eid, addrEid.raw, sizeof(endPoint.eid));
+    const uint64_t endPointId = runnerdb_test::InsertRecord<sim::runtime::EndPoint>(endPoint);
+    ASSERT_NE(endPointId, 0u);
+
+    uint32_t deviceId = 0;
+    EXPECT_TRUE(GetRmtDeviceIdByEid(eid, deviceId));
+    EXPECT_EQ(deviceId, 9u);
+    EXPECT_TRUE(runnerdb_test::DeleteRecord<sim::runtime::EndPoint>(endPointId));
 }
 
 TEST_F(DeviceSqeParseTest, ParseReduceTypeDavid_Zero)
@@ -1298,16 +1509,23 @@ TEST_F(DeviceSqeParseTest, ParseDataTypeDavid_ZeroInvalid)
 }
 
 // ==================== ParseDavidUDMASqe Tests ====================
-// ParseDavidUDMASqe uses GetWqebufferByJettyId to lookup RaJetty.sqBuffer from DB.
-// These tests cover various opcode paths with valid RaJetty setup.
+// ParseDavidUDMASqe uses GetWqebufferByJettyId to lookup RaJetty.sqBuffer from
+// DB. These tests cover various opcode paths with valid RaJetty setup.
 
 TEST_F(DeviceSqeParseTest, ParseDavidUDMASqe_WriteOpcodeWithValidWqe)
 {
     alignas(64) uint8_t wqeBuffer[HCCL_WQE_SIZE * 4] = {};
-    sim::RaJetty jetty{};
+    sim::runtime::RaJetty jetty{};
     jetty.id = 1;
+    // 新合同：SQE 的 jettyId1 是 USER_CTL_NORMAL(AICPU) 硬件编号
+    // [5312,9407]；设备按 （编号, 创建者 pid,
+    // 模式）复合查行。测试进程同时扮演创建者与解析者，创建者 pid
+    // 即本进程的父进程（设备视角的 rank host）。
+    jetty.jetty_id = HcclSim::HCCL_VM_AICPU_USER_CTL_JETTY_ID_BEGIN;
+    jetty.mode = HcclSim::HCCL_VM_JETTY_MODE_USER_CTL_NORMAL;
+    jetty.pid = static_cast<uint64_t>(getppid());
     jetty.sqBuffer = reinterpret_cast<uint64_t>(wqeBuffer);
-    RunnerDB::Add<sim::RaJetty>(jetty);
+    runnerdb_test::InsertRecord<sim::runtime::RaJetty>(jetty);
 
     UdmaSqeWrite* ubWqeWrite = reinterpret_cast<UdmaSqeWrite*>(wqeBuffer);
     memset(ubWqeWrite, 0, sizeof(UdmaSqeWrite));
@@ -1318,7 +1536,7 @@ TEST_F(DeviceSqeParseTest, ParseDavidUDMASqe_WriteOpcodeWithValidWqe)
 
     Rt91095StarsUbdmaDBmodeSqe ubSqe;
     memset(&ubSqe, 0, sizeof(ubSqe));
-    ubSqe.jettyId1 = 1;
+    ubSqe.jettyId1 = HcclSim::HCCL_VM_AICPU_USER_CTL_JETTY_ID_BEGIN;
     ubSqe.piValue1 = 2;
 
     EXPECT_NO_THROW(ParseDavidUDMASqe(0, &ubSqe));
@@ -1327,10 +1545,17 @@ TEST_F(DeviceSqeParseTest, ParseDavidUDMASqe_WriteOpcodeWithValidWqe)
 TEST_F(DeviceSqeParseTest, ParseDavidUDMASqe_WriteWithNotifyOpcodeWithValidWqe)
 {
     alignas(64) uint8_t wqeBuffer[HCCL_WQE_SIZE * 4] = {};
-    sim::RaJetty jetty{};
+    sim::runtime::RaJetty jetty{};
     jetty.id = 1;
+    // 新合同：SQE 的 jettyId1 是 USER_CTL_NORMAL(AICPU) 硬件编号
+    // [5312,9407]；设备按 （编号, 创建者 pid,
+    // 模式）复合查行。测试进程同时扮演创建者与解析者，创建者 pid
+    // 即本进程的父进程（设备视角的 rank host）。
+    jetty.jetty_id = HcclSim::HCCL_VM_AICPU_USER_CTL_JETTY_ID_BEGIN;
+    jetty.mode = HcclSim::HCCL_VM_JETTY_MODE_USER_CTL_NORMAL;
+    jetty.pid = static_cast<uint64_t>(getppid());
     jetty.sqBuffer = reinterpret_cast<uint64_t>(wqeBuffer);
-    RunnerDB::Add<sim::RaJetty>(jetty);
+    runnerdb_test::InsertRecord<sim::runtime::RaJetty>(jetty);
 
     UdmaSqeWriteWithNotify* ubWqe = reinterpret_cast<UdmaSqeWriteWithNotify*>(wqeBuffer);
     memset(ubWqe, 0, sizeof(UdmaSqeWriteWithNotify));
@@ -1344,7 +1569,7 @@ TEST_F(DeviceSqeParseTest, ParseDavidUDMASqe_WriteWithNotifyOpcodeWithValidWqe)
 
     Rt91095StarsUbdmaDBmodeSqe ubSqe;
     memset(&ubSqe, 0, sizeof(ubSqe));
-    ubSqe.jettyId1 = 1;
+    ubSqe.jettyId1 = HcclSim::HCCL_VM_AICPU_USER_CTL_JETTY_ID_BEGIN;
     ubSqe.piValue1 = 2;
 
     EXPECT_NO_THROW(ParseDavidUDMASqe(0, &ubSqe));
@@ -1353,10 +1578,17 @@ TEST_F(DeviceSqeParseTest, ParseDavidUDMASqe_WriteWithNotifyOpcodeWithValidWqe)
 TEST_F(DeviceSqeParseTest, ParseDavidUDMASqe_ReadOpcodeWithValidWqe)
 {
     alignas(64) uint8_t wqeBuffer[HCCL_WQE_SIZE * 4] = {};
-    sim::RaJetty jetty{};
+    sim::runtime::RaJetty jetty{};
     jetty.id = 1;
+    // 新合同：SQE 的 jettyId1 是 USER_CTL_NORMAL(AICPU) 硬件编号
+    // [5312,9407]；设备按 （编号, 创建者 pid,
+    // 模式）复合查行。测试进程同时扮演创建者与解析者，创建者 pid
+    // 即本进程的父进程（设备视角的 rank host）。
+    jetty.jetty_id = HcclSim::HCCL_VM_AICPU_USER_CTL_JETTY_ID_BEGIN;
+    jetty.mode = HcclSim::HCCL_VM_JETTY_MODE_USER_CTL_NORMAL;
+    jetty.pid = static_cast<uint64_t>(getppid());
     jetty.sqBuffer = reinterpret_cast<uint64_t>(wqeBuffer);
-    RunnerDB::Add<sim::RaJetty>(jetty);
+    runnerdb_test::InsertRecord<sim::runtime::RaJetty>(jetty);
 
     UdmaSqeWrite* ubWqeRead = reinterpret_cast<UdmaSqeWrite*>(wqeBuffer);
     memset(ubWqeRead, 0, sizeof(UdmaSqeWrite));
@@ -1371,7 +1603,7 @@ TEST_F(DeviceSqeParseTest, ParseDavidUDMASqe_ReadOpcodeWithValidWqe)
 
     Rt91095StarsUbdmaDBmodeSqe ubSqe;
     memset(&ubSqe, 0, sizeof(ubSqe));
-    ubSqe.jettyId1 = 1;
+    ubSqe.jettyId1 = HcclSim::HCCL_VM_AICPU_USER_CTL_JETTY_ID_BEGIN;
     ubSqe.piValue1 = 2;
 
     EXPECT_NO_THROW(ParseDavidUDMASqe(0, &ubSqe));
@@ -1380,10 +1612,17 @@ TEST_F(DeviceSqeParseTest, ParseDavidUDMASqe_ReadOpcodeWithValidWqe)
 TEST_F(DeviceSqeParseTest, ParseDavidUDMASqe_UnsupportedOpcodeWithValidWqe)
 {
     alignas(64) uint8_t wqeBuffer[HCCL_WQE_SIZE * 4] = {};
-    sim::RaJetty jetty{};
+    sim::runtime::RaJetty jetty{};
     jetty.id = 1;
+    // 新合同：SQE 的 jettyId1 是 USER_CTL_NORMAL(AICPU) 硬件编号
+    // [5312,9407]；设备按 （编号, 创建者 pid,
+    // 模式）复合查行。测试进程同时扮演创建者与解析者，创建者 pid
+    // 即本进程的父进程（设备视角的 rank host）。
+    jetty.jetty_id = HcclSim::HCCL_VM_AICPU_USER_CTL_JETTY_ID_BEGIN;
+    jetty.mode = HcclSim::HCCL_VM_JETTY_MODE_USER_CTL_NORMAL;
+    jetty.pid = static_cast<uint64_t>(getppid());
     jetty.sqBuffer = reinterpret_cast<uint64_t>(wqeBuffer);
-    RunnerDB::Add<sim::RaJetty>(jetty);
+    runnerdb_test::InsertRecord<sim::runtime::RaJetty>(jetty);
 
     UdmaSqeCommon* ubCommon = reinterpret_cast<UdmaSqeCommon*>(wqeBuffer);
     memset(ubCommon, 0, sizeof(UdmaSqeCommon));
@@ -1391,7 +1630,7 @@ TEST_F(DeviceSqeParseTest, ParseDavidUDMASqe_UnsupportedOpcodeWithValidWqe)
 
     Rt91095StarsUbdmaDBmodeSqe ubSqe;
     memset(&ubSqe, 0, sizeof(ubSqe));
-    ubSqe.jettyId1 = 1;
+    ubSqe.jettyId1 = HcclSim::HCCL_VM_AICPU_USER_CTL_JETTY_ID_BEGIN;
     ubSqe.piValue1 = 2;
 
     EXPECT_NO_THROW(ParseDavidUDMASqe(0, &ubSqe));
@@ -1400,10 +1639,17 @@ TEST_F(DeviceSqeParseTest, ParseDavidUDMASqe_UnsupportedOpcodeWithValidWqe)
 TEST_F(DeviceSqeParseTest, ParseDavidUDMASqe_AdjustCiValWithValidWqe)
 {
     alignas(64) uint8_t wqeBuffer[HCCL_WQE_SIZE * 8] = {};
-    sim::RaJetty jetty{};
+    sim::runtime::RaJetty jetty{};
     jetty.id = 1;
+    // 新合同：SQE 的 jettyId1 是 USER_CTL_NORMAL(AICPU) 硬件编号
+    // [5312,9407]；设备按 （编号, 创建者 pid,
+    // 模式）复合查行。测试进程同时扮演创建者与解析者，创建者 pid
+    // 即本进程的父进程（设备视角的 rank host）。
+    jetty.jetty_id = HcclSim::HCCL_VM_AICPU_USER_CTL_JETTY_ID_BEGIN;
+    jetty.mode = HcclSim::HCCL_VM_JETTY_MODE_USER_CTL_NORMAL;
+    jetty.pid = static_cast<uint64_t>(getppid());
     jetty.sqBuffer = reinterpret_cast<uint64_t>(wqeBuffer);
-    RunnerDB::Add<sim::RaJetty>(jetty);
+    runnerdb_test::InsertRecord<sim::runtime::RaJetty>(jetty);
 
     UdmaSqeCommon* ubCommon1 = reinterpret_cast<UdmaSqeCommon*>(wqeBuffer + 1 * HCCL_WQE_SIZE);
     memset(ubCommon1, 0, sizeof(UdmaSqeCommon));
@@ -1420,13 +1666,14 @@ TEST_F(DeviceSqeParseTest, ParseDavidUDMASqe_AdjustCiValWithValidWqe)
 
     Rt91095StarsUbdmaDBmodeSqe ubSqe;
     memset(&ubSqe, 0, sizeof(ubSqe));
-    ubSqe.jettyId1 = 1;
+    ubSqe.jettyId1 = HcclSim::HCCL_VM_AICPU_USER_CTL_JETTY_ID_BEGIN;
     ubSqe.piValue1 = 3;
 
     EXPECT_NO_THROW(ParseDavidUDMASqe(0, &ubSqe));
 }
 
-// ==================== ParseA5SqeFromSqBuffer with multiple SQEs Tests ====================
+// ==================== ParseA5SqeFromSqBuffer with multiple SQEs Tests
+// ====================
 
 TEST_F(DeviceSqeParseTest, ParseA5SqeFromSqBuffer_MultipleSqeTypesV2)
 {
@@ -1469,7 +1716,7 @@ TEST_F(DeviceSqeParseTest, ParseA5SqeFromSqBuffer_MultipleSqeTypesV2)
         Rt91095StarsUbdmaDBmodeSqe sqe3;
         memset(&sqe3, 0, sizeof(sqe3));
         sqe3.header.type = static_cast<int>(Rt91095StarsSqeType::RT_91095_SQE_TYPE_UBDMA);
-        sqe3.jettyId1 = 1;
+        sqe3.jettyId1 = HcclSim::HCCL_VM_AICPU_USER_CTL_JETTY_ID_BEGIN;
         sqe3.piValue1 = 1;
         memcpy(sqBuf + 3 * HCCL_SQE_SIZE, &sqe3, sizeof(sqe3));
     }
@@ -1551,7 +1798,8 @@ TEST_F(DeviceSqeParseTest, ParseDavidUBReadWriteSqe_InlineWriteWithEid)
     EXPECT_NO_THROW(ParseDavidUBReadWriteSqe(reinterpret_cast<uint64_t>(&ubWqe), 0, 1, false));
 }
 
-// ==================== ParseDavidUBWriteWithNotifySqe edge cases ====================
+// ==================== ParseDavidUBWriteWithNotifySqe edge cases
+// ====================
 
 TEST_F(DeviceSqeParseTest, ParseDavidUBWriteWithNotify_ReduceMin)
 {
@@ -1591,7 +1839,8 @@ TEST_F(DeviceSqeParseTest, ParseDavidUBWriteWithNotify_ReduceSum)
     EXPECT_NO_THROW(ParseDavidUBWriteWithNotifySqe(reinterpret_cast<uint64_t>(&ubWqe), 0, 2));
 }
 
-// ==================== ParseReduceTypeDavid and ParseDataTypeDavid edge cases ====================
+// ==================== ParseReduceTypeDavid and ParseDataTypeDavid edge cases
+// ====================
 
 TEST_F(DeviceSqeParseTest, ParseReduceTypeDavid_CombinedOpcode)
 {

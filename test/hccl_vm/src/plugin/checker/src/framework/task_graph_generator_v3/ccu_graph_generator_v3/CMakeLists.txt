@@ -10,15 +10,11 @@
 
 target_sources(checker PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/ccu_all_rank_param_recorder_v3.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/ccu_convert_config_generator_v3.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/ccu_loop_merge_v3.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/ccu_task_common_v3.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/ccu_task_transform_v3.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/ccu_task_transform_instruct_a5_v3.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/ccu_task_transform_instruct_common_v3.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/ccu_task_transform_instruct_a6_v3.cc
 )
-
-if(BUILD_A6_CCU_INSTR)
-    target_sources(checker PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/ccu_task_transform_instruct_a6_v3.cc
-    )
-endif()

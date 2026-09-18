@@ -8,6 +8,12 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: ccu executor base header file
+ * Author: caiyifan
+ */
+
 #ifndef HCCL_SIM_CCU_EXECUTOR_BASE_H
 #define HCCL_SIM_CCU_EXECUTOR_BASE_H
 
@@ -18,8 +24,8 @@
 
 #include "ccu_microcode_common_v1.h"
 #include "ccu_resource_manager.h"
-#include "trace/ccu_trace_types.h"
 #include "sim_log.h"
+#include "trace/ccu_trace_types.h"
 
 class CcuExecutorBase {
 public:

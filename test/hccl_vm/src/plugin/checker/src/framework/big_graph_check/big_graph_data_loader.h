@@ -17,8 +17,8 @@
 
 #include "binary_data_type_pub.h"
 #include "hccl_types.h"
+#include "operation_data/operation_data_types.h"
 #include "sim_loader.h"
-#include "sim_op_db_types.h"
 #include "task_graph_generator_v3/task_def_v3.h"
 
 namespace HcclSim {
@@ -26,7 +26,7 @@ namespace BigGraphCheckV3 {
 
     struct OperatorRankData {
         uint32_t rankId{UINT32_MAX};
-        sim::CompositeOpDetail op;
+        sim::operation::CompositeOpDetail op;
         std::vector<HcclTaskMetaData> taskMetas;
     };
 
@@ -39,14 +39,16 @@ namespace BigGraphCheckV3 {
 
     struct BigGraphData {
         uint32_t syncIter{0};
-        std::vector<sim::CcuChannelTab> channels;
-        std::vector<sim::CcuInstrResTab> instrRes;
+        std::vector<sim::operation::CcuChannelTab> channels;
+        std::vector<sim::operation::HalfRTTTab> halfRTT;
+        std::vector<sim::operation::CcuInstrResTab> instrRes;
         std::vector<OpParam> operators;
 
         void Clear()
         {
             syncIter = 0;
             channels.clear();
+            halfRTT.clear();
             instrRes.clear();
             operators.clear();
         }
@@ -57,7 +59,7 @@ namespace BigGraphCheckV3 {
         HcclResult Load(loader::Loader& loader, uint32_t syncIter, BigGraphData& data) const;
 
     private:
-        static HcclResult DecodeTaskMeta(const sim::OpTaskTab& task, HcclTaskMetaData& taskMeta);
+        static HcclResult DecodeTaskMeta(const sim::operation::OpTaskTab& task, HcclTaskMetaData& taskMeta);
     };
 
 } // namespace BigGraphCheckV3

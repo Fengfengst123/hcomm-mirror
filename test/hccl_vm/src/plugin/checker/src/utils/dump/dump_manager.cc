@@ -14,8 +14,8 @@
 #include <fstream>
 
 #include "file_utils.h"
-#include "sim_log.h"
 #include "setting_manager.h"
+#include "sim_log.h"
 
 static const std::string DATA_DIR_NAME = "data";
 static const std::string INSIGHT_DIR_NAME = "insight";

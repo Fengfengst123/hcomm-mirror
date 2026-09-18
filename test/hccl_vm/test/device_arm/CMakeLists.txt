@@ -14,7 +14,8 @@ add_subdirectory(proxy)
 
 set(COMMON_INCLUDE_DIRS
     ${CMAKE_SOURCE_DIR}/src/device_arm
-    ${CMAKE_SOURCE_DIR}/src/device_arm/proxy
+    ${CMAKE_SOURCE_DIR}/src/device_arm/common
+    ${CMAKE_SOURCE_DIR}/src/device_arm/level2/proxy
     ${CMAKE_SOURCE_DIR}/src/common
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/include/store
@@ -41,7 +42,7 @@ set(COMMON_INCLUDE_DIRS
 
 set(COMMON_SOURCES
     ${CMAKE_SOURCE_DIR}/src/utils/sim_log.cc
-    ${CMAKE_SOURCE_DIR}/src/proxy/log_stub.cc
+    ${CMAKE_SOURCE_DIR}/src/proxy/level2/log_stub.cc
 )
 
 set(COMMON_LIBS
@@ -59,7 +60,7 @@ set(COMMON_LIBS
 add_executable(test_hccl_task_collection hccl_task_collection_test.cc)
 
 target_sources(test_hccl_task_collection PRIVATE
-    ${CMAKE_SOURCE_DIR}/src/device_arm/hccl_task_collection.cc
+    ${CMAKE_SOURCE_DIR}/src/device_arm/common/hccl_task_collection.cc
     ${COMMON_SOURCES}
 )
 
@@ -71,11 +72,31 @@ set_target_properties(test_hccl_task_collection PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/output/bin"
 )
 
+# AICPU数据面桩的x86纯转换与参数校验测试。
+add_executable(test_data_op_device_stub data_op_device_stub_test.cc)
+
+target_sources(test_data_op_device_stub PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/device_arm/common/hccl_task_collection.cc
+    ${CMAKE_SOURCE_DIR}/src/device_arm/common/hccl_device_pub.cc
+    ${CMAKE_SOURCE_DIR}/src/common/sim_pipe_io.cc
+    ${CMAKE_SOURCE_DIR}/src/store/store_sim_memory_manager.cc
+    ${CMAKE_SOURCE_DIR}/src/runnerdb/tracedb/db_sim_sqlite_db.cc
+    ${COMMON_SOURCES}
+)
+
+target_include_directories(test_data_op_device_stub PRIVATE ${COMMON_INCLUDE_DIRS})
+target_link_libraries(test_data_op_device_stub PRIVATE ${COMMON_LIBS})
+target_compile_options(test_data_op_device_stub PRIVATE -DCANN_VERSION_NUM=90100000)
+
+set_target_properties(test_data_op_device_stub PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/output/bin"
+)
+
 # 2. test_hccl_device_pub (12 TEST_F)
 add_executable(test_hccl_device_pub hccl_device_pub_test.cc)
 
 target_sources(test_hccl_device_pub PRIVATE
-    ${CMAKE_SOURCE_DIR}/src/device_arm/hccl_device_pub.cc
+    ${CMAKE_SOURCE_DIR}/src/device_arm/common/hccl_device_pub.cc
     ${CMAKE_SOURCE_DIR}/src/common/sim_pipe_io.cc
     ${CMAKE_SOURCE_DIR}/src/store/store_sim_memory_manager.cc
     ${CMAKE_SOURCE_DIR}/src/runnerdb/tracedb/db_sim_sqlite_db.cc

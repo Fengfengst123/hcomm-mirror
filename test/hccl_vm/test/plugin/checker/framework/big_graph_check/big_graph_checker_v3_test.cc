@@ -62,8 +62,8 @@ namespace {
         TaskRecordAICPU* AddAicpuRecord(uint32_t notifyId, const TaskPosition& position)
         {
             AicpuNotify notify;
-            notify.recordRankId = 0;
-            notify.waitRankId = 2;
+            notify.recordDeviceId = 0;
+            notify.waitDeviceId = 2;
             notify.notifyId = notifyId;
             return AddNode(std::make_unique<TaskRecordAICPU>(notify, ProtocolType::SDMA), position);
         }
@@ -71,8 +71,8 @@ namespace {
         TaskWaitAICPU* AddAicpuWait(uint32_t notifyId, const TaskPosition& position)
         {
             AicpuNotify notify;
-            notify.recordRankId = 0;
-            notify.waitRankId = 2;
+            notify.recordDeviceId = 0;
+            notify.waitDeviceId = 2;
             notify.notifyId = notifyId;
             return AddNode(std::make_unique<TaskWaitAICPU>(notify, ProtocolType::SDMA), position);
         }
@@ -81,8 +81,8 @@ namespace {
         {
             CcuNotify notify;
             notify.channelId = INVALID_CHANNEL_ID;
-            notify.recordRankId = 0;
-            notify.waitRankId = 2;
+            notify.recordDeviceId = 0;
+            notify.waitDeviceId = 2;
             notify.dieId = 0;
             notify.ckeId = ckeId;
             notify.ckeMask = 0x1;
@@ -93,8 +93,8 @@ namespace {
         {
             CcuNotify notify;
             notify.channelId = INVALID_CHANNEL_ID;
-            notify.recordRankId = 0;
-            notify.waitRankId = 2;
+            notify.recordDeviceId = 0;
+            notify.waitDeviceId = 2;
             notify.dieId = 0;
             notify.ckeId = ckeId;
             notify.ckeMask = 0x1;
@@ -104,9 +104,6 @@ namespace {
         static AivPipeEvent MakeEvent(int32_t eventId)
         {
             AivPipeEvent event;
-            event.rankId = 0;
-            event.launchIdx = 7;
-            event.blockId = 3;
             event.srcPipe = 1;
             event.dstPipe = 2;
             event.eventId = eventId;
@@ -116,10 +113,7 @@ namespace {
         static AivFlagSync MakeFlag(uint64_t commInfoOffset, int32_t value = 5)
         {
             AivFlagSync flag;
-            flag.currentRank = 0;
-            flag.flagOwnerRank = 2;
-            flag.launchIdx = 7;
-            flag.blockId = 3;
+            flag.flagOwnerDevice = 2;
             flag.commInfoOffset = commInfoOffset;
             flag.value = value;
             return flag;

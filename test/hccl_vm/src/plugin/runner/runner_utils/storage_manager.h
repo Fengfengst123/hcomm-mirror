@@ -17,12 +17,12 @@
 #include <queue>
 #include <vector>
 
-#include "sim_binary_data_type_pub.h"
 #include "ccu_resource_common.h"
 #include "dtype_common.h"
+#include "operation_data/operation_data_types.h"
+#include "sim_binary_data_type_pub.h"
 #include "sim_common_defs.h"
 #include "sim_loader.h"
-#include "sim_op_db_types.h"
 #include "store_sim_shm_memory_common.h"
 
 namespace HcclSim {
@@ -88,22 +88,21 @@ public:
 
     std::string FindRootPath();
 
-    HcclVmResult InitCcuResource(std::vector<sim::CcuInstrResTab>& instrRes);
-    HcclVmResult InitAivResourceFromCompositeOpDetail(const sim::CompositeOpDetail& opDetail);
-    void ResetAivResource();
+    HcclVmResult InitCcuResource(std::vector<sim::operation::CcuInstrResTab>& instrRes);
     void ReleasePhyMem();
 
-    HcclVmResult LoadHcclVmSynthesisData(sim::OpDetailTab& detail, std::vector<sim::CcuChannelTab>& channels);
-    HcclVmResult LoadHcclVmInstrData(std::vector<sim::CcuInstrResTab>& instrRes);
-    HcclVmResult LoadHcclVmTaskMetaData(std::vector<sim::OpTaskTab>& tasks);
+    HcclVmResult
+    LoadHcclVmSynthesisData(sim::operation::OpDetailTab& detail, std::vector<sim::operation::CcuChannelTab>& channels);
+    HcclVmResult LoadHcclVmInstrData(std::vector<sim::operation::CcuInstrResTab>& instrRes);
+    HcclVmResult LoadHcclVmTaskMetaData(std::vector<sim::operation::OpTaskTab>& tasks);
     HcclVmResult ConvertTaskQueue(const HcclVmTaskMetaData& taskMeataData);
     uint32_t GetRankSize() const;
 
     HcclVmInstrData GetHvmInstrData() const;
-    HcclVmResult Trans2CheckerParam(sim::OpDetailTab& detailTab, ::OpDetails& detail);
+    HcclVmResult Trans2CheckerParam(sim::operation::OpDetailTab& detailTab, ::OpDetails& detail);
     HcclVmTaskMetaData GetHvmTaskMetaData() const;
     AllRankTaskQueues& GetAllRankTaskQueues();
-    void DumpAllRankInputOutput(std::vector<std::map<uint32_t, sim::CompositeOpDetail>>& compositeDataMap);
+    void DumpAllRankInputOutput(std::vector<std::map<uint32_t, sim::operation::CompositeOpDetail>>& compositeDataMap);
     HcclVmResult DumpHcclVmFlagData(uint16_t finishFlag);
     HcclVmResult GetHcclVmFlagData(HcclSim::HcclVmFlagData& flagData);
     void Reset()
@@ -137,7 +136,7 @@ private:
     HcclVmSynData m_synData;
     HcclVmInstrData m_instrData;
     AllRankTaskQueues m_allRankTaskQueues;
-    std::vector<sim::PhyMemBlock> m_allPhyMem;
+    std::vector<sim::runtime::PhyMemBlock> m_allPhyMem;
     DevType devType_{DevType::DEV_TYPE_COUNT}; // 初始化无效值
 };
 } // namespace HcclSim

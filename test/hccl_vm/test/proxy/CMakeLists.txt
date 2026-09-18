@@ -15,8 +15,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -D_GLIBCXX_USE_CXX11_ABI=0")
 
 include_directories(
-    ${CMAKE_SOURCE_DIR}/src/proxy
+    ${CMAKE_SOURCE_DIR}/src/proxy/common
     ${CMAKE_SOURCE_DIR}/src/common
+    ${CMAKE_SOURCE_DIR}/src/store
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/include/store
     ${CMAKE_SOURCE_DIR}/include/runnerdb
@@ -40,6 +41,8 @@ include_directories(
     ${HCOMM_CODE_ROOT}/src/pub_inc
     ${HCOMM_CODE_ROOT}/src/framework/communicator/impl/independent_op/rank_graph
     ${HCOMM_CODE_ROOT}/src/framework/inc
+    ${HCOMM_CODE_ROOT}/src/base_comm/resources/ccu/ccu_microcode
+    ${HCOMM_CODE_ROOT}/src/base_comm/resources/ccu/pub_inc
     ${CMAKE_SOURCE_DIR}/include
     ${HCOMM_CODE_ROOT}/test/ut/depends/pkg_inc/profiling
     ${HCOMM_CODE_ROOT}/test/ut/depends/pkg_inc/aicpu/tsd
@@ -70,7 +73,7 @@ link_libraries(
 # test_hccl_proxy_common
 add_executable(test_hccl_proxy_common hccl_proxy_common_test.cc)
 target_sources(test_hccl_proxy_common PRIVATE
-    ${CMAKE_SOURCE_DIR}/src/proxy/hccl_proxy_common.cc
+    ${CMAKE_SOURCE_DIR}/src/proxy/common/hccl_proxy_common.cc
 )
 set_target_properties(test_hccl_proxy_common PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/output/bin"
@@ -80,7 +83,7 @@ target_link_libraries(test_hccl_proxy_common gtest_main)
 # test_hccl_inner_stub
 add_executable(test_hccl_inner_stub hccl_inner_stub_test.cc)
 target_sources(test_hccl_inner_stub PRIVATE
-    ${CMAKE_SOURCE_DIR}/src/proxy/hccl_inner_stub.cc
+    ${CMAKE_SOURCE_DIR}/src/proxy/level2/hccl_inner_stub.cc
 )
 set_target_properties(test_hccl_inner_stub PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/output/bin"
@@ -90,7 +93,7 @@ target_link_libraries(test_hccl_inner_stub gtest_main)
 # test_tsd_client_stub
 add_executable(test_tsd_client_stub tsd_client_stub_test.cc)
 target_sources(test_tsd_client_stub PRIVATE
-    ${CMAKE_SOURCE_DIR}/src/proxy/tsd_client_stub.cc
+    ${CMAKE_SOURCE_DIR}/src/proxy/level2/tsd_client_stub.cc
 )
 set_target_properties(test_tsd_client_stub PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/output/bin"
@@ -100,7 +103,7 @@ target_link_libraries(test_tsd_client_stub gtest_main)
 # test_scatter_stub
 add_executable(test_scatter_stub scatter_stub_test.cc)
 target_sources(test_scatter_stub PRIVATE
-    ${CMAKE_SOURCE_DIR}/src/proxy/scatter_stub.cc
+    ${CMAKE_SOURCE_DIR}/src/proxy/level2/scatter_stub.cc
 )
 set_target_properties(test_scatter_stub PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/output/bin"
@@ -110,7 +113,7 @@ target_link_libraries(test_scatter_stub gtest_main)
 # test_log_stub
 add_executable(test_log_stub log_stub_test.cc)
 target_sources(test_log_stub PRIVATE
-    ${CMAKE_SOURCE_DIR}/src/proxy/log_stub.cc
+    ${CMAKE_SOURCE_DIR}/src/proxy/level2/log_stub.cc
 )
 set_target_properties(test_log_stub PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/output/bin"
@@ -120,7 +123,7 @@ target_link_libraries(test_log_stub gtest_main)
 # test_aprofiling_stub
 add_executable(test_aprofiling_stub aprofiling_stub_test.cc)
 target_sources(test_aprofiling_stub PRIVATE
-    ${CMAKE_SOURCE_DIR}/src/proxy/aprofiling_stub.cc
+    ${CMAKE_SOURCE_DIR}/src/proxy/level2/aprofiling_stub.cc
 )
 set_target_properties(test_aprofiling_stub PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/output/bin"
@@ -130,7 +133,7 @@ target_link_libraries(test_aprofiling_stub gtest_main)
 # test_aclrt_stub
 add_executable(test_aclrt_stub aclrt_stub_test.cc)
 target_sources(test_aclrt_stub PRIVATE
-    ${CMAKE_SOURCE_DIR}/src/proxy/aclrt_stub.cc
+    ${CMAKE_SOURCE_DIR}/src/proxy/level2/aclrt_stub.cc
 )
 set_target_properties(test_aclrt_stub PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/output/bin"
@@ -141,8 +144,8 @@ target_link_libraries(test_aclrt_stub gtest_main)
 # InsertTaskToCollection 由 link_libraries 的 store 库提供，无需额外编 device_arm 源。
 add_executable(test_aclrt_memory_stub aclrt_memory_stub_test.cc)
 target_sources(test_aclrt_memory_stub PRIVATE
-    ${CMAKE_SOURCE_DIR}/src/proxy/aclrt_memory_stub.cc
-    ${CMAKE_SOURCE_DIR}/src/proxy/hccl_proxy_common.cc
+    ${CMAKE_SOURCE_DIR}/src/proxy/level2/aclrt_memory_stub.cc
+    ${CMAKE_SOURCE_DIR}/src/proxy/common/hccl_proxy_common.cc
     ${CMAKE_SOURCE_DIR}/src/common/sim_sub_process_manager.cc
     ${CMAKE_SOURCE_DIR}/src/common/sim_pipe_io.cc
 )
@@ -151,26 +154,57 @@ set_target_properties(test_aclrt_memory_stub PROPERTIES
 )
 target_link_libraries(test_aclrt_memory_stub gtest_main)
 
+# test_ctrl_base_resource_stub —— HComm基础Endpoint创建和南向绑定行为单测
+add_executable(test_ctrl_base_resource_stub ctrl_base_resource_stub_test.cc)
+target_sources(test_ctrl_base_resource_stub PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/proxy/level1/ctrl_base_resource_stub.cc
+    ${CMAKE_SOURCE_DIR}/src/proxy/level2/aclrt_stream_stub.cc
+)
+set_target_properties(test_ctrl_base_resource_stub PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/output/bin"
+)
+target_link_libraries(test_ctrl_base_resource_stub gtest_main)
+
 add_executable(test_hccl_comm_stub hccl_comm_stub_test.cc)
 target_sources(test_hccl_comm_stub PRIVATE
-    ${CMAKE_SOURCE_DIR}/src/proxy/hccl_comm_stub.cc
+    ${CMAKE_SOURCE_DIR}/src/proxy/level0/hccl_comm_stub.cc
+    ${CMAKE_SOURCE_DIR}/src/proxy/common/hccl_proxy_common.cc
+    ${CMAKE_SOURCE_DIR}/src/proxy/level1/level1_proxy_common.cc
+)
+target_include_directories(test_hccl_comm_stub PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/proxy/level1
 )
 set_target_properties(test_hccl_comm_stub PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/output/bin"
 )
-target_link_libraries(test_hccl_comm_stub gtest_main)
+target_link_libraries(test_hccl_comm_stub gtest_main
+    ${ASCEND_CANN_PACKAGE_PATH}/${CANN_ARCH_DIR}/lib64/libc_sec.a
+)
+target_link_options(test_hccl_comm_stub PRIVATE
+    -Wl,--unresolved-symbols=ignore-in-object-files
+)
 
 add_executable(test_ai_core_stub ai_core_stub_test.cc)
 target_sources(test_ai_core_stub PRIVATE
-    ${CMAKE_SOURCE_DIR}/src/proxy/aiv_kernel/aiv_mode_stub/ai_core_stub.cc
-    ${CMAKE_SOURCE_DIR}/src/proxy/aiv_kernel/aiv_mode_stub/aiv_task.cc
-    ${CMAKE_SOURCE_DIR}/src/proxy/aiv_kernel/ascendc_stub/ascendc_base_stub.cc
+    ${CMAKE_SOURCE_DIR}/src/proxy/level2/aiv_kernel/aiv_mode_stub/ai_core_stub.cc
+    ${CMAKE_SOURCE_DIR}/src/proxy/level2/aiv_kernel/aiv_mode_stub/aiv_task.cc
+    ${CMAKE_SOURCE_DIR}/src/proxy/level2/aiv_kernel/ascendc_stub/ascendc_base_stub.cc
 )
 target_include_directories(test_ai_core_stub PRIVATE
-    ${CMAKE_SOURCE_DIR}/src/proxy/aiv_kernel/aiv_mode_stub
-    ${CMAKE_SOURCE_DIR}/src/proxy/aiv_kernel/ascendc_stub
+    ${CMAKE_SOURCE_DIR}/src/proxy/level2/aiv_kernel/aiv_mode_stub
+    ${CMAKE_SOURCE_DIR}/src/proxy/level2/aiv_kernel/ascendc_stub
 )
 set_target_properties(test_ai_core_stub PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/output/bin"
 )
 target_link_libraries(test_ai_core_stub gtest_main)
+
+# test_ccu_fallback_stub —— CCU 协商/回退接口 level0 短路桩单测
+add_executable(test_ccu_fallback_stub ccu_fallback_stub_test.cc)
+target_sources(test_ccu_fallback_stub PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/proxy/level0/ccu_fallback_stub.cc
+)
+set_target_properties(test_ccu_fallback_stub PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/output/bin"
+)
+target_link_libraries(test_ccu_fallback_stub gtest_main)

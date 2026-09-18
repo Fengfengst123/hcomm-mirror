@@ -79,6 +79,12 @@ Protocol ParseProtocol(const std::string& str)
     if (str == "UB_TP") {
         return Protocol::UB_TP;
     }
+    if (str == "UBG") {
+        return Protocol::UBG;
+    }
+    if (str == "UBOE") {
+        return Protocol::UBOE;
+    }
     if (str == "ROCE") {
         return Protocol::ROCE;
     }
@@ -94,6 +100,10 @@ std::string ProtocolToString(Protocol proto)
             return "UB_MEM";
         case Protocol::UB_TP:
             return "UB_TP";
+        case Protocol::UBG:
+            return "UBG";
+        case Protocol::UBOE:
+            return "UBOE";
         case Protocol::ROCE:
             return "ROCE";
         default:

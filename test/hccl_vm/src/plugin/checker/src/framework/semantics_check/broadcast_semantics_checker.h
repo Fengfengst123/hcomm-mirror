@@ -15,8 +15,9 @@
 #include "hccl_types.h"
 
 namespace HcclSim {
-HcclResult
-TaskCheckBroadcastSemantics(std::map<RankId, RankMemorySemantics>& allRankMemSemantics, u64 dataSize, RankId root);
+HcclResult TaskCheckBroadcastSemantics(
+    std::map<DeviceId, RankMemorySemantics>& allRankMemSemantics, u64 dataSize, DeviceId rootDeviceId,
+    const std::vector<DeviceId>& rankToDevice);
 }
 
 #endif

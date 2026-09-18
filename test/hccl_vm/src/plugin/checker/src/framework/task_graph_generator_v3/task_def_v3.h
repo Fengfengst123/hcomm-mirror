@@ -25,6 +25,8 @@ namespace TaskGraphGeneratorV3 {
     using NodeId = int32_t;
     using OperatorId = uint32_t;
     using RankId = uint32_t;
+    using DeviceId = uint32_t;
+    using CommId = uint64_t;
     using StreamId = uint32_t;
     using QueueId = uint32_t;
     using ChannelId = uint16_t; // for CCU mode
@@ -34,6 +36,8 @@ namespace TaskGraphGeneratorV3 {
     constexpr OperatorId INVALID_OPERATOR_ID = std::numeric_limits<OperatorId>::max();
     constexpr size_t MAX_NODE_COUNT = static_cast<size_t>(std::numeric_limits<NodeId>::max());
     constexpr RankId INVALID_RANK_ID = std::numeric_limits<RankId>::max();
+    constexpr DeviceId INVALID_DEVICE_ID = std::numeric_limits<DeviceId>::max();
+    constexpr CommId INVALID_COMM_ID = std::numeric_limits<CommId>::max();
     constexpr StreamId INVALID_STREAM_ID = std::numeric_limits<StreamId>::max();
     constexpr QueueId INVALID_QUEUE_ID = std::numeric_limits<QueueId>::max();
     constexpr ChannelId INVALID_CHANNEL_ID = std::numeric_limits<ChannelId>::max();
@@ -96,6 +100,7 @@ namespace TaskGraphGeneratorV3 {
         AIV_RECV_FLAG,
         START,
         END,
+        SYNC_STREAM,
         INVALID = UINT8_MAX
     };
 
@@ -103,18 +108,27 @@ namespace TaskGraphGeneratorV3 {
 
     struct TaskPosition {
         OperatorId operatorId{INVALID_OPERATOR_ID};
+        std::string commName;
+        uint32_t opIter{0};
+        CommId commId{INVALID_COMM_ID};
+        DeviceId deviceId{INVALID_DEVICE_ID};
         RankId rankId{INVALID_RANK_ID};
         StreamId streamId{INVALID_STREAM_ID};
+        // Sourced from opDetails.streamId; may differ from streamId for slave
+        // tasks.
+        StreamId mainStreamId{INVALID_STREAM_ID};
         QueueId queueId{INVALID_QUEUE_ID};
         uint64_t launchIdx{std::numeric_limits<uint64_t>::max()};
         uint32_t blockId{std::numeric_limits<uint32_t>::max()};
         uint32_t pipe{std::numeric_limits<uint32_t>::max()};
         uint32_t taskId{std::numeric_limits<uint32_t>::max()};
+        uint64_t commHash{std::numeric_limits<uint64_t>::max()};
     };
 
     using TaskLocation = TaskPosition;
 
     struct MemSlice {
+        DeviceId deviceId{INVALID_DEVICE_ID};
         RankId rankId{INVALID_RANK_ID};
         MemType memType{MemType::INVALID};
         uint64_t offset{0};
@@ -123,29 +137,18 @@ namespace TaskGraphGeneratorV3 {
     };
 
     struct AivPipeEvent {
-        RankId rankId{INVALID_RANK_ID};
-        uint64_t launchIdx{0};
-        uint32_t blockId{std::numeric_limits<uint32_t>::max()};
-        uint32_t curPipe{std::numeric_limits<uint32_t>::max()};
         uint32_t srcPipe{std::numeric_limits<uint32_t>::max()};
         uint32_t dstPipe{std::numeric_limits<uint32_t>::max()};
         int32_t eventId{0};
-        uint32_t taskId{std::numeric_limits<uint32_t>::max()};
     };
 
     struct AivFlagSync {
-        RankId currentRank{INVALID_RANK_ID};
-        RankId flagOwnerRank{INVALID_RANK_ID};
-        uint64_t launchIdx{0};
-        uint32_t blockId{std::numeric_limits<uint32_t>::max()};
-        uint32_t curPipe{std::numeric_limits<uint32_t>::max()};
-        uint32_t taskId{std::numeric_limits<uint32_t>::max()};
+        DeviceId flagOwnerDevice{INVALID_DEVICE_ID};
         uint64_t commInfoOffset{0};
         int32_t value{0};
     };
 
     struct AivBarrierInfo {
-        TaskPosition taskLoc;
         uint32_t pipeType{std::numeric_limits<uint32_t>::max()};
         bool merged{false};
         std::vector<NodeId> memberNodeIds;
@@ -154,7 +157,6 @@ namespace TaskGraphGeneratorV3 {
     };
 
     struct AivSyncAllInfo {
-        TaskPosition taskLoc;
         uint32_t syncRound{std::numeric_limits<uint32_t>::max()};
         bool merged{false};
         std::vector<NodeId> memberNodeIds;
@@ -163,15 +165,15 @@ namespace TaskGraphGeneratorV3 {
     };
 
     struct AicpuNotify {
-        RankId recordRankId{INVALID_RANK_ID};
-        RankId waitRankId{INVALID_RANK_ID};
+        DeviceId recordDeviceId{INVALID_DEVICE_ID};
+        DeviceId waitDeviceId{INVALID_DEVICE_ID};
         uint32_t notifyId{INVALID_NOTIFY_ID};
     };
 
     struct CcuNotify {
         ChannelId channelId{INVALID_CHANNEL_ID};
-        RankId recordRankId{INVALID_RANK_ID};
-        RankId waitRankId{INVALID_RANK_ID};
+        DeviceId recordDeviceId{INVALID_DEVICE_ID};
+        DeviceId waitDeviceId{INVALID_DEVICE_ID};
         uint32_t dieId{INVALID_DIE_ID};
         uint16_t ckeId{INVALID_CCU_CKE};
         uint16_t ckeMask{INVALID_CCU_CKE_MASK};
@@ -189,7 +191,8 @@ namespace TaskGraphGeneratorV3 {
     };
 
     struct CcuSubGraphDesc {
-        RankId rankId{INVALID_RANK_ID};
+        CommId commId{INVALID_COMM_ID};
+        DeviceId deviceId{INVALID_DEVICE_ID};
         std::vector<std::vector<CcuSqeParam>> ccuParams;
     };
 
@@ -216,7 +219,8 @@ namespace TaskGraphGeneratorV3 {
         uint64_t loopCnt{UINT64_MAX};
         uint64_t loopExpandCnt{UINT64_MAX};
         NodeId loopEndNodeId{INVALID_NODE_ID};
-        // loop 体内节点：所属 loop start 的 nodeId（INVALID_NODE_ID 表示不在 loop 内）
+        // loop 体内节点：所属 loop start 的 nodeId（INVALID_NODE_ID 表示不在 loop
+        // 内）
         NodeId loopStartNodeId{INVALID_NODE_ID};
     };
 
@@ -549,7 +553,8 @@ namespace TaskGraphGeneratorV3 {
 
         const CcuSubGraphDesc& GetCcuDesc() const { return ccuDesc_; }
         size_t GetQueueNum() const { return ccuDesc_.ccuParams.size(); }
-        RankId GetRankId() const { return ccuDesc_.rankId; }
+        CommId GetCommId() const { return ccuDesc_.commId; }
+        DeviceId GetDeviceId() const { return ccuDesc_.deviceId; }
 
         void AddCcuParam(size_t queueId, const CcuSqeParam& param)
         {
@@ -593,9 +598,9 @@ namespace TaskGraphGeneratorV3 {
 
     class TaskAivGraph : public TaskNode {
     public:
-        TaskAivGraph(RankId rankId, uint64_t launchIdx, uint64_t hostStreamId)
+        TaskAivGraph(DeviceId deviceId, uint64_t launchIdx, uint64_t hostStreamId)
             : TaskNode(TaskType::AIV_GRAPH),
-              rankId_(rankId),
+              deviceId_(deviceId),
               launchIdx_(launchIdx),
               hostStreamId_(hostStreamId)
         {}
@@ -603,12 +608,12 @@ namespace TaskGraphGeneratorV3 {
         std::string Describe() const override;
         std::string DescribeShort() const override;
 
-        RankId GetRankId() const { return rankId_; }
+        DeviceId GetDeviceId() const { return deviceId_; }
         uint64_t GetLaunchIdx() const { return launchIdx_; }
         uint64_t GetHostStreamId() const { return hostStreamId_; }
 
     private:
-        RankId rankId_{INVALID_RANK_ID};
+        DeviceId deviceId_{INVALID_DEVICE_ID};
         uint64_t launchIdx_{0};
         uint64_t hostStreamId_{0};
     };
@@ -684,6 +689,19 @@ namespace TaskGraphGeneratorV3 {
 
     private:
         AivFlagSync flag_;
+    };
+
+    class TaskSyncStream : public TaskNode {
+    public:
+        explicit TaskSyncStream(uint64_t syncIdx) : TaskNode(TaskType::SYNC_STREAM), syncIdx_(syncIdx) {}
+        ~TaskSyncStream() override = default;
+        std::string Describe() const override;
+        std::string DescribeShort() const override;
+
+        uint64_t GetSyncIdx() const { return syncIdx_; }
+
+    private:
+        uint64_t syncIdx_{0};
     };
 
     class TaskStart : public TaskNode {

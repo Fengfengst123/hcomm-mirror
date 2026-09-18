@@ -8,6 +8,12 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: ccu executor -- jmp Author:
+ * caiyifan
+ */
+
 #include "jump_executor.h"
 
 #include <cstdint>
@@ -28,14 +34,12 @@ void JumpExecutor::Parser()
         dstInstrXnId_ = instr_.v1.jmp.dstInstrXnId;
         conditionXnId_ = instr_.v1.jmp.conditionXnId;
         expectData_ = instr_.v1.jmp.expectData;
-#ifdef BUILD_A6_CCU_INSTR
     } else if (version_ == RunnerCcuVersion::CCU_V2) {
         relTarInstrXnId_ = instr_.v2.jmp.relTarInstrXnId;
         conditionXnId_ = instr_.v2.jmp.conditionXnId;
         expectedXnId_ = instr_.v2.jmp.expectedXnId;
         conditionType_ = instr_.v2.jmp.conditionType;
         jumpMode_ = instr_.v2.jmp.jumpMode;
-#endif
     } else {
         HCCL_VM_ERROR("Invalid ccu version:{}", RunnerCcuVersionToString(version_));
         ccuSimulator_->SetExecState(CcuExecState::EXEC_FAIL);
@@ -87,48 +91,57 @@ void JumpExecutor::RunV2()
         case 0: // 等于
             updateNextInsIdx(conditionValue == expectedValue);
             HCCL_VM_INFO(
-                "When conditionX{}{} equal to expectData{}{}, Jump Mode{},Jump instruction offset{}{}", conditionXnId,
-                conditionValue, expectedXnId, expectedValue, jumpMode_, relTarInstrXnId, relTarInstrValue);
+                "When conditionX{}{} equal to expectData{}{}, Jump "
+                "Mode{},Jump instruction offset{}{}",
+                conditionXnId, conditionValue, expectedXnId, expectedValue, jumpMode_, relTarInstrXnId,
+                relTarInstrValue);
             break;
         case 1: // 不等于
             updateNextInsIdx(conditionValue != expectedValue);
             HCCL_VM_INFO(
-                "When conditionX{}{} not equal to expectData{}{}, Jump Mode{}, Jump instruction offset{}{}",
+                "When conditionX{}{} not equal to expectData{}{}, Jump "
+                "Mode{}, Jump instruction offset{}{}",
                 conditionXnId, conditionValue, expectedXnId, expectedValue, jumpMode_, relTarInstrXnId,
                 relTarInstrValue);
             break;
         case 2: // 大于
             updateNextInsIdx(conditionValue > expectedValue);
             HCCL_VM_INFO(
-                "When conditionX{}{} greater than expectData{}{}, Jump Mode{}, Jump instruction offset{}{}",
+                "When conditionX{}{} greater than expectData{}{}, Jump "
+                "Mode{}, Jump instruction offset{}{}",
                 conditionXnId, conditionValue, expectedXnId, expectedValue, jumpMode_, relTarInstrXnId,
                 relTarInstrValue);
             break;
         case 3: // 大于/等于
             updateNextInsIdx(conditionValue >= expectedValue);
             HCCL_VM_INFO(
-                "When conditionX{}{} greater than or equal to expectData{}{}, Jump Mode{}, Jump instruction offset{}{}",
+                "When conditionX{}{} greater than or equal to "
+                "expectData{}{}, Jump Mode{}, Jump instruction offset{}{}",
                 conditionXnId, conditionValue, expectedXnId, expectedValue, jumpMode_, relTarInstrXnId,
                 relTarInstrValue);
             break;
         case 4: // 小于
             updateNextInsIdx(conditionValue < expectedValue);
             HCCL_VM_INFO(
-                "When conditionX{}{} less than expectData{}{}, Jump Mode{}, Jump instruction offset{}{}", conditionXnId,
-                conditionValue, expectedXnId, expectedValue, jumpMode_, relTarInstrXnId, relTarInstrValue);
+                "When conditionX{}{} less than expectData{}{}, Jump "
+                "Mode{}, Jump instruction offset{}{}",
+                conditionXnId, conditionValue, expectedXnId, expectedValue, jumpMode_, relTarInstrXnId,
+                relTarInstrValue);
             break;
         case 5: // 小于/等于
             updateNextInsIdx(conditionValue <= expectedValue);
             HCCL_VM_INFO(
-                "When conditionX{}{} less than or equal to expectData{}{}, Jump Mode{}, Jump instruction offset{}{}",
+                "When conditionX{}{} less than or equal to "
+                "expectData{}{}, Jump Mode{}, Jump instruction offset{}{}",
                 conditionXnId, conditionValue, expectedXnId, expectedValue, jumpMode_, relTarInstrXnId,
                 relTarInstrValue);
             break;
         default: // 无条件跳转
             updateNextInsIdx(true);
             HCCL_VM_INFO(
-                "When conditionX{}{} is true, Jump Mode{}, Jump instruction offset{}{}", conditionXnId, conditionValue,
-                jumpMode_, relTarInstrXnId, relTarInstrValue);
+                "When conditionX{}{} is true, Jump Mode{}, Jump "
+                "instruction offset{}{}",
+                conditionXnId, conditionValue, jumpMode_, relTarInstrXnId, relTarInstrValue);
             break;
     }
 }
@@ -149,7 +162,8 @@ void JumpExecutor::Run()
 std::string JumpExecutor::Describe()
 {
     return HcclSim::StringFormat(
-        "[Simulation Execute] When conditionXn[%u] not equal to expectData[%lu], Jump To InstrIdXn[%u]\n",
+        "[Simulation Execute] When conditionXn[%u] not equal to "
+        "expectData[%lu], Jump To InstrIdXn[%u]\n",
         conditionXnId_, expectData_, dstInstrXnId_);
 }
 

@@ -8,6 +8,12 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: ccu executor -- clear cke
+ * Author: caiyifan
+ */
+
 #include "clear_cke_executor.h"
 
 #include "ccu_executor_manager.h"
@@ -48,8 +54,9 @@ void ClearCkeExecutor::Run() { WaitCkeProcess(waitCKEId_, waitCKEMask_, clearTyp
 std::string ClearCkeExecutor::Describe()
 {
     return HcclSim::StringFormat(
-        "[Simulation Execute] Wait CKE[%u:%04x], Clear CKE[%u:%04x], clearType[%u]\n", waitCKEId_, waitCKEMask_,
-        clearCKEId_, clearMask_, clearType_);
+        "[Simulation Execute] Wait CKE[%u:%04x], "
+        "Clear CKE[%u:%04x], clearType[%u]\n",
+        waitCKEId_, waitCKEMask_, clearCKEId_, clearMask_, clearType_);
 }
 
 CcuTrace::CcuInstrTraceDetail ClearCkeExecutor::CollectTraceDetail()

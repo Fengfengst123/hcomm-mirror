@@ -195,7 +195,7 @@ function formatPortGroup(pg) {
 }
 
 function getHostIp(superPodId, serverId) {
-  return `${192 + superPodId}.${serverId + 1}.5.5`
+  return `${superPodId + 1}.${serverId + 1}.0.0`
 }
 
 function getSrvX(spRect, srvIdx) {

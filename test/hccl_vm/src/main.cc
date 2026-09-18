@@ -10,28 +10,46 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <string>
+#include <system_error>
+#include <vector>
 
 #include "cmd_base.h"
 #include "cmd_base_utils.h"
 #include "sim_common_api.h"
 #include "sim_log.h"
-#include "db_sim_op_db_ops.h"
+#include "storage/storage_runtime.h"
+#include "store/store_sim_resource_root.h"
 
 void envInit()
 {
     setenv("HCCL_VM_INSTALL_ROOT", GetBinLocation().c_str(), 1);
-    std::string dbPrefix = InstallPath::ResolveToInstallRoot("data/hccl_vm_data.db");
-    int ret3 = system(("sudo rm -fr " + dbPrefix + " " + dbPrefix + "-wal " + dbPrefix + "-shm 2>/dev/null").c_str());
-    int ret1 = system("sudo rm -fr /dev/shm/* 2>/dev/null");
-    std::string dataDir = InstallPath::ResolveToInstallRoot("data") + "/";
-    int ret2 = system(("sudo rm -fr " + dataDir + "* 2>/dev/null").c_str());
-    std::string logsDir = InstallPath::ResolveToInstallRoot("logs") + "/";
-    int ret4 = system(("sudo rm -fr " + logsDir + "* 2>/dev/null").c_str());
 
-    if (ret1 != 0 || ret2 != 0 || ret4 != 0) {
-        printf("envInit failed\n");
+    // 清理上次运行残留：data/、logs/ 及 sqlite db
+    // 均位于安装目录内，属当前用户可写，无需 sudo。
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    fs::remove_all(InstallPath::ResolveToInstallRoot("data"), ec);
+    ec.clear();
+    fs::remove_all(InstallPath::ResolveToInstallRoot("logs"), ec);
+    ec.clear();
+    if (!fs::create_directories(InstallPath::ResolveToInstallRoot("data"), ec) || ec) {
+        printf("envInit failed: recreate data dir\n");
     }
+    ec.clear();
+    if (!fs::create_directories(InstallPath::ResolveToInstallRoot("logs"), ec) || ec) {
+        printf("envInit failed: recreate logs dir\n");
+    }
+
+    // 只强清并重建本进程 pid 目录，不再整机清扫 /dev/shm（其他 hccl-vm
+    // 实例隔离）。
+    if (!sim::SimResourceRoot::GetInstance().Init()) {
+        printf("SimResourceRoot init failed\n");
+    }
+    // 注册退出清理器：正常退出(atexit) + 异常崩溃/终止信号(signal handler)
+    // 都删除自身 pid 目录。
+    sim::SimResourceRoot::RegisterExitCleaner();
     printf("envInit success\n");
 }
 
@@ -45,12 +63,20 @@ int main(int argc, char* argv[])
         envInit();
         LogConfig config = LoadLogConfig("hccl_vm");
         InitLogger(config);
-        sim::InitOpDataDb();
+        // 启动时序（方案
+        // §2.1）：数据库会话不在命令解析前取得——help/非法参数不建库； start/run
+        // 参数解析成功后在其回调起点显式初始化并检查，失败即返回不启动
+        // workload。
         std::string cmd = ArgvToString(argc, argv);
         if (argc == 1) {
             cmd += " --help";
         }
         ParseCommand(cmd);
+        // 迁移前由静态单例析构关闭连接；显式排空并关闭进程存储会话保证引擎关闭顺序。
+        auto closed = HcclSim::Storage::StorageRuntime::CloseProcessSession();
+        if (!closed.ok()) {
+            HCCL_VM_ERROR("close storage session failed: {}", closed.diagnostic);
+        }
     }
     return 0;
 }

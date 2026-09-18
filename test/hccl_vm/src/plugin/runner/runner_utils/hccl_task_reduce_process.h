@@ -40,9 +40,9 @@ typedef enum {                  // todo 临时规避，最好引用HCCL业务代
     HCCL_DATA_TYPE_RESERVED = 255 /**< reserved */
 } HcclDataType;
 
-void MemReduceSum(void* src, void* dst, uint32_t length, HcclDataType dataType);
-void MemReduceMin(void* src, void* dst, uint32_t length, HcclDataType dataType);
-void MemReduceMax(void* src, void* dst, uint32_t length, HcclDataType dataType);
+void MemReduceSum(void* src, void* dst, uint64_t byteLength, HcclDataType dataType);
+void MemReduceMin(void* src, void* dst, uint64_t byteLength, HcclDataType dataType);
+void MemReduceMax(void* src, void* dst, uint64_t byteLength, HcclDataType dataType);
 } // namespace VirtualRunTime
 
 #endif

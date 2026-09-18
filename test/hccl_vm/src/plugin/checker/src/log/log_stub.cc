@@ -12,8 +12,8 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "sim_log.h"
 #include "log.h"
+#include "sim_log.h"
 
 constexpr size_t LOG_MSG_BUFFER_SIZE = 1024;
 

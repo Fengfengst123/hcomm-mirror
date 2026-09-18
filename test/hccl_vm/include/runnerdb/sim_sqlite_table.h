@@ -27,8 +27,8 @@
 #include <unordered_map>
 #include <vector>
 
-#include "sim_log.h"
 #include "sim_common_api.h"
+#include "sim_log.h"
 
 namespace sim {
 inline std::shared_mutex& GetConnectionMutex()
@@ -106,8 +106,9 @@ public:
 
             if (!isRetryable || attempt == kMaxRetries) {
                 HCCL_VM_ERROR(
-                    "[SqliteTable::Add] SQL insert failed [{}]: rc={}, errc={}, ext={}, msg={}", m_tableName.c_str(),
-                    stepRc, errc, extErrc, sqlite3_errmsg(m_db));
+                    "[SqliteTable::Add] SQL insert failed [{}]: "
+                    "rc={}, errc={}, ext={}, msg={}",
+                    m_tableName.c_str(), stepRc, errc, extErrc, sqlite3_errmsg(m_db));
                 return 0;
             }
 
@@ -124,12 +125,20 @@ public:
         for (int attempt = 0; attempt <= kMaxRetries; ++attempt) {
             std::unique_lock<std::shared_mutex> connLock(GetConnectionMutex());
 
-            sqlite3_exec(m_db, "BEGIN IMMEDIATE", nullptr, nullptr, nullptr);
+            // 已处在外层批量写事务中时(SqliteWriteTransaction),
+            // 不再自行管理事务边界,
+            // 避免内层BEGIN失败/内层COMMIT提前提交外层事务
+            bool ownTx = (sqlite3_get_autocommit(m_db) != 0);
+            if (ownTx) {
+                sqlite3_exec(m_db, "BEGIN IMMEDIATE", nullptr, nullptr, nullptr);
+            }
 
             T rec;
             bool found = FindInternal(id, rec);
             if (!found) {
-                sqlite3_exec(m_db, "ROLLBACK", nullptr, nullptr, nullptr);
+                if (ownTx) {
+                    sqlite3_exec(m_db, "ROLLBACK", nullptr, nullptr, nullptr);
+                }
                 return false;
             }
 
@@ -139,7 +148,9 @@ public:
 
             sqlite3_stmt* rawStmt;
             if (sqlite3_prepare_v2(m_db, sql.c_str(), -1, &rawStmt, nullptr) != SQLITE_OK) {
-                sqlite3_exec(m_db, "ROLLBACK", nullptr, nullptr, nullptr);
+                if (ownTx) {
+                    sqlite3_exec(m_db, "ROLLBACK", nullptr, nullptr, nullptr);
+                }
                 HCCL_VM_ERROR(
                     "[SqliteTable::Update] SQL prepare failed [{}]: {}", m_tableName.c_str(), sqlite3_errmsg(m_db));
                 return false;
@@ -156,15 +167,18 @@ public:
 
             if (!changed && result != SQLITE_DONE) {
                 int errc = sqlite3_errcode(m_db);
-                sqlite3_exec(m_db, "ROLLBACK", nullptr, nullptr, nullptr);
+                if (ownTx) {
+                    sqlite3_exec(m_db, "ROLLBACK", nullptr, nullptr, nullptr);
+                }
                 bool isRetryable = (errc == SQLITE_BUSY || errc == SQLITE_LOCKED);
 
                 connLock.unlock();
 
                 if (!isRetryable || attempt == kMaxRetries) {
                     HCCL_VM_ERROR(
-                        "[SqliteTable::Update] SQL step failed [{}]: rc={}, errc={}, msg={}", m_tableName.c_str(),
-                        result, errc, sqlite3_errmsg(m_db));
+                        "[SqliteTable::Update] SQL step failed [{}]: "
+                        "rc={}, errc={}, msg={}",
+                        m_tableName.c_str(), result, errc, sqlite3_errmsg(m_db));
                     return false;
                 }
 
@@ -172,7 +186,9 @@ public:
                 continue;
             }
 
-            sqlite3_exec(m_db, changed ? "COMMIT" : "ROLLBACK", nullptr, nullptr, nullptr);
+            if (ownTx) {
+                sqlite3_exec(m_db, changed ? "COMMIT" : "ROLLBACK", nullptr, nullptr, nullptr);
+            }
             return changed;
         }
         return false;
@@ -202,7 +218,9 @@ public:
             int errc = sqlite3_errcode(m_db);
             if (errc != SQLITE_BUSY && errc != SQLITE_LOCKED) {
                 HCCL_VM_ERROR(
-                    "[SqliteTable::Delete] SQL step failed [{}]: rc={}, errc={}", m_tableName.c_str(), result, errc);
+                    "[SqliteTable::Delete] SQL step failed [{}]: "
+                    "rc={}, errc={}",
+                    m_tableName.c_str(), result, errc);
                 return false;
             }
 
@@ -362,8 +380,9 @@ private:
 
         if (sqlite3_exec(m_db, sql.c_str(), nullptr, nullptr, nullptr) != SQLITE_OK) {
             HCCL_VM_ERROR(
-                "[SqliteTable::CreateTableIfNotExists] SQL create table failed [{}]: {}", m_tableName.c_str(),
-                sqlite3_errmsg(m_db));
+                "[SqliteTable::CreateTableIfNotExists] SQL create "
+                "table failed [{}]: {}",
+                m_tableName.c_str(), sqlite3_errmsg(m_db));
         }
     }
 
@@ -448,6 +467,37 @@ public:
                 m_db = nullptr;
             }
         }
+    }
+
+    // ============ 批量写事务 ============
+    // 供大批量初始化场景使用: 事务期间同连接上的单条Add/Update自动并入当前事务,
+    // 将逐条独立事务的WAL提交开销合并为一次提交。
+    // 约束: 事务期间应无其他线程并发写库(批量初始化阶段满足); 中途失败须回滚。
+    bool BeginTransaction()
+    {
+        std::unique_lock<std::shared_mutex> connLock(GetConnectionMutex());
+        if (m_db == nullptr || sqlite3_get_autocommit(m_db) == 0) {
+            return false; // 连接无效或已在事务中, 不允许嵌套开启
+        }
+        return sqlite3_exec(m_db, "BEGIN IMMEDIATE", nullptr, nullptr, nullptr) == SQLITE_OK;
+    }
+
+    bool CommitTransaction()
+    {
+        std::unique_lock<std::shared_mutex> connLock(GetConnectionMutex());
+        if (m_db == nullptr || sqlite3_get_autocommit(m_db) != 0) {
+            return false; // 无未提交事务
+        }
+        return sqlite3_exec(m_db, "COMMIT", nullptr, nullptr, nullptr) == SQLITE_OK;
+    }
+
+    bool RollbackTransaction()
+    {
+        std::unique_lock<std::shared_mutex> connLock(GetConnectionMutex());
+        if (m_db == nullptr || sqlite3_get_autocommit(m_db) != 0) {
+            return true; // 无未提交事务视为回滚完成
+        }
+        return sqlite3_exec(m_db, "ROLLBACK", nullptr, nullptr, nullptr) == SQLITE_OK;
     }
 
     sqlite3* GetDb() { return m_db; }

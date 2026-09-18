@@ -40,6 +40,7 @@ target_include_directories(hccl_plugin_objs PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/common
     ${CMAKE_CURRENT_SOURCE_DIR}/plugin
+    ${ASCEND_CANN_PACKAGE_PATH}/pkg_inc/runtime
 )
 hcclvm_apply_common_flags(hccl_plugin_objs)
 

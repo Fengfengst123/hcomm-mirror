@@ -8,6 +8,11 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: HCOM data type definition
+ */
+
 #ifndef HCCL_BASE_H
 #define HCCL_BASE_H
 #include <hccl_types.h>
@@ -86,8 +91,9 @@ enum HcclEventType {
 const u32 TAG_MAX_LEN = 191; // 最大的tag 长度
 using TagAttr = struct TagAttrDef {
     char name[TAG_MAX_LEN + 1]; // tag标识
-    // tag标识的接收数据，调用者是否会主动调用接收接口，0 = 否, 1 = 会(预留，暂不支持)。
-    // 对于activeRecv = 0，当接收侧收到数据或者发送请求时，主动通知调用者。
+    // tag标识的接收数据，调用者是否会主动调用接收接口，0 = 否, 1 =
+    // 会(预留，暂不支持)。 对于activeRecv =
+    // 0，当接收侧收到数据或者发送请求时，主动通知调用者。
     uint32_t activeRecv;
     uint32_t sendCredit; // 配置该tag允许inflight的send个数
     uint32_t eventId;
@@ -97,7 +103,8 @@ using HcclEventMsg = struct HcclEventMsgDef {
     HcclComm comm;
     u32 peerRank;
     u32 tag;
-    // 0:HCCL_SEND_COMPLETION; 1:HCCL_RECV_COMPLETION; 2:HCCL_RECV_REQUEST; 3:HCCL_CONGESTION_RELIEF
+    // 0:HCCL_SEND_COMPLETION; 1:HCCL_RECV_COMPLETION; 2:HCCL_RECV_REQUEST;
+    // 3:HCCL_CONGESTION_RELIEF
     u32 hcclEventType;
     union {
         struct {
@@ -212,8 +219,10 @@ struct HcomAllToAllVCParams {
 };
 
 struct HcomGatherAllToAllVParams {
-    void* addrInfo; // device mem;  contains host VA[uint_64]:  [addr, length, addr, length, addr, length, ...]
-    void* addrInfoCountPerRank; // device mem;  length: ranksize;  contains addrInfoCounts for every rank
+    void* addrInfo;             // device mem;  contains host VA[uint_64]:  [addr, length,
+                                // addr, length, addr, length, ...]
+    void* addrInfoCountPerRank; // device mem;  length: ranksize;  contains
+                                // addrInfoCounts for every rank
     void* recvbuf;              // device mem
     void* recvcounts;           // device mem;  Type: uint_64
     void* rdispls;              // device mem;  Type: uint_64
@@ -241,9 +250,10 @@ typedef void* HcclRequest;
 typedef void* ServiceHandle;
 
 typedef struct {
-    int srcRank; // 接收/探测到的msg/信封的发送端rank_id，MPI标准定义，调用者可以访问
-    int tag;     // 接收/探测到的msg/信封的tag，MPI标准定义，调用者可以访问
-    int error; // 接收/探测的错误码0：no error，others：传输过程出错，MPI标准定义，调用者可以访问
+    int srcRank;   // 接收/探测到的msg/信封的发送端rank_id，MPI标准定义，调用者可以访问
+    int tag;       // 接收/探测到的msg/信封的tag，MPI标准定义，调用者可以访问
+    int error;     // 接收/探测的错误码0：no
+                   // error，others：传输过程出错，MPI标准定义，调用者可以访问
     int cancelled; // 指定实现，不建议调用者访问
     int count;     // 接收/探测到的payload大小，指定实现，不建议调用者访问
 } HcclStatus;
@@ -324,9 +334,10 @@ typedef struct {
     HcomOperationType opType; // op类型用于结合拓扑和rank_table一起决定需要创建哪些通信连接
     HcomSchedType schedType; // 由于prepare接口需要NPU与CPU共用，创建的QP是不同的，引出需要调度器类型
     int32_t cxtId; // 集合通信的执行上下文标识，由调用者自定义，（暂时保留不使用）
-                   // 相同cxtId被认为是相同的执行上下文，比如stream/thread
-                   // 相同上下文的集合通信只能串行执行
-    uint64_t flag; // bit0：接收数据量和地址是否动态, 1==动态, 此时info里的addr, count无效（预留不使用）
+    // 相同cxtId被认为是相同的执行上下文，比如stream/thread
+    // 相同上下文的集合通信只能串行执行
+    uint64_t flag; // bit0：接收数据量和地址是否动态, 1==动态, 此时info里的addr,
+                   // count无效（预留不使用）
     union {
         HcomP2pOpInfo p2p;
         HcomCollOpInfo coll;

@@ -130,7 +130,7 @@ TEST_F(PluginCommandTest, Parse_PluginList_TriggersCallback)
 TEST_F(PluginCommandTest, Parse_InstallTriggersCallback)
 {
     cmd_->Setup(*app_);
-    EXPECT_NO_THROW(app_->parse("test plugin install foo_plugin.so", true));
+    EXPECT_NO_THROW(app_->parse("test plugin install @foo_plugin", true));
 }
 
 TEST_F(PluginCommandTest, Parse_UninstallValidName_TriggersCallback)

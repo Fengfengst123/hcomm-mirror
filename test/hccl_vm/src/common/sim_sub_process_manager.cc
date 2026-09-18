@@ -9,20 +9,87 @@
  */
 
 #include "sim_sub_process_manager.h"
-#include <sys/wait.h>
+#include <fcntl.h>
 #include <sys/utsname.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
+#include "sim_common_api.h"
+#include "sim_common_defs.h"
+#include "sim_log.h"
+#include "sim_pipe_io.h"
 #include <cerrno>
 #include <chrono>
+#include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#include <sstream>
 #include <thread>
-#include "sim_log.h"
-#include "sim_common_defs.h"
-#include "sim_common_api.h"
-#include "sim_pipe_io.h"
 
 namespace sim {
+
+namespace {
+    namespace fs = std::filesystem;
+
+    bool IsCompleteCannSysroot(const fs::path& sysroot, std::string& missingPath)
+    {
+        const std::vector<fs::path> requiredPaths{
+            sysroot / "lib64/ld-linux-aarch64.so.1", sysroot / "lib64/libc.so.6", sysroot / "usr/lib64/libstdc++.so.6",
+            sysroot / "usr/lib64/libgcc_s.so.1"};
+
+        std::error_code ec;
+        for (const auto& requiredPath : requiredPaths) {
+            ec.clear();
+            if (!fs::exists(requiredPath, ec)) {
+                missingPath = requiredPath.string();
+                if (ec) {
+                    missingPath += ": " + ec.message();
+                }
+                return false;
+            }
+        }
+        return true;
+    }
+
+    std::string ResolveCannSysroot(const char* ascendHomePath)
+    {
+        const char* configuredSysroot = std::getenv("CANN_HCC_SYSROOT");
+        if (configuredSysroot != nullptr && configuredSysroot[0] != '\0') {
+            std::string missingPath;
+            if (IsCompleteCannSysroot(configuredSysroot, missingPath)) {
+                return configuredSysroot;
+            }
+            HCCL_VM_ERROR(
+                "invalid CANN_HCC_SYSROOT [{}]: required component [{}] "
+                "was not found.",
+                configuredSysroot, missingPath);
+            return {};
+        }
+
+        if (ascendHomePath == nullptr || ascendHomePath[0] == '\0') {
+            HCCL_VM_ERROR("CANN sysroot is not configured; set ASCEND_HOME_PATH or "
+                          "CANN_HCC_SYSROOT.");
+            return {};
+        }
+
+        const std::vector<fs::path> candidates{
+            fs::path(ascendHomePath) / "tools/hcc/sysroot", fs::path(ascendHomePath) / "toolkit/toolchain/hcc/sysroot"};
+        std::ostringstream diagnostics;
+        for (const auto& candidate : candidates) {
+            std::string missingPath;
+            if (IsCompleteCannSysroot(candidate, missingPath)) {
+                return candidate.string();
+            }
+            diagnostics << "\n  " << candidate.string() << ": missing " << missingPath;
+        }
+
+        HCCL_VM_ERROR(
+            "complete CANN sysroot was not found under ASCEND_HOME_PATH "
+            "[{}]. Tried:{}",
+            ascendHomePath, diagnostics.str());
+        return {};
+    }
+} // namespace
 
 thread_local static sim::SubProcessManager g_aiCpuProcMgr;
 
@@ -38,6 +105,11 @@ SubProcessManager::~SubProcessManager()
 int SubProcessManager::CreateProcess(const SubProcessConfig& config)
 {
     std::lock_guard<std::mutex> lock(m_forkLock);
+
+    if (config.executable.empty() || config.args.empty()) {
+        HCCL_VM_ERROR("Invalid subprocess config: executable or argv is empty.");
+        return -1;
+    }
 
     if (m_pid > 0) {
         HCCL_VM_INFO("Process {} already exists, skip.", m_pid);
@@ -201,6 +273,22 @@ int SubProcessManager::Request(
     return 0;
 }
 
+int SubProcessManager::RequestV(
+    uint8_t reqCmd, const struct iovec* reqIov, uint32_t reqSegCnt, uint8_t& rspCmd, void* rspData, uint32_t rspMaxLen,
+    uint32_t& rspLen)
+{
+    std::lock_guard<std::mutex> lock(m_rpcLock);
+    if (HostSendMsgV(reqCmd, reqIov, reqSegCnt) != 0) {
+        return -1;
+    }
+
+    if (HostRecvMsg(rspCmd, rspData, rspMaxLen, rspLen) != 0) {
+        return -1;
+    }
+
+    return 0;
+}
+
 int SubProcessManager::HostSendMsg(uint8_t cmd, const void* data, uint32_t len)
 {
     if (m_h2dWriteFd < 0) {
@@ -209,6 +297,16 @@ int SubProcessManager::HostSendMsg(uint8_t cmd, const void* data, uint32_t len)
     }
 
     return PipeSendMsg(m_h2dWriteFd, cmd, data, len);
+}
+
+int SubProcessManager::HostSendMsgV(uint8_t cmd, const struct iovec* iov, uint32_t iovcnt)
+{
+    if (m_h2dWriteFd < 0) {
+        HCCL_VM_ERROR("HostSendMsgV: h2d pipe not open.");
+        return -1;
+    }
+
+    return PipeSendMsgV(m_h2dWriteFd, cmd, iov, iovcnt);
 }
 
 int SubProcessManager::HostRecvMsg(uint8_t& outCmd, void* outData, uint32_t maxLen, uint32_t& outLen)
@@ -231,34 +329,52 @@ bool IsAarch64Host()
 SubProcessConfig CreateAicpuDeviceConfig(uint32_t rankId, uint32_t deviceKey)
 {
     SubProcessConfig config;
-    std::string rankIdStr = std::to_string(rankId);
-    std::string devKeyStr = std::to_string(deviceKey);
-    std::string devBinPath = InstallPath::ResolveToInstallRoot("bin/device");
+    const char* ascendHomePath = std::getenv("ASCEND_HOME_PATH");
+    const std::string cannSysroot = ResolveCannSysroot(ascendHomePath);
+    if (cannSysroot.empty()) {
+        return config;
+    }
+
+    const std::string devBinPath = InstallPath::ResolveToInstallRoot("bin/device");
+    const std::string preloadPath = InstallPath::ResolveToInstallRoot("lib/aarch64/libhccl_device_proxy.so");
+    const std::string preloadPathL1 = InstallPath::ResolveToInstallRoot("lib/aarch64/libhccl_device_proxy_level1.so");
+    std::string libPath = InstallPath::ResolveToInstallRoot("lib/aarch64");
+    if (ascendHomePath != nullptr) {
+        libPath += ":" + std::string(ascendHomePath) + "/" + GetArchStr() + "-linux/devlib/device";
+    }
+    libPath += ":" + cannSysroot + "/lib64";
+    libPath += ":" + cannSysroot + "/usr/lib64";
 
     if (IsAarch64Host()) {
-        config.executable = devBinPath;
-        config.args.push_back(devBinPath);
+        const std::string cannLoaderPath = (fs::path(cannSysroot) / "lib64/ld-linux-aarch64.so.1").string();
+        config.executable = cannLoaderPath;
+        config.args = {cannLoaderPath, "--library-path", libPath, devBinPath};
     } else {
         config.executable = "qemu-aarch64-static";
-        config.args.push_back("qemu-aarch64-static");
-        config.args.push_back(devBinPath);
-        config.envVars["QEMU_LD_PREFIX"] = "/usr/aarch64-linux-gnu";
+        config.args = {"qemu-aarch64-static", devBinPath};
+        config.envVars["QEMU_LD_PREFIX"] = cannSysroot;
     }
 
-    config.args.push_back(rankIdStr);
-    config.args.push_back(devKeyStr);
+    config.args.push_back(std::to_string(rankId));
+    config.args.push_back(std::to_string(deviceKey));
 
-    std::string preloadPath = InstallPath::ResolveToInstallRoot("lib/aarch64/libhccl_device_proxy.so");
-    std::string libPath = InstallPath::ResolveToInstallRoot("lib/aarch64");
-    const char* ascendHomePath = std::getenv("ASCEND_HOME_PATH");
-    if (ascendHomePath != nullptr) {
-        libPath += ":";
-        libPath += ascendHomePath;
-        libPath += "/" + GetArchStr() + "-linux/devlib/device";
+    uint32_t vmLevel = 2;
+    const char* levelEnv = std::getenv("HCCL_VM_LEVEL");
+    if (levelEnv != nullptr && levelEnv[0] != '\0') {
+        char* endptr = nullptr;
+        unsigned long val = std::strtoul(levelEnv, &endptr, 10);
+        if (endptr != levelEnv && *endptr == '\0') {
+            vmLevel = static_cast<uint32_t>(val);
+        }
     }
-
-    config.envVars["LD_PRELOAD"] = preloadPath;
+    if (vmLevel == 1) {
+        config.envVars["LD_PRELOAD"] = preloadPathL1 + ":" + preloadPath;
+    } else {
+        config.envVars["LD_PRELOAD"] = preloadPath;
+    }
     config.envVars["LD_LIBRARY_PATH"] = libPath;
+
+    HCCL_VM_INFO("AICPU CANN runtime: sysroot=[{}], executable=[{}].", cannSysroot, config.executable);
 
     return config;
 }

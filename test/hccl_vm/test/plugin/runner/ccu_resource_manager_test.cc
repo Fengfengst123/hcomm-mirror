@@ -8,6 +8,12 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: unit test for
+ * CcuResourceManager Author: xx
+ */
+
 #include <cstdint>
 #include <cstring>
 #include <gtest/gtest.h>
@@ -623,7 +629,8 @@ TEST_F(CcuResourceManagerTest, TransMSToMSBasic)
     EXPECT_NO_THROW(mgr.TransMSToMS(0, 0, 0, 0, 0, 1, 8));
 }
 
-// Test: DumpCcuInstructions with enableDump true (covered by existing test, but verify no crash)
+// Test: DumpCcuInstructions with enableDump true (covered by existing test, but
+// verify no crash)
 TEST_F(CcuResourceManagerTest, DumpCcuInstructionsAfterInit)
 {
     CcuResourceManager& mgr = CcuResourceManager::GetInstance();

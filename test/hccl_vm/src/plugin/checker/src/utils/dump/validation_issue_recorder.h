@@ -17,11 +17,9 @@
 #include <vector>
 
 #include "hccl_types.h"
-#include "task_def.h"
+#include "sim_common.h"
 
 namespace HcclSim {
-nlohmann::json DumpIssueTaskNodeToJson(TaskNode* node, const std::string& nodeId = "");
-
 class ValidationIssueRecorder {
 public:
     static ValidationIssueRecorder& GetInstance()

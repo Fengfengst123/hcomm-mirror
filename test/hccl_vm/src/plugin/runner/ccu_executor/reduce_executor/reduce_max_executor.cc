@@ -8,17 +8,23 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: ccu executor -- reduce max
+ * Author: caiyifan
+ */
+
 #include "reduce_max_executor.h"
 
 #include <cstdint>
 #include <cstring>
 
 #include "ccu_executor_manager.h"
-#include "ccu_microcode_common_v1.h"
 #include "ccu_fp16.h"
-#include "sim_log.h"
+#include "ccu_microcode_common_v1.h"
 #include "ccu_reduce_operator.h"
 #include "ccu_string_util.h"
+#include "sim_log.h"
 
 using namespace std;
 using namespace hcomm::CcuRep;
@@ -127,7 +133,8 @@ void ReduceMaxExecutor::Run()
 std::string ReduceMaxExecutor::Describe()
 {
     return HcclSim::StringFormat(
-        "[Simulation Execute] Wait CKE[%u:%04x], Max %s with Count[%u], DataType[%u] and "
+        "[Simulation Execute] Wait CKE[%u:%04x], Max %s with Count[%u], "
+        "DataType[%u] and "
         "CastEn[%u], Set CKE[%u:%04x], clearType[%u]\n",
         waitCKEId_, waitCKEMask_, ParseMSList().c_str(), count_, dataType_, setCKEId_, setCKEMask_, clearType_);
 }

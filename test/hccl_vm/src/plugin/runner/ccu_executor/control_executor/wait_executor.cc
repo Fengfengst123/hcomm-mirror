@@ -8,6 +8,12 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: ccu executor -- wait executor
+ * Author: caiyifan
+ */
+
 #include "wait_executor.h"
 
 #include <cstdint>
@@ -68,8 +74,9 @@ void WaitExecutor::Run()
         case 3: // 大于/等于
             updateNextInsIdx(conditionValue >= expectedValue);
             HCCL_VM_INFO(
-                "When conditionXn{}{} greater than or equal to expectData{}{}, WaitFlag{} ", conditionXnId,
-                conditionValue, expectedXnId, expectedValue, conditionValue >= expectedValue);
+                "When conditionXn{}{} greater than or equal to "
+                "expectData{}{}, WaitFlag{} ",
+                conditionXnId, conditionValue, expectedXnId, expectedValue, conditionValue >= expectedValue);
             break;
         case 4: // 小于
             updateNextInsIdx(conditionValue < expectedValue);
@@ -80,8 +87,9 @@ void WaitExecutor::Run()
         case 5: // 小于/等于
             updateNextInsIdx(conditionValue <= expectedValue);
             HCCL_VM_INFO(
-                "When conditionXn{}{} less than or equal to expectData{}{}, WaitFlag{} ", conditionXnId, conditionValue,
-                expectedXnId, expectedValue, conditionValue <= expectedValue);
+                "When conditionXn{}{} less than or equal to "
+                "expectData{}{}, WaitFlag{} ",
+                conditionXnId, conditionValue, expectedXnId, expectedValue, conditionValue <= expectedValue);
             break;
         default: // 参考等于
             updateNextInsIdx(conditionValue == expectedValue);

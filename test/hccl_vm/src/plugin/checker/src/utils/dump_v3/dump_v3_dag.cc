@@ -130,6 +130,8 @@ namespace {
                 return "START";
             case TaskType::END:
                 return "END";
+            case TaskType::SYNC_STREAM:
+                return "SYNC_STREAM";
             default:
                 return "INVALID";
         }
@@ -412,8 +414,8 @@ namespace {
             const auto& notify = record->GetNotify();
             return Json::object({
                 {"kind", "aicpu"},
-                {"record_rank_id", notify.recordRankId},
-                {"wait_rank_id", notify.waitRankId},
+                {"record_device_id", notify.recordDeviceId},
+                {"wait_device_id", notify.waitDeviceId},
                 {"notify_id", notify.notifyId},
             });
         }
@@ -421,8 +423,8 @@ namespace {
             const auto& notify = wait->GetNotify();
             return Json::object({
                 {"kind", "aicpu"},
-                {"record_rank_id", notify.recordRankId},
-                {"wait_rank_id", notify.waitRankId},
+                {"record_device_id", notify.recordDeviceId},
+                {"wait_device_id", notify.waitDeviceId},
                 {"notify_id", notify.notifyId},
             });
         }
@@ -430,8 +432,8 @@ namespace {
             const auto& notify = record->GetNotify();
             return Json::object({
                 {"kind", "ccu"},
-                {"record_rank_id", notify.recordRankId},
-                {"wait_rank_id", notify.waitRankId},
+                {"record_device_id", notify.recordDeviceId},
+                {"wait_device_id", notify.waitDeviceId},
                 {"channel_id", notify.channelId},
                 {"die_id", notify.dieId},
                 {"cke_id", notify.ckeId},
@@ -442,8 +444,8 @@ namespace {
             const auto& notify = wait->GetNotify();
             return Json::object({
                 {"kind", "ccu"},
-                {"record_rank_id", notify.recordRankId},
-                {"wait_rank_id", notify.waitRankId},
+                {"record_device_id", notify.recordDeviceId},
+                {"wait_device_id", notify.waitDeviceId},
                 {"channel_id", notify.channelId},
                 {"die_id", notify.dieId},
                 {"cke_id", notify.ckeId},
@@ -531,7 +533,8 @@ namespace {
         HcclResult ret = GenReachabilityClosure(mainStart, closure, &topoOrder);
         if (ret != HCCL_SUCCESS) {
             HCCL_VM_ERROR(
-                "{} Failed to build the V3 graph topological order for dump output, "
+                "{} Failed to build the V3 graph topological order for "
+                "dump output, "
                 "mainStartNodeId={}, ret={}",
                 MakeErrorCodeText(ErrorCode::DUMP_FAILED), mainStart->GetNodeId(), static_cast<uint32_t>(ret));
             return ret;
@@ -624,7 +627,8 @@ HcclResult DumpV3Dag(const TaskGraphGeneratorV3::TaskGraphGeneratorV3& graph, co
     }
     if (stage.empty()) {
         HCCL_VM_ERROR(
-            "{} Dump stage name is empty, dataId={}, graphOutputPath={}, layoutOutputPath={}",
+            "{} Dump stage name is empty, dataId={}, "
+            "graphOutputPath={}, layoutOutputPath={}",
             MakeErrorCodeText(ErrorCode::DUMP_FAILED), StorageManager::GetInstance().GetDataId(), kGraphPath,
             kLayoutPath);
         return HCCL_E_PARA;

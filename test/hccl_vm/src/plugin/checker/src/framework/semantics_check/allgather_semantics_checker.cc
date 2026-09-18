@@ -19,99 +19,110 @@
 #include "utils/error_codes.h"
 
 namespace HcclSim {
-HcclResult TaskCheckAllGatherSemantics(std::map<RankId, RankMemorySemantics>& allRankMemSemantics, u64 dataSize)
+HcclResult TaskCheckAllGatherSemantics(
+    std::map<DeviceId, RankMemorySemantics>& allRankMemSemantics, u64 dataSize,
+    const std::vector<DeviceId>& rankToDevice)
 {
     u32 rankSize = allRankMemSemantics.size();
+    if (allRankMemSemantics.size() != rankSize) {
+        HCCL_VM_ERROR(
+            "{} AllGather rank set size mismatch: expected {}, actual {}.",
+            MakeErrorCodeText(ErrorCode::SEMANTIC_FINAL_MISSING), rankSize, allRankMemSemantics.size());
+        return HcclResult::HCCL_E_PARA;
+    }
 
-    for (RankId rankId = 0; rankId < rankSize; rankId++) {
-        // 对应的rank不存在需要报错
-        if (allRankMemSemantics.count(rankId) == 0) {
-            HCCL_VM_ERROR(
-                "{} AllGather produced no result data for rank {}, but this rank is "
-                "expected to receive data from all {} participating ranks with an expected total "
-                "result size of 0x{:x} bytes.",
-                MakeErrorCodeText(ErrorCode::SEMANTIC_FINAL_MISSING), rankId, rankSize, dataSize * rankSize);
-            return HcclResult::HCCL_E_PARA;
-        }
-
+    for (auto& [deviceId, mem] : allRankMemSemantics) {
         u64 totalSize = 0;
-        RankId curRankId = 0;
+        uint32_t curRankIdx = 0;
         u64 curDataSize = 0;
-        for (auto& ele : allRankMemSemantics[rankId][BufferType::OUTPUT]) {
+        for (auto& [eleAddr, ele] : mem[BufferType::OUTPUT]) {
             const u64 rangeEnd = ele.startAddr + ele.size;
             if (ele.startAddr != totalSize) {
                 HCCL_VM_ERROR(
-                    "{} AllGather output for rank {} should continue at 0x{:x}, "
-                    "but the next actual range starts at 0x{:x} (actual range: [0x{:x},0x{:x}))."
+                    "{} AllGather output for device {} should continue at "
+                    "0x{:x}, "
+                    "but the next actual range starts at 0x{:x} (actual range: "
+                    "[0x{:x},0x{:x}))."
                     "\nCurrent result range detail:\n{}",
-                    MakeErrorCodeText(ErrorCode::SEMANTIC_FINAL_MISSING), rankId, totalSize, ele.startAddr,
+                    MakeErrorCodeText(ErrorCode::SEMANTIC_FINAL_MISSING), deviceId, totalSize, ele.startAddr,
                     ele.startAddr, rangeEnd, ele.Describe());
                 return HcclResult::HCCL_E_PARA;
             }
 
             if (ele.srcBufs.size() != 1) {
                 HCCL_VM_ERROR(
-                    "{} AllGather output range [0x{:x},0x{:x}) for rank {} should come "
-                    "from exactly one source, but it actually comes from {} sources."
+                    "{} AllGather output range [0x{:x},0x{:x}) for device {} "
+                    "should come "
+                    "from exactly one source, but it actually comes from {} "
+                    "sources."
                     "\nCurrent result range detail:\n{}",
-                    MakeErrorCodeText(ErrorCode::SEMANTIC_FINAL_REDUCE_ERROR), ele.startAddr, rangeEnd, rankId,
+                    MakeErrorCodeText(ErrorCode::SEMANTIC_FINAL_REDUCE_ERROR), ele.startAddr, rangeEnd, deviceId,
                     ele.srcBufs.size(), ele.Describe());
                 return HcclResult::HCCL_E_PARA;
             }
 
             const auto& srcBuf = *ele.srcBufs.begin();
 
-            if (srcBuf.rankId != curRankId) {
+            if (srcBuf.deviceId != rankToDevice[curRankIdx]) {
                 HCCL_VM_ERROR(
-                    "{} AllGather output range [0x{:x},0x{:x}) for rank {} should come from "
-                    "rank {}, but it actually comes from rank {}."
+                    "{} AllGather output range [0x{:x},0x{:x}) for device {} "
+                    "should come from "
+                    "source index {}, but it actually comes from device {}."
                     "\nCurrent result range detail:\n{}",
-                    MakeErrorCodeText(ErrorCode::SEMANTIC_FINAL_SRC_ERROR), ele.startAddr, rangeEnd, rankId, curRankId,
-                    srcBuf.rankId, ele.Describe());
+                    MakeErrorCodeText(ErrorCode::SEMANTIC_FINAL_SRC_ERROR), ele.startAddr, rangeEnd, deviceId,
+                    curRankIdx, srcBuf.deviceId, ele.Describe());
                 return HcclResult::HCCL_E_PARA;
             }
 
             if (srcBuf.bufType != BufferType::INPUT) {
                 HCCL_VM_ERROR(
-                    "{} AllGather output range [0x{:x},0x{:x}) for rank {} should come from "
-                    "INPUT, but it actually comes from rank {} with buffer type {}."
+                    "{} AllGather output range [0x{:x},0x{:x}) for device {} "
+                    "should come from "
+                    "INPUT, but it actually comes from device {} with buffer "
+                    "type {}."
                     "\nCurrent result range detail:\n{}",
-                    MakeErrorCodeText(ErrorCode::SEMANTIC_FINAL_SRC_ERROR), ele.startAddr, rangeEnd, rankId,
-                    srcBuf.rankId, BufferTypeToString(srcBuf.bufType), ele.Describe());
+                    MakeErrorCodeText(ErrorCode::SEMANTIC_FINAL_SRC_ERROR), ele.startAddr, rangeEnd, deviceId,
+                    srcBuf.deviceId, BufferTypeToString(srcBuf.bufType), ele.Describe());
                 return HcclResult::HCCL_E_PARA;
             }
 
             if (srcBuf.srcAddr != curDataSize) {
                 HCCL_VM_ERROR(
-                    "{} AllGather output range [0x{:x},0x{:x}) for rank {} should come from "
-                    "rank {} at source address 0x{:x}, but the actual source address is 0x{:x}."
+                    "{} AllGather output range [0x{:x},0x{:x}) for device {} "
+                    "should come from "
+                    "source index {} at source address 0x{:x}, but the actual "
+                    "source address is 0x{:x}."
                     "\nCurrent result range detail:\n{}",
-                    MakeErrorCodeText(ErrorCode::SEMANTIC_FINAL_SRC_ERROR), ele.startAddr, rangeEnd, rankId,
-                    srcBuf.rankId, curDataSize, srcBuf.srcAddr, ele.Describe());
+                    MakeErrorCodeText(ErrorCode::SEMANTIC_FINAL_SRC_ERROR), ele.startAddr, rangeEnd, deviceId,
+                    srcBuf.deviceId, curDataSize, srcBuf.srcAddr, ele.Describe());
                 return HcclResult::HCCL_E_PARA;
             }
 
             curDataSize += ele.size;
             if (curDataSize == dataSize) {
                 curDataSize = 0;
-                curRankId++;
+                curRankIdx++;
             } else if (curDataSize > dataSize) {
                 HCCL_VM_ERROR(
-                    "{} AllGather data collected from rank {} for rank {} becomes larger "
-                    "than expected after outputRange [0x{:x},0x{:x}). The accumulated size is 0x{:x}, "
-                    "but the expected size from this source rank is 0x{:x}."
+                    "{} AllGather data collected from source index {} for "
+                    "device {} becomes larger "
+                    "than expected after outputRange [0x{:x},0x{:x}). The "
+                    "accumulated size is 0x{:x}, "
+                    "but the expected size from this source is 0x{:x}."
                     "\nCurrent result range detail:\n{}",
-                    MakeErrorCodeText(ErrorCode::SEMANTIC_FINAL_SIZE_ERROR), curRankId, rankId, ele.startAddr, rangeEnd,
-                    curDataSize, dataSize, ele.Describe());
+                    MakeErrorCodeText(ErrorCode::SEMANTIC_FINAL_SIZE_ERROR), curRankIdx, deviceId, ele.startAddr,
+                    rangeEnd, curDataSize, dataSize, ele.Describe());
                 return HcclResult::HCCL_E_PARA;
             }
             totalSize += ele.size;
         }
         if (totalSize != dataSize * rankSize) {
             HCCL_VM_ERROR(
-                "{} AllGather output for rank {} ends too early: the checker validated "
-                "0x{:x} bytes in total, but the expected total result size is 0x{:x} bytes.",
-                MakeErrorCodeText(ErrorCode::SEMANTIC_FINAL_MISSING), rankId, totalSize, dataSize * rankSize);
+                "{} AllGather output for device {} ends too early: "
+                "the checker validated "
+                "0x{:x} bytes in total, but the expected total "
+                "result size is 0x{:x} bytes.",
+                MakeErrorCodeText(ErrorCode::SEMANTIC_FINAL_MISSING), deviceId, totalSize, dataSize * rankSize);
             return HcclResult::HCCL_E_PARA;
         }
     }

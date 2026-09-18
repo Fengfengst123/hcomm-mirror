@@ -78,6 +78,9 @@ set_target_properties(test_binary_data_operator PROPERTIES
 )
 
 add_executable(test_dump_shm_data dump_shm_data_test.cc)
+target_include_directories(test_dump_shm_data PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/runnerdb/modeldb
+)
 target_link_libraries(test_dump_shm_data PRIVATE store runnerdb sqlite3 log)
 set_target_properties(test_dump_shm_data PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/output/bin"
@@ -139,6 +142,9 @@ set_target_properties(test_hccl_shm_pub PROPERTIES
 )
 
 add_executable(test_sim_shm_ops_static sim_shm_ops_static_test.cc)
+target_sources(test_sim_shm_ops_static PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/store/store_sim_resource_root.cc
+)
 target_link_libraries(test_sim_shm_ops_static PRIVATE pthread rt log)
 set_target_properties(test_sim_shm_ops_static PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/output/bin"
@@ -153,5 +159,11 @@ set_target_properties(test_sim_run_mode PROPERTIES
 add_executable(test_sim_check_only_off sim_check_only_off_test.cc)
 target_link_libraries(test_sim_check_only_off PRIVATE pthread rt store runnerdb sqlite3 log)
 set_target_properties(test_sim_check_only_off PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/output/bin"
+)
+
+add_executable(test_sim_resource_root sim_resource_root_test.cc)
+target_link_libraries(test_sim_resource_root PRIVATE pthread rt store runnerdb sqlite3 log)
+set_target_properties(test_sim_resource_root PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/output/bin"
 )

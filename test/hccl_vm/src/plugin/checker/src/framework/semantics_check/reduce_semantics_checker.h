@@ -16,7 +16,8 @@
 
 namespace HcclSim {
 HcclResult TaskCheckReduceSemantics(
-    std::map<RankId, RankMemorySemantics>& allRankMemSemantics, u64 dataSize, HcclReduceOp reduceType, RankId root);
+    std::map<DeviceId, RankMemorySemantics>& allRankMemSemantics, u64 dataSize, HcclReduceOp reduceType,
+    DeviceId rootDeviceId, const std::vector<DeviceId>& rankToDevice);
 }
 
 #endif

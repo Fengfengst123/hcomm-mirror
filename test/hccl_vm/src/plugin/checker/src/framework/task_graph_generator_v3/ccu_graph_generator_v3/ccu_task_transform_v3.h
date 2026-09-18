@@ -13,21 +13,21 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <map>
-#include <set>
-#include <queue>
-#include <vector>
-#include <memory>
-#include <unordered_map>
 #include <hccl_types.h>
+#include <map>
+#include <memory>
+#include <queue>
+#include <set>
+#include <unordered_map>
+#include <vector>
 
 #include "base.h"
-#include "log.h"
-#include "data_slice.h"
-#include "ccu_microcode_v1.h"
 #include "ccu_instr_info.h"
-#include "data_type.h"
+#include "ccu_microcode_v1.h"
 #include "ccu_task_common_v3.h"
+#include "data_slice.h"
+#include "data_type.h"
+#include "log.h"
 
 using namespace hcomm;
 namespace HcclSim {
@@ -61,7 +61,7 @@ namespace TaskGraphGeneratorV3 {
     void SetPostRemainingCkeMask(TaskNode* post, u32 remainingCkeMask);
 
     HcclResult ProcessWaitMask(
-        RankId rankId, uint32_t dieId, CcuGraphStateV3* curCcuTask, uint32_t queId, uint16_t waitCKEId,
+        DeviceId deviceId, uint32_t dieId, CcuGraphStateV3* curCcuTask, uint32_t queId, uint16_t waitCKEId,
         uint16_t waitCKEMask, bool& isContinue);
 
     // 转换指令的函数指针
@@ -79,7 +79,7 @@ namespace TaskGraphGeneratorV3 {
         virtual bool IsSupported(uint16_t header) = 0;
         // 指令转换函数
         virtual HcclResult Transform(
-            const CcuRep::CcuInstr* instr, CcuGraphStateV3* task, uint32_t rankId, bool& isContinue, void* loopParam)
+            const CcuRep::CcuInstr* instr, CcuGraphStateV3* task, uint32_t deviceId, bool& isContinue, void* loopParam)
             = 0;
     };
 

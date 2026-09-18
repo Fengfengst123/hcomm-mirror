@@ -7,7 +7,6 @@
 This document lists all third-party header files that the project references through `#include`. Each entry marks its origin (CANN / HCCL / HCOMM) and its actual path on disk.
 
 **Path Conventions**:
-
 - CANN root directory: `/home/teamserver/workspace/Ascend/cann-9.1.0/` (abbreviated as `CANN/` below)
 - HCOMM root directory: `/home/teamserver/workspace/hcomm/` (abbreviated as `HCOMM/` below)
 - HCCL root directory: `/home/teamserver/workspace/hccl/` (abbreviated as `HCCL/` below)
@@ -30,7 +29,7 @@ This document lists all third-party header files that the project references thr
 
 | #include | Actual File Path | Reference Locations |
 |----------|------------|---------|
-| `hccl/hccl_types.h` | `CANN/include/hccl/hccl_types.h` | proxy/aclrt_kernel_stub.cc, hccl_op_stub.cc, hccl_proxy_common.h; plugin/runner/ccu_executor/ccu_fp16.h; common/sim_data_dump.cc; device_arm/proxy/device_sqe_parse_stub.h; test/proxy/ |
+| `hccl/hccl_types.h` | `CANN/include/hccl/hccl_types.h` | proxy/aclrt_kernel_stub.cc, hccl_op_stub.cc, hccl_proxy_common.h; plugin/runner/ccu_executor/ccu_fp16.h; common/sim_data_dump.cc; device_arm/level2/proxy/device_sqe_parse_stub.h; test/proxy/ |
 | `hccl/hccl.h` | `CANN/include/hccl/hccl.h` | **proxy/hccl_op_stub.cc**; test/proxy/hccl_comm_stub_test.cc |
 | `hccl/hcom.h` | `CANN/include/hccl/hcom.h` | proxy/hccl_inner_stub.cc; test/proxy/hccl_inner_stub_test.cc |
 | `hccl/base.h` | `CANN/include/hccl/base.h` | proxy/aclrt_context_stub.cc; plugin/runner/ccu_executor/ccu_fp16.h; plugin/checker/header/external/task_param.h; include/sim_ip_address.h |
@@ -49,13 +48,13 @@ This document lists all third-party header files that the project references thr
 |----------|------------|---------|
 | `"runtime/base.h"` | `CANN/pkg_inc/runtime/runtime/base.h` | proxy/hccl_comm_stub.cc, aclrt_runtime_config.cc, aclrt_notify_stub.cc, hccp_stub.cc, aclrt_device_stub.cc, hccp_ra_socket_stub.cc, aclrt_stream_stub.cc, aclrt_stub.cc; test/proxy/ |
 | `"runtime/event.h"` | `CANN/pkg_inc/runtime/runtime/event.h` | proxy/aclrt_runtime_config.cc, aclrt_notify_stub.cc |
-| `"runtime/rt.h"` | `CANN/pkg_inc/runtime/runtime/rt.h` | device_arm/proxy/device_sqe_parse_stub.h |
+| `"runtime/rt.h"` | `CANN/pkg_inc/runtime/runtime/rt.h` | device_arm/level2/proxy/device_sqe_parse_stub.h |
 
 ### 1.5 CANN Profiling Interfaces (`CANN/pkg_inc/profiling/`)
 
 | #include | Actual File Path | Reference Locations |
 |----------|------------|---------|
-| `"aprof_pub.h"` | `CANN/pkg_inc/profiling/aprof_pub.h` | proxy/aprofiling_stub.cc; device_arm/proxy/aprofiling_stub.cc; test/proxy/aprofiling_stub_test.cc |
+| `"aprof_pub.h"` | `CANN/pkg_inc/profiling/aprof_pub.h` | proxy/aprofiling_stub.cc; device_arm/level2/proxy/aprofiling_stub.cc; test/proxy/aprofiling_stub_test.cc |
 
 ### 1.6 CANN Trace Interfaces (`CANN/pkg_inc/trace/`)
 
@@ -68,7 +67,7 @@ This document lists all third-party header files that the project references thr
 
 | #include | Actual File Path | Reference Locations |
 |----------|------------|---------|
-| `"ascend_hal.h"` | `CANN/include/driver/ascend_hal.h` | proxy/adapter_rts_stub.cc, aclrt_new_stub.cc, ascend_hal_stub.cc; device_arm/proxy/device_sqe_parse_stub.h, ascend_hal_stub.cc; test/device_arm/ |
+| `"ascend_hal.h"` | `CANN/include/driver/ascend_hal.h` | proxy/adapter_rts_stub.cc, aclrt_new_stub.cc, ascend_hal_stub.cc; device_arm/level2/proxy/device_sqe_parse_stub.h, ascend_hal_stub.cc; test/device_arm/ |
 
 ### 1.8 CANN Base Interfaces (`CANN/pkg_inc/base/`)
 
@@ -175,12 +174,11 @@ This section describes the dependencies for AIV (AI Vector Core) operator simula
 
 **Original Source**: the `hccl_aiv_utils.h` header file from the HCOMM repository
 
-**Backup Location**: `src/proxy/aclrt_kernel_stub.cc` lines 597-628
+**Backup Location**: `src/proxy/level2/aclrt_kernel_stub.cc` lines 597-628
 
 **Description**: `AivOpArgs` is the parameter structure for AIV collective communication operators. The structure passes AIV kernel execution parameters between the host side and the device side. The tool originally loaded the `ops_hccl::ExecuteKernelLaunch()` function from the HCOMM library through `dlsym` (symbol name: `_ZN8ops_hccl19ExecuteKernelLaunchERKNS_9AivOpArgsE`). That function accepts this structure as a parameter. The tool maintains a complete backup of the structure to remove the dependency on the HCOMM runtime library.
 
 **Structure Definition**:
-
 ```cpp
 struct AivOpArgs {
     HcclCMDType cmdType = HcclCMDType::HCCL_CMD_MAX;   // collective communication command type
@@ -220,7 +218,7 @@ struct AivOpArgs {
 
 **Original Source**: the header file with the same name from the HCOMM repository
 
-**Backup Location**: `src/proxy/aiv_kernel/hccl_op_stub/aiv_communication_base_v2.h`
+**Backup Location**: `src/proxy/level2/aiv_kernel/hccl_op_stub/aiv_communication_base_v2.h`
 
 **Description**: This header file defines the base class `AivCommBase` for AIV collective communication operators and the related kernel parameter macros (`KERNEL_ARGS_DEF`, `KERNEL_ARGS_CALL`, and so on). The tool originally included this file directly from the HCOMM repository. The tool maintains a complete backup to remove the dependency.
 
@@ -240,7 +238,7 @@ struct AivOpArgs {
 
 ### 5.3 AIV Operator Op Header Files (HCOMM / HCCL Dependencies)
 
-Each AIV kernel implementation file for a collective communication operator in the tool (`src/proxy/aiv_kernel/hccl_op_stub/*/aiv_communication_v2.cc`) includes the corresponding operator op header file through `#include`. These header files **do not exist within the project**. They come from the HCOMM and HCCL repositories respectively:
+Each AIV kernel implementation file for a collective communication operator in the tool (`src/proxy/level2/aiv_kernel/hccl_op_stub/*/aiv_communication_v2.cc`) includes the corresponding operator op header file through `#include`. These header files **do not exist within the project**. They come from the HCOMM and HCCL repositories respectively:
 
 | #include | Source | Actual File Path | Reference Locations |
 |----------|------|------------|---------|
@@ -250,14 +248,14 @@ Each AIV kernel implementation file for a collective communication operator in t
 | `"aiv_broadcast_op.h"` | HCOMM | `hcomm/src/legacy/ascend910/algorithm/base/alg_aiv_template/broadcast/` | hccl_op_stub/broadcast/aiv_communication_v2.cc |
 | `"aiv_all_to_all_op.h"` | HCOMM | `hcomm/src/legacy/ascend910/algorithm/base/alg_aiv_template/all_to_all/` | hccl_op_stub/all_to_all_v/aiv_communication_v2.cc |
 | `"aiv_all_to_all_v_op.h"` | HCOMM | `hcomm/src/legacy/ascend910/algorithm/base/alg_aiv_template/all_to_all/` | hccl_op_stub/all_to_all_v/aiv_communication_v2.cc |
-| `"aiv_scatter_op.h"` | HCCL | `hccl/src/ops/scatter/algorithm/template/aiv/kernel/` | hccl_op_stub/scatter/aiv_communication_v2.cc |
-| `"aiv_reduce_op.h"` | HCCL | `hccl/src/ops/reduce/algorithm/template/aiv/kernel/` | hccl_op_stub/reduce/aiv_communication_v2.cc |
+| `"aiv_scatter_op.h"` | HCCL | `hccl/src/ops/scatter/template/aiv/kernel/` | hccl_op_stub/scatter/aiv_communication_v2.cc |
+| `"aiv_reduce_op.h"` | HCCL | `hccl/src/ops/reduce/template/aiv/kernel/` | hccl_op_stub/reduce/aiv_communication_v2.cc |
 
 **Dependency Risk**: Changes to the interface signatures, template parameters, or member functions in the operator op header files on the HCOMM or HCCL side will cause AIV kernel compilation failures or lead to inconsistent runtime behavior.
 
 ### 5.4 AscendC Interface Dependencies
 
-The tool depends on the AscendC programming interfaces provided by the CANN package to simulate AIV kernel execution. All AscendC interfaces in the project use local stub files under the `src/proxy/aiv_kernel/ascendc_stub/` directory. The tool does not use the AscendC header files from the CANN SDK directly.
+The tool depends on the AscendC programming interfaces provided by the CANN package to simulate AIV kernel execution. All AscendC interfaces in the project use local stub files under the `src/proxy/level2/aiv_kernel/ascendc_stub/` directory. The tool does not use the AscendC header files from the CANN SDK directly.
 
 **AscendC Interfaces in Use** (implemented through stubs):
 
@@ -284,11 +282,11 @@ This section describes the dependencies for simulating host-device interaction i
 
 ### 6.1 AICPU Interaction Data Structures
 
-The tool maintains local backups of the following data structures in `src/device_arm/aicpu_args_stub.h` to remove the strong dependency on the HCOMM runtime library:
+The tool maintains local backups of the following data structures in `src/device_arm/common/aicpu_args_stub.h` to remove the strong dependency on the HCOMM runtime library:
 
 | Data Structure | Purpose | Corresponding Kernel Function |
 |---------|------|-----------------|
-| `CommAicpuParam` | Communication domain initialization parameters (hcomId, device ID, H2D/D2H transfer parameters) | `RunAicpuCommInit` |
+| `CommAicpuParam` | Communication domain initialization parameters (hcomId, device ID, H2D/D2H transfer parameters) | `RunAicpuIndOpCommInit` |
 | `HDCommunicateParams` | H2D/D2H control transfer parameters (deviceAddr, readCacheAddr) | referenced by `CommAicpuParam` |
 | `ThreadMgrAicpuParam` | Thread management parameters (threadNum, serialized threadParam array, deviceHandle) | `RunAicpuIndOpThreadInit`, `RunAicpuThreadSupplementNotify` |
 | `AicpuTsThread` | AICPU thread information (streamType, notifyLoadType, devId) | referenced by `ThreadMgrAicpuParam` |
@@ -311,15 +309,14 @@ The tool dynamically loads the following kernel functions from the HCOMM runtime
 
 | dlsym Symbol Name | Library | Function |
 |-------------|-------|------|
-| `RunAicpuCommInit` | `libccl_kernel.so` | AICPU communication domain initialization |
+| `RunAicpuIndOpCommInit` | `libccl_kernel.so` | AICPU communication domain initialization |
 | `RunAicpuIndOpThreadInit` | `libccl_kernel.so` | AICPU thread initialization |
 | `RunAicpuIndOpChannelInitV2` | `libccl_kernel.so` | AICPU channel initialization V2 |
-| `RunAicpuDfxInitV2` | `libccl_kernel.so` | AICPU DFX operator information initialization V2 |
+| `RunAicpuDfxOpInfoInitV2` | `libccl_kernel.so` | AICPU DFX operator information initialization V2 |
 | `RunAicpuThreadSupplementNotify` | `libccl_kernel.so` | AICPU resource supplement notification |
 | `HcclLaunchAicpuKernel` | `libscatter_aicpu_kernel.so` | AICPU collective communication kernel launch |
 
 **Dependency Risks**:
-
 1. Changes to the signatures or behavior of the above kernel functions on the HCOMM side may cause `dlsym` calls to fail or produce incorrect results
 2. If `libccl_kernel.so` or `libscatter_aicpu_kernel.so` adds or removes kernel functions, the tool must update its function pointer list accordingly
 3. Inconsistencies between the locally backed-up structures (`CommAicpuParam`, `ThreadMgrAicpuParam`, `HcclChannelUrmaRes`, and so on) and the actual definitions on the HCOMM side will cause address translation errors and memory out-of-bounds access
@@ -330,13 +327,12 @@ The `InitKernelFuncHandle` function hardcodes the following SO library names to 
 
 | Hardcoded SO Name | Loaded dlsym Symbols | Description |
 |--------------|-----------------|------|
-| `libccl_kernel.so` | `RunAicpuCommInit`, `RunAicpuIndOpThreadInit`, `RunAicpuIndOpChannelInitV2`, `RunAicpuDfxInitV2`, `RunAicpuThreadSupplementNotify` | HCOMM communication framework core library |
+| `libccl_kernel.so` | `RunAicpuIndOpCommInit`, `RunAicpuIndOpThreadInit`, `RunAicpuIndOpChannelInitV2`, `RunAicpuDfxOpInfoInitV2`, `RunAicpuThreadSupplementNotify` | HCOMM communication framework core library |
 | `libscatter_aicpu_kernel.so` | `HcclLaunchAicpuKernel` | AICPU collective communication operator kernel library |
 | `libslog.so` | (logging library dependency) | CANN secure logging library |
 | `libc_sec.so` | (security library dependency) | CANN security function library |
 
 **Dependency Risks**:
-
 1. **SO Name Changes**: If the HCOMM side renames or splits the above SOs (for example, renaming `libccl_kernel.so`), the `dlopen` call in the tool will fail. This causes all AICPU kernels to become non-executable
 2. **Operator Kernel SO Name Ambiguity**: The operator kernel SO name is fixed as `libscatter_aicpu_kernel.so` regardless of the operator type (AllReduce, AllGather, ReduceScatter, and so on). The "scatter" in the name suggests applicability only to the Scatter operator, but the library actually hosts kernels for all collective communication operators. If the HCOMM side later splits SOs by operator type (for example, `liballreduce_aicpu_kernel.so`), the tool will fail to adapt
 3. **User-Defined Operator Scenarios**: The HCCL business layer does not strictly define SO names for user-defined operators. Users may compile private SOs (for example, `libcustom_alltoall_kernel.so`). The tool currently recognizes only the fixed SO names listed above. The tool cannot load or simulate private SOs for user-defined operators
@@ -355,3 +351,5 @@ The `InitKernelFuncHandle` function hardcodes the following SO library names to 
 | **AIV Operator Ops** | 8 header files (6 from HCOMM + 2 from HCCL) | proxy/aiv_kernel module only (AIV operator simulation) |
 | **AscendC Interfaces** | 6 stub header files | proxy/aiv_kernel module only (AIV operator simulation) |
 | **AICPU Backup** | 8 local structures + 6 kernel functions + 4 SO library names | device_arm module only (AICPU mode host-device interaction) |
+
+

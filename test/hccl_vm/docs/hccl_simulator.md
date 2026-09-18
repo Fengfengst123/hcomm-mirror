@@ -24,6 +24,8 @@
 | L3 | 网络性能建模 | ⏳远期 |
 | L4 | 故障注入诊断 | ⏳远期 |
 
+
+
 #### 1.2.1 使用场景
 
 | 角色     | 用途                       |
@@ -31,6 +33,7 @@
 | 开源贡献 | 验证新增算子/算法语义      |
 | 测试     | 运行HCCL API测试用例     |
 | 开发     | 执行Runtime/Driver级用例 |
+
 
 #### 1.2.2 输入形式
 
@@ -81,7 +84,9 @@ C --> D[CPU执行]
 - L2：全局事件序列化。
 - L3/L4：固定种子随机源或统一时钟。
 
+
 ### 3.2 典型工作流
+
 
 #### 3.2.1 开源贡献者自定义算子验证流程(LLT)
 
@@ -491,9 +496,11 @@ while HcclAllReduceInner(is_running=True):
 
 ### 4.6 FR4持久化
 
+
 #### 4.6.1 `L2阶段`Story: 模拟器提供持久化接口，以便开发者测试结束快速定位问题
 
 ### 4.7 FR5控制器
+
 
 考虑到易用性，用户在一般在终端中使用HCCL测试程序，因此控制器通过命令行实例程序承载。
 
@@ -510,6 +517,7 @@ while HcclAllReduceInner(is_running=True):
 - 系统配置文件只读，且没有被损坏。
 
 ##### 成功场景: 系统模型发现
+
 
 1. 用户通过`hccl-vm --list-topologies`查看支持模拟的系统。
 2. 命令会打印出cloud_matrix, atlas900等所有内置系统模型的列表，但不启动模拟器。
@@ -546,7 +554,7 @@ while HcclAllReduceInner(is_running=True):
 1. 用户执行`hccl-vm --topology=non_existent_topo`。
 2. `hccl-vm`输出错误信息后正常终止，如“错误：未找到名为 'non_existent_topo' 的系统。可用系统：cloud_matrix, atlas900”。
 
-##### 失败场景: 拓扑配置文件格式错误
+#####  失败场景: 拓扑配置文件格式错误
 
 1. 用户提供的拓扑配置文件内容不符合YAML规范或缺少必要字段，导致`hccl-vm`在初始化时解析失败。
 2. 模拟器向标准错误输出一条明确的错误信息，如“错误：解析拓扑文件a.yaml失败，原因：...”，并立即终止整个程序的执行。
@@ -676,6 +684,7 @@ while HcclAllReduceInner(is_running=True):
 
 上板测试程序，会跑在真实的卡上。这时，需要用户手动或者脚本在多个服务器上启动同一份测试程序，如果要跑模拟器则需要在每个跑测试程序的服务器上都准备一份模拟器的控制器。而模拟器内部是需要对进行整个网络拓扑乃至硬件环境进行统一建模的，因此需要对控制器做分布式设计。
 
+
 #### 4.8.1 `L2阶段`Story: 用户可以通过k8s等集群管理软件，在多个服务器上协同运行HCCL真实用例
 
 ## 5 **附录**
@@ -686,11 +695,13 @@ while HcclAllReduceInner(is_running=True):
 
 #### 5.1.1`L1阶段`
 
+
 - HCCL通信域管理（25个API）
 - HCCL控制面编程（23个API）
 - HCCL AICPU编程（8个API）
 
 #### 5.1.2 `L2阶段`
+
 
 ### 5.2 **附录B: 拓扑配置文件格式(Schema)**
 
@@ -705,6 +716,7 @@ while HcclAllReduceInner(is_running=True):
 - `type` (string, optional): 连接类型，如 "HCCS", "PCIe"。当前L1阶段该字段仅为注释，不影响逻辑。
 
 **示例: `my_topo.yaml`**
+
 
 ```yaml
 ## 描述一个4卡的环形连接拓扑
@@ -765,3 +777,4 @@ extern "C" SimValidationResult post_HcclAllReduceInner_hook(const SimCommContext
 ```
 
 ### 5.4 **附录D: 系统模型**
+

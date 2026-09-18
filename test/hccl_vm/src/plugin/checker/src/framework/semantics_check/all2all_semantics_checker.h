@@ -8,6 +8,12 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: All2All语义校验文件头 Author:
+ * yinding Create: 2024-09-30
+ */
+
 #ifndef HCCLV1_ALL2ALL_SEMANTICS_CHECKER_H
 #define HCCLV1_ALL2ALL_SEMANTICS_CHECKER_H
 
@@ -16,7 +22,8 @@
 
 namespace HcclSim {
 HcclResult TaskCheckAll2AllSemantics(
-    std::map<RankId, RankMemorySemantics>& allRankMemSemantics, All2AllDataDesTagInner& all2AllDataDes);
+    std::map<DeviceId, RankMemorySemantics>& allRankMemSemantics, All2AllDataDesTagInner& all2AllDataDes,
+    const std::vector<DeviceId>& rankToDevice);
 }
 
 #endif

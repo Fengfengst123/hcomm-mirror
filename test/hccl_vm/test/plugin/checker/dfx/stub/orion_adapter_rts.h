@@ -16,7 +16,7 @@
 namespace Hccl {
 using DevId = uint32_t;
 
-DevId HrtGetDevicePhyIdByUserDevId(int32_t deviceLogicId);
+DevId HrtGetDevicePhyIdByIndex(int32_t deviceLogicId);
 } // namespace Hccl
 
 #endif

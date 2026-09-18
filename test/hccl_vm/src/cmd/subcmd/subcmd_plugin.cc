@@ -28,7 +28,8 @@ void PluginCommand::Setup(CLI::App& app)
             if (value.length() > 1 && value[0] == '@') {
                 return ""; // 返回空串表示通过
             }
-            return "[HVM] [ERROR] Install plugin : Invalid format! Plugin name must start with '@' (e.g., @myplugin).";
+            return "[HVM] [ERROR] Install plugin : Invalid format! Plugin name "
+                   "must start with '@' (e.g., @myplugin).";
         });
     plugin_install->callback([&]() {
         auto ret = InstallUserPlugin(plugName);
@@ -41,8 +42,8 @@ void PluginCommand::Setup(CLI::App& app)
             if (value.length() > 1 && value[0] == '@') {
                 return ""; // 返回空串表示通过
             }
-            return "[HVM] [ERROR] Uninstall plugin : Invalid format! Plugin name must start with '@' (e.g., "
-                   "@myplugin).";
+            return "[HVM] [ERROR] Uninstall plugin : Invalid format! Plugin "
+                   "name must start with '@' (e.g., @myplugin).";
         });
     plugin_uninstall->callback([&]() {
         auto ret = UninstallUserPlugin(plugName);
@@ -55,7 +56,8 @@ void PluginCommand::Setup(CLI::App& app)
             if (value.length() > 1 && value[0] == '@') {
                 return ""; // 返回空串表示通过
             }
-            return "[HVM] [ERROR] Run plugin : Invalid format! Plugin name must start with '@' (e.g., @myplugin).";
+            return "[HVM] [ERROR] Run plugin : Invalid format! Plugin name "
+                   "must start with '@' (e.g., @myplugin).";
         });
     plugin_run->callback([&]() {
         auto ret = RunUserPlugin(plugName);

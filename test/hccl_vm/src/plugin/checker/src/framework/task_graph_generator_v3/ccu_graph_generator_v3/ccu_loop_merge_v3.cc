@@ -42,65 +42,65 @@ namespace TaskGraphGeneratorV3 {
         }
 
         // 判断所有内存切片是否都属于指定的rank
-        bool SameRankGroup(const std::vector<MemSlice>& slices, RankId rankId)
+        bool SameRankGroup(const std::vector<MemSlice>& slices, DeviceId deviceId)
         {
-            return std::all_of(slices.begin(), slices.end(), [rankId](const MemSlice& slice) {
-                return slice.rankId == rankId;
+            return std::all_of(slices.begin(), slices.end(), [deviceId](const MemSlice& slice) {
+                return slice.deviceId == deviceId;
             });
         }
 
         // 判断所有切片是否都属于同一个对端rank（非本端），并输出该对端rankId
-        bool SamePeerGroup(const std::vector<MemSlice>& slices, RankId localRank, RankId& peerRank)
+        bool SamePeerGroup(const std::vector<MemSlice>& slices, DeviceId localDeviceId, DeviceId& peerDeviceId)
         {
-            peerRank = INVALID_RANK_ID;
+            peerDeviceId = INVALID_DEVICE_ID;
             for (const auto& slice : slices) {
-                if (slice.rankId == localRank) {
+                if (slice.deviceId == localDeviceId) {
                     return false;
                 }
-                if (peerRank == INVALID_RANK_ID) {
-                    peerRank = slice.rankId;
+                if (peerDeviceId == INVALID_DEVICE_ID) {
+                    peerDeviceId = slice.deviceId;
                     continue;
                 }
-                if (peerRank != slice.rankId) {
+                if (peerDeviceId != slice.deviceId) {
                     return false;
                 }
             }
-            return peerRank != INVALID_RANK_ID;
+            return peerDeviceId != INVALID_DEVICE_ID;
         }
 
         // 根据src/dst的rank归属，推断传输指令的角色：LOCAL_COPY（本地拷贝）、WRITE（写远端）、READ（读远端）
         // 要求所有切片对的角色和对端rank必须一致，否则返回不支持
         HcclResult ResolveTransRole(
-            RankId rankId, const std::vector<MemSlice>& srcs, const std::vector<MemSlice>& dsts, CcuNodeRoleV3& role,
-            RankId& peerRank)
+            DeviceId deviceId, const std::vector<MemSlice>& srcs, const std::vector<MemSlice>& dsts,
+            CcuNodeRoleV3& role, DeviceId& peerDeviceId)
         {
             if (srcs.empty() || srcs.size() != dsts.size()) {
                 return HCCL_E_NOT_SUPPORT;
             }
 
             role = CcuNodeRoleV3::UNKNOWN;
-            peerRank = INVALID_RANK_ID;
+            peerDeviceId = INVALID_DEVICE_ID;
             for (size_t index = 0; index < srcs.size(); ++index) {
                 CcuNodeRoleV3 curRole = CcuNodeRoleV3::UNKNOWN;
-                RankId curPeer = INVALID_RANK_ID;
-                if (srcs[index].rankId == rankId && dsts[index].rankId == rankId) {
+                DeviceId curPeerDeviceId = INVALID_DEVICE_ID;
+                if (srcs[index].deviceId == deviceId && dsts[index].deviceId == deviceId) {
                     curRole = CcuNodeRoleV3::LOCAL_COPY;
-                } else if (srcs[index].rankId == rankId && dsts[index].rankId != rankId) {
+                } else if (srcs[index].deviceId == deviceId && dsts[index].deviceId != deviceId) {
                     curRole = CcuNodeRoleV3::WRITE;
-                    curPeer = dsts[index].rankId;
-                } else if (srcs[index].rankId != rankId && dsts[index].rankId == rankId) {
+                    curPeerDeviceId = dsts[index].deviceId;
+                } else if (srcs[index].deviceId != deviceId && dsts[index].deviceId == deviceId) {
                     curRole = CcuNodeRoleV3::READ;
-                    curPeer = srcs[index].rankId;
+                    curPeerDeviceId = srcs[index].deviceId;
                 } else {
                     return HCCL_E_NOT_SUPPORT;
                 }
 
                 if (role == CcuNodeRoleV3::UNKNOWN) {
                     role = curRole;
-                    peerRank = curPeer;
+                    peerDeviceId = curPeerDeviceId;
                     continue;
                 }
-                if (role != curRole || peerRank != curPeer) {
+                if (role != curRole || peerDeviceId != curPeerDeviceId) {
                     return HCCL_E_NOT_SUPPORT;
                 }
             }
@@ -110,24 +110,25 @@ namespace TaskGraphGeneratorV3 {
         // 根据srcGroups/dst的rank归属，推断Reduce指令的角色：
         // LOCAL_BATCH_REDUCE（本地归约）、WRITE_REDUCE（写远端归约）、READ_REDUCE（读远端归约）
         HcclResult ResolveReduceRole(
-            RankId rankId, const std::vector<std::vector<MemSlice>>& srcGroups, const std::vector<MemSlice>& dsts,
-            CcuNodeRoleV3& role, RankId& peerRank)
+            DeviceId deviceId, const std::vector<std::vector<MemSlice>>& srcGroups, const std::vector<MemSlice>& dsts,
+            CcuNodeRoleV3& role, DeviceId& peerDeviceId)
         {
             if (srcGroups.empty() || srcGroups.size() != dsts.size()) {
                 return HCCL_E_NOT_SUPPORT;
             }
 
             role = CcuNodeRoleV3::UNKNOWN;
-            peerRank = INVALID_RANK_ID;
+            peerDeviceId = INVALID_DEVICE_ID;
             for (size_t index = 0; index < srcGroups.size(); ++index) {
                 CcuNodeRoleV3 curRole = CcuNodeRoleV3::UNKNOWN;
-                RankId curPeer = INVALID_RANK_ID;
-                if (dsts[index].rankId == rankId && SameRankGroup(srcGroups[index], rankId)) {
+                DeviceId curPeerDeviceId = INVALID_DEVICE_ID;
+                if (dsts[index].deviceId == deviceId && SameRankGroup(srcGroups[index], deviceId)) {
                     curRole = CcuNodeRoleV3::LOCAL_BATCH_REDUCE;
-                } else if (dsts[index].rankId != rankId && SameRankGroup(srcGroups[index], rankId)) {
+                } else if (dsts[index].deviceId != deviceId && SameRankGroup(srcGroups[index], deviceId)) {
                     curRole = CcuNodeRoleV3::WRITE_REDUCE;
-                    curPeer = dsts[index].rankId;
-                } else if (dsts[index].rankId == rankId && SamePeerGroup(srcGroups[index], rankId, curPeer)) {
+                    curPeerDeviceId = dsts[index].deviceId;
+                } else if (
+                    dsts[index].deviceId == deviceId && SamePeerGroup(srcGroups[index], deviceId, curPeerDeviceId)) {
                     curRole = CcuNodeRoleV3::READ_REDUCE;
                 } else {
                     return HCCL_E_NOT_SUPPORT;
@@ -135,10 +136,10 @@ namespace TaskGraphGeneratorV3 {
 
                 if (role == CcuNodeRoleV3::UNKNOWN) {
                     role = curRole;
-                    peerRank = curPeer;
+                    peerDeviceId = curPeerDeviceId;
                     continue;
                 }
-                if (role != curRole || peerRank != curPeer) {
+                if (role != curRole || peerDeviceId != curPeerDeviceId) {
                     return HCCL_E_NOT_SUPPORT;
                 }
             }
@@ -149,11 +150,11 @@ namespace TaskGraphGeneratorV3 {
         HcclResult ProcessWaitOps(
             CcuGraphStateV3* curCcuTask, uint32_t queId, const std::vector<CcuLoopCkeOpV3>& waitOps, bool& isContinue)
         {
-            RankId rankId = curCcuTask->GetRankId();
+            DeviceId deviceId = curCcuTask->GetDeviceId();
             uint32_t dieId = INVALID_DIE_ID;
             curCcuTask->GetDieId(queId, dieId);
             for (const auto& wait : waitOps) {
-                CHK_RET(ProcessWaitMask(rankId, dieId, curCcuTask, queId, wait.ckeId, wait.mask, isContinue));
+                CHK_RET(ProcessWaitMask(deviceId, dieId, curCcuTask, queId, wait.ckeId, wait.mask, isContinue));
                 if (!isContinue) {
                     return HCCL_SUCCESS;
                 }
@@ -164,11 +165,11 @@ namespace TaskGraphGeneratorV3 {
         // 处理指令的set操作列表：对每个CKE设置信号掩码
         HcclResult ProcessSetOps(CcuGraphStateV3* curCcuTask, uint32_t queId, const std::vector<CcuLoopCkeOpV3>& setOps)
         {
-            RankId rankId = curCcuTask->GetRankId();
+            DeviceId deviceId = curCcuTask->GetDeviceId();
             uint32_t dieId = INVALID_DIE_ID;
             curCcuTask->GetDieId(queId, dieId);
             for (const auto& set : setOps) {
-                CHK_RET(ProcessSetMask(rankId, dieId, curCcuTask, queId, set.ckeId, set.mask));
+                CHK_RET(ProcessSetMask(deviceId, dieId, curCcuTask, queId, set.ckeId, set.mask));
             }
             return HCCL_SUCCESS;
         }
@@ -176,11 +177,11 @@ namespace TaskGraphGeneratorV3 {
         // 清除已处理的wait操作对应的CKE掩码，避免重复等待
         HcclResult ClearWaitOps(CcuGraphStateV3* curCcuTask, uint32_t queId, const std::vector<CcuLoopCkeOpV3>& waitOps)
         {
-            RankId rankId = curCcuTask->GetRankId();
+            DeviceId deviceId = curCcuTask->GetDeviceId();
             uint32_t dieId = INVALID_DIE_ID;
             curCcuTask->GetDieId(queId, dieId);
             for (const auto& wait : waitOps) {
-                CHK_RET(ClearWaitMask(rankId, dieId, wait.ckeId, wait.mask));
+                CHK_RET(ClearWaitMask(deviceId, dieId, wait.ckeId, wait.mask));
             }
             return HCCL_SUCCESS;
         }
@@ -213,7 +214,7 @@ namespace TaskGraphGeneratorV3 {
     std::string CcuLoopInstrV3::Describe() const
     {
         std::ostringstream os;
-        os << "{rankId=" << rankId << ", dieId=" << dieId << ", instrId=" << instrId << "}";
+        os << "{deviceId=" << deviceId << ", dieId=" << dieId << ", instrId=" << instrId << "}";
         return os.str();
     }
 
@@ -233,8 +234,8 @@ namespace TaskGraphGeneratorV3 {
         }
 
         std::sort(slices.begin(), slices.end(), [](const MemSlice& lhs, const MemSlice& rhs) {
-            if (lhs.rankId != rhs.rankId) {
-                return lhs.rankId < rhs.rankId;
+            if (lhs.deviceId != rhs.deviceId) {
+                return lhs.deviceId < rhs.deviceId;
             }
             if (lhs.memType != rhs.memType) {
                 return lhs.memType < rhs.memType;
@@ -247,12 +248,13 @@ namespace TaskGraphGeneratorV3 {
         for (size_t index = 1; index < slices.size(); ++index) {
             MemSlice& last = merged.back();
             const MemSlice& cur = slices[index];
-            if (last.rankId == cur.rankId && last.memType == cur.memType && cur.memType != MemType::MS_CCU) {
+            if (last.deviceId == cur.deviceId && last.memType == cur.memType && cur.memType != MemType::MS_CCU) {
                 const uint64_t lastEnd = last.offset + last.len;
                 const uint64_t curEnd = cur.offset + cur.len;
                 if (lastEnd > cur.offset && !allowOverlap) {
                     HCCL_VM_WARN(
-                        "Skip merged-loop optimization because memory slices from different "
+                        "Skip merged-loop optimization because memory "
+                        "slices from different "
                         "loop expansions overlap, loopInstrId={}",
                         instrId);
                     return false;
@@ -271,7 +273,7 @@ namespace TaskGraphGeneratorV3 {
 
     void CcuLoopInstrV3::CopyBaseTo(CcuLoopInstrV3& dst) const
     {
-        dst.rankId = rankId;
+        dst.deviceId = deviceId;
         dst.dieId = dieId;
         dst.instrId = instrId;
         dst.waitOps = waitOps;
@@ -327,7 +329,7 @@ namespace TaskGraphGeneratorV3 {
     std::string CcuLoopTransMemV3::Describe() const
     {
         std::ostringstream os;
-        os << "{rankId=" << rankId << ", dieId=" << dieId << ", instrId=" << instrId << ", srcs=" << srcs.size()
+        os << "{deviceId=" << deviceId << ", dieId=" << dieId << ", instrId=" << instrId << ", srcs=" << srcs.size()
            << ", dsts=" << dsts.size() << ", waitOps=" << waitOps.size() << ", setOps=" << setOps.size() << "}";
         return os.str();
     }
@@ -378,10 +380,10 @@ namespace TaskGraphGeneratorV3 {
     std::string CcuLoopReduceV3::Describe() const
     {
         std::ostringstream os;
-        os << "{rankId=" << rankId << ", dieId=" << dieId << ", instrId=" << instrId << ", srcGroups=" << srcs.size()
-           << ", dsts=" << dsts.size() << ", dataType=" << static_cast<uint32_t>(dataType)
-           << ", reduceOp=" << static_cast<uint32_t>(reduceOp) << ", waitOps=" << waitOps.size()
-           << ", setOps=" << setOps.size() << "}";
+        os << "{deviceId=" << deviceId << ", dieId=" << dieId << ", instrId=" << instrId
+           << ", srcGroups=" << srcs.size() << ", dsts=" << dsts.size()
+           << ", dataType=" << static_cast<uint32_t>(dataType) << ", reduceOp=" << static_cast<uint32_t>(reduceOp)
+           << ", waitOps=" << waitOps.size() << ", setOps=" << setOps.size() << "}";
         return os.str();
     }
 
@@ -412,8 +414,9 @@ namespace TaskGraphGeneratorV3 {
     std::string CcuLoopClearCkeV3::Describe() const
     {
         std::ostringstream os;
-        os << "{rankId=" << rankId << ", dieId=" << dieId << ", instrId=" << instrId << ", clearCKEId=" << clearCKEId
-           << ", clearMask=0x" << std::hex << clearMask << std::dec << ", waitOps=" << waitOps.size() << "}";
+        os << "{deviceId=" << deviceId << ", dieId=" << dieId << ", instrId=" << instrId
+           << ", clearCKEId=" << clearCKEId << ", clearMask=0x" << std::hex << clearMask << std::dec
+           << ", waitOps=" << waitOps.size() << "}";
         return os.str();
     }
 
@@ -453,6 +456,22 @@ namespace TaskGraphGeneratorV3 {
         return used;
     }
 
+    HcclResult CcuLoopWaitCkeChecker::Check(size_t instrIndex, CcuLoopCkeOpV3 waitOp)
+    {
+        if (waitOp.ckeId == INVALID_CCU_CKE || waitOp.mask == 0) {
+            return HCCL_SUCCESS;
+        }
+
+        if (!usedWaitCkeIds_.insert(waitOp.ckeId).second) {
+            HCCL_VM_ERROR(
+                "{} [A6] Duplicate wait CKE ID detected in loop body, "
+                "waitCkeId={}, instrIndex={}",
+                MakeErrorCodeText(ErrorCode::GRAPH_LOOP_MERGE_ERROR).c_str(), waitOp.ckeId, instrIndex);
+            return HCCL_E_PARA;
+        }
+        return HCCL_SUCCESS;
+    }
+
     // 检查各loop展开之间是否存在CKE或MS资源冲突（同一资源不能被多个展开使用）
     bool CcuLoopV3::CheckResourceConflict() const
     {
@@ -462,7 +481,8 @@ namespace TaskGraphGeneratorV3 {
             for (uint16_t ckeId : loopInstrs.GetUsedCKE()) {
                 if (!allCKEs.insert(ckeId).second) {
                     HCCL_VM_WARN(
-                        "Skip merged-loop optimization because different loop expansions reuse "
+                        "Skip merged-loop optimization because different "
+                        "loop expansions reuse "
                         "the same CKE resource, loopInstrId={}, ckeId={}",
                         instrId, ckeId);
                     return false;
@@ -471,7 +491,8 @@ namespace TaskGraphGeneratorV3 {
             for (uint16_t msId : loopInstrs.GetUsedMS()) {
                 if (!allMSs.insert(msId).second) {
                     HCCL_VM_WARN(
-                        "Skip merged-loop optimization because different loop expansions reuse "
+                        "Skip merged-loop optimization because different "
+                        "loop expansions reuse "
                         "the same MS resource, loopInstrId={}, msId={}",
                         instrId, msId);
                     return false;
@@ -486,7 +507,8 @@ namespace TaskGraphGeneratorV3 {
         for (auto& loopInstrs : loopExpands) {
             if (!loopInstrs.MemMerge(true)) {
                 HCCL_VM_WARN(
-                    "Skip merged-loop optimization because memory slices inside one loop "
+                    "Skip merged-loop optimization because memory slices "
+                    "inside one loop "
                     "iteration cannot be merged, loopInstrId={}",
                     instrId);
                 return false;
@@ -506,7 +528,8 @@ namespace TaskGraphGeneratorV3 {
         for (const auto& expand : loopExpands) {
             if (expand.instrs.size() != instrCnt) {
                 HCCL_VM_WARN(
-                    "Skip merged-loop optimization because loop expansions contain different "
+                    "Skip merged-loop optimization because loop "
+                    "expansions contain different "
                     "numbers of instructions, loopInstrId={}",
                     instrId);
                 return false;
@@ -529,8 +552,10 @@ namespace TaskGraphGeneratorV3 {
             auto mergedInstr = loopExpands.front().instrs[instrIdx]->InstrMerge(parallelInstrs);
             if (mergedInstr == nullptr) {
                 HCCL_VM_WARN(
-                    "Skip merged-loop optimization because one instruction position cannot be "
-                    "merged across loop expansions, loopInstrId={}, instructionIndex={}",
+                    "Skip merged-loop optimization because one "
+                    "instruction position cannot be "
+                    "merged across loop expansions, loopInstrId={}, "
+                    "instructionIndex={}",
                     instrId, instrIdx);
                 return false;
             }
@@ -538,7 +563,8 @@ namespace TaskGraphGeneratorV3 {
         }
         if (!merged.MemMerge(false)) {
             HCCL_VM_WARN(
-                "Skip merged-loop optimization because merged instruction memory ranges still "
+                "Skip merged-loop optimization because merged instruction "
+                "memory ranges still "
                 "overlap, loopInstrId={}",
                 instrId);
             return false;
@@ -555,27 +581,31 @@ namespace TaskGraphGeneratorV3 {
     {
         if (curCcuTask == nullptr) {
             HCCL_VM_ERROR(
-                "{} Failed to emit merged loop instructions because loop graph state is null, "
+                "{} Failed to emit merged loop instructions because loop graph "
+                "state is null, "
                 "queueId={}",
                 MakeErrorCodeText(ErrorCode::GRAPH_LOOP_MERGE_ERROR).c_str(), queId);
             return HCCL_E_PTR;
         }
-        const RankId rankId = curCcuTask->GetRankId();
+        const DeviceId deviceId = curCcuTask->GetDeviceId();
         for (const auto& instr : mergedInstrs.instrs) {
             if (instr == nullptr) {
                 HCCL_VM_ERROR(
-                    "{} Failed to emit one merged loop instruction because the merged instruction "
-                    "entry is null, rankId={}, queueId={}",
-                    MakeErrorCodeText(ErrorCode::GRAPH_LOOP_MERGE_ERROR).c_str(), static_cast<uint32_t>(rankId), queId);
+                    "{} Failed to emit one merged loop instruction because the "
+                    "merged instruction "
+                    "entry is null, deviceId={}, queueId={}",
+                    MakeErrorCodeText(ErrorCode::GRAPH_LOOP_MERGE_ERROR).c_str(), static_cast<uint32_t>(deviceId),
+                    queId);
                 return HCCL_E_PTR;
             }
             HcclResult ret = ProcessWaitOps(curCcuTask, queId, instr->waitOps, isContinue);
             if (ret != HCCL_SUCCESS) {
                 HCCL_VM_ERROR(
-                    "{} Failed to process wait conditions before emitting one merged loop "
-                    "instruction, rankId={}, queueId={}, mergedLoopInstr={}",
-                    MakeErrorCodeText(ErrorCode::GRAPH_LOOP_MERGE_ERROR).c_str(), static_cast<uint32_t>(rankId), queId,
-                    instr->Describe());
+                    "{} Failed to process wait conditions before emitting one "
+                    "merged loop "
+                    "instruction, deviceId={}, queueId={}, mergedLoopInstr={}",
+                    MakeErrorCodeText(ErrorCode::GRAPH_LOOP_MERGE_ERROR).c_str(), static_cast<uint32_t>(deviceId),
+                    queId, instr->Describe());
                 return ret;
             }
             if (!isContinue) {
@@ -584,83 +614,92 @@ namespace TaskGraphGeneratorV3 {
 
             if (auto trans = std::dynamic_pointer_cast<CcuLoopTransMemV3>(instr)) {
                 CcuNodeRoleV3 role = CcuNodeRoleV3::UNKNOWN;
-                RankId peerRank = INVALID_RANK_ID;
-                ret = ResolveTransRole(rankId, trans->srcs, trans->dsts, role, peerRank);
+                DeviceId peerDeviceId = INVALID_DEVICE_ID;
+                ret = ResolveTransRole(deviceId, trans->srcs, trans->dsts, role, peerDeviceId);
                 if (ret != HCCL_SUCCESS) {
                     HCCL_VM_ERROR(
-                        "{} Failed to determine the transfer direction for one merged loop "
-                        "instruction, rankId={}, queueId={}, mergedLoopInstr={}",
-                        MakeErrorCodeText(ErrorCode::GRAPH_LOOP_MERGE_ERROR).c_str(), static_cast<uint32_t>(rankId),
+                        "{} Failed to determine the transfer direction for one "
+                        "merged loop "
+                        "instruction, deviceId={}, queueId={}, mergedLoopInstr={}",
+                        MakeErrorCodeText(ErrorCode::GRAPH_LOOP_MERGE_ERROR).c_str(), static_cast<uint32_t>(deviceId),
                         queId, trans->Describe());
                     return ret;
                 }
                 ret = AddBatchTransMem(
-                    rankId, queId, curCcuTask, trans->srcs, trans->dsts, trans->mergedSrcs, trans->mergedDsts, role,
-                    peerRank);
+                    deviceId, queId, curCcuTask, trans->srcs, trans->dsts, trans->mergedSrcs, trans->mergedDsts, role,
+                    peerDeviceId);
                 if (ret != HCCL_SUCCESS) {
                     HCCL_VM_ERROR(
-                        "{} Failed to emit one merged loop transfer task, rankId={}, queueId={}, "
+                        "{} Failed to emit one merged loop transfer task, "
+                        "deviceId={}, queueId={}, "
                         "mergedLoopInstr={}",
-                        MakeErrorCodeText(ErrorCode::GRAPH_LOOP_MERGE_ERROR).c_str(), static_cast<uint32_t>(rankId),
+                        MakeErrorCodeText(ErrorCode::GRAPH_LOOP_MERGE_ERROR).c_str(), static_cast<uint32_t>(deviceId),
                         queId, trans->Describe());
                     return ret;
                 }
             } else if (auto reduce = std::dynamic_pointer_cast<CcuLoopReduceV3>(instr)) {
                 CcuNodeRoleV3 role = CcuNodeRoleV3::UNKNOWN;
-                RankId peerRank = INVALID_RANK_ID;
-                ret = ResolveReduceRole(rankId, reduce->srcs, reduce->dsts, role, peerRank);
+                DeviceId peerDeviceId = INVALID_DEVICE_ID;
+                ret = ResolveReduceRole(deviceId, reduce->srcs, reduce->dsts, role, peerDeviceId);
                 if (ret != HCCL_SUCCESS) {
                     HCCL_VM_ERROR(
-                        "{} Failed to determine the reduce direction for one merged loop "
-                        "instruction, rankId={}, queueId={}, mergedLoopInstr={}",
-                        MakeErrorCodeText(ErrorCode::GRAPH_LOOP_MERGE_ERROR).c_str(), static_cast<uint32_t>(rankId),
+                        "{} Failed to determine the reduce direction for one "
+                        "merged loop "
+                        "instruction, deviceId={}, queueId={}, mergedLoopInstr={}",
+                        MakeErrorCodeText(ErrorCode::GRAPH_LOOP_MERGE_ERROR).c_str(), static_cast<uint32_t>(deviceId),
                         queId, reduce->Describe());
                     return ret;
                 }
                 ret = AddBatchReduce(
-                    rankId, queId, curCcuTask, reduce->srcs, reduce->dsts, reduce->mergedSrcs, reduce->mergedDsts,
-                    reduce->dataType, reduce->reduceOp, role, peerRank);
+                    deviceId, queId, curCcuTask, reduce->srcs, reduce->dsts, reduce->mergedSrcs, reduce->mergedDsts,
+                    reduce->dataType, reduce->reduceOp, role, peerDeviceId);
                 if (ret != HCCL_SUCCESS) {
                     HCCL_VM_ERROR(
-                        "{} Failed to emit one merged loop reduce task, rankId={}, queueId={}, "
+                        "{} Failed to emit one merged loop reduce task, "
+                        "deviceId={}, queueId={}, "
                         "mergedLoopInstr={}",
-                        MakeErrorCodeText(ErrorCode::GRAPH_LOOP_MERGE_ERROR).c_str(), static_cast<uint32_t>(rankId),
+                        MakeErrorCodeText(ErrorCode::GRAPH_LOOP_MERGE_ERROR).c_str(), static_cast<uint32_t>(deviceId),
                         queId, reduce->Describe());
                     return ret;
                 }
             } else if (auto clear = std::dynamic_pointer_cast<CcuLoopClearCkeV3>(instr)) {
                 if (clear->clearMask != 0) {
                     HCCL_VM_WARN(
-                        "{} Skip merged-loop optimization because ClearCKE uses a non-zero "
+                        "{} Skip merged-loop optimization because "
+                        "ClearCKE uses a non-zero "
                         "mask, instrId={}, clearMask=0x{:x}",
                         MakeErrorCodeText(ErrorCode::GRAPH_UNSUPPORTED), clear->instrId, clear->clearMask);
                     return HCCL_E_NOT_SUPPORT;
                 }
             } else {
                 HCCL_VM_ERROR(
-                    "{} Failed to emit one merged loop instruction because its merged instruction "
-                    "type is not supported, rankId={}, queueId={}, mergedLoopInstr={}",
-                    MakeErrorCodeText(ErrorCode::GRAPH_LOOP_MERGE_ERROR).c_str(), static_cast<uint32_t>(rankId), queId,
-                    instr->Describe());
+                    "{} Failed to emit one merged loop instruction because its "
+                    "merged instruction "
+                    "type is not supported, deviceId={}, queueId={}, "
+                    "mergedLoopInstr={}",
+                    MakeErrorCodeText(ErrorCode::GRAPH_LOOP_MERGE_ERROR).c_str(), static_cast<uint32_t>(deviceId),
+                    queId, instr->Describe());
                 return HCCL_E_NOT_SUPPORT;
             }
 
             ret = ProcessSetOps(curCcuTask, queId, instr->setOps);
             if (ret != HCCL_SUCCESS) {
                 HCCL_VM_ERROR(
-                    "{} Failed to apply set masks after emitting one merged loop instruction, "
-                    "rankId={}, queueId={}, mergedLoopInstr={}",
-                    MakeErrorCodeText(ErrorCode::GRAPH_LOOP_MERGE_ERROR).c_str(), static_cast<uint32_t>(rankId), queId,
-                    instr->Describe());
+                    "{} Failed to apply set masks after emitting one merged loop "
+                    "instruction, "
+                    "deviceId={}, queueId={}, mergedLoopInstr={}",
+                    MakeErrorCodeText(ErrorCode::GRAPH_LOOP_MERGE_ERROR).c_str(), static_cast<uint32_t>(deviceId),
+                    queId, instr->Describe());
                 return ret;
             }
             ret = ClearWaitOps(curCcuTask, queId, instr->waitOps);
             if (ret != HCCL_SUCCESS) {
                 HCCL_VM_ERROR(
-                    "{} Failed to clear consumed wait masks after emitting one merged loop "
-                    "instruction, rankId={}, queueId={}, mergedLoopInstr={}",
-                    MakeErrorCodeText(ErrorCode::GRAPH_LOOP_MERGE_ERROR).c_str(), static_cast<uint32_t>(rankId), queId,
-                    instr->Describe());
+                    "{} Failed to clear consumed wait masks after emitting one "
+                    "merged loop "
+                    "instruction, deviceId={}, queueId={}, mergedLoopInstr={}",
+                    MakeErrorCodeText(ErrorCode::GRAPH_LOOP_MERGE_ERROR).c_str(), static_cast<uint32_t>(deviceId),
+                    queId, instr->Describe());
                 return ret;
             }
         }

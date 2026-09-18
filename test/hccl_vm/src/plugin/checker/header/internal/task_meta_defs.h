@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef HCCL_COMMON_DEFS_H
-#define HCCL_COMMON_DEFS_H
+#ifndef HCOMM_HCCL_VM_CHECKER_TASK_META_DEFS_H
+#define HCOMM_HCCL_VM_CHECKER_TASK_META_DEFS_H
 
 #include <cstdint>
 #include <cstring>
@@ -26,16 +26,7 @@ enum class LinkProto {
     INVALID_A = 3,
 };
 
-enum class HccLTaskMetaType : char {
-    NOTIFY_WAIT,
-    NOTIFY_RECORD,
-    REDUCE,
-    MEM_CPY,
-    CCU_GRAPH,
-    AIV_GRAPH,
-    EVENT_WAIT,
-    EVENT_RECORD
-};
+enum class HccLTaskMetaType : char { NOTIFY_WAIT, NOTIFY_RECORD, REDUCE, MEM_CPY, CCU_GRAPH, AIV_GRAPH, SYNC_STREAM };
 
 typedef enum {
     COMM_PROTOCOL_RESERVED = -1,
@@ -51,38 +42,22 @@ typedef enum {
 #pragma pack(push, 1)
 
 typedef struct {
-    uint32_t srcRankId;
+    uint32_t srcDeviceId;
     uint64_t srcOffset;
-    uint32_t dstRankId;
+    uint32_t dstDeviceId;
     uint64_t dstOffset;
     uint64_t len;
     uint8_t protocol;
 } TransMemTask;
 
 typedef struct {
-    uint32_t rankId;
-    uint32_t rankSize;
-    uint64_t commId;
-    uint64_t streamId;
-    uint64_t inputAddr;
-    uint64_t inputSize;
-    uint64_t outputAddr;
-    uint64_t outputSize;
-    uint64_t cclAddr;
-    uint64_t cclSize;
-} OpStartTask;
+    uint64_t syncIdx;
+} SyncStreamTask;
 
 typedef struct {
-    uint32_t rankId;
-    uint32_t rankSize;
-    uint64_t commId;
-    uint64_t streamId;
-} OpSyncTask;
-
-typedef struct {
-    uint32_t srcRankId;
+    uint32_t srcDeviceId;
     uint64_t srcOffset;
-    uint32_t dstRankId;
+    uint32_t dstDeviceId;
     uint64_t dstOffset;
     uint64_t dataCount;
     uint8_t dataType;
@@ -92,9 +67,9 @@ typedef struct {
 } ReduceTask;
 
 typedef struct {
-    uint32_t srcRankId;
+    uint32_t srcDeviceId;
     uint64_t notifyId;
-    uint32_t dstRankId;
+    uint32_t dstDeviceId;
     uint8_t notifyCount;
     uint8_t protocol;
 } NotifyTask;
@@ -116,8 +91,9 @@ typedef struct {
 
 typedef struct HcclTaskMetaData {
     HccLTaskMetaType taskType;
-    uint16_t commId;
+    uint64_t commId;
     uint32_t rankId;
+    uint64_t deviceId;
     uint64_t streamId;
     uint32_t jettyId;
     uint8_t rmEid[16];
@@ -127,13 +103,18 @@ typedef struct HcclTaskMetaData {
         NotifyTask notify;
         CcuTask ccu;
         AivTask aiv;
-        OpStartTask opStartTask;
-        OpSyncTask opSyncTask;
+        SyncStreamTask syncStreamTask;
     } taskData;
     HcclTaskMetaData()
     {
+        taskType = HccLTaskMetaType::SYNC_STREAM;
+        commId = 0;
+        rankId = UINT32_MAX;
+        deviceId = UINT64_MAX;
+        streamId = UINT64_MAX;
         jettyId = UINT32_MAX;
         std::memset(rmEid, 0, sizeof(rmEid));
+        std::memset(&taskData, 0, sizeof(taskData));
     }
 } HcclTaskMetaData;
 
@@ -175,4 +156,4 @@ typedef struct {
 } OpDetails;
 #pragma pack(pop)
 
-#endif
+#endif // HCOMM_HCCL_VM_CHECKER_TASK_META_DEFS_H

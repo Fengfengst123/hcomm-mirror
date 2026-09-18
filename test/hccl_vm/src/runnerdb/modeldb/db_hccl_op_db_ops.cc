@@ -11,14 +11,13 @@
 #include "db_hccl_op_db_ops.h"
 
 #include <cstdint>
-#include <filesystem>
 #include <unistd.h>
 
-#include "sim_common_macro.h"
 #include "db_hccl_db_factory.h"
 #include "db_hccl_db_sqlite.h"
-#include "sim_log.h"
 #include "sim_common_api.h"
+#include "sim_common_macro.h"
+#include "sim_log.h"
 #include "sim_yaml_config.h"
 
 namespace HcclSim {
@@ -77,70 +76,102 @@ namespace DB {
 
         std::string opTaskTable = "opTask_P_" + std::to_string(getpid());
         auto ret = m_db->RunInTransaction([this, &opTaskTable]() -> HcclVmResult {
-            HCCLVM_CHK_RET(
-                m_db->Execute("CREATE TABLE IF NOT EXISTS opDetails ("
-                              "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-                              "pid INTEGER, rankId INTEGER, opIter INTEGER, syncIter INTEGER, "
-                              "streamId INTEGER, root INTEGER, opExpansionMode INTEGER, devType INTEGER,"
-                              "rankSize INTEGER, srcRank INTEGER, dstRank INTEGER, opDetail BLOB, opExtInfo BLOB);"));
+            HCCLVM_CHK_RET(m_db->Execute("CREATE TABLE IF NOT EXISTS opDetails ("
+                                         "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                                         "pid INTEGER, deviceId INTEGER, rankId INTEGER, "
+                                         "commId INTEGER, opIter INTEGER, syncIter INTEGER, "
+                                         "streamId INTEGER, root INTEGER, opExpansionMode "
+                                         "INTEGER, devType INTEGER,"
+                                         "rankSize INTEGER, srcRank INTEGER, dstRank INTEGER, "
+                                         "opDetail BLOB, opExtInfo BLOB);"));
 
-            HCCLVM_CHK_RET(
-                m_db->Execute("CREATE INDEX IF NOT EXISTS idx_opdetail_pid_synciter ON opDetails(pid, syncIter);"));
+            HCCLVM_CHK_RET(m_db->Execute("CREATE INDEX IF NOT EXISTS idx_opdetail_pid_synciter ON "
+                                         "opDetails(pid, syncIter);"));
+            HCCLVM_CHK_RET(m_db->Execute("CREATE INDEX IF NOT EXISTS idx_opdetail_comm_device_id ON "
+                                         "opDetails(commId, deviceId, id);"));
 
             HCCLVM_CHK_RET(m_db->Execute("CREATE TABLE IF NOT EXISTS opMemInfo ("
                                          "id INTEGER PRIMARY KEY AUTOINCREMENT, "
                                          "opDetailId INTEGER, inputAddr INTEGER, inputSize INTEGER, "
-                                         "outputAddr INTEGER, outputSize INTEGER, cclAddr INTEGER, cclSize INTEGER, "
-                                         "FOREIGN KEY (opDetailId) REFERENCES opDetails(id) ON DELETE CASCADE);"));
+                                         "outputAddr INTEGER, outputSize INTEGER, cclAddr INTEGER, cclSize "
+                                         "INTEGER, "
+                                         "FOREIGN KEY (opDetailId) REFERENCES opDetails(id) ON DELETE "
+                                         "CASCADE);"));
 
-            HCCLVM_CHK_RET(
-                m_db->Execute("CREATE INDEX IF NOT EXISTS idx_opmeminfo_op_detail_id ON opMemInfo(opDetailId);"));
+            HCCLVM_CHK_RET(m_db->Execute("CREATE INDEX IF NOT EXISTS idx_opmeminfo_op_detail_id ON "
+                                         "opMemInfo(opDetailId);"));
 
             HCCLVM_CHK_RET(m_db->Execute("CREATE TABLE IF NOT EXISTS syncRecords ("
                                          "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-                                         "pid INTEGER, rankId INTEGER, rankSize INTEGER, syncIter INTEGER, streamId "
-                                         "INTEGER, status INTEGER DEFAULT 0);"));
+                                         "pid INTEGER, rankId INTEGER, rankSize INTEGER, syncIter INTEGER, "
+                                         "streamId INTEGER, status INTEGER DEFAULT 0);"));
 
-            HCCLVM_CHK_RET(m_db->Execute("CREATE INDEX IF NOT EXISTS idx_sync_status ON syncRecords(status);"));
-            HCCLVM_CHK_RET(
-                m_db->Execute("CREATE INDEX IF NOT EXISTS idx_sync_pid_status ON syncRecords(pid, status);"));
+            HCCLVM_CHK_RET(m_db->Execute("CREATE INDEX IF NOT EXISTS idx_sync_status ON "
+                                         "syncRecords(status);"));
+            HCCLVM_CHK_RET(m_db->Execute("CREATE INDEX IF NOT EXISTS idx_sync_pid_status ON "
+                                         "syncRecords(pid, status);"));
 
             HCCLVM_CHK_RET(m_db->Execute("CREATE TABLE IF NOT EXISTS ccuChannels ("
                                          "id INTEGER PRIMARY KEY AUTOINCREMENT, "
                                          "channelId INTEGER, srcDieId INTEGER, dstDieId INTEGER, "
+                                         "srcDeviceId INTEGER, dstDeviceId INTEGER, "
                                          "srcRankId INTEGER, dstRankId INTEGER, leid BLOB, reid BLOB, "
                                          "protocol INTEGER, jettyNum INTEGER, jettyId BLOB);"));
 
-            HCCLVM_CHK_RET(
-                m_db->Execute("CREATE INDEX IF NOT EXISTS idx_ccuchannel_channelid ON ccuChannels(channelId);"));
+            HCCLVM_CHK_RET(m_db->Execute("CREATE INDEX IF NOT EXISTS idx_ccuchannel_channelid "
+                                         "ON ccuChannels(channelId);"));
 
-            HCCLVM_CHK_RET(
-                m_db->Execute("CREATE TABLE IF NOT EXISTS JettyMaps ("
-                              "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-                              "opDetailId INTEGER, srcDieId INTEGER, dstDieId INTEGER, "
-                              "srcRankId INTEGER, dstRankId INTEGER, leid BLOB, reid BLOB, protocol INTEGER);"));
+            HCCLVM_CHK_RET(m_db->Execute("CREATE TABLE IF NOT EXISTS JettyMaps ("
+                                         "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                                         "opDetailId INTEGER, srcDieId INTEGER, dstDieId INTEGER, "
+                                         "srcRankId INTEGER, dstRankId INTEGER, leid BLOB, reid BLOB, "
+                                         "protocol INTEGER);"));
 
-            HCCLVM_CHK_RET(
-                m_db->Execute("CREATE INDEX IF NOT EXISTS idx_jettymap_op_detail_id ON JettyMaps(opDetailId);"));
-            HCCLVM_CHK_RET(m_db->Execute(
-                "CREATE INDEX IF NOT EXISTS idx_jettymap_srcdie_dstdie ON JettyMaps(srcDieId, dstDieId);"));
+            HCCLVM_CHK_RET(m_db->Execute("CREATE INDEX IF NOT EXISTS idx_jettymap_op_detail_id ON "
+                                         "JettyMaps(opDetailId);"));
+            HCCLVM_CHK_RET(m_db->Execute("CREATE INDEX IF NOT EXISTS idx_jettymap_srcdie_dstdie ON "
+                                         "JettyMaps(srcDieId, dstDieId);"));
 
-            HCCLVM_CHK_RET(m_db->Execute(
-                "CREATE TABLE IF NOT EXISTS ccuInstrRes ("
-                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-                "deviceId INTEGER, rankId INTEGER, dieId INTEGER, instrCount INTEGER, instrSpace BLOB);"));
+            HCCLVM_CHK_RET(m_db->Execute("CREATE TABLE IF NOT EXISTS ccuInstrRes ("
+                                         "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                                         "deviceId INTEGER, dieId INTEGER, "
+                                         "instrCount INTEGER, instrSpace BLOB);"));
 
-            HCCLVM_CHK_RET(
-                m_db->Execute("CREATE TABLE IF NOT EXISTS ccuInstr ("
-                              "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-                              "ccuInstrResId INTEGER, rankId INTEGER, startId INTEGER, instrInfoSize INTEGER, "
-                              "FOREIGN KEY (ccuInstrResId) REFERENCES ccuInstrRes(id) ON DELETE CASCADE);"));
+            HCCLVM_CHK_RET(m_db->Execute("CREATE TABLE IF NOT EXISTS ccuInstr ("
+                                         "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                                         "ccuInstrResId INTEGER, startId INTEGER, instrInfoSize INTEGER, "
+                                         "FOREIGN KEY (ccuInstrResId) REFERENCES ccuInstrRes(id) ON DELETE "
+                                         "CASCADE);"));
 
             HCCLVM_CHK_RET(m_db->Execute(
                 "CREATE TABLE IF NOT EXISTS " + opTaskTable
                 + " ("
                   "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-                  "opDetailId INTEGER, taskSeq INTEGER, opTaskMeta BLOB);"));
+                  "pid INTEGER, "
+                  "opDetailId INTEGER, "
+                  "deviceId INTEGER, "
+                  "streamId INTEGER, "
+                  "taskType INTEGER, "
+                  "isDone INTEGER DEFAULT 0, "
+                  "opTaskMeta BLOB);"));
+
+            HCCLVM_CHK_RET(m_db->Execute("CREATE TABLE IF NOT EXISTS halfRTT ("
+                                         "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                                         "deviceId INTEGER, dieId INTEGER, "
+                                         "wishCntXnIdBegin INTEGER, wishCntXnIdEnd INTEGER, "
+                                         "totalCntId INTEGER);"));
+
+            HCCLVM_CHK_RET(m_db->Execute("CREATE INDEX IF NOT EXISTS idx_halfrtt_rank_dieid "
+                                         "ON halfRTT(deviceId, dieId);"));
+
+            HCCLVM_CHK_RET(m_db->Execute("CREATE TABLE IF NOT EXISTS halfRTT ("
+                                         "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                                         "rankId INTEGER, dieId INTEGER, "
+                                         "wishCntXnIdBegin INTEGER, wishCntXnIdEnd INTEGER, "
+                                         "totalCntId INTEGER);"));
+
+            HCCLVM_CHK_RET(m_db->Execute("CREATE INDEX IF NOT EXISTS idx_halfrtt_rank_dieid "
+                                         "ON halfRTT(rankId, dieId);"));
 
             return HCCL_SIM_SUCCESS;
         });

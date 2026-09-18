@@ -14,12 +14,12 @@
 #include <cstdint>
 #include <memory>
 
+#include "runtime_state/sim_models.h"
 #include "sim_common_defs.h"
-#include "sim_models.h"
 
 // Virtual Runtime
 struct VmPtrReleaser {
-    sim::PhyMemBlock phyMem;
+    sim::runtime::PhyMemBlock phyMem;
     void operator()(void* ptr) const;
 };
 

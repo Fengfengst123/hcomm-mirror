@@ -8,14 +8,20 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: ccu executor -- Trans Mem
+ * Author: caiyifan
+ */
+
 #include "trans_mem_executor.h"
 
 #include <cstdint>
 
 #include "ccu_executor_manager.h"
 #include "ccu_microcode_common_v2.h"
-#include "sim_log.h"
 #include "ccu_string_util.h"
+#include "sim_log.h"
 
 using namespace std;
 using namespace hcomm::CcuRep;
@@ -25,7 +31,6 @@ REG_CCU_EXECUTOR_CREATE_FUNC_V2(SimCcuV2::TRANS_TYPE, SimCcuV2::TRANSMEM_CODE, T
 void TransMemExecutor::Parser()
 {
     ValidateVersionExclusive(RunnerCcuVersion::CCU_V2, "TransMemExecutor");
-#ifdef BUILD_A6_CCU_INSTR
     xdId_ = instr_.v2.transMem.xdId;
     xdtId_ = instr_.v2.transMem.xdtId;
     xsId_ = instr_.v2.transMem.xsId;
@@ -53,7 +58,6 @@ void TransMemExecutor::Parser()
     targetHint_ = instr_.v2.transMem.targetHint;
     setCKEId_ = instr_.v2.transMem.setCKEId;
     setCKEMask_ = instr_.v2.transMem.setCKEMask;
-#endif
 }
 
 void TransMemExecutor::Run()

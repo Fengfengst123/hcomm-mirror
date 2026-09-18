@@ -8,13 +8,13 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#include <iostream>
 #include <climits>
+#include <iostream>
 #include <unistd.h>
 
+#include "sim_log.h"
 #include "store_binary_data_operator.h"
 #include "store_dump_shm_data.h"
-#include "sim_log.h"
 
 namespace HcclSim {
 std::string GetBinLocation()

@@ -9,9 +9,9 @@
  */
 
 #include "ccu_all_rank_param_recorder_v3.h"
-#include <sys/types.h>
 #include "sim_log.h"
 #include "utils/error_codes.h"
+#include <sys/types.h>
 
 namespace HcclSim {
 namespace TaskGraphGeneratorV3 {
@@ -30,6 +30,7 @@ namespace TaskGraphGeneratorV3 {
         curHBM.clear();
         seenPost.clear();
         postNodeMeta.clear();
+        loopGroupRegSnapshot.clear();
         devType_ = DevType::DEV_TYPE_COUNT;
         ccu_resource_base_addr_.clear();
         return;
@@ -42,6 +43,7 @@ namespace TaskGraphGeneratorV3 {
         curHBM.clear();
         seenPost.clear();
         postNodeMeta.clear();
+        loopGroupRegSnapshot.clear();
     }
 
     void AllRankParamRecorder::RegisterPostNode(TaskNode* node, const CcuPostNodeMetaV3& meta)
@@ -79,30 +81,30 @@ namespace TaskGraphGeneratorV3 {
         return &it->second;
     }
 
-    HcclResult AllRankParamRecorder::SetXn(uint32_t rankId, uint32_t dieId, uint16_t xnId, uint64_t xnValue)
+    HcclResult AllRankParamRecorder::SetXn(DeviceId deviceId, uint32_t dieId, uint16_t xnId, uint64_t xnValue)
     {
-        curXn[rankId][dieId][xnId] = xnValue;
+        curXn[deviceId][dieId][xnId] = xnValue;
         return HCCL_SUCCESS;
     }
 
-    HcclResult AllRankParamRecorder::SetGSA(uint32_t rankId, uint32_t dieId, uint16_t gsaId, uint64_t gsaValue)
+    HcclResult AllRankParamRecorder::SetGSA(DeviceId deviceId, uint32_t dieId, uint16_t gsaId, uint64_t gsaValue)
     {
-        curGSA[rankId][dieId][gsaId] = gsaValue;
+        curGSA[deviceId][dieId][gsaId] = gsaValue;
         return HCCL_SUCCESS;
     }
 
-    HcclResult AllRankParamRecorder::SetCKE(uint32_t rankId, uint32_t dieId, uint16_t ckeId, uint16_t ckeValue)
+    HcclResult AllRankParamRecorder::SetCKE(DeviceId deviceId, uint32_t dieId, uint16_t ckeId, uint16_t ckeValue)
     {
-        curCKE[rankId][dieId][ckeId] = ckeValue;
+        curCKE[deviceId][dieId][ckeId] = ckeValue;
         return HCCL_SUCCESS;
     }
 
-    HcclResult AllRankParamRecorder::GetXn(uint32_t rankId, uint32_t dieId, uint16_t xnId, uint64_t& xnValue)
+    HcclResult AllRankParamRecorder::GetXn(DeviceId deviceId, uint32_t dieId, uint16_t xnId, uint64_t& xnValue)
     {
-        if (curXn.find(rankId) != curXn.end()) {
-            if (curXn[rankId].find(dieId) != curXn[rankId].end()) {
-                if (curXn[rankId][dieId].find(xnId) != curXn[rankId][dieId].end()) {
-                    xnValue = curXn[rankId][dieId][xnId];
+        if (curXn.find(deviceId) != curXn.end()) {
+            if (curXn[deviceId].find(dieId) != curXn[deviceId].end()) {
+                if (curXn[deviceId][dieId].find(xnId) != curXn[deviceId][dieId].end()) {
+                    xnValue = curXn[deviceId][dieId][xnId];
                     return HCCL_SUCCESS;
                 }
             }
@@ -111,12 +113,12 @@ namespace TaskGraphGeneratorV3 {
         return HCCL_E_PARA;
     }
 
-    HcclResult AllRankParamRecorder::GetGSA(uint32_t rankId, uint32_t dieId, uint16_t gsaId, uint64_t& gsaValue)
+    HcclResult AllRankParamRecorder::GetGSA(DeviceId deviceId, uint32_t dieId, uint16_t gsaId, uint64_t& gsaValue)
     {
-        if (curGSA.find(rankId) != curGSA.end()) {
-            if (curGSA[rankId].find(dieId) != curGSA[rankId].end()) {
-                if (curGSA[rankId][dieId].find(gsaId) != curGSA[rankId][dieId].end()) {
-                    gsaValue = curGSA[rankId][dieId][gsaId];
+        if (curGSA.find(deviceId) != curGSA.end()) {
+            if (curGSA[deviceId].find(dieId) != curGSA[deviceId].end()) {
+                if (curGSA[deviceId][dieId].find(gsaId) != curGSA[deviceId][dieId].end()) {
+                    gsaValue = curGSA[deviceId][dieId][gsaId];
                     return HCCL_SUCCESS;
                 }
             }
@@ -125,12 +127,12 @@ namespace TaskGraphGeneratorV3 {
         return HCCL_E_PARA;
     }
 
-    HcclResult AllRankParamRecorder::GetCKE(uint32_t rankId, uint32_t dieId, uint16_t ckeId, uint16_t& ckeValue)
+    HcclResult AllRankParamRecorder::GetCKE(DeviceId deviceId, uint32_t dieId, uint16_t ckeId, uint16_t& ckeValue)
     {
-        if (curCKE.find(rankId) != curCKE.end()) {
-            if (curCKE[rankId].find(dieId) != curCKE[rankId].end()) {
-                if (curCKE[rankId][dieId].find(ckeId) != curCKE[rankId][dieId].end()) {
-                    ckeValue = curCKE[rankId][dieId][ckeId];
+        if (curCKE.find(deviceId) != curCKE.end()) {
+            if (curCKE[deviceId].find(dieId) != curCKE[deviceId].end()) {
+                if (curCKE[deviceId][dieId].find(ckeId) != curCKE[deviceId][dieId].end()) {
+                    ckeValue = curCKE[deviceId][dieId][ckeId];
                     return HCCL_SUCCESS;
                 }
             }
@@ -140,56 +142,78 @@ namespace TaskGraphGeneratorV3 {
         return HCCL_SUCCESS;
     }
 
-    std::map<uint16_t, uint64_t> AllRankParamRecorder::GetXnSnapshot(uint32_t rankId, uint32_t dieId) const
+    std::map<uint16_t, uint64_t> AllRankParamRecorder::GetXnSnapshot(DeviceId deviceId, uint32_t dieId) const
     {
-        auto rankIt = curXn.find(rankId);
-        if (rankIt == curXn.end()) {
+        auto deviceIt = curXn.find(deviceId);
+        if (deviceIt == curXn.end()) {
             return {};
         }
-        auto dieIt = rankIt->second.find(dieId);
-        if (dieIt == rankIt->second.end()) {
+        auto dieIt = deviceIt->second.find(dieId);
+        if (dieIt == deviceIt->second.end()) {
             return {};
         }
         return dieIt->second;
     }
 
-    std::map<uint16_t, uint64_t> AllRankParamRecorder::GetGSASnapshot(uint32_t rankId, uint32_t dieId) const
+    std::map<uint16_t, uint64_t> AllRankParamRecorder::GetGSASnapshot(DeviceId deviceId, uint32_t dieId) const
     {
-        auto rankIt = curGSA.find(rankId);
-        if (rankIt == curGSA.end()) {
+        auto deviceIt = curGSA.find(deviceId);
+        if (deviceIt == curGSA.end()) {
             return {};
         }
-        auto dieIt = rankIt->second.find(dieId);
-        if (dieIt == rankIt->second.end()) {
+        auto dieIt = deviceIt->second.find(dieId);
+        if (dieIt == deviceIt->second.end()) {
             return {};
         }
         return dieIt->second;
     }
 
-    std::map<uint16_t, uint16_t> AllRankParamRecorder::GetCKESnapshot(uint32_t rankId, uint32_t dieId) const
+    std::map<uint16_t, uint16_t> AllRankParamRecorder::GetCKESnapshot(DeviceId deviceId, uint32_t dieId) const
     {
-        auto rankIt = curCKE.find(rankId);
-        if (rankIt == curCKE.end()) {
+        auto deviceIt = curCKE.find(deviceId);
+        if (deviceIt == curCKE.end()) {
             return {};
         }
-        auto dieIt = rankIt->second.find(dieId);
-        if (dieIt == rankIt->second.end()) {
+        auto dieIt = deviceIt->second.find(dieId);
+        if (dieIt == deviceIt->second.end()) {
             return {};
         }
         return dieIt->second;
+    }
+
+    void AllRankParamRecorder::RecordLoopGroupRegSnapshot(
+        DeviceId deviceId, uint32_t dieId, uint32_t pc, uint64_t xpValue, uint64_t xmValue)
+    {
+        loopGroupRegSnapshot[deviceId][dieId][pc] = std::make_pair(xpValue, xmValue);
+    }
+
+    uint16_t AllRankParamRecorder::GetMaxUsedXnId(DeviceId deviceId, uint32_t dieId) const
+    {
+        auto deviceIt = curXn.find(deviceId);
+        if (deviceIt == curXn.end()) {
+            return UINT16_MAX;
+        }
+        auto dieIt = deviceIt->second.find(dieId);
+        if (dieIt == deviceIt->second.end() || dieIt->second.empty()) {
+            return UINT16_MAX;
+        }
+        // std::map 按 key 升序排列，最后一条即最大 xnId
+        return dieIt->second.rbegin()->first;
     }
 
     HcclResult AllRankParamRecorder::CheckAllPostMatch()
     {
-        for (const auto& rankPair : seenPost) {
-            for (const auto& diePair : rankPair.second) {
+        for (const auto& devicePair : seenPost) {
+            for (const auto& diePair : devicePair.second) {
                 for (const auto& regPair : diePair.second) {
                     for (const auto* post : regPair.second) {
                         const auto* meta = GetPostNodeMeta(post);
                         if (meta != nullptr) {
                             HCCL_VM_WARN(
-                                "{} Found CCU post/local-post tasks that were never consumed by "
-                                "any Wait task:\n  unconsumedPostCount={}, remainingCkeMask=0x{:x}, isLocal={}\n"
+                                "{} Found CCU post/local-post tasks that were "
+                                "never consumed by "
+                                "any Wait task:\n  unconsumedPostCount={}, "
+                                "remainingCkeMask=0x{:x}, isLocal={}\n"
                                 "  firstUnconsumedPostNode={}",
                                 MakeErrorCodeText(ErrorCode::GRAPH_UNMATCHED).c_str(), regPair.second.size(),
                                 meta->remainingCkeMask, meta->isLocal,
@@ -197,8 +221,10 @@ namespace TaskGraphGeneratorV3 {
                             continue;
                         }
                         HCCL_VM_WARN(
-                            "{} Found CCU post/local-post tasks that were never consumed by any "
-                            "Wait task:\n  unconsumedPostCount={}\n  firstUnconsumedPostNode={}",
+                            "{} Found CCU post/local-post tasks that were never "
+                            "consumed by any "
+                            "Wait task:\n  unconsumedPostCount={}\n  "
+                            "firstUnconsumedPostNode={}",
                             MakeErrorCodeText(ErrorCode::GRAPH_UNMATCHED).c_str(), regPair.second.size(),
                             post == nullptr ? "node=null" : post->Describe().c_str());
                     }
@@ -210,22 +236,22 @@ namespace TaskGraphGeneratorV3 {
     }
 
     HcclResult
-    AllRankParamRecorder::SetHBM(uint32_t rankId, uint32_t dieId, uint64_t hbmAddr, const std::vector<uint64_t>& data)
+    AllRankParamRecorder::SetHBM(DeviceId deviceId, uint32_t dieId, uint64_t hbmAddr, const std::vector<uint64_t>& data)
     {
         if (data.size() % 8 != 0) {
             return HCCL_E_PARA;
         }
-        curHBM[rankId][dieId][hbmAddr] = data;
+        curHBM[deviceId][dieId][hbmAddr] = data;
         return HCCL_SUCCESS;
     }
 
     HcclResult
-    AllRankParamRecorder::GetHBM(uint32_t rankId, uint32_t dieId, uint64_t hbmAddr, std::vector<uint64_t>& data)
+    AllRankParamRecorder::GetHBM(DeviceId deviceId, uint32_t dieId, uint64_t hbmAddr, std::vector<uint64_t>& data)
     {
-        if (curHBM.find(rankId) != curHBM.end()) {
-            if (curHBM[rankId].find(dieId) != curHBM[rankId].end()) {
-                if (curHBM[rankId][dieId].find(hbmAddr) != curHBM[rankId][dieId].end()) {
-                    data = curHBM[rankId][dieId][hbmAddr];
+        if (curHBM.find(deviceId) != curHBM.end()) {
+            if (curHBM[deviceId].find(dieId) != curHBM[deviceId].end()) {
+                if (curHBM[deviceId][dieId].find(hbmAddr) != curHBM[deviceId][dieId].end()) {
+                    data = curHBM[deviceId][dieId][hbmAddr];
                     return HCCL_SUCCESS;
                 }
             }
@@ -261,7 +287,8 @@ namespace TaskGraphGeneratorV3 {
                                              "null" :
                                              std::to_string(static_cast<uint32_t>(ccu_resource_base_addr_.size() - 1));
             HCCL_VM_ERROR(
-                "{} dieId is out of range when converting address to MS id, dieId={}, "
+                "{} dieId is out of range when converting address to MS "
+                "id, dieId={}, "
                 "maxDieId={}",
                 MakeErrorCodeText(ErrorCode::GRAPH_OUT_OF_RANGE).c_str(), dieId, maxDieId);
             return HCCL_E_PARA;
@@ -277,7 +304,8 @@ namespace TaskGraphGeneratorV3 {
         }
         if (ccuIndex == UINT64_MAX) {
             HCCL_VM_ERROR(
-                "{} Address does not fall into any known MS address range, localMsAddr={}, "
+                "{} Address does not fall into any known MS address range, "
+                "localMsAddr={}, "
                 "rawAddr={}",
                 MakeErrorCodeText(ErrorCode::GRAPH_ADDRESS_INVALID).c_str(), msAddr, addr);
             return HCCL_E_PARA;
@@ -360,7 +388,8 @@ namespace TaskGraphGeneratorV3 {
                                              "null" :
                                              std::to_string(static_cast<uint32_t>(ccu_resource_base_addr_.size() - 1));
             HCCL_VM_ERROR(
-                "{} dieId is out of range when converting address to register id, dieId={}, "
+                "{} dieId is out of range when converting address to "
+                "register id, dieId={}, "
                 "maxDieId={}",
                 MakeErrorCodeText(ErrorCode::GRAPH_OUT_OF_RANGE).c_str(), dieId, maxDieId);
             return HCCL_E_PARA;
@@ -368,7 +397,8 @@ namespace TaskGraphGeneratorV3 {
         type = findTypeByAddr(xnAddr - ccu_resource_base_addr_[dieId]);
         if (type == CcuComponerntType::UNKNOWN) {
             HCCL_VM_ERROR(
-                "{} Address does not belong to any known CCU component range, addr={}, "
+                "{} Address does not belong to any known CCU component range, "
+                "addr={}, "
                 "dieId={}, dieBaseAddr={}",
                 MakeErrorCodeText(ErrorCode::GRAPH_ADDRESS_INVALID).c_str(), xnAddr, dieId,
                 ccu_resource_base_addr_[dieId]);
@@ -389,7 +419,8 @@ namespace TaskGraphGeneratorV3 {
                                              "null" :
                                              std::to_string(static_cast<uint32_t>(ccu_resource_base_addr_.size() - 1));
             HCCL_VM_ERROR(
-                "{} dieId is out of range when converting address to register id, dieId={}, "
+                "{} dieId is out of range when converting address to "
+                "register id, dieId={}, "
                 "maxDieId={}",
                 MakeErrorCodeText(ErrorCode::GRAPH_OUT_OF_RANGE).c_str(), dieId, maxDieId);
             return HCCL_E_PARA;
@@ -411,7 +442,8 @@ namespace TaskGraphGeneratorV3 {
                                              "null" :
                                              std::to_string(static_cast<uint32_t>(ccu_resource_base_addr_.size() - 1));
             HCCL_VM_ERROR(
-                "{} dieId is out of range when converting register id to address, dieId={}, "
+                "{} dieId is out of range when converting register id to "
+                "address, dieId={}, "
                 "maxDieId={}",
                 MakeErrorCodeText(ErrorCode::GRAPH_OUT_OF_RANGE).c_str(), dieId, maxDieId);
             return HCCL_E_PARA;

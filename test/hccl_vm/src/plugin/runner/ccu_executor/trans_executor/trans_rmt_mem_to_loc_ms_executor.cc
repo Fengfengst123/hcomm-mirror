@@ -8,14 +8,20 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: ccu executor -- trans rmt mem
+ * to loc ms Author: caiyifan
+ */
+
 #include "trans_rmt_mem_to_loc_ms_executor.h"
 
 #include <cstdint>
 
 #include "ccu_executor_manager.h"
 #include "ccu_microcode_common_v1.h"
-#include "sim_log.h"
 #include "ccu_string_util.h"
+#include "sim_log.h"
 
 using namespace std;
 using namespace hcomm::CcuRep;
@@ -55,8 +61,9 @@ void TransRmtMemToLocMSExecutor::Process(CcuResourceManager& ccuResMgr)
         locMSId_ += msOffset;
         setCKEId_ += ckeOffset;
         HCCL_VM_DEBUG(
-            "locCcu[{}:{}], Get gsa addr offset = [{:04x}], ms offset = [{:04x}], cke offset = [{:04x}]", rankId_,
-            dieId_, addrOffset, msOffset, ckeOffset);
+            "locCcu[{}:{}], Get gsa addr offset = [{:04x}], ms "
+            "offset = [{:04x}], cke offset = [{:04x}]",
+            rankId_, dieId_, addrOffset, msOffset, ckeOffset);
     }
     // 3.搬运动作
     HCCL_VM_DEBUG(
@@ -78,7 +85,8 @@ void TransRmtMemToLocMSExecutor::Run() { WaitCkeProcess(waitCKEId_, waitCKEMask_
 std::string TransRmtMemToLocMSExecutor::Describe()
 {
     return HcclSim::StringFormat(
-        "[Simulation Execute] Wait CKE[%u:%04x], Trans RmtMem[%u:%u] To LocMS[%u:%u] With "
+        "[Simulation Execute] Wait CKE[%u:%04x], "
+        "Trans RmtMem[%u:%u] To LocMS[%u:%u] With "
         "LengthXn[%u] Use Channel[%u], Set "
         "CKE[%u:%04x], clearType[%u], lengthEn[%u]\n",
         waitCKEId_, waitCKEMask_, rmtGSAId_, rmtXnId_, locMSId_ / 0x8000, locMSId_ % 0x8000, lengthXnId_, channelId_,

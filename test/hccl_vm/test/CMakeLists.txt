@@ -40,6 +40,7 @@ add_subdirectory(proxy)
 add_subdirectory(runnerdb)
 add_subdirectory(store)
 add_subdirectory(src_root)
+add_subdirectory(topo)
 add_subdirectory(hccl_plugin_manager)
 add_subdirectory(utils)
 

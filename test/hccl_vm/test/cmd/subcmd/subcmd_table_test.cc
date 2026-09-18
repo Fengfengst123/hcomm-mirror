@@ -120,7 +120,10 @@ TEST_F(TableCommandTest, Parse_Update_SetsAllMembers)
 {
     cmd_->Setup(*app_);
     try {
-        app_->parse("test table update --table Device --id 42 --column soc_version --value V100", true);
+        app_->parse(
+            "test table update --table Device --id 42 --column "
+            "soc_version --value V100",
+            true);
     } catch (const CLI::CallForHelp& e) {
         std::cerr << "Catch CLI::CallForHelp: " << e.what() << "\n";
     } catch (const std::exception& e) {

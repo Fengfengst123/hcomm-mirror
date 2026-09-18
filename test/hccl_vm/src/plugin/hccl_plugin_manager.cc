@@ -29,10 +29,11 @@
 #include <unistd.h>
 
 #include "cmd_base_utils.h"
+#include "runtime_state/db_sim_runner_ops.h"
+#include "runtime_state/sim_models.h"
 #include "sim_common_api.h"
-#include "store_dump_shm_data.h"
 #include "sim_log.h"
-#include "sim_process_syncer.h"
+#include "store_dump_shm_data.h"
 
 using namespace HcclSim;
 
@@ -215,6 +216,8 @@ HcclVmResult HcclPluginManager::RegisterPlugin(const std::string& pluginTag)
         // 创建即启动 (符合你 HcclPlugin 构造函数的逻辑)
         auto plugin = std::make_shared<HcclPlugin>(folderPath);
         m_plugins[pluginTag] = plugin;
+        AddInstallRecordToDB(pluginTag);
+
     } catch (const std::exception& e) {
         HCCL_VM_ERROR("Failed to register plugin {}: {}", pluginTag, e.what());
         return HcclSim::HcclVmResult::HCCL_SIM_E_INTERNAL;
@@ -279,8 +282,6 @@ std::vector<HcclSim::HcclVmResult> HcclPluginManager::StartPlugins(const std::ve
 
 HcclVmResult ExitRunnerPlugin()
 {
-    sim::ProcessSyncer syncer;
-    syncer.signalRunnerExit();
     HCCL_VM_INFO("Runner exit signal sent.");
     return HcclVmResult::HCCL_SIM_SUCCESS;
 }
@@ -301,6 +302,7 @@ std::vector<HcclSim::HcclVmResult> HcclPluginManager::StopPlugins(const std::vec
 
             auto stopRet = it->second->Stop();
             m_plugins.erase(it);
+            RemoveInstallRecordFromDB(tag);
             results.push_back(exitRet != HcclVmResult::HCCL_SIM_SUCCESS ? exitRet : stopRet);
             continue;
         }
@@ -316,8 +318,10 @@ std::vector<HcclSim::HcclVmResult> HcclPluginManager::StopPlugins(const std::vec
         results.push_back(res);
 
         // 2. 从管理 Map 中移除（卸载）
-        // 即使 Stop 失败（如超时），我们通常也从 Manager 中移除它，将其交由系统清理或用户手动处理
+        // 即使 Stop 失败（如超时），我们通常也从 Manager
+        // 中移除它，将其交由系统清理或用户手动处理
         m_plugins.erase(it);
+        RemoveInstallRecordFromDB(tag);
     }
     return results;
 }
@@ -379,8 +383,9 @@ void HcclPluginManager::MonitorThread()
                             WEXITSTATUS(status));
                     } else if (WIFSIGNALED(status)) {
                         HCCL_VM_ERROR(
-                            "Plugin [{}] (PID: {}) exit with failure. Code {} ({})", it.second->GetTag(), terminatedPid,
-                            WTERMSIG(status), strsignal(WTERMSIG(status)));
+                            "Plugin [{}] (PID: {}) exit with "
+                            "failure. Code {} ({})",
+                            it.second->GetTag(), terminatedPid, WTERMSIG(status), strsignal(WTERMSIG(status)));
                     }
                     m_plugins.erase(it.first);
                     break;
@@ -395,5 +400,25 @@ void HcclPluginManager::MonitorThread()
                 continue;
             }
         }
+    }
+}
+
+void HcclPluginManager::AddInstallRecordToDB(const std::string& pluginTag)
+{
+    sim::runtime::Plugin pluginRow{};
+    std::strcpy(pluginRow.tag, pluginTag.c_str());
+    sim::runtime::Db::Add<sim::runtime::Plugin>(pluginRow);
+}
+
+void HcclPluginManager::RemoveInstallRecordFromDB(const std::string& pluginTag)
+{
+    // 正常情况一个tag只会有一行db记录，使用vector接口删除此tag相关的全部行，可以应对意外场景
+    auto pluginRows = sim::runtime::Db::GetByPred<sim::runtime::Plugin>(
+        HcclSim::Storage::Eq(&sim::runtime::Plugin::tag, pluginTag));
+    if (!pluginRows.ok() || !pluginRows.value.has_value()) {
+        return;
+    }
+    for (const sim::runtime::Plugin& row : *pluginRows.value) {
+        sim::runtime::Db::Delete<sim::runtime::Plugin>(HcclSim::Storage::Eq(&sim::runtime::Plugin::id, row.id));
     }
 }

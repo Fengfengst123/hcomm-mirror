@@ -22,7 +22,6 @@ struct CheckerSettings {
     bool enableInsightDump{false};
     bool enableMemorySnapshotDump{false};
     bool enableNewChecker{true};
-    bool enableOldChecker{true};
     bool enableBigGraphChecker{false};
 };
 
@@ -44,7 +43,6 @@ public:
     bool IsInsightDumpEnabled() const;
     bool IsMemorySnapshotEnabled() const;
     bool IsNewCheckerEnabled() const;
-    bool IsOldCheckerEnabled() const;
     bool IsBigGraphCheckerEnabled() const;
 
 private:

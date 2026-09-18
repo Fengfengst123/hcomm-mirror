@@ -8,13 +8,19 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: ccu executor -- Store Executor
+ * Author: caiyifan
+ */
+
 #include "store_executor.h"
 
 #include <cstdint>
 
 #include "ccu_executor_manager.h"
-#include "sim_log.h"
 #include "ccu_string_util.h"
+#include "sim_log.h"
 
 using namespace std;
 using namespace hcomm::CcuRep;
@@ -62,8 +68,9 @@ void StoreExecutor::Run()
 std::string StoreExecutor::Describe()
 {
     return HcclSim::StringFormat(
-        "[StoreExecutor] xdId:[%u], xsId:[%u], xlId:[%u], ckeId:[%u], ckeMask:[0x%04x]\n", xdId_, xsId_, xlId_, ckeId_,
-        ckeMask_);
+        "[StoreExecutor] xdId:[%u], xsId:[%u], "
+        "xlId:[%u], ckeId:[%u], ckeMask:[0x%04x]\n",
+        xdId_, xsId_, xlId_, ckeId_, ckeMask_);
 }
 
 CcuTrace::CcuInstrTraceDetail StoreExecutor::CollectTraceDetail()

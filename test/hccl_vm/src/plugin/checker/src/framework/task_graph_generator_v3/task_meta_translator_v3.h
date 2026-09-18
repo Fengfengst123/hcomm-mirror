@@ -11,6 +11,7 @@
 #ifndef CHECKER_TASK_GRAPH_GENERATOR_V3_TASK_META_TRANSLATOR_V3_H
 #define CHECKER_TASK_GRAPH_GENERATOR_V3_TASK_META_TRANSLATOR_V3_H
 
+#include <limits>
 #include <map>
 #include <memory>
 #include <utility>
@@ -18,8 +19,8 @@
 
 #include "hccl_types.h"
 #include "storage_manager.h"
-#include "task_meta_defs.h"
 #include "task_graph_generator_v3.h"
+#include "task_meta_defs.h"
 
 namespace HcclSim {
 namespace TaskGraphGeneratorV3 {
@@ -33,7 +34,9 @@ namespace TaskGraphGeneratorV3 {
         TaskMetaTranslatorV3(const TaskMetaTranslatorV3&) = delete;
         TaskMetaTranslatorV3& operator=(const TaskMetaTranslatorV3&) = delete;
 
-        HcclResult Translate(StorageManager& storage, OperatorId operatorId);
+        HcclResult Translate(
+            StorageManager& storage, OperatorId operatorId, const std::string& commName = {},
+            uint64_t commHash = std::numeric_limits<uint64_t>::max(), uint32_t opIter = 0);
         void Reset();
 
         const std::vector<std::unique_ptr<TaskNode>>& GetNodes() const { return nodes_; }
@@ -43,14 +46,14 @@ namespace TaskGraphGeneratorV3 {
 
     private:
         struct CcuMissionKey {
-            RankId rankId{INVALID_RANK_ID};
+            DeviceId deviceId{INVALID_DEVICE_ID};
             uint8_t dieId{0};
             uint8_t missionId{0};
 
             bool operator<(const CcuMissionKey& rhs) const
             {
-                if (rankId != rhs.rankId) {
-                    return rankId < rhs.rankId;
+                if (deviceId != rhs.deviceId) {
+                    return deviceId < rhs.deviceId;
                 }
                 if (dieId != rhs.dieId) {
                     return dieId < rhs.dieId;
@@ -61,7 +64,7 @@ namespace TaskGraphGeneratorV3 {
 
         HcclResult TranslateOneTaskMeta(
             const HcclTaskMetaData& taskMeta, StorageManager& storage, uint32_t taskIndex, OperatorId operatorId,
-            NodeId& nodeId);
+            const std::string& commName, uint64_t commHash, uint32_t opIter, NodeId& nodeId);
         HcclResult AddTaskNode(const TaskPosition& position, std::unique_ptr<TaskNode> node, NodeId& nodeId);
 
         std::vector<std::unique_ptr<TaskNode>> nodes_;

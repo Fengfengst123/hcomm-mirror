@@ -8,14 +8,20 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: ccu executor -- sync cke
+ * Author: caiyifan
+ */
+
 #include "sync_cke_executor.h"
 
 #include <cstdint>
 
 #include "ccu_executor_manager.h"
 #include "ccu_microcode_common_v1.h"
-#include "sim_log.h"
 #include "ccu_string_util.h"
+#include "sim_log.h"
 
 using namespace std;
 using namespace hcomm::CcuRep;
@@ -63,7 +69,8 @@ void SyncCkeExecutor::Run() { WaitCkeProcess(waitCKEId_, waitCKEMask_, clearType
 std::string SyncCkeExecutor::Describe()
 {
     return HcclSim::StringFormat(
-        "[Simulation Execute] Wait CKE[%u:%04x], Sync LocCKE[%u:%04x] To rmtCKE[%u:%04x] Use Channel[%u], Set "
+        "[Simulation Execute] Wait CKE[%u:%04x], Sync LocCKE[%u:%04x] To "
+        "rmtCKE[%u:%04x] Use Channel[%u], Set "
         "CKE[%u:%04x], clearType[%u]\n",
         waitCKEId_, waitCKEMask_, locCKEId_, locCKEMask_, rmtCKEId_, locCKEMask_, channelId_, setCKEId_, setCKEMask_,
         clearType_);

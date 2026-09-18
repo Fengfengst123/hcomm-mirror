@@ -8,6 +8,12 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
+# proxy模块按劫持层级组织:
+#   level0/ : HCCL算子入口劫持 (hccl_proxy_level0)
+#   level1/ : HCCP通信域/控制面接口劫持 (hccl_proxy_level1)
+#   level2/ : Runtime/CANN底层接口劫持 (hccl_proxy_level2, 含aiv_kernel)
+#   common/ : 各层级共用的源码与头文件 (无独立构建目标, 编入level2)
+
 message(STATUS "TOP_DIR: ${TOP_DIR}")
 message(STATUS "ASCEND_CANN_PACKAGE_PATH: ${ASCEND_CANN_PACKAGE_PATH}")
 
@@ -58,9 +64,7 @@ set(PROXY_INC_DIRS
         ${HCOMM_CODE_ROOT}/src/base_comm/resources/hccp/external_depends/ccu
         ${HCOMM_CODE_ROOT}/src/legacy/ascend910/pub_inc
         # hccl_proxy模块内部头文件
-        ${CMAKE_CURRENT_SOURCE_DIR}
-        ${CMAKE_CURRENT_SOURCE_DIR}/topomodel
-        ${CMAKE_CURRENT_SOURCE_DIR}/proxy
+        ${CMAKE_CURRENT_SOURCE_DIR}/common
 )
 
 set(PROXY_COMPILE_OPTS
@@ -90,69 +94,6 @@ set(PROXY_LINK_LIBS
         ${ASCEND_CANN_PACKAGE_PATH}/${CANN_ARCH_DIR}/lib64/libc_sec.a
 )
 
-add_library(hccl_proxy_level0 SHARED "")
-target_include_directories(hccl_proxy_level0 PRIVATE ${PROXY_INC_DIRS})
-target_sources(hccl_proxy_level0 PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/hccl_op_stub.cc
-)
-target_compile_options(hccl_proxy_level0 PRIVATE ${PROXY_COMPILE_OPTS})
-
-target_link_options(hccl_proxy_level0 PRIVATE
-        -Wl,--unresolved-symbols=ignore-in-object-files)
-target_link_libraries(hccl_proxy_level0 PRIVATE
-        dl
-        rt
-        ${ASCEND_CANN_PACKAGE_PATH}/${CANN_ARCH_DIR}/lib64/libc_sec.a)
-install(TARGETS hccl_proxy_level0
-    DESTINATION "lib/${CMAKE_SYSTEM_PROCESSOR}"
-    PERMISSIONS
-        OWNER_READ OWNER_WRITE OWNER_EXECUTE
-        GROUP_READ GROUP_EXECUTE
-        WORLD_READ WORLD_EXECUTE
-)
-
-add_library(hccl_proxy_level2 SHARED "")
-target_include_directories(hccl_proxy_level2 PRIVATE ${PROXY_INC_DIRS})
-target_sources(hccl_proxy_level2 PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/aclrt_device_stub.cc
-        ${CMAKE_CURRENT_SOURCE_DIR}/aclrt_context_stub.cc
-        ${CMAKE_CURRENT_SOURCE_DIR}/aclrt_memory_stub.cc
-        ${CMAKE_CURRENT_SOURCE_DIR}/aclrt_notify_stub.cc
-        ${CMAKE_CURRENT_SOURCE_DIR}/aclrt_event_stub.cc
-        ${CMAKE_CURRENT_SOURCE_DIR}/aclrt_stream_stub.cc
-        ${CMAKE_CURRENT_SOURCE_DIR}/scatter_stub.cc
-        ${CMAKE_CURRENT_SOURCE_DIR}/log_stub.cc
-        ${CMAKE_CURRENT_SOURCE_DIR}/hccl_inner_stub.cc
-        ${CMAKE_CURRENT_SOURCE_DIR}/hccp_ccu_stub.cc
-        ${CMAKE_CURRENT_SOURCE_DIR}/hccp_ra_socket_stub.cc
-        ${CMAKE_CURRENT_SOURCE_DIR}/aclrt_new_stub.cc
-        ${CMAKE_CURRENT_SOURCE_DIR}/aclrt_exception_stub.cc
-        ${CMAKE_CURRENT_SOURCE_DIR}/aclrt_exec_control.cc
-        ${CMAKE_CURRENT_SOURCE_DIR}/aclrt_kernel_stub.cc
-        ${CMAKE_CURRENT_SOURCE_DIR}/hccp_stub.cc
-        ${CMAKE_CURRENT_SOURCE_DIR}/ascend_hal_stub.cc
-        ${CMAKE_CURRENT_SOURCE_DIR}/adapter_rts_stub.cc
-        ${CMAKE_CURRENT_SOURCE_DIR}/tsd_client_stub.cc
-        ${CMAKE_CURRENT_SOURCE_DIR}/aprofiling_stub.cc
-        ${CMAKE_CURRENT_SOURCE_DIR}/aclrt_stub.cc
-        ${CMAKE_CURRENT_SOURCE_DIR}/hccl_proxy_common.cc
-        ${CMAKE_CURRENT_SOURCE_DIR}/hccl_comm_stub.cc
-        ${CMAKE_CURRENT_SOURCE_DIR}/aclrt_runtime_config.cc
-)
-target_compile_options(hccl_proxy_level2 PRIVATE ${PROXY_COMPILE_OPTS})
-target_link_libraries(hccl_proxy_level2 PRIVATE ${PROXY_LINK_LIBS})
-install(TARGETS hccl_proxy_level2
-    DESTINATION "lib/${CMAKE_SYSTEM_PROCESSOR}"
-    # 文件的权限 (755)
-    PERMISSIONS
-        OWNER_READ OWNER_WRITE OWNER_EXECUTE
-        GROUP_READ GROUP_EXECUTE
-        WORLD_READ WORLD_EXECUTE
-)
-
-# AIV构建
-option(BUILD_AIV "Enable aiv kernel build" OFF)
-MESSAGE(STATUS "BUILD_AIV: " ${BUILD_AIV})
-if(BUILD_AIV)
-    add_subdirectory(aiv_kernel)
-endif()
+add_subdirectory(level0)
+add_subdirectory(level1)
+add_subdirectory(level2)

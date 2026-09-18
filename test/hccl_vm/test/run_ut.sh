@@ -32,6 +32,7 @@ COV_DIR="$CODE_DIR/coverage_report"
 ENABLE_COVERAGE=0
 CMAKE_BUILD_TYPE="Debug"
 MAKE_JOBS=8
+G_TEST_STATUS=0
 
 # ==================== 测试执行优化配置 ====================
 # 默认超时(秒)
@@ -283,7 +284,7 @@ run_one_binary() {
     if [ ! -x "$BIN_DIR/$bin_name" ]; then
         echo -e "${RED}✗ 二进制不存在: $bin_name${NC}"
         log_run "二进制不存在: $bin_name"
-        echo "STATUS_LINE:NOBIN:0:0"
+        echo "STATUS_LINE,NOBIN:0:0"
         return 1
     fi
 
@@ -369,6 +370,7 @@ step_run_single() {
     local stype=$(echo "$status_line" | cut -d: -f1)
     local sp=$(echo "$status_line" | cut -d: -f2)
     local sf=$(echo "$status_line" | cut -d: -f3)
+    [ "$stype" != "PASS" ] && G_TEST_STATUS=1
     echo -e "状态: ${GREEN}$stype${NC}, PASSED: ${GREEN}${sp}${NC}, FAILED: ${RED}${sf}${NC}"
 }
 
@@ -403,6 +405,7 @@ step_run_directory() {
         [ -n "$sf" ] && total_fail=$((total_fail + sf))
         [ "$stype" = "CRASH" ] && total_crash=$((total_crash + 1))
         [ "$stype" = "TIMEOUT" ] && total_timeout=$((total_timeout + 1))
+        [ "$stype" != "PASS" ] && G_TEST_STATUS=1
         echo ""
     done
 
@@ -479,6 +482,7 @@ step_run_all() {
                 [ -n "$sf" ] && total_fail=$((total_fail + sf))
                 [ "$stype" = "CRASH" ] && total_crash=$((total_crash + 1))
                 [ "$stype" = "TIMEOUT" ] && total_timeout=$((total_timeout + 1))
+                [ "$stype" != "PASS" ] && G_TEST_STATUS=1
             fi
         done
         rm -rf "$tmpdir"
@@ -496,6 +500,7 @@ step_run_all() {
             [ -n "$sf" ] && total_fail=$((total_fail + sf))
             [ "$stype" = "CRASH" ] && total_crash=$((total_crash + 1))
             [ "$stype" = "TIMEOUT" ] && total_timeout=$((total_timeout + 1))
+            [ "$stype" != "PASS" ] && G_TEST_STATUS=1
             echo ""
         done
     fi
@@ -516,6 +521,7 @@ step_run_all() {
     G_TEST_FAIL=$total_fail
     G_TEST_CRASH=$total_crash
     G_TEST_TIMEOUT=$total_timeout
+    [ "$count" -eq 0 ] && G_TEST_STATUS=1
 }
 
 # ==================== 第四步: 生成覆盖率报告 ====================
@@ -704,7 +710,7 @@ main() {
             do_build || exit 1
             step_run_all
             if [ "$ENABLE_COVERAGE" -eq 1 ]; then
-                step_gen_coverage
+                step_gen_coverage || G_TEST_STATUS=1
                 show_final_summary
             fi
             ;;
@@ -753,7 +759,7 @@ main() {
                 fi
             fi
             if [ "$ENABLE_COVERAGE" -eq 1 ]; then
-                step_gen_coverage
+                step_gen_coverage || G_TEST_STATUS=1
                 show_final_summary
             fi
             ;;
@@ -776,6 +782,7 @@ main() {
     if [ "$ENABLE_COVERAGE" -eq 1 ]; then
         echo -e "  覆盖率报告:  ${YELLOW}$COV_DIR/html/index.html${NC}"
     fi
+    return "$G_TEST_STATUS"
 }
 
 main "$@"

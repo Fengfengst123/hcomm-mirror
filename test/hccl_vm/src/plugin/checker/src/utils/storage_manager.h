@@ -12,6 +12,7 @@
 #define STORAGE_MANAGER_H
 
 #include <cstdint>
+#include <limits>
 #include <map>
 #include <mutex>
 #include <vector>
@@ -19,10 +20,10 @@
 #include "binary_data_type_pub.h"
 #include "data_slice.h"
 #include "dtype_common.h"
-#include "sim_common.h"
-#include "sim_op_db_types.h"
-#include "task_meta_defs.h"
 #include "framework/task_graph_generator_v3/task_def_v3.h"
+#include "operation_data/operation_data_types.h"
+#include "sim_common.h"
+#include "task_meta_defs.h"
 
 namespace HcclSim {
 struct MemBlock {
@@ -62,6 +63,8 @@ struct CheckerParam {
 
     // 以下是可能缺失的字段，初始化为安全值
     HcclReduceOp reduceType = static_cast<HcclReduceOp>(0);
+    DeviceId deviceId = INVALID_DEVICE_ID;
+    CommId commId = INVALID_COMM_ID;
     uint32_t srcRank = 0;
     uint32_t dstRank = 0;
     uint32_t root = 0;
@@ -74,8 +77,14 @@ struct CheckerParam {
 };
 
 struct RemoteDieInfo {
-    uint32_t dstRank;
+    uint32_t dstDeviceId; // 远端物理设备 ID
     uint32_t remoteDieId;
+};
+
+struct HalfRTTInfo {
+    uint32_t wishCntXnBegin = 0;
+    uint32_t wishCntXnEnd = 0;
+    uint32_t totalCntXn = 0;
 };
 
 using ChannelsPerDie = std::map<uint32_t, RemoteDieInfo>;
@@ -123,14 +132,23 @@ public:
         m_checker_params[operatorId] = m_checker_param;
     }
 
-    HcclResult
-    LoadHcclVmSynthesisData(uint32_t rankId, sim::OpMemInfoTab memInfo, std::vector<sim::CcuChannelTab>& channels);
-    HcclResult LoadHcclVmInstrData(std::vector<sim::CcuInstrResTab>& instrRes);
-    HcclResult LoadHcclVmTaskMetaData(std::vector<std::vector<sim::OpTaskTab>>& allTasks);
+    HcclResult LoadHcclVmSynthesisData(
+        DeviceId deviceId, CommId commId, const std::string& commName, uint64_t commHash, uint32_t opIter,
+        uint32_t rankId, sim::operation::OpMemInfoTab memInfo, std::vector<sim::operation::CcuChannelTab>& channels,
+        std::vector<sim::operation::HalfRTTTab>& halfRTT);
+    HcclResult LoadHcclVmInstrData(std::vector<sim::operation::CcuInstrResTab>& instrRes);
+    HcclResult LoadHcclVmTaskMetaData(std::vector<std::vector<sim::operation::OpTaskTab>>& allTasks);
     HcclResult LoadDecodedHcclVmTaskMetaData(const std::vector<std::vector<HcclTaskMetaData>>& allTaskMetas);
     void Reset(bool clearMemLayout = true);
-    uint64_t GetBlockSize(uint32_t rankId, BufferType bufferType);
-    HcclResult GetSlice(uint64_t addr, uint64_t len, DataSlice& dataSlice, uint32_t* rank = nullptr);
+    uint64_t GetBlockSize(
+        const std::string& commName, uint64_t commHash, uint32_t opIter, DeviceId deviceId, BufferType bufferType);
+    HcclResult GetSlice(
+        const std::string& commName, uint64_t commHash, uint32_t opIter, uint64_t addr, uint64_t len,
+        DataSlice& dataSlice, DeviceId* deviceId = nullptr);
+    std::map<DeviceId, RankId> GetDeviceRankMappings() const;
+    std::map<DeviceId, RankId> GetDeviceRankMappings(CommId commId) const;
+    bool GetDeviceIdByCommRank(CommId commId, RankId rankId, DeviceId& deviceId) const;
+    bool GetMainStreamId(DeviceId deviceId, TaskGraphGeneratorV3::StreamId& streamId) const;
     uint32_t GetRankSize() const;
 
     HcclResult ReadHeader(FILE* fp, FileHeader& header);
@@ -138,10 +156,13 @@ public:
     HcclResult ChannelRead(FILE* fp, ChannelInfo& chInfo);
 
     HcclVmInstrData GetHvmInstrData() const;
-    HcclResult Trans2CheckerParam(sim::OpDetailTab& detailTab, ::OpDetails& detail);
+    HcclResult Trans2CheckerParam(sim::operation::OpDetailTab& detailTab, ::OpDetails& detail);
     HcclVmTaskMetaData GetHvmTaskMetaData() const;
     void InitCcuInfo(DevType& devType, std::vector<uint64_t>& resourceBaseAddr);
-    void BeginOpGroup();
+    void BeginOpGroup(const std::string& commName, uint64_t commHash, uint32_t opIter);
+    std::string GetCurrentCommName() const;
+    uint64_t GetCurrentCommHash() const;
+    uint32_t GetCurrentOpIter() const;
     HcclResult FinalizeOpGroup();
     void MergeAll2AllVSendCountMatrix();
 
@@ -152,9 +173,19 @@ private:
     std::string m_data_id;
     mutable std::mutex m_mutex;
 
-    // RankID -> Type -> StartAddr -> BlockInfo
-    std::map<uint32_t, std::map<BufferType, std::map<uint64_t, MemBlock>>> m_mem_layout;
-    std::map<RankId, std::map<uint32_t, ChannelsPerDie>> m_allRankChannelInfo;
+    using DeviceMemLayout = std::map<DeviceId, std::map<BufferType, std::map<uint64_t, MemBlock>>>;
+
+    // 算子 buffer 按通信域和 opIter 隔离保存。
+    using CommIdentity = std::pair<std::string, uint64_t>;
+    std::map<CommIdentity, std::map<uint32_t, DeviceMemLayout>> m_op_mem_layout;
+    // CCL buffer 属于通信域，在多个 opIter 之间持续使用。
+    std::map<CommIdentity, DeviceMemLayout> m_comm_ccl_layout;
+    std::string m_current_comm_name;
+    uint64_t m_current_comm_hash{std::numeric_limits<uint64_t>::max()};
+    uint32_t m_current_op_iter{0};
+    std::map<CommId, std::map<DeviceId, RankId>> m_comm_device_rank_mappings;
+    std::map<DeviceId, TaskGraphGeneratorV3::StreamId> m_main_stream_ids;
+    std::map<DeviceId, std::map<uint32_t, ChannelsPerDie>> m_allRankChannelInfo;
     CheckerParam m_checker_param;
     std::map<TaskGraphGeneratorV3::OperatorId, CheckerParam> m_checker_params;
     // 用于收集每一轮算子中所有rank的发送矩阵数据

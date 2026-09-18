@@ -11,18 +11,19 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
-#include <sys/mman.h> // shm_unlink
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
 #include <sstream>
 #include <string>
+#include <sys/mman.h> // shm_unlink
 #include <vector>
 
 #include "cmd_base_utils.h"
 #include "cmd_cluster_model_utils.h"
-#include "store_sim_memory_manager.h"
+#include "sim_common_api.h"
 #include "store_sim_comm_pool_policy.h"
+#include "store_sim_memory_manager.h"
 
 using namespace HcclSim;
 
@@ -322,10 +323,10 @@ TEST_F(FileInModelDirTest, ResultContainsModelName)
     EXPECT_NE(result.find("my_test_model"), std::string::npos);
 }
 
-TEST_F(FileInModelDirTest, ResultContainsClusterModelDir)
+TEST_F(FileInModelDirTest, ResultContainsTopoMetaConfigDir)
 {
     std::string result = FileInModelDir("some_model");
-    EXPECT_NE(result.find("cluster_model"), std::string::npos);
+    EXPECT_NE(result.find("config/topo_meta"), std::string::npos);
 }
 
 class UninstallUserPluginParseTest : public testing::Test {
@@ -513,7 +514,8 @@ TEST_F(CstyleCmdEdgeTest, LargeArgCount)
     EXPECT_EQ(cmd.argc(), 100);
 }
 
-// ==================== RemoveFromLDPreload additional edge cases ====================
+// ==================== RemoveFromLDPreload additional edge cases
+// ====================
 
 class RemoveFromLDPreloadEdgeTest : public testing::Test {
 protected:
@@ -684,7 +686,8 @@ TEST_F(GetBinLocationAdditionalTest, PathIsAbsolute)
     EXPECT_EQ(loc[0], '/');
 }
 
-// ==================== InstallUserPluginTagParse additional tests ====================
+// ==================== InstallUserPluginTagParse additional tests
+// ====================
 
 class InstallUserPluginTagParseAdditionalTest : public testing::Test {
 protected:
@@ -716,7 +719,8 @@ TEST_F(InstallUserPluginTagParseAdditionalTest, DeepNestedPath)
     EXPECT_EQ(tag, "plugin");
 }
 
-// ==================== UninstallUserPluginParse additional tests ====================
+// ==================== UninstallUserPluginParse additional tests
+// ====================
 
 class UninstallUserPluginParseAdditionalTest : public testing::Test {
 protected:
@@ -810,9 +814,9 @@ TEST_F(ParseYamlTopoTest, ParseExistingYamlFile112)
     EXPECT_TRUE(result);
     EXPECT_EQ(topo.size(), 1u);
     if (!topo.empty()) {
-        EXPECT_EQ(topo[0].size(), 1u);
-        if (!topo[0].empty()) {
-            EXPECT_EQ(topo[0][0].size(), 2u);
+        EXPECT_EQ(topo.at(0).size(), 1u);
+        if (!topo.at(0).empty()) {
+            EXPECT_EQ(topo.at(0).at(0).size(), 2u);
         }
     }
 }
@@ -825,9 +829,9 @@ TEST_F(ParseYamlTopoTest, ParseExistingYamlFile114)
     EXPECT_TRUE(result);
     EXPECT_EQ(topo.size(), 1u);
     if (!topo.empty()) {
-        EXPECT_EQ(topo[0].size(), 1u);
-        if (!topo[0].empty()) {
-            EXPECT_EQ(topo[0][0].size(), 4u);
+        EXPECT_EQ(topo.at(0).size(), 1u);
+        if (!topo.at(0).empty()) {
+            EXPECT_EQ(topo.at(0).at(0).size(), 4u);
         }
     }
 }
@@ -840,9 +844,9 @@ TEST_F(ParseYamlTopoTest, ParseExistingYamlFile118)
     EXPECT_TRUE(result);
     EXPECT_EQ(topo.size(), 1u);
     if (!topo.empty()) {
-        EXPECT_EQ(topo[0].size(), 1u);
-        if (!topo[0].empty()) {
-            EXPECT_EQ(topo[0][0].size(), 8u);
+        EXPECT_EQ(topo.at(0).size(), 1u);
+        if (!topo.at(0).empty()) {
+            EXPECT_EQ(topo.at(0).at(0).size(), 8u);
         }
     }
 }
@@ -855,7 +859,7 @@ TEST_F(ParseYamlTopoTest, ParseExistingYamlFile121)
     EXPECT_TRUE(result);
     EXPECT_EQ(topo.size(), 1u);
     if (!topo.empty()) {
-        EXPECT_EQ(topo[0].size(), 2u);
+        EXPECT_EQ(topo.at(0).size(), 2u);
     }
 }
 
@@ -867,7 +871,7 @@ TEST_F(ParseYamlTopoTest, ParseExistingYamlFile122)
     EXPECT_TRUE(result);
     EXPECT_EQ(topo.size(), 1u);
     if (!topo.empty()) {
-        EXPECT_EQ(topo[0].size(), 2u);
+        EXPECT_EQ(topo.at(0).size(), 2u);
     }
 }
 
@@ -941,7 +945,8 @@ protected:
 
 TEST_F(ShowUserPluginFuncTest, NoPluginInstalled) { ShowUserPlugin(); }
 
-// ==================== RemoveFromLDPreload: empty result path (line 202) ====================
+// ==================== RemoveFromLDPreload: empty result path (line 202)
+// ====================
 
 TEST_F(RemoveFromLDPreloadEdgeTest, DuplicateEntriesAllRemoved)
 {
@@ -967,7 +972,8 @@ TEST_F(RemoveFromLDPreloadEdgeTest, TripleColonThenRemoveAll)
     EXPECT_EQ(val, nullptr);
 }
 
-// ==================== LogLevel Tests (error path: proxyConfig == nullptr) ====================
+// ==================== LogLevel Tests (error path: proxyConfig == nullptr)
+// ====================
 
 class LogLevelTest : public testing::Test {
 protected:
@@ -1049,7 +1055,7 @@ protected:
     std::string modelDir_;
     void SetUp() override
     {
-        modelDir_ = GetBinLocation() + "/cluster_model/topo_meta";
+        modelDir_ = InstallPath::ResolveToInstallRoot("config/topo_meta");
         std::filesystem::create_directories(modelDir_);
     }
     void TearDown() override {}
@@ -1201,7 +1207,7 @@ topology:
     TopoMeta topo;
     EXPECT_TRUE(ParseYamlTopo("ut_server_mismatch", topo));
     ASSERT_EQ(topo.size(), 1u);
-    EXPECT_EQ(topo[0].size(), 1u);
+    EXPECT_EQ(topo.at(0).size(), 1u);
     RemoveYaml("ut_server_mismatch");
 }
 
@@ -1222,8 +1228,8 @@ topology:
     TopoMeta topo;
     EXPECT_TRUE(ParseYamlTopo("ut_rank_mismatch", topo));
     ASSERT_EQ(topo.size(), 1u);
-    ASSERT_EQ(topo[0].size(), 1u);
-    EXPECT_EQ(topo[0][0].size(), 2u);
+    ASSERT_EQ(topo.at(0).size(), 1u);
+    EXPECT_EQ(topo.at(0).at(0).size(), 2u);
     RemoveYaml("ut_rank_mismatch");
 }
 
@@ -1302,7 +1308,8 @@ TEST_F(RunUserPluginTest, InvalidTag)
 
 TEST_F(RunUserPluginTest, EmptyTag) { EXPECT_ANY_THROW(RunUserPlugin("")); }
 
-// ==================== AIV expansion mode environment checks ====================
+// ==================== AIV expansion mode environment checks
+// ====================
 
 class AivModeTest : public testing::Test {
 protected:
@@ -1420,12 +1427,13 @@ protected:
     }
 };
 
-TEST_F(InitHvmEnvTest, InitializesSharedMemoryWithoutAivValidation)
+TEST_F(InitHvmEnvTest, FailsWhenClusterTopoDirInvalid)
 {
+    // 使用不存在的集群目录调用 InitHvmEnv 时，拓扑初始化应失败并返回错误。
     HcclVmResult ret = InitHvmEnv("/nonexistent/path/for/ut", 2, false);
-    EXPECT_EQ(ret, HCCL_SIM_HOST_SUCCESS_CMD);
+    EXPECT_EQ(ret, HCCL_SIM_HOST_ERROR_CMD);
 
-    // clean 模式不建复用区 HcclCommPool。
+    // normal 模式不建复用区 HcclCommPool，即使初始化失败也不会创建。
     EXPECT_EQ(sim::MemoryManager::GetInstance().AcquireMemByName(sim::CommPoolPolicy::kPoolName), nullptr);
 }
 

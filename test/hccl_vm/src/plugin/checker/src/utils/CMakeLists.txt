@@ -12,18 +12,13 @@ target_sources(checker PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/check_utils.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/file_utils.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/setting_manager.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/task_utils.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/sim_task.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/task_ccu.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/type_conversion.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/storage_manager.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/binary_data_operator.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/dump/dump_json_utils.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/dump/dump_manager.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/dump/dump_memory_timeline.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/dump/dump_graph.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/dump/dump_run_manifest.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/dump/validation_issue_recorder.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/dump/msgpack_writer.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/dump_v3/dump_v3_manager.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/dump_v3/dump_v3_dag.cc
 )

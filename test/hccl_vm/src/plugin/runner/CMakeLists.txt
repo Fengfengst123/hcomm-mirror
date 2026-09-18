@@ -27,6 +27,7 @@ target_include_directories(runner PRIVATE
     ${ASCEND_CANN_PACKAGE_PATH}/${CANN_ARCH_DIR}/include
     ${ASCEND_CANN_PACKAGE_PATH}/${CANN_ARCH_DIR}/pkg_inc
     ${ASCEND_CANN_PACKAGE_PATH}/${CANN_ARCH_DIR}/pkg_inc/hccl
+    ${ASCEND_CANN_PACKAGE_PATH}/pkg_inc/runtime
 
     ${HCOMM_CODE_ROOT}/src/base_comm/resources/ccu/ccu_microcode
 

@@ -9,16 +9,17 @@
  */
 
 #include "cmd_base_utils.h"
-#include <algorithm>
-#include <cerrno>
-#include <atomic>
-#include <chrono>
 #include <CLI11.hpp>
+#include <algorithm>
+#include <atomic>
+#include <cerrno>
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <dlfcn.h>
 #include <fcntl.h>
 #include <filesystem>
 #include <fstream>
@@ -30,7 +31,6 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
-#include <sys/file.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -38,20 +38,22 @@
 #include <unistd.h>
 #include <vector>
 
-#include "topo_ascend_cluster_parser.h"
 #include "cmd_base.h"
-#include "store_dump_shm_data.h"
-#include "store_sim_comm_pool_policy.h"
-#include "store_sim_run_mode.h"
+#include "operation_data/operation_data_ops.h"
+#include "runtime_state/db_sim_runner_common.h"
+#include "runtime_state/db_sim_runner_ops.h"
+#include "sim_common_api.h"
 #include "sim_data_dump.h"
 #include "sim_log.h"
-#include "runnerdb/modeldb/db_hccl_op_db_ops.h"
-#include "store_sim_memory_manager.h"
+#include "storage/table_access.h"
+#include "store/store_sim_resource_root.h"
+#include "store_dump_shm_data.h"
+#include "store_sim_comm_memory_manager.h"
+#include "store_sim_comm_pool_policy.h"
 #include "store_sim_device_memory_manager.h"
-#include "sim_process_syncer.h"
-#include "db_sim_runner_common.h"
-#include "sim_common_api.h"
-#include "db_sim_runner_db.h"
+#include "store_sim_memory_manager.h"
+#include "store_sim_run_mode.h"
+#include "topo_ascend_cluster_parser.h"
 #include "yaml-cpp/yaml.h"
 
 using namespace HcclSim;
@@ -87,10 +89,16 @@ static std::string ToPosixMqName(const char* name)
     if (name == nullptr || name[0] == '\0') {
         throw std::invalid_argument("message queue name is empty");
     }
+    std::string base;
     if (name[0] == '/') {
-        return name;
+        base = name;
+    } else {
+        base = "/" + std::string(name);
     }
-    return "/" + std::string(name);
+    // POSIX 消息队列名不能包含中间斜杠（无目录层级）, 无法落到
+    // /dev/shm/hvm_<pid>/ 下; 故把根目录名后缀（hvm_<pid>）嵌进名字，实现按
+    // hccl-vm 进程粒度隔离。
+    return base + "_" + sim::SimResourceRoot::GetTag();
 }
 
 static std::string MakeMqErrorMessage(const std::string& operation, const std::string& name, int err)
@@ -199,12 +207,6 @@ private:
     std::string name_;
     mqd_t mq_{static_cast<mqd_t>(-1)};
 };
-
-static bool IsBinDumpDisabled()
-{
-    const char* env = std::getenv("HCCL_VM_SKIP_BIN_DUMP");
-    return env != nullptr && std::string(env) == "1";
-}
 
 static bool StartsWith(const std::string& value, const std::string& prefix) { return value.rfind(prefix, 0) == 0; }
 
@@ -387,9 +389,18 @@ HcclVmResult InitHvmEnv(const std::string& configClusterDir, uint32_t level, boo
         }
     }
 
+    if (!sim::CommunicationMemoryManager::GetInstance().InitPool()) {
+        HCCL_VM_ERROR("InitPool failed");
+        return HcclVmResult::HCCL_SIM_HOST_ERROR_CMD;
+    }
+
     // 解析集群拓扑，并初始化静态数据模型数据
     HCCL_VM_INFO("Initializing: Cluster Topo");
-    AscendClusterTopoParser::GetInstance().InitClusterTopo(configClusterDir);
+    auto topoRet = AscendClusterTopoParser::GetInstance().InitClusterTopo(configClusterDir);
+    if (topoRet != HcclVmResult::HCCL_SIM_SUCCESS) {
+        HCCL_VM_ERROR("Failed to initialize cluster topology from directory: {}", configClusterDir);
+        return HcclVmResult::HCCL_SIM_HOST_ERROR_CMD;
+    }
 
     std::string checkerTag = "@checker";
     auto chkInstallRet = InstallUserPlugin(checkerTag);
@@ -495,7 +506,8 @@ HcclVmResult HcclVmExit()
     if (sim::IsCheckOnlyMode()) {
         sim::MemoryManager::GetInstance().FreeMemByName(sim::CommPoolPolicy::kPoolName);
     }
-    int ret1 = system("sudo rm -fr /dev/shm/* 2>/dev/null");
+    // 清空本进程 pid 目录（正常退出路径），不含其他实例目录。
+    sim::SimResourceRoot::GetInstance().Cleanup();
     FlushLog();
     ArchiveLogsAndData();
     return ret;
@@ -519,9 +531,11 @@ HcclVmResult InstallUserPlugin(std::string argStr)
         return ret;
     }
 
-    // 装 Runner 时若仅校验模式开着，复用池仍在、大块仍会引流，可能覆盖 Runner 真实数据，告警提示。
+    // 装 Runner 时若仅校验模式开着，复用池仍在、大块仍会引流，可能覆盖 Runner
+    // 真实数据，告警提示。
     if (argStr == "runner" && sim::IsCheckOnlyMode()) {
-        HCCL_VM_WARN("check-only mode on while runner installed; big-block contents are not guaranteed");
+        HCCL_VM_WARN("check-only mode on while runner installed; big-block "
+                     "contents are not guaranteed");
     }
 
     return HcclVmResult::HCCL_SIM_HOST_SUCCESS_CMD;
@@ -594,20 +608,23 @@ void ShowUserPlugin()
 HcclVmResult SetConsoleLogLevel(int level)
 {
     (void)level;
-    HCCL_VM_WARN("set console log level is disabled because ProxyConfig shared memory is removed");
+    HCCL_VM_WARN("set console log level is disabled because ProxyConfig shared "
+                 "memory is removed");
     return HcclVmResult::HCCL_SIM_HOST_ERROR_CMD;
 }
 
 HcclVmResult SetFileLogLevel(int level)
 {
     (void)level;
-    HCCL_VM_WARN("set file log level is disabled because ProxyConfig shared memory is removed");
+    HCCL_VM_WARN("set file log level is disabled because ProxyConfig shared "
+                 "memory is removed");
     return HcclVmResult::HCCL_SIM_HOST_ERROR_CMD;
 }
 
 HcclVmResult ShowCurrentLogLevel()
 {
-    HCCL_VM_WARN("show log level is disabled because ProxyConfig shared memory is removed");
+    HCCL_VM_WARN("show log level is disabled because ProxyConfig shared memory "
+                 "is removed");
     return HcclVmResult::HCCL_SIM_HOST_ERROR_CMD;
 }
 
@@ -625,17 +642,34 @@ HcclVmResult StartHvmCmd()
     std::string hcclVmbin = InstallPath::ResolveToInstallRoot("bin/hccl-vm");
     std::string libDir = "lib/" + GetArchStr() + "/";
     std::string proxyPathL0 = InstallPath::ResolveToInstallRoot(libDir + "libhccl_proxy_level0.so");
-    std::string proxyPathL2
-        = InstallPath::ResolveToInstallRoot(libDir + "libhccl_proxy_level" + std::to_string(g_hcclVmLevel) + ".so");
+    std::string proxyPathL1 = InstallPath::ResolveToInstallRoot(libDir + "libhccl_proxy_level1.so");
+    std::string proxyPathL2 = InstallPath::ResolveToInstallRoot(libDir + "libhccl_proxy_level2.so");
     if (!fs::exists(proxyPathL0) || !fs::exists(proxyPathL2)) {
         HCCL_VM_ERROR(
-            "proxy hacking .so not found: l0={}, l2={}. please check your proxy hacking .so:"
-            "1. Whether the hook library has been successfully built and installed. 2. Whether the simulation level "
-            "matches the proxy hook library version. Current simulation level: {}, Default simulation level: 2",
+            "proxy hacking .so not found: l0={}, l2={}. please check "
+            "your proxy hacking .so:"
+            "1. Whether the hook library has been successfully built "
+            "and installed. 2. Whether the simulation level matches "
+            "the proxy hook library version. Current simulation "
+            "level: {}, Default simulation level: 2",
             proxyPathL0, proxyPathL2, g_hcclVmLevel);
         return HCCL_SIM_HOST_ERROR_CMD;
     }
+    if (g_hcclVmLevel == 1 && !fs::exists(proxyPathL1)) {
+        HCCL_VM_ERROR(
+            "proxy hacking .so not found: l1={}. please check your "
+            "proxy hacking .so:"
+            "1. Whether the hook library has been successfully built "
+            "and installed. 2. Whether the simulation level matches "
+            "the proxy hook library version. Current simulation "
+            "level: {}, Default simulation level: 2",
+            proxyPathL1, g_hcclVmLevel);
+        return HCCL_SIM_HOST_ERROR_CMD;
+    }
     std::string preload = proxyPathL0 + ":" + proxyPathL2;
+    if (g_hcclVmLevel == 1) {
+        preload = proxyPathL0 + ":" + proxyPathL1 + ":" + proxyPathL2;
+    }
 
     // 管道处理的用途是隔绝进程终端在std::cout中的残留
     int pipefds[2] = {-1, -1};
@@ -685,9 +719,12 @@ HcclVmResult StartHvmCmd()
         setenv(HVM_BASH_ENV_KEY.c_str(), g_binDir.c_str(), 1);
         setenv("LD_PRELOAD", preload.c_str(), 1);
         setenv("HCCL_VM_INSTALL_ROOT", g_binDir.c_str(), 1);
+        setenv("HCCL_VM_LEVEL", std::to_string(g_hcclVmLevel).c_str(), 1);
         setenv("RANK_TABLE_FILE", InstallPath::ResolveToInstallRoot("data/ranktable.json").c_str(), 1);
         execv("/bin/bash", bashArgv);
-        exit(1);
+        // exec 失败必须 _exit：fork child 不运行继承进程的 atexit/静态析构
+        // （可能触碰父进程 Storage 会话/SQLite 连接等继承对象）。
+        _exit(1);
     } else {
         // Parent Process (Host)
         // 等待 bash 结束 (阻塞等待，保持Host存活)
@@ -754,105 +791,65 @@ void ServerListen()
     HCCL_VM_INFO("HOST Server listening thread exit...");
 }
 
-// 监听proxy和runner进程，中转进程状态
+// 监听 proxy 进程，等待所有设备进入同步状态并生成 runner 输入文件。
 void RunnerListen()
 {
+    // 空闲轮询间隔：就绪状态由 proxy
+    // 写入（aclrtSynchronizeStream）且持续到监听器
+    // 消费（DeleteAll）期间不会自行消失，无需高频探测；代价是就绪发现最多延迟
+    // 约一个轮询间隔，不承诺实时通知。
+    constexpr std::chrono::milliseconds kRunnerListenIdlePoll{500};
+    // 查询失败重试间隔：异常路径尽快恢复，与空闲轮询用途不同，保持原 10ms。
+    constexpr std::chrono::milliseconds kRunnerListenErrorRetry{10};
+
     HCCL_VM_INFO("Runner listening...");
     g_runnerListenFlag.store(true);
-    sim::ProcessSyncer syncer;
-    syncer.Init();
     while (g_runnerListenFlag.load()) {
-        // 1. 监听DeviceStatus，等待所有proxy进程都进入等待状态
-        auto allStatus = RunnerDB::GetByPred<sim::DeviceStatus>([](const sim::DeviceStatus& d) {
-            return d.synchronize_strategy == 1;
-        });
-        auto allRank = RunnerDB::GetByPred<sim::Rank>([](const sim::Rank& d) {
-            return true;
-        });
-
-        if (allStatus.size() != allRank.size() || allRank.empty()) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        // 1. 先计数就绪
+        // DeviceStatus（synchronize_strategy=1，命中单列索引，数据库端
+        //    计数聚合不回表）。数量为 0 时本轮无需再查 Device：原触发条件
+        //    "设备数非零且数量相等"在该取值下不可能成立。
+        auto readyStatusResult = sim::runtime::Db::Count<sim::runtime::DeviceStatus>(
+            HcclSim::Storage::Eq(&sim::runtime::DeviceStatus::synchronize_strategy, uint64_t{1}));
+        if (!readyStatusResult.ok() || !readyStatusResult.value.has_value()) {
+            HCCL_VM_WARN("runner listener DeviceStatus count failed; retrying");
+            std::this_thread::sleep_for(kRunnerListenErrorRetry);
             continue;
         }
-        auto ret = HcclVmResult::HCCL_SIM_SUCCESS;
-        // 单算子场景才dump数据
-        if (syncer.getCurrentRound() == 0) {
-            if (IsBinDumpDisabled()) {
-                HCCL_VM_INFO("skip dumping bin files (HCCL_VM_SKIP_BIN_DUMP=1)");
-            } else {
-                ret = DumpDataToFile("runner");
-                if (ret == HcclVmResult::HCCL_SIM_E_SKIP) {
-                    HCCL_VM_INFO("skip dumping data (multi-op scenario)");
-                } else if (ret != HcclVmResult::HCCL_SIM_SUCCESS) {
-                    HCCL_VM_WARN("dump data to file failed. ret: {:d}", static_cast<int>(ret));
-                }
-            }
-        } else if (syncer.getCurrentRound() >= 1) {
-            HCCL_VM_INFO("skip dumping data for round {:d}", syncer.getCurrentRound());
-            std::string dataDir = InstallPath::ResolveToInstallRoot("data") + "/";
-            std::remove((dataDir + "runner_hcclvm_instr_data.bin").c_str());
-            std::remove((dataDir + "runner_hcclvm_syn_data.bin").c_str());
-            std::remove((dataDir + "runner_hcclvm_task_data.bin").c_str());
-        }
-
-        bool isRunnerRunning = true;
-        {
-            int fd = open("/tmp/hccl_vm_runner.lock", O_RDONLY);
-            if (fd < 0) {
-                isRunnerRunning = false;
-            } else if (flock(fd, LOCK_EX | LOCK_NB) == 0) {
-                flock(fd, LOCK_UN);
-                close(fd);
-                isRunnerRunning = false;
-            } else {
-                close(fd);
-            }
-        }
-        // runner 未安装, 也会barrier proxy进程
-        if (!isRunnerRunning) {
-            uint32_t targetRound = syncer.getCurrentRound() + 1;
-            HCCL_VM_INFO("{:d} rank ready, barrier-only sync completed. targetRound={}", allStatus.size(), targetRound);
-            for (auto& ds : allStatus) {
-                auto dsId = ds.id;
-                RunnerDB::Update<sim::DeviceStatus>(dsId, [](sim::DeviceStatus& ds) {
-                    ds.synchronize_strategy = 0;
-                });
-            }
-            syncer.notifyProxyToContinue(targetRound);
+        const auto readyStatusCount = *readyStatusResult.value;
+        if (readyStatusCount == 0) {
+            std::this_thread::sleep_for(kRunnerListenIdlePoll);
             continue;
         }
 
-        HCCL_VM_INFO("{:d} rank ready, start runner...", allStatus.size());
-
-        // 2. 清除DeviceStatus表项
-        for (auto& ds : allStatus) {
-            auto dsId = ds.id;
-            RunnerDB::Update<sim::DeviceStatus>(dsId, [](sim::DeviceStatus& ds) {
-                ds.synchronize_strategy = 0;
-            });
+        // 2. 再计数在线 Device（status=1，为 (status, server_id)
+        // 索引首列，同样走
+        //    数据库端计数快路）。两次计数是先后执行的独立查询，不是跨表原子快照；
+        //    就绪状态持续到本轮消费，短暂不一致由下一轮轮询收敛，与原实现
+        //    两次查询的语义一致。
+        auto onlineDevicesResult = sim::runtime::Db::Count<sim::runtime::Device>(
+            HcclSim::Storage::Eq(&sim::runtime::Device::status, uint64_t{1}));
+        if (!onlineDevicesResult.ok() || !onlineDevicesResult.value.has_value()) {
+            HCCL_VM_WARN("runner listener Device count failed; retrying");
+            std::this_thread::sleep_for(kRunnerListenErrorRetry);
+            continue;
+        }
+        const auto onlineDeviceCount = *onlineDevicesResult.value;
+        if (onlineDeviceCount != readyStatusCount || onlineDeviceCount == 0) {
+            std::this_thread::sleep_for(kRunnerListenIdlePoll);
+            continue;
         }
 
-        {
-            int fd = open("/tmp/hccl_vm_runner.lock", O_RDONLY);
-            if (fd < 0) {
-                close(fd);
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                continue;
-            }
-            if (flock(fd, LOCK_EX | LOCK_NB) == 0) {
-                // 成功获得锁，说明runner进程已经结束，清理状态继续监听
-                flock(fd, LOCK_UN);
-                close(fd);
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                continue;
-            }
-            close(fd);
+        HCCL_VM_INFO("{:d} rank ready, dump runner data...", readyStatusCount);
+        const auto ret = DumpDataToFile("runner");
+        if (ret != HcclVmResult::HCCL_SIM_SUCCESS) {
+            HCCL_VM_WARN("dump data to file failed. ret: {:d}", static_cast<int>(ret));
         }
 
-        uint32_t targetRound = syncer.getCurrentRound() + 1;
-        syncer.notifyRunnerAndWaitAcknowledge(targetRound);
-        HCCL_VM_INFO("The task is ready, notify runner to execute. targetRound={}", targetRound);
+        // 清空本轮状态，下一轮由 proxy 重新写入 synchronize_strategy=1。
+        (void)sim::runtime::Db::DeleteAll<sim::runtime::DeviceStatus>(HcclSim::Storage::ClearMode::KEEP_SEQUENCE);
     }
+    HCCL_VM_INFO("Runner listening thread exit.");
 }
 
 void ParseCommand(std::string& cmd)
@@ -898,7 +895,7 @@ static void BackupDatabase(const std::string& srcPath)
 
     std::string destPath = (dataDir / ("hccl_vm_data_backup_" + oss.str() + ".db")).string();
 
-    auto ret = HcclSim::DB::OpDbOps::Instance().Backup(destPath);
+    auto ret = sim::operation::BackupOperationData(destPath);
     if (ret != HcclSim::HCCL_SIM_SUCCESS) {
         HCCL_VM_ERROR("Failed to backup database to {}", destPath);
     } else {
@@ -1011,56 +1008,6 @@ static void BackupAivTaskFiles(const fs::path& backupDir)
     }
 }
 
-static void CleanShmFilesByPrefix(const std::vector<std::string>& prefixes)
-{
-    const fs::path shmDir = "/dev/shm";
-    std::error_code ec;
-    if (!fs::exists(shmDir, ec) || ec || !fs::is_directory(shmDir, ec)) {
-        if (ec) {
-            HCCL_VM_WARN("failed to access shared memory directory {}: {}", shmDir.string(), ec.message());
-        }
-        return;
-    }
-
-    uint32_t removedCount = 0;
-    uint32_t failedCount = 0;
-    fs::directory_iterator iter(shmDir, ec);
-    if (ec) {
-        HCCL_VM_WARN("failed to iterate shared memory directory {}: {}", shmDir.string(), ec.message());
-        return;
-    }
-    for (const fs::directory_iterator end; iter != end; iter.increment(ec)) {
-        if (ec) {
-            HCCL_VM_WARN("failed to iterate shared memory directory {}: {}", shmDir.string(), ec.message());
-            return;
-        }
-
-        const fs::path filePath = iter->path();
-        const std::string fileName = filePath.filename().string();
-        const bool matched = std::any_of(prefixes.begin(), prefixes.end(), [&fileName](const std::string& prefix) {
-            return StartsWith(fileName, prefix);
-        });
-        if (!matched) {
-            continue;
-        }
-
-        std::error_code statusEc;
-        const fs::file_status status = fs::symlink_status(filePath, statusEc);
-        if (statusEc || !fs::is_regular_file(status)) {
-            continue;
-        }
-
-        std::error_code removeEc;
-        if (!fs::remove(filePath, removeEc) || removeEc) {
-            ++failedCount;
-            HCCL_VM_WARN("failed to remove shared memory file {}: {}", filePath.string(), removeEc.message());
-            continue;
-        }
-        ++removedCount;
-    }
-    HCCL_VM_INFO("cleaned {} shared memory files in {}, failed {}", removedCount, shmDir.string(), failedCount);
-}
-
 HcclVmResult ClearDbTables()
 {
     const fs::path backupDir = fs::path(InstallPath::ResolveToInstallRoot("data/" + MakeDataBackupTimestamp()));
@@ -1068,55 +1015,64 @@ HcclVmResult ClearDbTables()
     BackupAivTaskFiles(backupDir);
     BackupDatabase(InstallPath::ResolveToInstallRoot("data/hccl_vm_data.db"));
 
-    // 1. 清空 OpDbOps (SQLite) 中的静态表数据
-    std::vector<std::string> staticTables
-        = {"opDetails", "opMemInfo", "syncRecords", "ccuChannels", "JettyMaps", "ccuInstrRes", "ccuInstr"};
-    for (const auto& table : staticTables) {
-        HcclSim::DB::OpDbOps::Instance().ExecUpdate("DELETE FROM " + table, {});
+    // 1. 清空静态操作数据表（迁移前 DELETE FROM 语义：保留自增序列）
+    (void)sim::operation::ClearStaticData();
+
+    // 2. 销毁全部动态任务表 (opTask_P_*)：枚举物理表并按 PID scope 逐一销毁
+    (void)sim::operation::DropDynamicData();
+
+    // 3. 清空 RunnerDB (内存/SHM) 表。单次清空表直接走一次性原子入口；
+    //    CcuResource 不在此处整表删除（保留行/句柄，指令空间列已于 2026-09-17
+    //    删除，无整列重写需求），逐行仅归零计数/状态。整表 DeleteAll 仅发生在
+    //    reset 主流程（HcclVmResetCommDomain 先 DeleteAll 再调本函数，届时
+    //    下方枚举为空操作）。
+    (void)sim::runtime::Db::DeleteAll<sim::runtime::PhyMemBlock>(HcclSim::Storage::ClearMode::RESET_SEQUENCE);
+    (void)sim::runtime::Db::DeleteAll<sim::runtime::VirtualMemBlock>(HcclSim::Storage::ClearMode::RESET_SEQUENCE);
+    (void)sim::runtime::Db::DeleteAll<sim::runtime::RaDevice>(HcclSim::Storage::ClearMode::RESET_SEQUENCE);
+    (void)sim::runtime::Db::DeleteAll<sim::runtime::RaContext>(HcclSim::Storage::ClearMode::RESET_SEQUENCE);
+    (void)sim::runtime::Db::DeleteAll<sim::runtime::RaQP>(HcclSim::Storage::ClearMode::RESET_SEQUENCE);
+    (void)sim::runtime::Db::DeleteAll<sim::runtime::RaJetty>(HcclSim::Storage::ClearMode::RESET_SEQUENCE);
+    (void)sim::runtime::Db::DeleteAll<sim::runtime::EndPointPair>(HcclSim::Storage::ClearMode::RESET_SEQUENCE);
+    (void)sim::runtime::Db::DeleteAll<sim::runtime::Link>(HcclSim::Storage::ClearMode::RESET_SEQUENCE);
+    (void)sim::runtime::Db::DeleteAll<sim::runtime::MemoryLayout>(HcclSim::Storage::ClearMode::RESET_SEQUENCE);
+    (void)sim::runtime::Db::DeleteAll<sim::runtime::SimModelData>(HcclSim::Storage::ClearMode::RESET_SEQUENCE);
+    auto ccuRealTab
+        = sim::runtime::Db::GetByPred<sim::runtime::CcuResource>(HcclSim::Storage::All<sim::runtime::CcuResource>());
+    if (!ccuRealTab.ok() || !ccuRealTab.value.has_value()) {
+        HCCL_VM_ERROR("cannot enumerate ccu resources while clearing database");
+        return HcclVmResult::HCCL_SIM_E_INTERNAL;
+    }
+    for (const auto& tmp : *ccuRealTab.value) {
+        // 显式字段更新：计数/状态归零（instr_space 列已删除，指令数据不落库）。
+        (void)sim::runtime::Db::Update<sim::runtime::CcuResource>(
+            HcclSim::Storage::Eq(&sim::runtime::CcuResource::id, tmp.id),
+            HcclSim::Storage::Set(&sim::runtime::CcuResource::instr_cnt, uint64_t{0}),
+            HcclSim::Storage::Set(&sim::runtime::CcuResource::state, uint64_t{0}));
+    }
+    (void)sim::runtime::Db::DeleteAll<sim::runtime::CcuChannel>(HcclSim::Storage::ClearMode::RESET_SEQUENCE);
+    (void)sim::runtime::Db::DeleteAll<sim::runtime::DeviceStatus>(HcclSim::Storage::ClearMode::RESET_SEQUENCE);
+    (void)sim::runtime::Db::DeleteAll<sim::runtime::Task>(HcclSim::Storage::ClearMode::RESET_SEQUENCE);
+    (void)sim::runtime::Db::DeleteAll<sim::runtime::Runner>(HcclSim::Storage::ClearMode::RESET_SEQUENCE);
+    (void)sim::runtime::Db::DeleteAll<sim::runtime::RaSocketPair>(HcclSim::Storage::ClearMode::RESET_SEQUENCE);
+    (void)sim::runtime::Db::DeleteAll<sim::runtime::TopoMetaConfig>(HcclSim::Storage::ClearMode::RESET_SEQUENCE);
+    (void)sim::runtime::Db::DeleteAll<sim::runtime::HcclThread>(HcclSim::Storage::ClearMode::RESET_SEQUENCE);
+    (void)sim::runtime::Db::DeleteAll<sim::runtime::HcclChannel>(HcclSim::Storage::ClearMode::RESET_SEQUENCE);
+    (void)sim::runtime::Db::DeleteAll<sim::runtime::CommunicatorDestroySync>(
+        HcclSim::Storage::ClearMode::RESET_SEQUENCE);
+    (void)sim::runtime::Db::DeleteAll<sim::runtime::Communicator>(HcclSim::Storage::ClearMode::RESET_SEQUENCE);
+    (void)sim::runtime::Db::DeleteAll<sim::runtime::Notify>(HcclSim::Storage::ClearMode::RESET_SEQUENCE);
+    (void)sim::runtime::Db::DeleteAll<sim::runtime::HcclBuffer>(HcclSim::Storage::ClearMode::RESET_SEQUENCE);
+    (void)sim::runtime::Db::DeleteAll<sim::runtime::HcclMem>(HcclSim::Storage::ClearMode::RESET_SEQUENCE);
+    (void)sim::runtime::Db::DeleteAll<sim::runtime::HcommEndpoint>(HcclSim::Storage::ClearMode::RESET_SEQUENCE);
+    (void)sim::runtime::Db::DeleteAll<sim::runtime::HcommMemReg>(HcclSim::Storage::ClearMode::RESET_SEQUENCE);
+    auto engineCtxResetFn = reinterpret_cast<void (*)()>(dlsym(RTLD_DEFAULT, "HcclEngineCtxResetAll"));
+    if (engineCtxResetFn != nullptr) {
+        engineCtxResetFn();
     }
 
-    // 2. 删除 OpDbOps (SQLite) 中的动态表 (opTask_P_*)
-    std::vector<std::vector<std::string>> rows;
-    std::string querySql = "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'opTask_P_%'";
-    if (HcclSim::DB::OpDbOps::Instance().ExecQuery(querySql, {}, rows) == 0) {
-        for (const auto& row : rows) {
-            if (!row.empty()) {
-                HcclSim::DB::OpDbOps::Instance().ExecUpdate("DROP TABLE IF EXISTS " + row[0], {});
-            }
-        }
-    }
-
-    // 3. 清空 RunnerDB (内存/SHM) 表
-    RunnerDB::DeleteAll<sim::PhyMemBlock>();
-    RunnerDB::DeleteAll<sim::VirtualMemBlock>();
-    RunnerDB::DeleteAll<sim::RaDevice>();
-    RunnerDB::DeleteAll<sim::RaContext>();
-    RunnerDB::DeleteAll<sim::RaQP>();
-    RunnerDB::DeleteAll<sim::RaJetty>();
-    RunnerDB::DeleteAll<sim::EndPointPair>();
-    RunnerDB::DeleteAll<sim::MemoryLayout>();
-    RunnerDB::DeleteAll<sim::SimModelData>();
-    auto ccuRealTab = RunnerDB::GetByPred<sim::CcuResource>([](auto&&) {
-        return true;
-    });
-    for (auto& tmp : ccuRealTab) {
-        RunnerDB::Update<sim::CcuResource>(tmp.id, [](sim::CcuResource& ccuRes) {
-            ccuRes.instr_cnt = 0;
-            ccuRes.state = 0;
-            memset(ccuRes.instr_space, 0, sizeof(ccuRes.instr_space));
-        });
-    }
-    RunnerDB::DeleteAll<sim::CcuChannel>();
-    RunnerDB::DeleteAll<sim::DeviceStatus>();
-    RunnerDB::DeleteAll<sim::Task>();
-    RunnerDB::DeleteAll<sim::Runner>();
-    RunnerDB::DeleteAll<sim::RaSocket>();
-    RunnerDB::DeleteAll<sim::RaSocketPair>();
-
-    CleanShmFilesByPrefix({"DEV", "ra_sock_"});
-
-    sim::ProcessSyncer syncer;
-    syncer.Reset();
+    // 仅清理本进程 pid 目录下的遗留 DEV/ra_sock_ 文件，不整机扫
+    // /dev/shm（跨实例隔离）。
+    sim::SimResourceRoot::GetInstance().CleanShmByPrefix({"DEV", "ra_sock_"});
 
     return HcclVmResult::HCCL_SIM_HOST_SUCCESS_CMD;
 }
@@ -1126,17 +1082,18 @@ extern uint64_t g_cur_server_key;
 HcclVmResult HcclVmResetCommDomain()
 {
     AscendClusterTopoParser::GetInstance().SetClusterStatus(HvmClusterStatus::COMM_DOMAIN_UNINIT);
-    // 重置 Host 进程中缓存的 server key，防止跨用例残留
+    // 重置 Host 进程中缓存的 server key与通信域配置缓存，防止跨用例残留
     g_cur_server_key = 0;
+    sim::runtime::ResetCommConfigData();
     // 重置device的逻辑ID
-    auto ret2 = sim::ResetAllDeviceLogicId();
+    auto ret2 = sim::runtime::ResetAllDeviceLogicId();
     if (!ret2) {
         HCCL_VM_ERROR("reset all device logic id failed.");
         return HcclVmResult::HCCL_SIM_E_INTERNAL;
     }
-    // 清除Rank/CcuResource表
-    RunnerDB::DeleteAll<sim::Rank>();
-    RunnerDB::DeleteAll<sim::CcuResource>();
+    // 清除CcuResource/Communicator表
+    (void)sim::runtime::Db::DeleteAll<sim::runtime::CcuResource>(HcclSim::Storage::ClearMode::RESET_SEQUENCE);
+    (void)sim::runtime::Db::DeleteAll<sim::runtime::Communicator>(HcclSim::Storage::ClearMode::RESET_SEQUENCE);
     return ClearDbTables();
 }
 
@@ -1175,7 +1132,26 @@ HcclVmResult CopyFile(const std::string& clusterDir)
     srcFile.close();
     destFile.close();
 
-    HCCL_VM_INFO("✅ topo.json copy success!");
+    // 6. 校验/etc/hccl_rootinfo.json文件中topo_file_path路径是否为destPath
+    std::string topoFilePath = "/etc/hccl_rootinfo.json";
+    std::ifstream rootinfoFile(topoFilePath, std::ios::binary);
+    if (rootinfoFile.is_open()) {
+        std::string line;
+        while (std::getline(rootinfoFile, line)) {
+            if (line.find("topo_file_path") != std::string::npos) {
+                if (line.find(destPath) == std::string::npos) {
+                    HCCL_VM_ERROR("wrong topo_file_path in rootinfo.json file. path: {}", topoFilePath);
+                    return HcclVmResult::HCCL_SIM_E_INTERNAL;
+                }
+                break;
+            }
+        }
+        rootinfoFile.close();
+    } else {
+        HCCL_VM_WARN("{} not exist", topoFilePath);
+    }
+
+    HCCL_VM_INFO("topo.json copy success!");
 
     return HcclVmResult::HCCL_SIM_SUCCESS;
 }

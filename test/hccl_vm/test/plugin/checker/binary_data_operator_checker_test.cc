@@ -64,8 +64,8 @@ TEST_F(BinaryDataOperatorCheckerTest, TaskMetaRead_Normal_Success)
     taskDataIn.taskType = HccLTaskMetaType::REDUCE;
     taskDataIn.rankId = 1;
     taskDataIn.streamId = 2;
-    taskDataIn.taskData.reduce.srcRankId = 0;
-    taskDataIn.taskData.reduce.dstRankId = 1;
+    taskDataIn.taskData.reduce.srcDeviceId = 0;
+    taskDataIn.taskData.reduce.dstDeviceId = 1;
 
     TaskMetaWrite(fp, taskDataIn);
     fclose(fp);

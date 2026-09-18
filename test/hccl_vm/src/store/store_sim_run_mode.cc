@@ -10,16 +10,17 @@
 
 #include "store_sim_run_mode.h"
 
-#include "db_sim_runner_db.h"
-#include "sim_models.h"
+#include "runtime_state/db_sim_runner_ops.h"
+#include "runtime_state/sim_models.h"
+#include "storage/table_access.h"
 
 namespace sim {
 bool ProbeCheckOnlyMode()
 {
-    auto cfg = RunnerDB::GetOneByPred<RunModeConfig>([](const RunModeConfig&) {
-        return true;
-    });
-    return cfg.second && cfg.first.mode != 0;
+    // 运行模式单行表:空条件单行查询(取首行)。
+    auto selected = sim::runtime::Db::GetOneByPred<sim::runtime::RunModeConfig>(
+        HcclSim::Storage::All<sim::runtime::RunModeConfig>());
+    return selected.ok() && selected->mode != 0;
 }
 
 bool IsCheckOnlyMode()

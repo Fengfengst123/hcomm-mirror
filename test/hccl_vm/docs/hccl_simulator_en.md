@@ -24,6 +24,7 @@ Implement layered simulation depth:
 | L3 | Network performance modeling | ⏳ Long-term |
 | L4 | Fault injection diagnosis | ⏳ Long-term |
 
+
 #### 1.2.1 Usage Scenarios
 
 | Role | Purpose |
@@ -80,6 +81,7 @@ C --> D[CPU Execution]
 - L1: Communication semantic checks (no concurrent communication domains/ operators)
 - L2: Global event serialization.
 - L3/L4: Fixed-seed random sources or a unified clock.
+
 
 ### 3.2 Typical Workflow
 
@@ -491,9 +493,11 @@ while HcclAllReduceInner(is_running=True):
 
 ### 4.6 FR4 Persistence
 
+
 #### 4.6.1 `L2 Phase` Story: The simulator provides persistence interfaces so developers can quickly locate issues after testing ends
 
 ### 4.7 FR5 Controller
+
 
 The user generally uses HCCL test programs in a terminal for ease of use. Therefore, the controller runs through a command-line instance program.
 
@@ -686,11 +690,13 @@ Convention: The simulator provides Host offline implementations for the APIs lis
 
 #### 5.1.1 `L1 Phase`
 
+
 - HCCL communication domain management (25 APIs)
 - HCCL control plane programming (23 APIs)
 - HCCL AICPU programming (8 APIs)
 
 #### 5.1.2 `L2 Phase`
+
 
 ### 5.2 **Appendix B: Topology Configuration File Format (Schema)**
 
@@ -705,6 +711,7 @@ Each `link` object contains:
 - `type` (string, optional): The connection type, such as "HCCS" or "PCIe". In the current L1 phase, this field serves only as a comment and does not affect logic.
 
 **Sample: `my_topo.yaml`**
+
 
 ```yaml
 ## Describe a 4-NPU ring connection topology
@@ -765,3 +772,4 @@ extern "C" SimValidationResult post_HcclAllReduceInner_hook(const SimCommContext
 ```
 
 ### 5.4 **Appendix D: System Models**
+

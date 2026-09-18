@@ -13,204 +13,200 @@
 #include <sys/mman.h>
 
 #include "store_sim_comm_memory_manager.h"
-#include "store_sim_memory_manager.h"
+#include "store_sim_resource_root.h"
 
 class CommMemoryManagerTest : public testing::Test {
 protected:
     void SetUp() override
     {
-        shm_unlink("comm_test_alloc");
-        shm_unlink("comm_test_acquire");
-        shm_unlink("comm_test_write");
-        shm_unlink("comm_test_write_empty");
-        shm_unlink("test_alloc_null");
-        shm_unlink("comm_test_read");
-        shm_unlink("comm_test_read_null");
-        shm_unlink("comm_test_read_zero");
-        shm_unlink("comm_test_read_empty");
-        shm_unlink("comm_test_multi");
-        shm_unlink("comm_test_write_zero");
-        shm_unlink("comm_test_write_ptr");
-        shm_unlink("comm_test_acq");
-        shm_unlink("comm_test_rel");
+        // 先初始化 pid 目录（强清重建），保证 GetOrCreatePage 用 open()
+        // 的中间目录存在
+        ASSERT_TRUE(sim::SimResourceRoot::GetInstance().Init());
+        ASSERT_TRUE(sim::CommunicationMemoryManager::GetInstance().InitPool());
     }
 
     void TearDown() override
     {
-        sim::CommunicationMemoryManager::GetInstance().ReleaseCommMem("comm_test_alloc");
-        sim::CommunicationMemoryManager::GetInstance().ReleaseCommMem("comm_test_acquire");
-        sim::CommunicationMemoryManager::GetInstance().ReleaseCommMem("comm_test_write");
-        sim::CommunicationMemoryManager::GetInstance().ReleaseCommMem("comm_test_write_empty");
-        sim::CommunicationMemoryManager::GetInstance().ReleaseCommMem("test_alloc_null");
+        sim::CommunicationMemoryManager::GetInstance().Shutdown();
+        // 清理本进程 pid 目录，隔离残留资源
+        sim::SimResourceRoot::GetInstance().Cleanup();
     }
 };
 
-TEST_F(CommMemoryManagerTest, GetInstance_Singleton_SameInstance)
+TEST_F(CommMemoryManagerTest, GetInstance_Singleton)
 {
     sim::CommunicationMemoryManager& inst1 = sim::CommunicationMemoryManager::GetInstance();
     sim::CommunicationMemoryManager& inst2 = sim::CommunicationMemoryManager::GetInstance();
     EXPECT_EQ(&inst1, &inst2);
 }
 
-TEST_F(CommMemoryManagerTest, AllocCommMem_Normal_Success)
+TEST_F(CommMemoryManagerTest, InitPool_Success)
 {
-    void* ptr = sim::CommunicationMemoryManager::GetInstance().AllocCommMem("comm_test_alloc");
-    EXPECT_NE(ptr, nullptr);
+    sim::CommunicationMemoryManager::GetInstance().Shutdown();
+    unlink(sim::SimResourceRoot::BuildName("ra_sock_pool_0").c_str());
+    EXPECT_TRUE(sim::CommunicationMemoryManager::GetInstance().InitPool());
 }
 
-TEST_F(CommMemoryManagerTest, AllocCommMem_NullName_Fail)
+TEST_F(CommMemoryManagerTest, AllocSlot_Basic)
 {
-    void* ptr = sim::CommunicationMemoryManager::GetInstance().AllocCommMem(nullptr);
-    EXPECT_EQ(ptr, nullptr);
+    auto& mgr = sim::CommunicationMemoryManager::GetInstance();
+    uint32_t first = mgr.AllocSlot();
+    ASSERT_NE(first, UINT32_MAX);
+    uint32_t second = mgr.AllocSlot();
+    ASSERT_NE(second, UINT32_MAX);
+    EXPECT_EQ(first + 1, second);
 }
 
-TEST_F(CommMemoryManagerTest, AcquireCommMem_Normal_Success)
+TEST_F(CommMemoryManagerTest, GetSlotHandle_Client)
 {
-    sim::CommunicationMemoryManager::GetInstance().AllocCommMem("comm_test_acq");
-    void* ptr = sim::CommunicationMemoryManager::GetInstance().AcquireCommMem("comm_test_acq");
-    EXPECT_NE(ptr, nullptr);
-    sim::CommunicationMemoryManager::GetInstance().ReleaseCommMem("comm_test_acq");
+    auto& mgr = sim::CommunicationMemoryManager::GetInstance();
+    uint32_t slotIdx = mgr.AllocSlot();
+    ASSERT_NE(slotIdx, UINT32_MAX);
+
+    sim::SlotHandle h = mgr.GetSlotHandle(slotIdx, sim::kRsFdClient);
+    ASSERT_NE(h.base, nullptr);
+    EXPECT_EQ(h.sendBuf, h.base + sim::kSlotC2sOff);
+    EXPECT_EQ(h.recvBuf, h.base + sim::kSlotS2cOff);
+    EXPECT_EQ(h.sendLock, reinterpret_cast<volatile uint32_t*>(h.base + sim::kC2sLockOff));
+    EXPECT_EQ(h.recvLock, reinterpret_cast<volatile uint32_t*>(h.base + sim::kS2cLockOff));
 }
 
-TEST_F(CommMemoryManagerTest, AcquireCommMem_NotExist_Fail)
+TEST_F(CommMemoryManagerTest, GetSlotHandle_Server)
 {
-    void* ptr = sim::CommunicationMemoryManager::GetInstance().AcquireCommMem("not_exist_comm");
-    EXPECT_EQ(ptr, nullptr);
+    auto& mgr = sim::CommunicationMemoryManager::GetInstance();
+    uint32_t slotIdx = mgr.AllocSlot();
+    ASSERT_NE(slotIdx, UINT32_MAX);
+
+    sim::SlotHandle h = mgr.GetSlotHandle(slotIdx, sim::kRsFdServer);
+    ASSERT_NE(h.base, nullptr);
+    EXPECT_EQ(h.sendBuf, h.base + sim::kSlotS2cOff);
+    EXPECT_EQ(h.recvBuf, h.base + sim::kSlotC2sOff);
+    EXPECT_EQ(h.sendLock, reinterpret_cast<volatile uint32_t*>(h.base + sim::kS2cLockOff));
+    EXPECT_EQ(h.recvLock, reinterpret_cast<volatile uint32_t*>(h.base + sim::kC2sLockOff));
 }
 
-TEST_F(CommMemoryManagerTest, AcquireCommMem_NullName_Fail)
+TEST_F(CommMemoryManagerTest, GetSlotHandle_InvalidSlot)
 {
-    void* ptr = sim::CommunicationMemoryManager::GetInstance().AcquireCommMem(nullptr);
-    EXPECT_EQ(ptr, nullptr);
+    auto& mgr = sim::CommunicationMemoryManager::GetInstance();
+    sim::SlotHandle h = mgr.GetSlotHandle(UINT32_MAX, sim::kRsFdClient);
+    EXPECT_EQ(h.base, nullptr);
 }
 
-TEST_F(CommMemoryManagerTest, ReleaseCommMem_Normal_Success)
+TEST_F(CommMemoryManagerTest, Send_Basic)
 {
-    sim::CommunicationMemoryManager::GetInstance().AllocCommMem("comm_test_rel");
-    int ret = sim::CommunicationMemoryManager::GetInstance().ReleaseCommMem("comm_test_rel");
-    EXPECT_EQ(ret, 0);
+    auto& mgr = sim::CommunicationMemoryManager::GetInstance();
+    uint32_t slotIdx = mgr.AllocSlot();
+    ASSERT_NE(slotIdx, UINT32_MAX);
+
+    sim::SlotHandle client = mgr.GetSlotHandle(slotIdx, sim::kRsFdClient);
+    const char* data = "hello";
+    int64_t ret = mgr.Send(client, data, strlen(data));
+    EXPECT_EQ(ret, static_cast<int64_t>(strlen(data)));
+    EXPECT_EQ(*client.sendSize, static_cast<uint32_t>(strlen(data)));
 }
 
-TEST_F(CommMemoryManagerTest, ReleaseCommMem_NullName_Fail)
+TEST_F(CommMemoryManagerTest, Send_BufferFull)
 {
-    int ret = sim::CommunicationMemoryManager::GetInstance().ReleaseCommMem(nullptr);
-    EXPECT_EQ(ret, -1);
+    auto& mgr = sim::CommunicationMemoryManager::GetInstance();
+    uint32_t slotIdx = mgr.AllocSlot();
+    ASSERT_NE(slotIdx, UINT32_MAX);
+
+    sim::SlotHandle client = mgr.GetSlotHandle(slotIdx, sim::kRsFdClient);
+    char bigData[sim::kSlotBufSize + 1];
+    memset(bigData, 'A', sizeof(bigData));
+    int64_t ret = mgr.Send(client, bigData, sizeof(bigData));
+    EXPECT_GT(ret, 0);
+    EXPECT_LE(ret, static_cast<int64_t>(sim::kSlotBufSize));
 }
 
-TEST_F(CommMemoryManagerTest, ReleaseCommMem_NotExist_Fail)
+TEST_F(CommMemoryManagerTest, Recv_Basic)
 {
-    int ret = sim::CommunicationMemoryManager::GetInstance().ReleaseCommMem("not_exist_release");
-    EXPECT_EQ(ret, -1);
-}
+    auto& mgr = sim::CommunicationMemoryManager::GetInstance();
+    uint32_t slotIdx = mgr.AllocSlot();
+    ASSERT_NE(slotIdx, UINT32_MAX);
 
-TEST_F(CommMemoryManagerTest, WriteCommMem_Normal_Success)
-{
-    sim::CommunicationMemoryManager::GetInstance().AllocCommMem("comm_test_write");
-    const char* data = "test data";
-    int ret = sim::CommunicationMemoryManager::GetInstance().WriteCommMem("comm_test_write", data, strlen(data));
-    EXPECT_EQ(ret, 0);
-}
+    sim::SlotHandle client = mgr.GetSlotHandle(slotIdx, sim::kRsFdClient);
+    sim::SlotHandle server = mgr.GetSlotHandle(slotIdx, sim::kRsFdServer);
 
-TEST_F(CommMemoryManagerTest, WriteCommMem_NullName_Fail)
-{
-    const char* data = "test";
-    int ret = sim::CommunicationMemoryManager::GetInstance().WriteCommMem(nullptr, data, strlen(data));
-    EXPECT_EQ(ret, -1);
-}
-
-TEST_F(CommMemoryManagerTest, WriteCommMem_NullDataPtr_Fail)
-{
-    sim::CommunicationMemoryManager::GetInstance().AllocCommMem("comm_test_write_ptr");
-    int ret = sim::CommunicationMemoryManager::GetInstance().WriteCommMem("comm_test_write_ptr", nullptr, 10);
-    EXPECT_EQ(ret, -1);
-    sim::CommunicationMemoryManager::GetInstance().ReleaseCommMem("comm_test_write_ptr");
-}
-
-TEST_F(CommMemoryManagerTest, WriteCommMem_ZeroSize_DoNothing)
-{
-    sim::CommunicationMemoryManager::GetInstance().AllocCommMem("comm_test_write_zero");
-    const char* data = "test";
-    int ret = sim::CommunicationMemoryManager::GetInstance().WriteCommMem("comm_test_write_zero", data, 0);
-    EXPECT_EQ(ret, -1);
-    sim::CommunicationMemoryManager::GetInstance().ReleaseCommMem("comm_test_write_zero");
-}
-
-TEST_F(CommMemoryManagerTest, WriteCommMem_NotExist_Fail)
-{
-    const char* data = "test";
-    int ret = sim::CommunicationMemoryManager::GetInstance().WriteCommMem("not_exist_write", data, strlen(data));
-    EXPECT_EQ(ret, -1);
-}
-
-TEST_F(CommMemoryManagerTest, ReadCommMem_Normal_Success)
-{
-    sim::CommunicationMemoryManager::GetInstance().AllocCommMem("comm_test_read");
     const char* writeData = "test data";
-    sim::CommunicationMemoryManager::GetInstance().WriteCommMem("comm_test_read", writeData, strlen(writeData));
+    mgr.Send(client, writeData, strlen(writeData));
 
     char readBuf[64] = {0};
-    int ret = sim::CommunicationMemoryManager::GetInstance().ReadCommMem("comm_test_read", readBuf, 64);
-    EXPECT_GT(ret, 0);
+    int64_t ret = mgr.Recv(server, readBuf, sizeof(readBuf));
+    EXPECT_EQ(ret, static_cast<int64_t>(strlen(writeData)));
     EXPECT_STREQ(readBuf, writeData);
-    sim::CommunicationMemoryManager::GetInstance().ReleaseCommMem("comm_test_read");
 }
 
-TEST_F(CommMemoryManagerTest, ReadCommMem_NullName_Fail)
+TEST_F(CommMemoryManagerTest, Recv_NoData)
 {
+    auto& mgr = sim::CommunicationMemoryManager::GetInstance();
+    uint32_t slotIdx = mgr.AllocSlot();
+    ASSERT_NE(slotIdx, UINT32_MAX);
+
+    sim::SlotHandle server = mgr.GetSlotHandle(slotIdx, sim::kRsFdServer);
     char buf[64];
-    int ret = sim::CommunicationMemoryManager::GetInstance().ReadCommMem(nullptr, buf, 64);
-    EXPECT_EQ(ret, -1);
-}
-
-TEST_F(CommMemoryManagerTest, ReadCommMem_NullDataPtr_Fail)
-{
-    sim::CommunicationMemoryManager::GetInstance().AllocCommMem("comm_test_read_null");
-    int ret = sim::CommunicationMemoryManager::GetInstance().ReadCommMem("comm_test_read_null", nullptr, 64);
-    EXPECT_EQ(ret, -1);
-    sim::CommunicationMemoryManager::GetInstance().ReleaseCommMem("comm_test_read_null");
-}
-
-TEST_F(CommMemoryManagerTest, ReadCommMem_ZeroSize_DoNothing)
-{
-    sim::CommunicationMemoryManager::GetInstance().AllocCommMem("comm_test_read_zero");
-    char buf[64];
-    int ret = sim::CommunicationMemoryManager::GetInstance().ReadCommMem("comm_test_read_zero", buf, 0);
-    EXPECT_EQ(ret, -1);
-    sim::CommunicationMemoryManager::GetInstance().ReleaseCommMem("comm_test_read_zero");
-}
-
-TEST_F(CommMemoryManagerTest, ReadCommMem_NotExist_Fail)
-{
-    char buf[64];
-    int ret = sim::CommunicationMemoryManager::GetInstance().ReadCommMem("not_exist_read", buf, 64);
-    EXPECT_EQ(ret, -1);
-}
-
-TEST_F(CommMemoryManagerTest, ReadCommMem_EmptyBuffer_ReturnsZero)
-{
-    sim::CommunicationMemoryManager::GetInstance().AllocCommMem("comm_test_read_empty");
-    char buf[64];
-    int ret = sim::CommunicationMemoryManager::GetInstance().ReadCommMem("comm_test_read_empty", buf, 64);
+    int64_t ret = mgr.Recv(server, buf, sizeof(buf));
     EXPECT_EQ(ret, 0);
-    sim::CommunicationMemoryManager::GetInstance().ReleaseCommMem("comm_test_read_empty");
 }
 
-TEST_F(CommMemoryManagerTest, WriteRead_MultipleTimes_Success)
+TEST_F(CommMemoryManagerTest, SendRecv_Multiple)
 {
-    sim::CommunicationMemoryManager::GetInstance().AllocCommMem("comm_test_multi");
+    auto& mgr = sim::CommunicationMemoryManager::GetInstance();
+    uint32_t slotIdx = mgr.AllocSlot();
+    ASSERT_NE(slotIdx, UINT32_MAX);
+
+    sim::SlotHandle client = mgr.GetSlotHandle(slotIdx, sim::kRsFdClient);
+    sim::SlotHandle server = mgr.GetSlotHandle(slotIdx, sim::kRsFdServer);
 
     const char* data1 = "first";
-    int ret = sim::CommunicationMemoryManager::GetInstance().WriteCommMem("comm_test_multi", data1, strlen(data1));
-    EXPECT_EQ(ret, 0);
-
+    mgr.Send(client, data1, strlen(data1));
     const char* data2 = "second";
-    ret = sim::CommunicationMemoryManager::GetInstance().WriteCommMem("comm_test_multi", data2, strlen(data2));
-    EXPECT_EQ(ret, 0);
+    mgr.Send(client, data2, strlen(data2));
 
-    char buf[64] = {0};
-    int readSize = sim::CommunicationMemoryManager::GetInstance().ReadCommMem("comm_test_multi", buf, 64);
-    EXPECT_GT(readSize, 0);
-    EXPECT_STREQ(buf, "firstsecond");
+    char readBuf[64] = {0};
+    int64_t ret = mgr.Recv(server, readBuf, sizeof(readBuf));
+    EXPECT_EQ(ret, static_cast<int64_t>(strlen(data1) + strlen(data2)));
+    EXPECT_STREQ(readBuf, "firstsecond");
+}
 
-    sim::CommunicationMemoryManager::GetInstance().ReleaseCommMem("comm_test_multi");
+TEST_F(CommMemoryManagerTest, AddRef_CloseSlot_Lifecycle)
+{
+    auto& mgr = sim::CommunicationMemoryManager::GetInstance();
+    uint32_t slotIdx = mgr.AllocSlot();
+    ASSERT_NE(slotIdx, UINT32_MAX);
+
+    mgr.AddRef(slotIdx);
+    bool isLast = mgr.CloseSlot(slotIdx);
+    EXPECT_TRUE(isLast);
+}
+
+TEST_F(CommMemoryManagerTest, CloseSlot_NotLast)
+{
+    auto& mgr = sim::CommunicationMemoryManager::GetInstance();
+    uint32_t slotIdx = mgr.AllocSlot();
+    ASSERT_NE(slotIdx, UINT32_MAX);
+
+    mgr.AddRef(slotIdx);
+    mgr.AddRef(slotIdx);
+    bool isLast = mgr.CloseSlot(slotIdx);
+    EXPECT_FALSE(isLast);
+}
+
+TEST_F(CommMemoryManagerTest, fd_EncodeDecode)
+{
+    uint32_t slotIdx = 12345;
+    uint64_t fd = MAKE_FD(slotIdx, sim::kRsFdClient);
+    EXPECT_EQ(FD_SLOT_IDX(fd), slotIdx);
+    EXPECT_EQ(FD_ROLE(fd), sim::kRsFdClient);
+
+    fd = MAKE_FD(slotIdx, sim::kRsFdServer);
+    EXPECT_EQ(FD_SLOT_IDX(fd), slotIdx);
+    EXPECT_EQ(FD_ROLE(fd), sim::kRsFdServer);
+}
+
+TEST_F(CommMemoryManagerTest, Shutdown_Cleanup)
+{
+    auto& mgr = sim::CommunicationMemoryManager::GetInstance();
+    mgr.Shutdown();
+    SUCCEED();
 }

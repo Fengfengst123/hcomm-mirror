@@ -79,20 +79,22 @@ namespace {
             ASSERT_TRUE(child->AddParent(parent));
         }
 
-        TaskRecordAICPU* AddRecord(RankId recordRank, RankId waitRank, uint32_t notifyId, const TaskPosition& position)
+        TaskRecordAICPU*
+        AddRecord(DeviceId recordDevice, DeviceId waitDevice, uint32_t notifyId, const TaskPosition& position)
         {
             AicpuNotify notify;
-            notify.recordRankId = recordRank;
-            notify.waitRankId = waitRank;
+            notify.recordDeviceId = recordDevice;
+            notify.waitDeviceId = waitDevice;
             notify.notifyId = notifyId;
             return AddNode(std::make_unique<TaskRecordAICPU>(notify, ProtocolType::SDMA), position);
         }
 
-        TaskWaitAICPU* AddWait(RankId recordRank, RankId waitRank, uint32_t notifyId, const TaskPosition& position)
+        TaskWaitAICPU*
+        AddWait(DeviceId recordDevice, DeviceId waitDevice, uint32_t notifyId, const TaskPosition& position)
         {
             AicpuNotify notify;
-            notify.recordRankId = recordRank;
-            notify.waitRankId = waitRank;
+            notify.recordDeviceId = recordDevice;
+            notify.waitDeviceId = waitDevice;
             notify.notifyId = notifyId;
             return AddNode(std::make_unique<TaskWaitAICPU>(notify, ProtocolType::SDMA), position);
         }
@@ -124,7 +126,8 @@ namespace {
             AddEdge(graph.start, graph.rank0Record12);
             AddEdge(graph.rank0Record12, graph.rank0Wait5);
 
-            // Rank 0, stream 11: Wait(12), Record(14), TransMem, Wait(11), Reduce, Record(5).
+            // Rank 0, stream 11: Wait(12), Record(14), TransMem, Wait(11), Reduce,
+            // Record(5).
             graph.rank0Wait12 = AddWait(0, 0, 12, rank0Stream11);
             graph.rank0Record14 = AddRecord(0, 0, 14, rank0Stream11);
             auto rank0TransMem = AddNode(
@@ -166,7 +169,8 @@ namespace {
             AddEdge(graph.start, graph.rank1Record17);
             AddEdge(graph.rank1Record17, graph.rank1Wait8);
 
-            // Rank 1, stream 14: Wait(17), Wait(24), TransMem, Record(22), Record(8).
+            // Rank 1, stream 14: Wait(17), Wait(24), TransMem, Record(22),
+            // Record(8).
             graph.rank1Wait17 = AddWait(1, 1, 17, rank1Stream14);
             graph.rank1Wait24 = AddWait(0, 1, 24, rank1Stream14);
             auto rank1TransMem = AddNode(
@@ -181,7 +185,8 @@ namespace {
             AddEdge(rank1TransMem, graph.rank1Record22);
             AddEdge(graph.rank1Record22, graph.rank1Record8);
 
-            // Cross-stream relationships represented by the notify records and waits in the dump.
+            // Cross-stream relationships represented by the notify records and
+            // waits in the dump.
             AddEdge(graph.rank0Record12, graph.rank0Wait12);
             AddEdge(graph.rank0Record14, graph.rank0Wait14);
             if (includeRecord24 && record24NotifyId == 24) {

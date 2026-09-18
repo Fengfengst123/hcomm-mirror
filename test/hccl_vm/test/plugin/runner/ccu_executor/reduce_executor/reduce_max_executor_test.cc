@@ -8,6 +8,12 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: unit test for
+ * ReduceMaxExecutor Author: xx
+ */
+
 #include <cstdint>
 #include <cstring>
 #include <gtest/gtest.h>
@@ -33,6 +39,7 @@ TEST_F(ReduceMaxExecutorTest, DefaultConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     ReduceMaxExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -43,6 +50,7 @@ TEST_F(ReduceMaxExecutorTest, ParameterizedConstructor)
     memset(&instr, 0, sizeof(instr));
 
     ReduceMaxExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -53,6 +61,7 @@ TEST_F(ReduceMaxExecutorTest, ParserZeroValues)
     memset(&instr, 0, sizeof(instr));
 
     ReduceMaxExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -64,6 +73,7 @@ TEST_F(ReduceMaxExecutorTest, ParserMaxValues)
     memset(&instr, 0xFF, sizeof(instr));
 
     ReduceMaxExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -83,6 +93,7 @@ TEST_F(ReduceMaxExecutorTest, ParserSpecificParameters)
     instr.v1.max.waitCKEMask = 0xF0;
 
     ReduceMaxExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -97,6 +108,7 @@ TEST_F(ReduceMaxExecutorTest, DifferentDataTypes)
     for (uint16_t dataType = 0; dataType <= 8; dataType++) {
         instr.v1.max.dataType = dataType;
         ReduceMaxExecutor executor(0, 0, 0, instr, nullptr);
+        executor.SetVersion(RunnerCcuVersion::CCU_V1);
         EXPECT_NO_THROW(executor.Parser());
         EXPECT_NO_THROW(executor.Describe());
     }
@@ -113,6 +125,7 @@ TEST_F(ReduceMaxExecutorTest, DifferentCountValues)
     for (auto count : counts) {
         instr.v1.max.count = count;
         ReduceMaxExecutor executor(0, 0, 0, instr, nullptr);
+        executor.SetVersion(RunnerCcuVersion::CCU_V1);
         EXPECT_NO_THROW(executor.Parser());
         EXPECT_NO_THROW(executor.Describe());
     }
@@ -127,6 +140,7 @@ TEST_F(ReduceMaxExecutorTest, DescribeContent)
     instr.v1.max.dataType = 0;
 
     ReduceMaxExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -140,6 +154,7 @@ TEST_F(ReduceMaxExecutorTest, InheritanceCheck)
     memset(&instr, 0, sizeof(instr));
 
     ReduceMaxExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     CcuExecutorBase* base = &executor;
     EXPECT_NE(base, nullptr);
 }
@@ -155,6 +170,7 @@ TEST_F(ReduceMaxExecutorTest, VariousMsIds)
     }
 
     ReduceMaxExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }

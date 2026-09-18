@@ -9,9 +9,9 @@
  */
 
 #include "db_hccl_db_sqlite.h"
-#include <cstdint>
 #include "sim_common_macro.h"
 #include "sim_log.h"
+#include <cstdint>
 
 namespace HcclSim {
 namespace DB {

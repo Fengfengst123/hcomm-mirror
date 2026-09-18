@@ -51,11 +51,11 @@ namespace TaskGraphGeneratorV3 {
         std::string DescribeMemSliceForSemantic(const MemSlice& slice)
         {
             std::ostringstream os;
-            os << "{rankId=";
-            if (slice.rankId == INVALID_RANK_ID) {
+            os << "{deviceId=";
+            if (slice.deviceId == INVALID_DEVICE_ID) {
                 os << "invalid";
             } else {
-                os << slice.rankId;
+                os << slice.deviceId;
             }
             os << ", memoryType=" << DescribeMemType(slice.memType) << ", offset=0x" << std::hex << slice.offset
                << ", length=0x" << slice.len << std::dec << "}";
@@ -63,8 +63,8 @@ namespace TaskGraphGeneratorV3 {
         }
 
         struct SliceOpPairV3 {
-            RankId srcRank{INVALID_RANK_ID};
-            RankId dstRank{INVALID_RANK_ID};
+            DeviceId srcDeviceId{INVALID_DEVICE_ID};
+            DeviceId dstDeviceId{INVALID_DEVICE_ID};
             MemSlice src;
             MemSlice dst;
             TaskPosition position;
@@ -92,17 +92,17 @@ namespace TaskGraphGeneratorV3 {
             }
         };
 
-        // 对 MS 语义做“按 rank + msId + batch 下标”分桶。
+        // 对 MS 语义做“按 device + msId + batch 下标”分桶。
         // 普通内存仍然共用原来的 INPUT/OUTPUT/CCL 语义表，不会被 batch index 隔离。
         struct MsKey {
-            RankId rankId{INVALID_RANK_ID};
+            DeviceId deviceId{INVALID_DEVICE_ID};
             u64 msId{0};
             u64 index{0};
 
             bool operator<(const MsKey& rhs) const
             {
-                if (rankId != rhs.rankId) {
-                    return rankId < rhs.rankId;
+                if (deviceId != rhs.deviceId) {
+                    return deviceId < rhs.deviceId;
                 }
                 if (msId != rhs.msId) {
                     return msId < rhs.msId;
@@ -112,7 +112,7 @@ namespace TaskGraphGeneratorV3 {
         };
 
         struct AivMemoryKey {
-            RankId rankId{INVALID_RANK_ID};
+            DeviceId deviceId{INVALID_DEVICE_ID};
             MemType memType{MemType::INVALID};
             u64 aivUBIdx{0};
             u64 batchIndex{0};
@@ -120,8 +120,8 @@ namespace TaskGraphGeneratorV3 {
 
             bool operator<(const AivMemoryKey& rhs) const
             {
-                if (rankId != rhs.rankId) {
-                    return rankId < rhs.rankId;
+                if (deviceId != rhs.deviceId) {
+                    return deviceId < rhs.deviceId;
                 }
                 if (memType != rhs.memType) {
                     return static_cast<uint32_t>(memType) < static_cast<uint32_t>(rhs.memType);
@@ -143,9 +143,7 @@ namespace TaskGraphGeneratorV3 {
             std::vector<BufferSemantic> srcSemantics;
         };
 
-        using InternalBufferSemanticMap = std::map<u64, BufferSemantic>;
-        using InternalRankMemorySemantics = std::map<BufferType, InternalBufferSemanticMap>;
-        using LegacyRankMemories = std::map<RankId, RankMemorySemantics>;
+        using InternalBufferSemanticMap = BufferSemanticMap;
 
         u64 GetSegmentEndAddr(const BufferSemantic& semantic);
 
@@ -154,7 +152,7 @@ namespace TaskGraphGeneratorV3 {
             u64 dataSize{0};
             u64 inputSize{0};
             u64 outputSize{0};
-            std::map<RankId, InternalRankMemorySemantics> mem;
+            std::map<DeviceId, RankMemorySemantics> mem;
             std::map<MsKey, InternalBufferSemanticMap> ms;
             std::map<AivMemoryKey, InternalBufferSemanticMap> AivDevMem;
         };
@@ -208,10 +206,13 @@ namespace TaskGraphGeneratorV3 {
 
         bool IsValidMemorySlice(const MemSlice& slice)
         {
-            return slice.rankId != INVALID_RANK_ID && slice.memType != MemType::INVALID;
+            return slice.deviceId != INVALID_DEVICE_ID && slice.memType != MemType::INVALID;
         }
 
-        MsKey MakeMsKey(RankId rankId, u64 offset, u64 index) { return MsKey{rankId, offset / kMsSliceSize, index}; }
+        MsKey MakeMsKey(DeviceId deviceId, u64 offset, u64 index)
+        {
+            return MsKey{deviceId, offset / kMsSliceSize, index};
+        }
 
         u64 MakeAivUbIdx(const TaskPosition& position)
         {
@@ -222,74 +223,76 @@ namespace TaskGraphGeneratorV3 {
             return (position.launchIdx << 32U) | static_cast<u64>(position.blockId);
         }
 
-        AivMemoryKey
-        MakeAivMemoryKey(RankId rankId, MemType memType, const TaskPosition& position, u64 batchIndex, bool isBatchUB)
+        AivMemoryKey MakeAivMemoryKey(
+            DeviceId deviceId, MemType memType, const TaskPosition& position, u64 batchIndex, bool isBatchUB)
         {
             if (memType == MemType::AIV_COMM) {
-                return AivMemoryKey{rankId, memType, 0U, 0U, false};
+                return AivMemoryKey{deviceId, memType, 0U, 0U, false};
             }
             const bool effectiveIsBatchUB = memType == MemType::AIV_UB && isBatchUB;
             return AivMemoryKey{
-                rankId, memType, MakeAivUbIdx(position), effectiveIsBatchUB ? batchIndex : 0U, effectiveIsBatchUB};
+                deviceId, memType, MakeAivUbIdx(position), effectiveIsBatchUB ? batchIndex : 0U, effectiveIsBatchUB};
         }
 
-        // 普通内存直接按 rank/bufferType 取语义表；MS 则额外按 batch 下标拆桶，
+        // 普通内存直接按 device/bufferType 取语义表；MS 则额外按 batch 下标拆桶，
         // 从而把“同一个 ms 在不同 batch item 复用”的语义分开记录。
         InternalBufferSemanticMap& GetBufferSemanticMap(
-            SemanticState& state, RankId rankId, MemType memType, u64 offset, const TaskPosition& position, u64 index,
-            bool useBatchIndex)
+            SemanticState& state, DeviceId deviceId, MemType memType, u64 offset, const TaskPosition& position,
+            u64 index, bool useBatchIndex)
         {
             if (memType == MemType::MS_CCU) {
-                return state.ms[MakeMsKey(rankId, offset, index)];
+                return state.ms[MakeMsKey(deviceId, offset, index)];
             }
             if (memType == MemType::AIV_UB || memType == MemType::AIV_COMM) {
-                return state.AivDevMem[MakeAivMemoryKey(rankId, memType, position, index, useBatchIndex)];
+                return state.AivDevMem[MakeAivMemoryKey(deviceId, memType, position, index, useBatchIndex)];
             }
-            return state.mem[rankId][ConvertMemTypeToBufferType(memType)];
+            return state.mem[deviceId][ConvertMemTypeToBufferType(memType)];
         }
 
         const InternalBufferSemanticMap& GetBufferSemanticMap(
-            const SemanticState& state, RankId rankId, MemType memType, u64 offset, const TaskPosition& position,
+            const SemanticState& state, DeviceId deviceId, MemType memType, u64 offset, const TaskPosition& position,
             u64 index, bool useBatchIndex)
         {
             static const InternalBufferSemanticMap empty;
             if (memType == MemType::MS_CCU) {
-                const auto iter = state.ms.find(MakeMsKey(rankId, offset, index));
+                const auto iter = state.ms.find(MakeMsKey(deviceId, offset, index));
                 return iter == state.ms.end() ? empty : iter->second;
             }
             if (memType == MemType::AIV_UB || memType == MemType::AIV_COMM) {
                 const auto iter
-                    = state.AivDevMem.find(MakeAivMemoryKey(rankId, memType, position, index, useBatchIndex));
+                    = state.AivDevMem.find(MakeAivMemoryKey(deviceId, memType, position, index, useBatchIndex));
                 return iter == state.AivDevMem.end() ? empty : iter->second;
             }
-            const auto rankIter = state.mem.find(rankId);
-            if (rankIter == state.mem.end()) {
+            const auto deviceIter = state.mem.find(deviceId);
+            if (deviceIter == state.mem.end()) {
                 return empty;
             }
-            const auto memIter = rankIter->second.find(ConvertMemTypeToBufferType(memType));
-            return memIter == rankIter->second.end() ? empty : memIter->second;
+            const auto memIter = deviceIter->second.find(ConvertMemTypeToBufferType(memType));
+            return memIter == deviceIter->second.end() ? empty : memIter->second;
         }
 
-        void InitRankBuffers(SemanticState& state, RankId rankId, bool initInput)
+        void InitDeviceBuffers(SemanticState& state, DeviceId deviceId, bool initInput)
         {
-            state.mem[rankId][BufferType::INPUT];
-            state.mem[rankId][BufferType::OUTPUT];
-            state.mem[rankId][BufferType::CCL];
-            state.mem[rankId][BufferType::MS];
+            state.mem[deviceId][BufferType::INPUT];
+            state.mem[deviceId][BufferType::OUTPUT];
+            state.mem[deviceId][BufferType::CCL];
+            state.mem[deviceId][BufferType::MS];
             if (!initInput) {
                 return;
             }
             BufferSemantic input(0, state.inputSize);
-            input.srcBufs.insert(SrcBufDes(rankId, BufferType::INPUT, 0));
-            state.mem[rankId][BufferType::INPUT].emplace(input.startAddr, std::move(input));
+            input.srcBufs.insert(SrcBufDes(deviceId, BufferType::INPUT, 0));
+            state.mem[deviceId][BufferType::INPUT].emplace(input.startAddr, std::move(input));
         }
 
-        HcclResult InitState(SemanticState& state)
+        HcclResult
+        InitState(SemanticState& state, OperatorId operatorId, const std::map<DeviceId, RankId>& deviceToRank)
         {
-            state.param = StorageManager::GetInstance().GetCheckerParam();
+            state.param = StorageManager::GetInstance().GetCheckerParam(operatorId);
             if (state.param.rankSize == 0) {
                 HCCL_VM_ERROR(
-                    "{} Semantic check initialization failed because the rank count is 0, "
+                    "{} Semantic check initialization failed because the rank count is "
+                    "0, "
                     "collectiveType={}, dataType={}, elementCount={}, reduceType={}",
                     MakeErrorCodeText(ErrorCode::CHECKER_RUNTIME_ERROR), HcclCmdTypeToString(state.param.cmdType),
                     HcclDataTypeToString(state.param.dataType), state.param.dataCount,
@@ -297,7 +300,7 @@ namespace TaskGraphGeneratorV3 {
                 return HCCL_E_PARA;
             }
             CalcDataSize(state.param.cmdType, state.param.dataCount, state.param.dataType, state.dataSize);
-            for (RankId rankId = 0; rankId < state.param.rankSize; ++rankId) {
+            for (const auto& [deviceId, rankId] : deviceToRank) {
                 RankId srcRank = state.param.srcRank;
                 RankId dstRank = state.param.dstRank;
                 for (const auto& pair : state.param.sendRecvPairs) {
@@ -314,7 +317,14 @@ namespace TaskGraphGeneratorV3 {
                 const bool initInput
                     = !(state.param.cmdType == HCCL_CMD_BROADCAST || state.param.cmdType == HCCL_CMD_SCATTER)
                       || rankId == state.param.root;
-                InitRankBuffers(state, rankId, initInput);
+                if (deviceId == INVALID_DEVICE_ID) {
+                    HCCL_VM_ERROR(
+                        "{} Semantic check initialization failed because "
+                        "rank has no device mapping, rankId={}",
+                        MakeErrorCodeText(ErrorCode::CHECKER_RUNTIME_ERROR), rankId);
+                    return HCCL_E_PARA;
+                }
+                InitDeviceBuffers(state, deviceId, initInput);
             }
             return HCCL_SUCCESS;
         }
@@ -440,7 +450,7 @@ namespace TaskGraphGeneratorV3 {
             auto lhsIter = lhs.srcBufs.begin();
             auto rhsIter = rhs.srcBufs.begin();
             while (lhsIter != lhs.srcBufs.end() && rhsIter != rhs.srcBufs.end()) {
-                if (lhsIter->rankId != rhsIter->rankId || lhsIter->bufType != rhsIter->bufType
+                if (lhsIter->deviceId != rhsIter->deviceId || lhsIter->bufType != rhsIter->bufType
                     || lhsIter->srcAddr + lhs.size != rhsIter->srcAddr) {
                     return false;
                 }
@@ -536,7 +546,8 @@ namespace TaskGraphGeneratorV3 {
             if (bufSemantics.empty()) {
                 if (!ignoreError) {
                     HCCL_VM_ERROR(
-                        "{} No source/output information was found for the target memory range, "
+                        "{} No source/output information was found for the "
+                        "target memory range, "
                         "startAddr=0x{:x}, size=0x{:x}",
                         MakeErrorCodeText(ErrorCode::SEMANTIC_BUFFER_EMPTY), startAddr, size);
                 }
@@ -548,7 +559,8 @@ namespace TaskGraphGeneratorV3 {
             if (prev->startAddr > startAddr) {
                 if (!ignoreError) {
                     HCCL_VM_ERROR(
-                        "{} Output data does not start from the expected address; the beginning is "
+                        "{} Output data does not start from the expected "
+                        "address; the beginning is "
                         "missing, expectedStart=0x{:x}, actualStart=0x{:x}",
                         MakeErrorCodeText(ErrorCode::SEMANTIC_GAP), startAddr, prev->startAddr);
                 }
@@ -565,7 +577,8 @@ namespace TaskGraphGeneratorV3 {
                 if (cur->startAddr != prev->startAddr + prev->size) {
                     if (!ignoreError) {
                         HCCL_VM_ERROR(
-                            "{} Output data is broken in the middle; one piece ends at 0x{:x} "
+                            "{} Output data is broken in the middle; one "
+                            "piece ends at 0x{:x} "
                             "but the next starts at 0x{:x}",
                             MakeErrorCodeText(ErrorCode::SEMANTIC_GAP), prev->startAddr + prev->size, cur->startAddr);
                     }
@@ -582,7 +595,8 @@ namespace TaskGraphGeneratorV3 {
             if (totalSize != size) {
                 if (!ignoreError) {
                     HCCL_VM_ERROR(
-                        "{} Output data ends too early; the tail is missing, expectedEnd=0x{:x}, "
+                        "{} Output data ends too early; the tail is missing, "
+                        "expectedEnd=0x{:x}, "
                         "actualEnd=0x{:x}",
                         MakeErrorCodeText(ErrorCode::SEMANTIC_GAP), startAddr + size, startAddr + totalSize);
                 }
@@ -611,7 +625,8 @@ namespace TaskGraphGeneratorV3 {
             const SliceOpPairV3& pair, SemanticState& state, const std::vector<const BufferSemantic*>& srcSemantics)
         {
             InternalBufferSemanticMap& dstSemantics = GetBufferSemanticMap(
-                state, pair.dstRank, pair.dst.memType, pair.dst.offset, pair.position, pair.index, pair.useBatchIndex);
+                state, pair.dstDeviceId, pair.dst.memType, pair.dst.offset, pair.position, pair.index,
+                pair.useBatchIndex);
             const u64 dstStartAddr = pair.dst.offset;
             const u64 dstEndAddr = dstStartAddr + pair.dst.len;
             SplitBufferSemantic(dstSemantics, dstStartAddr);
@@ -639,7 +654,8 @@ namespace TaskGraphGeneratorV3 {
                 if (dstSemantic->srcBufs.size() == 1) {
                     if (dstSemantic->isReduce) {
                         HCCL_VM_ERROR(
-                            "{} Target output range is already marked as a reduce result before "
+                            "{} Target output range is already marked as a reduce "
+                            "result before "
                             "enough source data is merged, dataMapping={}",
                             MakeErrorCodeText(ErrorCode::SEMANTIC_REDUCE_ERROR), pair.Describe());
                         return HCCL_E_PARA;
@@ -649,7 +665,8 @@ namespace TaskGraphGeneratorV3 {
                 }
                 if (srcSemantic.srcBufs.size() > 1 && dstSemantic->reduceType != srcSemantic.reduceType) {
                     HCCL_VM_ERROR(
-                        "{} Reduce result type is inconsistent while merging one source data "
+                        "{} Reduce result type is inconsistent while merging "
+                        "one source data "
                         "range, dataMapping={}",
                         MakeErrorCodeText(ErrorCode::SEMANTIC_REDUCE_ERROR), pair.Describe());
                     return HCCL_E_PARA;
@@ -661,8 +678,10 @@ namespace TaskGraphGeneratorV3 {
                     dstSemantic->srcBufs.insert(srcBuf);
                     if (before == dstSemantic->srcBufs.size()) {
                         HCCL_VM_ERROR(
-                            "{} The same source data is added twice to one output range during "
-                            "reduce, dataMapping={}, sourceOffsetInThisRange=0x{:x}, outputRange=[0x{:x},0x{:x})",
+                            "{} The same source data is added twice to one output "
+                            "range during "
+                            "reduce, dataMapping={}, sourceOffsetInThisRange=0x{:x}, "
+                            "outputRange=[0x{:x},0x{:x})",
                             MakeErrorCodeText(ErrorCode::SEMANTIC_REDUCE_ERROR), pair.Describe(), srcOffset,
                             dstSemantic->startAddr, GetSegmentEndAddr(*dstSemantic));
                         return HCCL_E_PARA;
@@ -684,7 +703,8 @@ namespace TaskGraphGeneratorV3 {
             const u64 dstEndAddr = ApplyOffsetDelta(srcEndAddr, dstSrcOffset);
 
             InternalBufferSemanticMap& dstSemantics = GetBufferSemanticMap(
-                state, pair.dstRank, pair.dst.memType, pair.dst.offset, pair.position, pair.index, pair.useBatchIndex);
+                state, pair.dstDeviceId, pair.dst.memType, pair.dst.offset, pair.position, pair.index,
+                pair.useBatchIndex);
             SplitBufferSemantic(dstSemantics, dstStartAddr);
             SplitBufferSemantic(dstSemantics, dstEndAddr);
 
@@ -698,7 +718,8 @@ namespace TaskGraphGeneratorV3 {
             HcclResult ret = CheckBufSemantics(affectedViews, dstStartAddr, dstEndAddr - dstStartAddr, false);
             if (ret != HCCL_SUCCESS) {
                 HCCL_VM_ERROR(
-                    "{} Target output range is only partially filled before reduce continues, "
+                    "{} Target output range is only partially filled before reduce "
+                    "continues, "
                     "dataMapping={}, outputRange=[0x{:x},0x{:x}), pieceCount={}",
                     MakeErrorCodeText(ErrorCode::SEMANTIC_REDUCE_ERROR), pair.Describe(), dstStartAddr, dstEndAddr,
                     affectedDstSemantics.size());
@@ -708,8 +729,10 @@ namespace TaskGraphGeneratorV3 {
             ret = AddReduceSourcesToDstSegments(pair, srcSemantic, affectedDstSemantics, srcStartAddr);
             if (ret != HCCL_SUCCESS) {
                 HCCL_VM_ERROR(
-                    "{} Failed to merge one source data range into the target output range during "
-                    "reduce, dataMapping={}, srcRange=[0x{:x},0x{:x}), dstRange=[0x{:x},0x{:x}), ret={}",
+                    "{} Failed to merge one source data range into the "
+                    "target output range during "
+                    "reduce, dataMapping={}, srcRange=[0x{:x},0x{:x}), "
+                    "dstRange=[0x{:x},0x{:x}), ret={}",
                     MakeErrorCodeText(ErrorCode::SEMANTIC_REDUCE_ERROR), pair.Describe(), srcStartAddr, srcEndAddr,
                     dstStartAddr, dstEndAddr, static_cast<int32_t>(ret));
                 return ret;
@@ -754,14 +777,16 @@ namespace TaskGraphGeneratorV3 {
             }
             if (!IsSupportedSemanticMemType(pair.src.memType) || !IsSupportedSemanticMemType(pair.dst.memType)) {
                 HCCL_VM_ERROR(
-                    "{} This data mapping uses a memory type that semantic check does not support, "
+                    "{} This data mapping uses a memory type that semantic "
+                    "check does not support, "
                     "dataMapping={}",
                     MakeErrorCodeText(ErrorCode::SINGLETASK_SLICE_INVALID), pair.Describe());
                 return HCCL_E_NOT_SUPPORT;
             }
 
             const InternalBufferSemanticMap& srcSemanticsMap = GetBufferSemanticMap(
-                state, pair.srcRank, pair.src.memType, pair.src.offset, pair.position, pair.index, pair.useBatchIndex);
+                state, pair.srcDeviceId, pair.src.memType, pair.src.offset, pair.position, pair.index,
+                pair.useBatchIndex);
             std::vector<const BufferSemantic*> srcViews;
             CollectOverlappingBufferSemantics(
                 srcSemanticsMap, pair.src.offset, pair.src.offset + pair.src.len, srcViews);
@@ -770,14 +795,16 @@ namespace TaskGraphGeneratorV3 {
             if (ret != HCCL_SUCCESS) {
                 if (pair.op == SliceOpV3::REDUCE) {
                     HCCL_VM_ERROR(
-                        "{} Source data needed by this reduce is missing, dataMapping={}",
+                        "{} Source data needed by this reduce is missing, "
+                        "dataMapping={}",
                         MakeErrorCodeText(ErrorCode::SEMANTIC_REDUCE_ERROR), pair.Describe());
                     return ret;
                 }
                 // 老语义实现对 override 的不完整源语义是放行但告警；
                 // 这里保持同样语义，至少把“并非完整 memcpy 语义”的风险显式打出来。
                 HCCL_VM_WARN(
-                    "{} Source data needed by this overwrite is missing, dataMapping={}",
+                    "{} Source data needed by this overwrite is missing, "
+                    "dataMapping={}",
                     MakeErrorCodeText(ErrorCode::SEMANTIC_SIMULATE_FAILED), pair.Describe());
             }
 
@@ -823,8 +850,8 @@ namespace TaskGraphGeneratorV3 {
                     return;
                 }
                 pairs.push_back(SliceOpPairV3{
-                    task->GetSrc().rankId, task->GetDst().rankId, task->GetSrc(), task->GetDst(), node->GetPosition(),
-                    SliceOpV3::OVERRIDE, HCCL_REDUCE_RESERVED, 0});
+                    task->GetSrc().deviceId, task->GetDst().deviceId, task->GetSrc(), task->GetDst(),
+                    node->GetPosition(), SliceOpV3::OVERRIDE, HCCL_REDUCE_RESERVED, 0});
                 return;
             }
 
@@ -837,8 +864,8 @@ namespace TaskGraphGeneratorV3 {
                 for (size_t index = 0; index < srcs.size(); ++index) {
                     const auto& src = srcs[index];
                     SliceOpPairV3 pair;
-                    pair.srcRank = src.rankId;
-                    pair.dstRank = task->GetDst().rankId;
+                    pair.srcDeviceId = src.deviceId;
+                    pair.dstDeviceId = task->GetDst().deviceId;
                     pair.src = src;
                     pair.dst = task->GetDst();
                     pair.position = node->GetPosition();
@@ -859,7 +886,7 @@ namespace TaskGraphGeneratorV3 {
                 const size_t count = std::min(srcs.size(), dsts.size());
                 for (size_t index = 0; index < count; ++index) {
                     pairs.push_back(SliceOpPairV3{
-                        srcs[index].rankId, dsts[index].rankId, srcs[index], dsts[index], node->GetPosition(),
+                        srcs[index].deviceId, dsts[index].deviceId, srcs[index], dsts[index], node->GetPosition(),
                         SliceOpV3::OVERRIDE, HCCL_REDUCE_RESERVED, static_cast<u64>(index), true});
                 }
                 return;
@@ -876,8 +903,8 @@ namespace TaskGraphGeneratorV3 {
                 for (size_t index = 0; index < count; ++index) {
                     for (const auto& src : srcGroups[index]) {
                         SliceOpPairV3 pair;
-                        pair.srcRank = src.rankId;
-                        pair.dstRank = dsts[index].rankId;
+                        pair.srcDeviceId = src.deviceId;
+                        pair.dstDeviceId = dsts[index].deviceId;
                         pair.src = src;
                         pair.dst = dsts[index];
                         pair.position = node->GetPosition();
@@ -898,7 +925,8 @@ namespace TaskGraphGeneratorV3 {
             }
             std::vector<SliceOpPairV3> pairs;
             GetSliceOpPairs(node, pairs);
-            // 先 load 再 apply，保证一个 batch task 内所有 pair 看到的是同一时刻的源语义快照。
+            // 先 load 再 apply，保证一个 batch task 内所有 pair
+            // 看到的是同一时刻的源语义快照。
             std::vector<PreparedSliceOpPairV3> preparedPairs;
             preparedPairs.reserve(pairs.size());
             for (const auto& pair : pairs) {
@@ -919,63 +947,56 @@ namespace TaskGraphGeneratorV3 {
             return HCCL_SUCCESS;
         }
 
-        LegacyRankMemories BuildLegacyMemories(const SemanticState& state)
+        HcclResult CheckFinalOutput(SemanticState& state, const std::vector<DeviceId>& rankToDevice)
         {
-            LegacyRankMemories legacy;
-            for (const auto& rankEntry : state.mem) {
-                RankMemorySemantics& legacyMem = legacy[rankEntry.first];
-                for (const auto& bufEntry : rankEntry.second) {
-                    auto& legacyBufSet = legacyMem[bufEntry.first];
-                    for (const auto& semanticEntry : bufEntry.second) {
-                        legacyBufSet.insert(semanticEntry.second);
-                    }
-                }
-            }
-            return legacy;
-        }
-
-        HcclResult CheckFinalOutput(const SemanticState& state)
-        {
-            auto allRankMemSemantics = BuildLegacyMemories(state);
+            auto& allRankMemSemantics = state.mem;
             switch (state.param.cmdType) {
                 case HCCL_CMD_ALLREDUCE:
-                    return TaskCheckAllReduceSemantics(allRankMemSemantics, state.dataSize, state.param.reduceType);
+                    return TaskCheckAllReduceSemantics(
+                        allRankMemSemantics, state.dataSize, state.param.reduceType, rankToDevice);
                 case HCCL_CMD_ALLGATHER:
-                    return TaskCheckAllGatherSemantics(allRankMemSemantics, state.dataSize);
+                    return TaskCheckAllGatherSemantics(allRankMemSemantics, state.dataSize, rankToDevice);
                 case HCCL_CMD_ALLGATHER_V: {
                     auto vDataDes = state.param.vDataDes;
-                    return TaskCheckAllGatherVSemantics(allRankMemSemantics, vDataDes);
+                    return TaskCheckAllGatherVSemantics(allRankMemSemantics, vDataDes, rankToDevice);
                 }
                 case HCCL_CMD_REDUCE_SCATTER:
-                    return TaskCheckReduceScatterSemantics(allRankMemSemantics, state.dataSize, state.param.reduceType);
+                    return TaskCheckReduceScatterSemantics(
+                        allRankMemSemantics, state.dataSize, state.param.reduceType, rankToDevice);
                 case HCCL_CMD_REDUCE_SCATTER_V: {
                     auto vDataDes = state.param.vDataDes;
-                    return TaskCheckReduceScatterVSemantics(allRankMemSemantics, state.param.reduceType, vDataDes);
+                    return TaskCheckReduceScatterVSemantics(
+                        allRankMemSemantics, state.param.reduceType, vDataDes, rankToDevice);
                 }
                 case HCCL_CMD_ALLTOALL:
                 case HCCL_CMD_ALLTOALLV:
                 case HCCL_CMD_ALLTOALLVC: {
                     auto all2All = state.param.all2AllDataDes;
-                    return TaskCheckAll2AllSemantics(allRankMemSemantics, all2All);
+                    return TaskCheckAll2AllSemantics(allRankMemSemantics, all2All, rankToDevice);
                 }
                 case HCCL_CMD_SEND:
                 case HCCL_CMD_RECEIVE:
                     return TaskCheckSendRecvGroupSemantics(
-                        allRankMemSemantics, state.dataSize, state.param.sendRecvPairs);
+                        allRankMemSemantics, state.dataSize, state.param.sendRecvPairs, rankToDevice);
                 case HCCL_CMD_BROADCAST:
-                    return TaskCheckBroadcastSemantics(allRankMemSemantics, state.dataSize, state.param.root);
+                    return TaskCheckBroadcastSemantics(
+                        allRankMemSemantics, state.dataSize, rankToDevice[state.param.root], rankToDevice);
                 case HCCL_CMD_REDUCE:
                     return TaskCheckReduceSemantics(
-                        allRankMemSemantics, state.dataSize, state.param.reduceType, state.param.root);
+                        allRankMemSemantics, state.dataSize, state.param.reduceType, rankToDevice[state.param.root],
+                        rankToDevice);
                 case HCCL_CMD_SCATTER:
-                    return TaskCheckScatterSemantics(allRankMemSemantics, state.dataSize, state.param.root);
+                    return TaskCheckScatterSemantics(
+                        allRankMemSemantics, state.dataSize, rankToDevice[state.param.root], rankToDevice);
                 case HCCL_CMD_BATCH_SEND_RECV:
                     return TaskCheckBatchSendRecvRingSemantics(
-                        allRankMemSemantics, state.param.rankSize, state.dataSize);
+                        allRankMemSemantics, rankToDevice.size(), state.dataSize, rankToDevice);
                 default:
                     HCCL_VM_WARN(
-                        "{} Final output validation does not support this collective type yet, "
-                        "collectiveType={}, rankCount={}, dataType={}, elementCount={}, reduceType={}",
+                        "{} Final output validation does not support this collective type "
+                        "yet, "
+                        "collectiveType={}, rankCount={}, dataType={}, elementCount={}, "
+                        "reduceType={}",
                         MakeErrorCodeText(ErrorCode::CHECKER_RUNTIME_ERROR), HcclCmdTypeToString(state.param.cmdType),
                         state.param.rankSize, HcclDataTypeToString(state.param.dataType), state.param.dataCount,
                         DumpReduceOpToString(state.param.reduceType));
@@ -989,11 +1010,11 @@ namespace TaskGraphGeneratorV3 {
                 return;
             }
             stats->handledNodeCount = handledNodeCount;
-            stats->rankCount = state.mem.size();
+            stats->rankCount = state.param.rankSize;
             stats->normalSemanticCount = 0;
             stats->normalSemanticBytes = 0;
-            for (const auto& rankEntry : state.mem) {
-                for (const auto& bufEntry : rankEntry.second) {
+            for (const auto& deviceEntry : state.mem) {
+                for (const auto& bufEntry : deviceEntry.second) {
                     stats->normalSemanticCount += bufEntry.second.size();
                     for (const auto& semanticEntry : bufEntry.second) {
                         stats->normalSemanticBytes += semanticEntry.second.size;
@@ -1008,20 +1029,33 @@ namespace TaskGraphGeneratorV3 {
     {
         if (start == nullptr) {
             HCCL_VM_ERROR(
-                "{} Semantic check cannot start because the main start node is missing, "
+                "{} Semantic check cannot start because the main start "
+                "node is missing, "
                 "mainStartNode=null",
                 MakeErrorCodeText(ErrorCode::CHECKER_RUNTIME_ERROR));
             return HCCL_E_PTR;
         }
 
         SemanticState state;
-        HcclResult ret = InitState(state);
+        const OperatorId operatorId = start->GetOperatorId();
+        const CheckerParam operatorParam = StorageManager::GetInstance().GetCheckerParam(operatorId);
+        const std::map<DeviceId, RankId> deviceToRank
+            = StorageManager::GetInstance().GetDeviceRankMappings(operatorParam.commId);
+        HcclResult ret = InitState(state, operatorId, deviceToRank);
         if (ret != HCCL_SUCCESS) {
             return ret;
         }
 
-        // 第一步先用 BFS 把从 start 可达的节点全部收集出来，并初始化每个节点的“剩余父节点数”。
-        // 这里不直接在 BFS 顺序上做语义模拟，因为 DAG 中子节点可能比某些父节点更早被扫描到。
+        std::vector<DeviceId> rankToDevice(state.param.rankSize, INVALID_DEVICE_ID);
+        for (const auto& [deviceId, rankId] : deviceToRank) {
+            if (rankId < state.param.rankSize) {
+                rankToDevice[rankId] = deviceId;
+            }
+        }
+
+        // 第一步先用 BFS 把从 start
+        // 可达的节点全部收集出来，并初始化每个节点的“剩余父节点数”。 这里不直接在
+        // BFS 顺序上做语义模拟，因为 DAG 中子节点可能比某些父节点更早被扫描到。
         std::unordered_map<NodeId, const TaskNode*> nodes;
         std::unordered_map<NodeId, u32> pendingParents;
         std::queue<const TaskNode*> walk;
@@ -1043,8 +1077,9 @@ namespace TaskGraphGeneratorV3 {
             }
         }
 
-        // 第二步做一次基于入度的拓扑模拟：只有 pendingParents 归零的节点才允许执行。
-        // 这样可以直接复用当前 DAG 上已有的 parent/child 约束，不需要再单独识别 loop 区间。
+        // 第二步做一次基于入度的拓扑模拟：只有 pendingParents
+        // 归零的节点才允许执行。 这样可以直接复用当前 DAG 上已有的 parent/child
+        // 约束，不需要再单独识别 loop 区间。
         std::queue<const TaskNode*> ready;
         for (const auto& entry : nodes) {
             if (pendingParents[entry.first] == 0) {
@@ -1064,7 +1099,8 @@ namespace TaskGraphGeneratorV3 {
             for (const TaskNode* child : node->GetChildren()) {
                 if (child == nullptr) {
                     HCCL_VM_ERROR(
-                        "{} Graph structure is broken because one child node is null, parent={}",
+                        "{} Graph structure is broken because one child node is "
+                        "null, parent={}",
                         MakeErrorCodeText(ErrorCode::CHECKER_RUNTIME_ERROR), node->Describe());
                     return HCCL_E_PTR;
                 }
@@ -1091,14 +1127,16 @@ namespace TaskGraphGeneratorV3 {
                 }
             }
             HCCL_VM_ERROR(
-                "{} Output simulation stopped because some tasks still have unresolved "
-                "dependencies, handledNodeCount={}, totalNodeCount={}, firstRemainingNode={}",
+                "{} Output simulation stopped because some tasks still "
+                "have unresolved "
+                "dependencies, handledNodeCount={}, totalNodeCount={}, "
+                "firstRemainingNode={}",
                 MakeErrorCodeText(ErrorCode::CHECKER_RUNTIME_ERROR), handled, nodes.size(),
                 firstRemainingNode == nullptr ? std::string("node=null") : firstRemainingNode->Describe());
             return HCCL_E_INTERNAL;
         }
 
-        ret = CheckFinalOutput(state);
+        ret = CheckFinalOutput(state, rankToDevice);
         if (ret != HCCL_SUCCESS && ret != HCCL_E_NOT_SUPPORT) {
             HCCL_VM_ERROR("Final semantic check failed, ret={}", static_cast<uint32_t>(ret));
             return ret;

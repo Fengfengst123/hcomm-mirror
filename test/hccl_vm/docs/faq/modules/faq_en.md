@@ -8,25 +8,22 @@
 
 ---
 
-### FAQ-C001
+#### FAQ-C001
 
 **Title:** WSL Environment Configuration
 
 **Error Code:**
-
-```text
+```
 NA (4)
 ```
 
 **Error Function:**
-
-```text
+```
 NA
 ```
 
 **Key Log:**
-
-```text
+```
 [ 85%] Building CXX object src/legacy/ascend910/framework/CMakeFiles/hcomm.dir/common/src/config/env_config_host.cc.o
 {standard input}: Assembler messages:
 {standard input}:61985: Warning: end of file not at end of a line; newline inserted
@@ -46,14 +43,12 @@ gmake: *** [Makefile:156: all] Error 2
 **Symptom:** The one-click command or manual compilation of the hcomm sub-package in the WSL environment produces the error above.
 
 **Diagnosis Guide:**
-
-```text
+```
 [Possible Causes]
 Compiling the hcomm sub-package has specific requirements for the WSL virtual Linux environment.
 1. Ensure the WSL system version is Ubuntu 22.04 or Ubuntu 24.04.
 2. Ensure the WSL settings meet the following conditions: available memory >= 8 GB, swap space >= 4 GB. Configure these through WSL settings.
 ```
-
 ---
 
 ## Module: HCCL-VM
@@ -67,20 +62,17 @@ Compiling the hcomm sub-package has specific requirements for the WSL virtual Li
 **Title:** Communication Domain Not Configured
 
 **Error Code:**
-
-```text
+```
 NA (4)
 ```
 
 **Error Function:**
-
-```text
+```
 db_sim_runner_common.cc::GetDeviceByRankId()
 ```
 
 **Key Log:**
-
-```text
+```
 [error][PID:173579][TID:173579][db_sim_runner_common.cc][GetDeviceByRankId] cannot find rank by rank id 0
 [error][PID:173579][TID:173579][aclrt_device_stub.cc][aclrtSetDevice] [DEVICE_STUB]device not found by rankId:0
 acl interface return err ./common/src/hccl_test_common.cc:861, retcode: 100000.
@@ -90,12 +82,10 @@ This is an error in device_init.
 **Symptom:** The business case reports that the device with rank id 0 is not found.
 
 **Diagnosis Guide:**
-
-```text
+```
 [Possible Causes]
 Before running the business case, determine the communication domain size for the current operator. Configure the communication domain using the hccl-vm mock-comm aa command. The aa.yaml file is located at $HCCL_VM_INSTALL_DIR/config/topo_meta/aa.yaml.
 ```
-
 ---
 
 #### FAQ-E002
@@ -103,28 +93,24 @@ Before running the business case, determine the communication domain size for th
 **Title:** RANK_TABLE_FILE Not Set
 
 **Error Code:**
-
-```text
+```
 HCCL_SIM_E_PARA (1)
 ```
 
 **Error Function:**
-
-```text
+```
 hccl_comm_stub.cc::HcclCommInitRootInfo()
 ```
 
 **Key Log:**
-
-```text
+```
 RANK_TABLE_FILE env not set, please check your config.
 ```
 
 **Symptom:** The communication domain initialization cannot find the rank table configuration file.
 
 **Diagnosis Guide:**
-
-```text
+```
 [Possible Causes]
 1. The environment variable is not set.
 2. The file path is incorrect.
@@ -140,28 +126,24 @@ export RANK_TABLE_FILE=/path/to/rank_table.json
 **Title:** HCCL_VM_INSTALL_DIR Not Set
 
 **Error Code:**
-
-```text
+```
 HCCL_SIM_E_INTERNAL (4)
 ```
 
 **Error Function:**
-
-```text
+```
 hccl_op_stub.cc::VirtualExecuteAivKernel()
 ```
 
 **Key Log:**
-
-```text
+```
 [virtual-aiv] env HCCL_VM_INSTALL_DIR is not set, can not locate <path> for kernel <name>
 ```
 
 **Symptom:** AIV kernel virtual execution fails. The corresponding .so file is not found.
 
 **Diagnosis Guide:**
-
-```text
+```
 [Solution]
 export HCCL_VM_INSTALL_DIR=/path/to/hccl_vm/install/dir
 ```
@@ -173,28 +155,24 @@ export HCCL_VM_INSTALL_DIR=/path/to/hccl_vm/install/dir
 **Title:** Repeated Start Command in Sub-shell
 
 **Error Code:**
-
-```text
+```
 NA (No error code, WARNING only)
 ```
 
 **Error Function:**
-
-```text
+```
 subcmd_start.cc::StartCommand::Execute()
 ```
 
 **Key Log:**
-
-```text
+```
 [warning][PID:<PID>][TID:<TID>][subcmd_start.cc][Execute] hccl-vm has already started. Please do not start it again in a sub-bash.
 ```
 
 **Symptom:** Running `hccl-vm start` again inside the hvm sub-shell triggers a started notification. The system ignores the operation.
 
 **Diagnosis Guide:**
-
-```text
+```
 [Possible Causes]
 `hccl-vm start` forks a child bash process. When the user enters `hccl-vm start` again inside that sub-bash (prompt `(hvm)$>`), the system rejects the duplicate start.
 
@@ -209,28 +187,24 @@ Do not run `hccl-vm start` repeatedly inside the sub-shell. To restart the simul
 **Title:** Child Process Fork Failure
 
 **Error Code:**
-
-```text
+```
 HCCL_SIM_HOST_ERROR_CMD (No standard error code)
 ```
 
 **Error Function:**
-
-```text
+```
 cmd_base_utils.cc::StartHvmCmd()
 ```
 
 **Key Log:**
-
-```text
+```
 fork failed: Resource temporarily unavailable
 ```
 
 **Symptom:** The `hccl-vm start` command fails to create a sub-shell process. The simulation environment fails to start.
 
 **Diagnosis Guide:**
-
-```text
+```
 [Possible Causes]
 1. The system user process limit is reached (ulimit -u).
 2. The system memory is insufficient to allocate resources for a new process.
@@ -255,20 +229,17 @@ ps -eLf | wc -l
 **Title:** Plugin Name Format Error
 
 **Error Code:**
-
-```text
+```
 NA (CLI parameter validation)
 ```
 
 **Error Function:**
-
-```text
+```
 subcmd_plugin.cc::PluginCommand::Setup()
 ```
 
 **Key Log:**
-
-```text
+```
 [HVM] [ERROR] Install plugin : Invalid format! Plugin name must start with '@' (e.g., @myplugin).
 [HVM] [ERROR] Uninstall plugin : Invalid format! Plugin name must start with '@' (e.g., @myplugin).
 [HVM] [ERROR] Run plugin : Invalid format! Plugin name must start with '@' (e.g., @myplugin).
@@ -277,8 +248,7 @@ subcmd_plugin.cc::PluginCommand::Setup()
 **Symptom:** The `hccl-vm plugin install/run/uninstall` command fails CLI parameter validation and refuses to execute.
 
 **Diagnosis Guide:**
-
-```text
+```
 [Possible Causes]
 The plugin name does not start with the `@` symbol. For example, the user enters `hccl-vm plugin install runner` instead of `hccl-vm plugin install @runner`.
 
@@ -296,28 +266,24 @@ hccl-vm plugin uninstall @runner
 **Title:** Topology Configuration File Not Found
 
 **Error Code:**
-
-```text
+```
 NA (CLI parameter validation)
 ```
 
 **Error Function:**
-
-```text
+```
 cmd_base_utils.cc::FileInModelDir()
 ```
 
 **Key Log:**
-
-```text
+```
 [HVM] model File not found: <install_path>/config/topo_meta/<name>.yaml
 ```
 
 **Symptom:** The `hccl-vm mock-comm <name>` command reports that the specified topology YAML configuration file does not exist. CLI parameter validation rejects the request. The communication domain configuration file describes the communication domain size for operator execution (such as the number of supernodes, the number of servers, and which cards each server uses; see the file description for details).
 
 **Diagnosis Guide:**
-
-```text
+```
 [Possible Causes]
 1. The specified topology name has a spelling error.
 2. The corresponding YAML file is not placed in the `$HCCL_VM_INSTALL_DIR/config/topo_meta/` directory.
@@ -337,28 +303,24 @@ Confirm that the topology YAML file is placed in the correct directory and that 
 **Title:** YAML Topology File Parsing Exception
 
 **Error Code:**
-
-```text
+```
 NA (Runtime parsing error)
 ```
 
 **Error Function:**
-
-```text
+```
 cmd_cluster_model_utils.cc::ParseYamlTopoImpl()
 ```
 
 **Key Log:**
-
-```text
+```
 [error][PID:<PID>][TID:<TID>][cmd_cluster_model_utils.cc][ParseYamlTopoImpl] Exception when parsing YAML: <detail>
 ```
 
 **Symptom:** The `hccl-vm mock-comm <name>` command fails to parse the YAML topology configuration file. Communication domain initialization is interrupted.
 
 **Diagnosis Guide:**
-
-```text
+```
 [Possible Causes]
 1. The YAML file contains syntax errors (such as incorrect indentation, missing space after a colon, or illegal characters).
 2. The YAML file contains unsupported field types or formats.
@@ -386,20 +348,17 @@ Fix the YAML file syntax errors based on the `<detail>` information in the log. 
 **Title:** Device Memory Allocation Exceeds Limit
 
 **Error Code:**
-
-```text
+```
 HCCL_SIM_E_MEMORY (3)
 ```
 
 **Error Function:**
-
-```text
+```
 store_sim_device_memory_manager.cc::AllocPhyMem()
 ```
 
 **Key Log:**
-
-```text
+```
 dev:<N> alloc phy mem:<ADDR> size:<SIZE> exceeds pool ceiling:<CEILING>, reject
 ```
 
@@ -422,20 +381,17 @@ graph LR
 **Title:** Shared Memory Creation Failure
 
 **Error Code:**
-
-```text
+```
 HCCL_SIM_E_SYSCALL (8)
 ```
 
 **Error Function:**
-
-```text
+```
 store_sim_shm_ops.cc::ShmCreate()
 ```
 
 **Key Log:**
-
-```text
+```
 [SHM_OPS] create: shm_open failed, name: <name>
 [SHM_OPS] create: ftruncate failed, name: <name>
 [SHM_OPS] create: mmap failed, name: <name>
@@ -444,8 +400,7 @@ store_sim_shm_ops.cc::ShmCreate()
 **Symptom:** The system cannot create a shared memory segment.
 
 **Diagnosis Guide:**
-
-```text
+```
 [Possible Causes]
 1. `/dev/shm` space is insufficient.
 2. Permissions are insufficient.
@@ -463,20 +418,17 @@ ls /dev/shm/ | grep hccl
 **Title:** Communication Memory Allocation Failure
 
 **Error Code:**
-
-```text
+```
 HCCL_SIM_E_NOT_FOUND (6)
 ```
 
 **Error Function:**
-
-```text
+```
 store_sim_comm_memory_manager.cc
 ```
 
 **Key Log:**
-
-```text
+```
 [COMM_MEM] alloc failed, name: <name>
 [COMM_MEM] acquire failed, name: <name>
 [COMM_MEM] write size too large, size: <N>, max: <MAX>
@@ -495,8 +447,7 @@ store_sim_comm_memory_manager.cc
 **Error Function:** `CommunicationMemoryManager::WriteCommMem`
 
 **Key Log:**
-
-```text
+```
 Bus error
 ```
 
@@ -515,20 +466,17 @@ Bus error
 **Title:** AIV Kernel Virtual Execution Failure
 
 **Error Code:**
-
-```text
+```
 HCCL_SIM_E_INTERNAL (4)
 ```
 
 **Error Function:**
-
-```text
+```
 hccl_op_stub.cc::VirtualExecuteAivKernel()
 ```
 
 **Key Log:**
-
-```text
+```
 [virtual-aiv] env HCCL_VM_INSTALL_DIR is not set
 [virtual-aiv] missing aiv stub shared library, kernel=<name>
 [virtual-aiv] dlopen <so> failed, err = <error>
@@ -538,8 +486,7 @@ hccl_op_stub.cc::VirtualExecuteAivKernel()
 **Symptom:** AIV kernel execution fails in the virtual environment.
 
 **Diagnosis Guide:**
-
-```text
+```
 [Troubleshooting Steps]
 echo $HCCL_VM_INSTALL_DIR
 ls -la $HCCL_VM_INSTALL_DIR/lib/aiv/
@@ -553,20 +500,17 @@ nm -D $HCCL_VM_INSTALL_DIR/lib/aiv/<kernel>.so | grep <symbol>
 **Title:** Operator Database Recording Failure
 
 **Error Code:**
-
-```text
+```
 HCCL_SIM_E_INTERNAL (4)
 ```
 
 **Error Function:**
-
-```text
+```
 hccl_op_stub.cc::RecordOpDbInfo()
 ```
 
 **Key Log:**
-
-```text
+```
 [RecordOpDbInfo] insert op detail+mem failed
 [HcclAllReduce] record op db info failed
 ```
@@ -582,20 +526,17 @@ hccl_op_stub.cc::RecordOpDbInfo()
 **Title:** QP Not Found or State Error
 
 **Error Code:**
-
-```text
+```
 HCCL_SIM_E_NOT_FOUND (6)
 ```
 
 **Error Function:**
-
-```text
+```
 hccp_stub.cc::RaSendWr()
 ```
 
 **Key Log:**
-
-```text
+```
 [HCCP] RaSendWr: QP <N> not found
 [HCCP] RaSendWr: QP <N> not in RTS state, current state:<N>
 ```
@@ -621,20 +562,17 @@ stateDiagram-v2
 **Title:** EndPoint Lookup Failure
 
 **Error Code:**
-
-```text
+```
 HCCL_SIM_E_NOT_FOUND (6)
 ```
 
 **Error Function:**
-
-```text
+```
 hccp_stub.cc::RaCtxQpImport()
 ```
 
 **Key Log:**
-
-```text
+```
 [HCCP] cannot find endpoint addr:<IP>
 Get remote endpoint failed. ip:<IP>, eid:<EID>
 ```
@@ -642,8 +580,7 @@ Get remote endpoint failed. ip:<IP>, eid:<EID>
 **Symptom:** The network endpoint lookup fails.
 
 **Diagnosis Guide:**
-
-```text
+```
 [Possible Causes]
 The IP address is not in the endpoint list configured in the rank table.
 ```
@@ -655,20 +592,17 @@ The IP address is not in the endpoint list configured in the rank table.
 **Title:** CCU Microcode Loading Failure
 
 **Error Code:**
-
-```text
+```
 HCCL_SIM_E_INTERNAL (4)
 ```
 
 **Error Function:**
-
-```text
+```
 hccp_ccu_stub.cc::LoadMicrocodeInstruction()
 ```
 
 **Key Log:**
-
-```text
+```
 [LoadMicrocodeInstruction] get device by logic id <N> failed.
 [LoadMicrocodeInstruction] get ccu from device by die id <N> failed.
 [LoadMicrocodeInstruction] insert instr failed
@@ -683,28 +617,24 @@ hccp_ccu_stub.cc::LoadMicrocodeInstruction()
 **Title:** Unable to Get Current Context
 
 **Error Code:**
-
-```text
+```
 HCCL_SIM_E_NOT_FOUND (6)
 ```
 
 **Error Function:**
-
-```text
+```
 hccp_stub.cc::RaRdevInit()
 ```
 
 **Key Log:**
-
-```text
+```
 [error][PID:<PID>][TID:<TID>][hccp_stub.cc][RaRdevInit] can not get CurrContext: <N>
 ```
 
 **Symptom:** During RDMA device initialization, the current Runner cannot obtain the active Context. RDMA device creation fails.
 
 **Diagnosis Guide:**
-
-```text
+```
 [Possible Causes]
 1. The application layer did not call `aclrtSetDevice`/`aclrtCreateContext` to initialize the device and context.
 2. The Context was destroyed prematurely.
@@ -728,28 +658,24 @@ Confirm that the application layer called `aclrtSetDevice` and `aclrtCreateConte
 **Title:** AICPU Binary File Not Found
 
 **Error Code:**
-
-```text
+```
 ACL_ERROR_RT_FEATURE_NOT_SUPPORT
 ```
 
 **Error Function:**
-
-```text
+```
 aclrt_kernel_stub.cc::aclrtDestroyBinary()
 ```
 
 **Key Log:**
-
-```text
+```
 [error][PID:<PID>][TID:<TID>][aclrt_kernel_stub.cc][aclrtDestroyBinary] can not find this binary
 ```
 
 **Symptom:** When destroying an AICPU binary object, the corresponding binary handle is not found in the global kernel binary registry.
 
 **Diagnosis Guide:**
-
-```text
+```
 [Possible Causes]
 1. The binary file was not loaded correctly (`aclrtLoadBinary` was not executed or failed).
 2. The binary handle was destroyed twice (double-free).
@@ -770,20 +696,17 @@ Ensure `aclrtLoadBinary` returns successfully before calling `aclrtDestroyBinary
 **Title:** AICPU Device Process Abnormal Exit
 
 **Error Code:**
-
-```text
+```
 NA (Process-level error)
 ```
 
 **Error Function:**
-
-```text
+```
 aclrt_kernel_stub.cc::WaitAicpuProcess()
 ```
 
 **Key Log:**
-
-```text
+```
 [error][PID:<PID>][TID:<TID>][aclrt_kernel_stub.cc][WaitAicpuProcess] device process[<PID>] exited with status <N>
 [error][PID:<PID>][TID:<TID>][aclrt_kernel_stub.cc][WaitAicpuProcess] device process[<PID>] killed by signal <N>
 ```
@@ -791,8 +714,7 @@ aclrt_kernel_stub.cc::WaitAicpuProcess()
 **Symptom:** The AICPU device child process exits abnormally or is killed by a signal. The main process then also exits (`exit(EXIT_FAILURE)`).
 
 **Diagnosis Guide:**
-
-```text
+```
 [Possible Causes]
 1. An uncaught exception or segmentation fault occurs inside the AICPU process.
 2. System resources are insufficient (memory, file descriptors, and so on), and the OOM killer terminates the child process.
@@ -821,28 +743,24 @@ free -m
 **Title:** No Rank Found During CCU Microcode Loading
 
 **Error Code:**
-
-```text
+```
 HCCL_SIM_E_NOT_FOUND (6)
 ```
 
 **Error Function:**
-
-```text
+```
 hccp_ccu_stub.cc::LoadMicrocodeInstruction()
 ```
 
 **Key Log:**
-
-```text
+```
 [error][PID:<PID>][TID:<TID>][hccp_ccu_stub.cc][LoadMicrocodeInstruction] can not find any rank
 ```
 
 **Symptom:** During CCU microcode instruction loading, no rank record is found in the Rank table corresponding to the current device.
 
 **Diagnosis Guide:**
-
-```text
+```
 [Possible Causes]
 1. The communication domain was not initialized using the `mock-comm` command. The Rank table is empty.
 2. The current device ID does not exist in the communication domain configuration.
@@ -864,28 +782,25 @@ Ensure that the communication domain is initialized correctly using the `hccl-vm
 **Title:** Device Lookup by rankId Failure
 
 **Error Code:**
-
-```text
+```
 HCCL_E_NOT_FOUND
 ```
 
 cc
 
-```text
+```
 aclrt_device_stub.cc::hrtSetDevice()
 ```
 
 **Key Log:**
-
-```text
+```
 [error][PID:<PID>][TID:<TID>][aclrt_device_stub.cc][hrtSetDevice] device not found by rankId:<N>
 ```
 
 **Symptom:** When calling `aclrtSetDevice` to set the current device, the lookup for the corresponding device by rankId fails.
 
 **Diagnosis Guide:**
-
-```text
+```
 [Possible Causes]
 1. The rankId exceeds the actual rank range in the communication domain. For example, the communication domain configures 4 NPUs, but mpirun launches 6 NPU processes. Rank IDs 4 and 5 both report device not found.
 2. The communication domain is not initialized (the `mock-comm` command was not executed). [High probability] The Rank table is initialized internally only after the communication domain is initialized.
@@ -906,20 +821,17 @@ Confirm that the rankId is within the valid range of the communication domain co
 **Title:** Stub Interface Not Yet Implemented
 
 **Error Code:**
-
-```text
+```
 HCCL_SIM_E_INTERNAL (4) or NA
 ```
 
 **Error Function:**
-
-```text
+```
 Multiple stub function files (hccp_stub.cc, ascend_hal_stub.cc, aclrt_kernel_stub.cc, and so on)
 ```
 
 **Key Log:**
-
-```text
+```
 [warning][PID:<PID>][TID:<TID>][ascend_hal_stub.cc][*] [STUB] is empty
 [warning][PID:<PID>][TID:<TID>][hccp_stub.cc][*] [STUB] is empty
 [error][PID:<PID>][TID:<TID>][hccp_stub.cc][RaCtxGetAuxInfo] Not support yet
@@ -929,8 +841,7 @@ Multiple stub function files (hccp_stub.cc, ascend_hal_stub.cc, aclrt_kernel_stu
 **Symptom:** The application layer calls a low-level driver or runtime interface that the simulator has not yet implemented. The log shows `[STUB] is empty` or `Not support yet` warnings or errors. These stub functions return default values (typically 0 or success) directly and perform no actual operation.
 
 **Diagnosis Guide:**
-
-```text
+```
 [Possible Causes]
 The current simulator version implements only the core interface subset required for HCCL collective communication. Some low-level driver interfaces (such as drvGetDeviceCapability, RaCtxGetAuxInfo, and drvMemPrefetch) are not on the core HCCL communication path. Therefore, the stub function bodies are empty or marked as unsupported.
   In general, the workflows supported by the HCCL-VM tool do not call these interfaces, so these warnings do not appear. If the user calls incorrect application layer interfaces or enters an incorrect HCCL workflow, these warnings may appear.
@@ -959,8 +870,7 @@ The current simulator version implements only the core interface subset required
 **Error Function:** `hccp_ra_socket_stub.cc::RaGetSockets()`
 
 **Key Log:**
-
-```text
+```
 [RASOCKET_STUB]get socket failed local:socketFd peerAddr:ipaddr role:0
 ```
 
@@ -994,8 +904,7 @@ graph TD
 **Error Function:** `hccp_ra_socket_stub.cc::RaSocketBatchConnect()`
 
 **Key Log:**
-
-```text
+```
 [RASOCKET_STUB] alloc sock name ra_sock_1_c2s mem failed
 ```
 
@@ -1010,28 +919,24 @@ graph TD
 **Title:** waitpid Failure Waiting for AICPU Device Process
 
 **Error Code:**
-
-```text
+```
 NA (Process-level error)
 ```
 
 **Error Function:**
-
-```text
+```
 aclrt_kernel_stub.cc::WaitAicpuProcess()
 ```
 
 **Key Log:**
-
-```text
+```
 [error][PID:<PID>][TID:<TID>][aclrt_kernel_stub.cc][WaitAicpuProcess] waitpid failed for pid <PID>, errno: <N> (<description>)
 ```
 
 **Symptom:** The main process calls `waitpid` to wait for the AICPU device child process to exit. The `waitpid` system call does not return the target device process PID. The main process then calls `exit(EXIT_FAILURE)` to exit, and the simulation is interrupted. Unlike FAQ-PX008, in this scenario the exit status of the device child process is not collected successfully (waitpid itself fails), rather than the child process crashing actively.
 
 **Diagnosis Guide:**
-
-```text
+```
 [Possible Causes]
 The waitpid return value is incorrect. Common errno causes:
 1. ECHILD (10): The current process has no child process to wait for. The device child process was already reaped by another thread or process, or the fork parent-child relationship is incorrect (for example, a signal handler already reaped the child using wait4).
@@ -1055,21 +960,18 @@ dmesg | grep -i "process\|killed"
 **Title:** Remote IP Endpoint Not Found During Socket Connection
 
 **Error Code:**
-
-```text
+```
 NA (Returns -1, no standard error code)
 ```
 
 **Error Function:**
-
-```text
+```
 hccp_ra_socket_stub.cc::RaSocketInit()
 hccp_ra_socket_stub.cc::RaSocketBatchConnect()
 ```
 
 **Key Log:**
-
-```text
+```
 [RASOCKET_STUB] get device by phy id <N> failed
 [RASOCKET_STUB] cannot find remote ip <IP>
 ```
@@ -1077,8 +979,7 @@ hccp_ra_socket_stub.cc::RaSocketBatchConnect()
 **Symptom:** `RaSocketInit` resolves the IP from `rdevInfo.localIp`, or `RaSocketBatchConnect` resolves the IP from `conn[i].remoteIp`. The corresponding endpoint is not found in the EndPoint table. Socket initialization or connection returns -1 and is interrupted. The `<IP>` in the log is typically an IPv6 string with the prefix removed.
 
 **Diagnosis Guide:**
-
-```text
+```
 [Possible Causes]
 1. The ranktable.json does not configure an endpoint for this IP (the EndPoint table is missing this entry).
 2. The communication domain is not initialized (`mock-comm` was not executed). The EndPoint table is empty.
@@ -1103,20 +1004,17 @@ hccl-vm table show Rank
 **Title:** Peer Not Ready During Socket Connection Timeout
 
 **Error Code:**
-
-```text
+```
 NA (Function returns 0, but this connection does not establish a pair. Subsequent RaGetSockets triggers FAQ-PX012)
 ```
 
 **Error Function:**
-
-```text
+```
 hccp_ra_socket_stub.cc::RaSocketBatchConnect()
 ```
 
 **Key Log:**
-
-```text
+```
 [RASOCKET_STUB] can not find remote dev:<N>, endpoint:<N>
 [RASOCKET_STUB] can not get break dev:<N> sock:<N> connect dev:<N> ip addr:<IP> tag:<tag>
 ```
@@ -1124,8 +1022,7 @@ hccp_ra_socket_stub.cc::RaSocketBatchConnect()
 **Symptom:** `RaSocketBatchConnect` polls for the peer record in the RaSocket table. After 600 iterations at 100 ms each (60 seconds total), the record is still not found. The connection times out with a `break`. This connection does not establish an RaSocketPair. Subsequent `RaGetSockets` cannot retrieve the socket and reports FAQ-PX012.
 
 **Diagnosis Guide:**
-
-```text
+```
 [Possible Causes]
 1. The peer rank process is not started, or has not yet called `RaSocketInit`/`RaSocketListenStart`.
 2. Multi-rank startup order is incorrect. The peer has not completed socket initialization when BatchConnect is initiated.
@@ -1163,14 +1060,12 @@ sequenceDiagram
 **Title:** socketHandle Not Found in RaSocket Table
 
 **Error Code:**
-
-```text
+```
 NA (Returns -1)
 ```
 
 **Error Function:**
-
-```text
+```
 hccp_ra_socket_stub.cc::RaSocketListenStart()
 hccp_ra_socket_stub.cc::RaSocketListenStop()
 hccp_ra_socket_stub.cc::RaSocketBatchConnect()
@@ -1178,8 +1073,7 @@ hccp_ra_socket_stub.cc::RaGetSockets()
 ```
 
 **Key Log:**
-
-```text
+```
 [RASOCKET_STUB] can not get Socket:<N>
 [RASOCKET_STUB] can not get Local RA Socket:<N>
 [RASOCKET_STUB] can not get local socket fd:<N>
@@ -1188,8 +1082,7 @@ hccp_ra_socket_stub.cc::RaGetSockets()
 **Symptom:** When calling `RaSocketListenStart`/`RaSocketListenStop`/`RaSocketBatchConnect`/`RaGetSockets`, the provided `socketHandle` is not found in the RaSocket table by `GetById`. The corresponding operation fails and returns -1.
 
 **Diagnosis Guide:**
-
-```text
+```
 [Possible Causes]
 1. The socketHandle was already deleted by `RaSocketDeinit` (Deinit was called before usage).
 2. The socketHandle value is invalid. It comes from uninitialized memory or from another process.
@@ -1211,22 +1104,19 @@ hccl-vm table show RaSocket
 **Title:** Socket Link Send/Recv Read/Write Failure
 
 **Error Code:**
-
-```text
+```
 NA (Returns -1)
 ```
 
 **Error Function:**
-
-```text
+```
 hccp_ra_socket_stub.cc::RaSocketSend()
 hccp_ra_socket_stub.cc::RaSocketRecv()
 hccp_ra_socket_stub.cc::RaSocketRecvAsync()
 ```
 
 **Key Log:**
-
-```text
+```
 [RASOCKET_STUB] cannot pair socket:<N> role:<N>, key=<key>
 [RASOCKET_STUB] socket pair:<N> role:<N>, key=<key> recv failed
 [RASOCKET_STUB] socket pair:<N> role:<N>, key=<key> read try again
@@ -1235,8 +1125,7 @@ hccp_ra_socket_stub.cc::RaSocketRecvAsync()
 **Symptom:** `RaSocketSend` calls `WriteCommMem` to write to c2s/s2c shared memory and fails, returning -1. Or `RaSocketRecv`/`RaSocketRecvAsync` calls `ReadCommMem` and returns -1. Link data transmission is interrupted. The `read try again` message is a WARN indicating no data is available for reading (the peer has not sent yet). The function sleeps and retries, returning 0. This case is not within the scope of this FAQ.
 
 **Diagnosis Guide:**
-
-```text
+```
 [Possible Causes]
 1. The c2s/s2c shared memory of the pair was already released by `RaSocketBatchClose`. After ref_cnt reaches zero, `DestoryRaSocketBufKeyByPairId` deletes the buffer, but a thread is still calling Send/Recv.
 2. /dev/shm space is insufficient, or residual ra_sock_* old buffers cause memory segment conflicts.
@@ -1264,20 +1153,17 @@ hccl-vm table show RaSocketPair
 **Title:** Ranktable Environment Variable Configuration Error
 
 **Error Code:**
-
-```text
+```
 NA (1)
 ```
 
 **Error Function:**
-
-```text
+```
 param_check_v2.cc::RanktableRealPath
 ```
 
 **Key Log:**
-
-```text
+```
 [error][PID:172019][TID:172019][log_stub.cc][DlogPrintStub] [HCCL_LOG][param_check_v2.cc:457][172019]RanktableRealPath: /home/teamserver/workspace/CheckerL2_2128/hccl_vm_install/ranktable.json is not a valid real path
 
 [info][PID:172021][TID:172021][log_stub.cc][DlogPrintStub] [HCCL_LOG][adapter_rts.cc:234] [172021][hrtGetDeviceRefresh]deviceLogicId[3]
@@ -1292,8 +1178,7 @@ param_check_v2.cc::RanktableRealPath
 **Symptom:** The test case runs, and communication domain initialization fails.
 
 **Diagnosis Guide:**
-
-```text
+```
 [Possible Causes]
 The ranktable.json file path is configured incorrectly. Check the RANK_TABLE_FILE environment variable configuration. The tool generates ranktable.json at $HCCL_VM_INSTALL_DIR/data/ranktable.json.
 
@@ -1311,28 +1196,24 @@ Confirm that the RANK_TABLE_FILE environment variable is configured correctly an
 **Title:** topo.json Path Configuration Error
 
 **Error Code:**
-
-```text
+```
 NA (1)
 ```
 
 **Error Function:**
-
-```text
+```
 communicator_impl.cc::GetTopoFilePath
 ```
 
 **Key Log:**
-
-```text
+```
 [error][PID:172635][TID:172635][log_stub.cc][DlogPrintStub] [HCCL_LOG][communicator_impl.cc:1339][172635][GetTopoFilePath] topo_file_path[/home/teamserver/workspace/CheckerL2_2128/hccl_vm_install/topo.json] is not a valid real path
 ```
 
 **Symptom:** The test case runs, and communication domain initialization fails.
 
 **Diagnosis Guide:**
-
-```text
+```
 [Possible Causes]
 The topo.json file path is configured incorrectly in the /etc/hccl_rootinfo.json file. Check the topo_file_path field. The tool generates topo.json at $HCCL_VM_INSTALL_DIR/data/topo.json.
 
@@ -1350,20 +1231,17 @@ Confirm that the TOPO_FILE_PATH environment variable is configured correctly and
 **Title:** mock-comm Command Error
 
 **Error Code:**
-
-```text
+```
 NA
 ```
 
 **Error Function:**
-
-```text
+```
 db_sim_runner_ops.cc::GetServerKeyById
 ```
 
 **Key Log:**
-
-```text
+```
 (hvm)$> hccl-vm mock-comm 144
 [error][PID:172799][TID:172875][db_sim_runner_ops.cc][GetServerKeyById] can not find server by id: 0, 2
 [error][PID:172799][TID:172875][topo_ascend_cluster_parser.cc][InitDynamicModelData] cannot find device by physical id 0
@@ -1374,8 +1252,7 @@ db_sim_runner_ops.cc::GetServerKeyById
 **Symptom:** Before running the test case, the mock-comm command fails to configure the communication domain.
 
 **Diagnosis Guide:**
-
-```text
+```
 [Possible Causes]
 The communication domain 144 configured by the mock-comm command exceeds the cluster configuration started by the tool. For example, the cluster started by the tool has only 2 servers per supernode, but communication domain 144 specifies 4 servers under that supernode.
 
@@ -1394,20 +1271,17 @@ Ensure the communication domain configured by the mock-comm command does not exc
 **Title:** EndPoint IP Lookup Failure
 
 **Error Code:**
-
-```text
+```
 HCCL_SIM_E_NOT_FOUND (6)
 ```
 
 **Error Function:**
-
-```text
+```
 topo_ascend_cluster_parser.cc::AddLinkInfo()
 ```
 
 **Key Log:**
-
-```text
+```
 cannot find endPoint by ip <IP_ADDR>
 ```
 
@@ -1420,28 +1294,24 @@ cannot find endPoint by ip <IP_ADDR>
 **Title:** Superpod Index Out of Range
 
 **Error Code:**
-
-```text
+```
 HCCL_SIM_E_NOT_FOUND (6)
 ```
 
 **Error Function:**
-
-```text
+```
 topo_ascend_cluster_parser.cc::InitDynamicModelData()
 ```
 
 **Key Log:**
-
-```text
+```
 [InitDynamicModelData] superpod index <N> out of range
 ```
 
 **Symptom:** When parsing the ranktable to generate ranktable.json, the referenced superpod index exceeds the actual number of superpods in the cluster. Initialization fails.
 
 **Diagnosis Guide:**
-
-```text
+```
 [Possible Causes]
 The number of superpods referenced by the devices configured in the ranktable exceeds the cluster networking configuration started by the tool. For example, the cluster has only 1 superpod, but the ranktable references a second superpod.
 
@@ -1460,28 +1330,24 @@ Ensure the communication domain configured by the mock-comm command does not ref
 **Title:** Server Index Out of Range
 
 **Error Code:**
-
-```text
+```
 HCCL_SIM_E_NOT_FOUND (6)
 ```
 
 **Error Function:**
-
-```text
+```
 topo_ascend_cluster_parser.cc::InitDynamicModelData()
 ```
 
 **Key Log:**
-
-```text
+```
 [InitDynamicModelData] server index <N> out of range in superpod <M>
 ```
 
 **Symptom:** When parsing the ranktable to generate ranktable.json, the referenced server index exceeds the actual number of servers within the superpod. Initialization fails.
 
 **Diagnosis Guide:**
-
-```text
+```
 [Possible Causes]
 The number of servers under a superpod configured in the ranktable exceeds the number of servers under that superpod in the cluster networking configuration started by the tool. For example, the cluster networking has 2 servers per superpod, but the ranktable references a third server.
 
@@ -1500,28 +1366,24 @@ Ensure the communication domain configured by the mock-comm command does not hav
 **Title:** Device Lookup by Physical ID Failure
 
 **Error Code:**
-
-```text
+```
 HCCL_SIM_E_NOT_FOUND (6)
 ```
 
 **Error Function:**
-
-```text
+```
 topo_ascend_cluster_parser.cc::InitDynamicModelData()
 ```
 
 **Key Log:**
-
-```text
+```
 [InitDynamicModelData] cannot find device by physical id <N>
 ```
 
 **Symptom:** When parsing the ranktable, the device lookup by physical device ID fails. This typically occurs during mock-comm communication domain configuration.
 
 **Diagnosis Guide:**
-
-```text
+```
 [Possible Causes]
 The physical device ID (physical id) referenced in the communication domain configured by the mock-comm command exceeds the actual device range in the cluster networking. For example, the cluster has only 2 devices (physical id 0 and 1), but the communication domain configuration references physical id 2.
 
@@ -1544,20 +1406,17 @@ Ensure the physical device IDs referenced in the communication domain configured
 **Title:** SQLite Database Connection Failure
 
 **Error Code:**
-
-```text
+```
 HCCL_SIM_E_OPEN_FILE_FAILURE (10)
 ```
 
 **Error Function:**
-
-```text
+```
 db_hccl_db_sqlite.cc::Connect()
 ```
 
 **Key Log:**
-
-```text
+```
 [dbInit] Connect database failed
 Connect database:<path> failed
 ```
@@ -1565,8 +1424,7 @@ Connect database:<path> failed
 **Symptom:** The system cannot connect to the SQLite database file.
 
 **Diagnosis Guide:**
-
-```text
+```
 [Possible Causes]
 1. The database file does not exist.
 2. File permissions are insufficient.
@@ -1580,28 +1438,24 @@ Connect database:<path> failed
 **Title:** Database Backup File Not Found
 
 **Error Code:**
-
-```text
+```
 HCCL_SIM_E_OPEN_FILE_FAILURE (10)
 ```
 
 **Error Function:**
-
-```text
+```
 sim_loader.cc::BackupDatabase()
 ```
 
 **Key Log:**
-
-```text
+```
 [Loader] Backup database file not found: <dbPath>
 ```
 
 **Symptom:** The Loader cannot find the simulation database file.
 
 **Diagnosis Guide:**
-
-```text
+```
 [Possible Causes]
 1. The simulation data file path is configured incorrectly.
 2. The simulation data has not been generated yet.
@@ -1618,20 +1472,17 @@ ls -la <dbPath>
 **Title:** SQLite Query Failure
 
 **Error Code:**
-
-```text
+```
 HCCL_SIM_E_INTERNAL (4)
 ```
 
 **Error Function:**
-
-```text
+```
 db_hccl_db_sqlite.cc
 ```
 
 **Key Log:**
-
-```text
+```
 Prepare failed: <error> sql:<SQL>
 Step failed: <error>, sql:<SQL>
 ```
@@ -1639,8 +1490,7 @@ Step failed: <error>, sql:<SQL>
 **Symptom:** SQL query execution fails.
 
 **Diagnosis Guide:**
-
-```text
+```
 [Possible Causes]
 1. The database table structure does not match (version incompatibility).
 2. The database file is corrupted.
@@ -1662,22 +1512,19 @@ Step failed: <error>, sql:<SQL>
 **Title:** Binary File Magic Number Mismatch
 
 **Error Function:**
-
-```text
+```
 binary_data_operator.cc::FileHeaderRead()
 ```
 
 **Key Log:**
-
-```text
+```
 [FileHeaderRead] Unmatched magic number:0x<N>≠0x<M>
 ```
 
 **Symptom:** When reading the simulation data file, the magic number in the file header does not match.
 
 **Diagnosis Guide:**
-
-```text
+```
 [Possible Causes]
 1. The data file version is incompatible with the tool version.
 2. The file is corrupted.

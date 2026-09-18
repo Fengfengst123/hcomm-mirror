@@ -26,17 +26,14 @@ struct AivRuntimeBlockTaskSnapshot {
 };
 
 struct AivRuntimeTaskSnapshot {
-    uint32_t rankId{0};
-    uint32_t rankSize{0};
-    uint32_t launchIndex{0};
     std::string filePath;
     std::vector<AivRuntimeBlockTaskSnapshot> blocks;
 };
 
 class AivTaskSnapshotLoader {
 public:
-    static bool LoadRuntimeTaskSnapshotByLaunchDirect(
-        uint32_t rankId, uint32_t launchIndex, AivRuntimeTaskSnapshot& taskSnapshot,
+    static bool LoadRuntimeTasks(
+        uint64_t deviceId, uint64_t launchIndex, AivRuntimeTaskSnapshot& taskSnapshot,
         std::string* errorMessage = nullptr);
 
 private:

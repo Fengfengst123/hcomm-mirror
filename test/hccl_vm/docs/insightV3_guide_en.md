@@ -21,8 +21,8 @@ To configure Checker data output, confirm that the Checker configuration file ha
   ...
   "setting": {              // Checker plugin configuration items
       ...
-      "enable_insight_dump": true,         // Enable or disable visualization data output (disabled by default)
-      "enable_memory_snapshot_dump": false  // Enable or disable visualization memory snapshot data output (disabled by default, only supported by legacy Checker, requires enabling visualization data output "enable_insight_dump" first)
+      "enable_insight_dump": true,         // Whether to output Checker V3 Insight data (disabled by default)
+      "enable_memory_snapshot_dump": false  // Whether to output memory snapshot data (not yet supported, disabled by default, requires enabling Insight data output first)
   }
 }
 ```
@@ -55,34 +55,34 @@ Note: Compiling the Insight visualization frontend requires `Node.js` and `npm`.
 
 The recommended steps are as follows:
 
-1. Navigate to the frontend directory.
+1. Navigate to the frontend directory:
 
-   ```bash
-   cd {hccl_vm directory}/src/plugin/insight/frontend_v3
-   ```
+```bash
+cd {hccl_vm directory}/src/plugin/insight/frontend_v3
+```
 
-2. Install frontend dependencies.
+2. Install frontend dependencies:
 
-   ```bash
-   npm install
-   ```
+```bash
+npm install
+```
 
-3. Build the frontend output.
+3. Build the frontend output:
 
-   ```bash
-   npm run build
-   ```
+```bash
+npm run build
+```
 
-   After the frontend compilation completes, the system generates the `src/plugin/insight/dist/` directory.
+After the frontend compilation completes, the system generates the `src/plugin/insight/dist/` directory.
 
-4. Return to the HCCL_VM root directory, and run `build.sh` to compile and install hccl-vm.
+4. Return to the HCCL_VM root directory, and run `build.sh` to compile and install hccl-vm:
 
-   ```bash
-   cd {HCCL_VM directory}
-   bash build.sh --package-path <ASCEND_CANN_PATH> --hcomm-path <HCOMM_CODE_PATH>
-   ```
+```bash
+cd {HCCL_VM directory}
+bash build.sh --package-path <ASCEND_CANN_PATH> --hcomm-path <HCOMM_CODE_PATH>
+```
 
-   To package the installation directory, append `--pkg`. If the current build scenario requires AICPU / AIV / FULL mode, append the `--aicpu`, `--aiv`, or `--full` parameter following the standard project procedure.
+To package the installation directory, append `--pkg`. If the current build scenario requires AICPU / AIV / FULL mode, append the `--aicpu`, `--aiv`, or `--full` parameter following the standard project procedure.
 
 ---
 

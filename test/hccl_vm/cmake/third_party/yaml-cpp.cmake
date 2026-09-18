@@ -61,10 +61,19 @@ if(NOT yaml_cpp_FOUND)
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5
     )
 
+    # DOWNLOAD_EXTRACT_TIMESTAMP 为 CMake 3.24+ 引入的选项(配套策略 CMP0135),
+    # 旧版本(如3.22)不识别该关键字, 会将其与TRUE误解析为URL的值, 导致报错:
+    # "At least one entry of URL is a path (invalid in a list)", 故仅在高版本传入。
+    # (新旧版本的默认行为一致: 提取时更新源码时间戳)
+    set(YAMLCPP_DOWNLOAD_OPTS "")
+    if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.24)
+        list(APPEND YAMLCPP_DOWNLOAD_OPTS DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+    endif()
+
     include(ExternalProject)
     ExternalProject_Add(third_party_yaml_cpp
         URL ${YAMLCPP_PROJECT_URL}
-        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+        ${YAMLCPP_DOWNLOAD_OPTS}
         DOWNLOAD_DIR ${CMAKE_SOURCE_DIR}/third_party
         DOWNLOAD_NO_PROGRESS TRUE
         CONFIGURE_COMMAND ${CMAKE_COMMAND} ${YAMLCPP_OPTS} <SOURCE_DIR>

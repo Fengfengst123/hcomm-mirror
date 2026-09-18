@@ -30,7 +30,7 @@ target_include_directories(log PRIVATE
         ${YAMLCPP_INCLUDE_DIR}
 )
 
-target_compile_definitions(log PRIVATE HAVE_YAML_CPP)
+target_compile_definitions(log PUBLIC HAVE_YAML_CPP)
 
 hcclvm_apply_common_flags(log)
 

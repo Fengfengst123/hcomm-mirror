@@ -8,6 +8,12 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: CCU trace JSON serializer
+ * implementation
+ */
+
 #include "ccu_trace_serializer.h"
 
 #include <fstream>

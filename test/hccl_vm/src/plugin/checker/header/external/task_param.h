@@ -8,17 +8,20 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: dfx common data
+ */
+
 #ifndef TASK_PARAM_H
 #define TASK_PARAM_H
 
+#include "const_val.h"
+#include "enum_factory.h"
 #include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
-
-#include "const_val.h"
-#include "enum_factory.h"
-#include "hccl/base.h"
 
 namespace Hccl {
 MAKE_ENUM(DmaOp, HCCL_DMA_READ, HCCL_DMA_WRITE, HCCL_DMA_NOTIFY_WAIT);

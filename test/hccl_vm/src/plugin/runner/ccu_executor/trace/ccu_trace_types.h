@@ -8,6 +8,12 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: CCU trace data types for debug
+ * tool
+ */
+
 #ifndef HCCL_SIM_CCU_TRACE_TYPES_H
 #define HCCL_SIM_CCU_TRACE_TYPES_H
 
@@ -16,9 +22,9 @@
 #include <string>
 #include <vector>
 
-#include "sim_common_defs.h"
 #include "ccu_resource_common.h"
 #include "ccu_simulator_base.h"
+#include "sim_common_defs.h"
 
 namespace CcuTrace {
 
@@ -212,7 +218,8 @@ struct CcuInstrTraceDetail {
 // 指令空间与 trace 动态参数解耦：
 //   - 指令空间存储静态信息：指令 ID + 预计算的 Describe() 输出
 //   - trace entry 通过 (rankId, dieId, instrId) 三元组索引指令空间
-//   - 同一指令在 Loop 中执行多遍时，指令空间只有 1 条记录，但 trace 产生 N 条 entry
+//   - 同一指令在 Loop 中执行多遍时，指令空间只有 1 条记录，但 trace 产生 N 条
+//   entry
 
 struct CcuInstrSpaceEntry {
     uint16_t instrId{0};
@@ -336,7 +343,7 @@ struct CcuRunSummary {
     std::map<std::string, uint32_t> instrCountByCcu;
 };
 
-// ===== 全局上下文（由 SqeuentialExecutor 层维护） =====
+// ===== 全局上下文（由 SequentialExecutor 层维护） =====
 
 struct CcuGlobalContext {
     uint32_t globalSeqId{0};

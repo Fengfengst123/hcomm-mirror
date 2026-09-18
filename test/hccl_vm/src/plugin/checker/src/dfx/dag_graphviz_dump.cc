@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <cstring>
 #include <ctime>
 #include <fstream>
 #include <iomanip>
@@ -27,6 +28,7 @@
 #include <vector>
 
 #include "file_utils.h"
+#include "runtime_state/db_sim_runner_ops.h"
 #include "sim_log.h"
 
 namespace HcclSim {
@@ -38,6 +40,7 @@ namespace {
     using V3DotEdgeSet = std::set<V3DotEdge>;
     using V3DotEdgeList = std::vector<V3DotEdge>;
     using V3DotEdgeGroupMap = std::map<std::string, V3DotEdgeList>;
+    using V3CommNameMap = std::map<CommId, std::string>;
 
     constexpr const char* V3_DOT_SOLID_EDGE_COLOR = "#2f3f4f";
     constexpr const char* V3_DOT_DASHED_EDGE_COLOR = "#1f77d0";
@@ -52,14 +55,14 @@ namespace {
     constexpr const char* DAG_GRAPHVIZ_DUMP_SUBDIR = "data";
 
     struct LaneKey {
-        RankId rankId{INVALID_RANK_ID};
+        DeviceId deviceId{INVALID_DEVICE_ID};
         StreamId streamId{INVALID_STREAM_ID};
         QueueId queueId{INVALID_QUEUE_ID};
 
         bool operator<(const LaneKey& rhs) const
         {
-            if (rankId != rhs.rankId) {
-                return rankId < rhs.rankId;
+            if (deviceId != rhs.deviceId) {
+                return deviceId < rhs.deviceId;
             }
             if (streamId != rhs.streamId) {
                 return streamId < rhs.streamId;
@@ -69,7 +72,7 @@ namespace {
 
         bool operator==(const LaneKey& rhs) const
         {
-            return rankId == rhs.rankId && streamId == rhs.streamId && queueId == rhs.queueId;
+            return deviceId == rhs.deviceId && streamId == rhs.streamId && queueId == rhs.queueId;
         }
     };
 
@@ -317,6 +320,8 @@ namespace {
                 return "START";
             case TaskType::END:
                 return "END";
+            case TaskType::SYNC_STREAM:
+                return "SYNC_STREAM";
             default:
                 return "INVALID";
         }
@@ -341,7 +346,7 @@ namespace {
     std::string MakeCompactMemSliceLabel(const MemSlice& slice)
     {
         std::ostringstream os;
-        os << "{rank=" << FormatGraphvizIdValue(slice.rankId, INVALID_RANK_ID)
+        os << "{device=" << FormatGraphvizIdValue(slice.deviceId, INVALID_DEVICE_ID)
            << ", type=" << DescribeMemType(slice.memType) << ",offset=0x" << std::hex << slice.offset << ",len=0x"
            << slice.len << std::dec << "}";
         return os.str();
@@ -350,8 +355,8 @@ namespace {
     std::string MakeAicpuNotifyLabel(const AicpuNotify& notify)
     {
         std::ostringstream os;
-        os << "notify{srcRank=" << FormatGraphvizIdValue(notify.recordRankId, INVALID_RANK_ID)
-           << ", dstRank=" << FormatGraphvizIdValue(notify.waitRankId, INVALID_RANK_ID)
+        os << "notify{srcDevice=" << FormatGraphvizIdValue(notify.recordDeviceId, INVALID_DEVICE_ID)
+           << ", dstDevice=" << FormatGraphvizIdValue(notify.waitDeviceId, INVALID_DEVICE_ID)
            << ", notifyId=" << FormatGraphvizIdValue(notify.notifyId, INVALID_NOTIFY_ID) << "}";
         return os.str();
     }
@@ -359,8 +364,8 @@ namespace {
     std::string MakeCcuNotifyLabel(const CcuNotify& notify)
     {
         std::ostringstream os;
-        os << "notify{srcRank=" << FormatGraphvizIdValue(notify.recordRankId, INVALID_RANK_ID)
-           << ", dstRank=" << FormatGraphvizIdValue(notify.waitRankId, INVALID_RANK_ID)
+        os << "notify{srcDevice=" << FormatGraphvizIdValue(notify.recordDeviceId, INVALID_DEVICE_ID)
+           << ", dstDevice=" << FormatGraphvizIdValue(notify.waitDeviceId, INVALID_DEVICE_ID)
            << ", cke=" << FormatGraphvizIdValue(notify.ckeId, INVALID_CCU_CKE)
            << ", mask=" << FormatGraphvizHexValue(notify.ckeMask, INVALID_CCU_CKE_MASK) << "}";
         return os.str();
@@ -377,7 +382,20 @@ namespace {
         return node->GetPosition().queueId;
     }
 
-    void AppendV3GraphvizPositionLine(std::ostringstream& os, const V3TaskNode* node)
+    std::string GetV3GraphvizCommLabel(const TaskPosition& position, const V3CommNameMap& commNames)
+    {
+        if (position.commId == INVALID_COMM_ID) {
+            return "-";
+        }
+
+        const auto iter = commNames.find(position.commId);
+        if (iter != commNames.end() && !iter->second.empty()) {
+            return iter->second;
+        }
+        return "-";
+    }
+
+    void AppendV3GraphvizPositionLine(std::ostringstream& os, const V3TaskNode* node, const V3CommNameMap& commNames)
     {
         if (node == nullptr) {
             return;
@@ -385,10 +403,24 @@ namespace {
 
         const auto& loc = node->GetPosition();
         const QueueId queueId = GetV3GraphvizQueueId(node);
-        os << "\nrank=" << FormatGraphvizIdValue(loc.rankId, INVALID_RANK_ID)
+        os << "\nop=" << FormatGraphvizIdValue(loc.operatorId, INVALID_OPERATOR_ID)
+           << ", comm=" << GetV3GraphvizCommLabel(loc, commNames)
+           << "\ndevice=" << FormatGraphvizIdValue(loc.deviceId, INVALID_DEVICE_ID)
            << ", stream=" << FormatGraphvizIdValue(loc.streamId, INVALID_STREAM_ID);
         if (queueId != INVALID_QUEUE_ID) {
             os << ", queue=" << queueId;
+        }
+        if (loc.launchIdx != std::numeric_limits<uint64_t>::max()) {
+            os << ", launch=" << loc.launchIdx;
+        }
+        if (loc.blockId != std::numeric_limits<uint32_t>::max()) {
+            os << ", block=" << loc.blockId;
+        }
+        if (loc.pipe != std::numeric_limits<uint32_t>::max()) {
+            os << ", pipe=" << loc.pipe;
+        }
+        if (loc.taskId != std::numeric_limits<uint32_t>::max()) {
+            os << ", taskId=" << loc.taskId;
         }
     }
 
@@ -496,28 +528,88 @@ namespace {
                 return false;
             }
             case TaskType::CCU_GRAPH:
-            case TaskType::AIV_GRAPH:
-            case TaskType::AIV_SET_FLAG:
-            case TaskType::AIV_WAIT_FLAG:
-            case TaskType::AIV_PIPE_BARRIER:
-            case TaskType::AIV_SYNC_ALL:
-            case TaskType::AIV_SEND_FLAG:
-            case TaskType::AIV_RECV_FLAG:
                 break;
+            case TaskType::AIV_GRAPH: {
+                const auto* aivGraph = dynamic_cast<const TaskAivGraph*>(node);
+                if (aivGraph == nullptr) {
+                    return false;
+                }
+                os << "\ndevice=" << FormatGraphvizIdValue(aivGraph->GetDeviceId(), INVALID_DEVICE_ID)
+                   << ", launch=" << aivGraph->GetLaunchIdx() << ", hostStream=" << aivGraph->GetHostStreamId();
+                break;
+            }
+            case TaskType::AIV_SET_FLAG:
+            case TaskType::AIV_WAIT_FLAG: {
+                const auto* flag
+                    = node->GetType() == TaskType::AIV_SET_FLAG ? dynamic_cast<const TaskAivSetFlag*>(node) : nullptr;
+                const auto* wait
+                    = node->GetType() == TaskType::AIV_WAIT_FLAG ? dynamic_cast<const TaskAivWaitFlag*>(node) : nullptr;
+                const AivPipeEvent* event
+                    = flag == nullptr ? (wait == nullptr ? nullptr : &wait->GetEvent()) : &flag->GetEvent();
+                if (event == nullptr) {
+                    return false;
+                }
+                os << "\nsrcPipe=" << event->srcPipe << ", dstPipe=" << event->dstPipe
+                   << ", eventId=" << event->eventId;
+                break;
+            }
+            case TaskType::AIV_PIPE_BARRIER: {
+                const auto* barrier = dynamic_cast<const TaskAivPipeBarrier*>(node);
+                if (barrier == nullptr) {
+                    return false;
+                }
+                const auto& info = barrier->GetInfo();
+                os << "\npipeType=" << info.pipeType << ", merged=" << info.merged
+                   << ", memberTaskCount=" << info.memberTaskIds.size();
+                break;
+            }
+            case TaskType::AIV_SYNC_ALL: {
+                const auto* syncAll = dynamic_cast<const TaskAivSyncAll*>(node);
+                if (syncAll == nullptr) {
+                    return false;
+                }
+                const auto& info = syncAll->GetInfo();
+                os << "\nsyncRound=" << info.syncRound << ", merged=" << info.merged
+                   << ", memberTaskCount=" << info.memberTaskIds.size();
+                break;
+            }
+            case TaskType::AIV_SEND_FLAG:
+            case TaskType::AIV_RECV_FLAG: {
+                const auto* send
+                    = node->GetType() == TaskType::AIV_SEND_FLAG ? dynamic_cast<const TaskAivSendFlag*>(node) : nullptr;
+                const auto* recv
+                    = node->GetType() == TaskType::AIV_RECV_FLAG ? dynamic_cast<const TaskAivRecvFlag*>(node) : nullptr;
+                const AivFlagSync* flag
+                    = send == nullptr ? (recv == nullptr ? nullptr : &recv->GetFlag()) : &send->GetFlag();
+                if (flag == nullptr) {
+                    return false;
+                }
+                os << "\nflagOwnerDevice=" << FormatGraphvizIdValue(flag->flagOwnerDevice, INVALID_DEVICE_ID)
+                   << ", commInfoOffset=" << flag->commInfoOffset << ", value=" << flag->value;
+                break;
+            }
+            case TaskType::SYNC_STREAM: {
+                const auto* syncStream = dynamic_cast<const TaskSyncStream*>(node);
+                if (syncStream == nullptr) {
+                    return false;
+                }
+                os << "\nsyncIdx=" << syncStream->GetSyncIdx();
+                break;
+            }
             default:
                 return false;
         }
         return true;
     }
 
-    std::string MakeV3GraphvizNodeLabel(const V3TaskNode* node)
+    std::string MakeV3GraphvizNodeLabel(const V3TaskNode* node, const V3CommNameMap& commNames)
     {
         std::ostringstream os;
         const NodeId nodeId = (node == nullptr) ? INVALID_NODE_ID : node->GetNodeId();
         os << "nodeId=" << nodeId;
 
         if (node != nullptr) {
-            AppendV3GraphvizPositionLine(os, node);
+            AppendV3GraphvizPositionLine(os, node, commNames);
             os << "\ntype=" << TaskTypeKeyName(node->GetType());
         }
 
@@ -531,6 +623,23 @@ namespace {
         return os.str();
     }
 
+    V3CommNameMap BuildV3CommNameMap()
+    {
+        V3CommNameMap commNames;
+        auto communicatorsResult = sim::runtime::Db::GetByPred<sim::runtime::Communicator>(
+            HcclSim::Storage::All<sim::runtime::Communicator>());
+        const std::vector<sim::runtime::Communicator> communicators
+            = communicatorsResult.value_or(std::vector<sim::runtime::Communicator>{});
+        for (const sim::runtime::Communicator& communicator : communicators) {
+            const size_t commNameLen = ::strnlen(communicator.comm_id, sizeof(communicator.comm_id));
+            if (commNameLen == 0U || commNameLen == sizeof(communicator.comm_id)) {
+                continue;
+            }
+            commNames.emplace(communicator.id, std::string(communicator.comm_id, commNameLen));
+        }
+        return commNames;
+    }
+
     QueueId NormalizeQueueId(QueueId queueId) { return queueId == INVALID_QUEUE_ID ? 0U : queueId; }
 
     LaneKey MakeLaneKey(const V3TaskNode* node)
@@ -540,7 +649,7 @@ namespace {
             return laneKey;
         }
         const TaskLocation& taskLoc = node->GetLocation();
-        laneKey.rankId = taskLoc.rankId;
+        laneKey.deviceId = taskLoc.deviceId;
         laneKey.streamId = taskLoc.streamId;
         laneKey.queueId = NormalizeQueueId(taskLoc.queueId);
         return laneKey;
@@ -548,8 +657,8 @@ namespace {
 
     bool PreferRecordCandidate(const std::pair<LaneKey, NodeId>& lhs, const std::pair<LaneKey, NodeId>& rhs)
     {
-        if (lhs.first.rankId != rhs.first.rankId) {
-            return lhs.first.rankId < rhs.first.rankId;
+        if (lhs.first.deviceId != rhs.first.deviceId) {
+            return lhs.first.deviceId < rhs.first.deviceId;
         }
         if (lhs.first.streamId != rhs.first.streamId) {
             return lhs.first.streamId < rhs.first.streamId;
@@ -625,7 +734,9 @@ namespace {
             const auto nodeIter = nodeById.find(nodeId);
             if (nodeIter == nodeById.end() || nodeIter->second == nullptr) {
                 HCCL_VM_WARN(
-                    "[TaskGraphGeneratorV3][GraphvizDot][v3] Topo node is missing in BFS map, nodeId={}", nodeId);
+                    "[TaskGraphGeneratorV3][GraphvizDot][v3] Topo node is "
+                    "missing in BFS map, nodeId={}",
+                    nodeId);
                 continue;
             }
             topoNodes.push_back(nodeIter->second);
@@ -647,7 +758,8 @@ namespace {
         }
         if (topoNodes.size() != layoutNodes.size()) {
             HCCL_VM_WARN(
-                "[TaskGraphGeneratorV3][GraphvizDot][v3] Failed to build full topo order, use BFS order, "
+                "[TaskGraphGeneratorV3][GraphvizDot][v3] Failed to build "
+                "full topo order, use BFS order, "
                 "topoCount={}, nodeCount={}",
                 topoNodes.size(), layoutNodes.size());
             topoNodes = layoutNodes;
@@ -765,7 +877,7 @@ namespace {
     std::string MakeGenericLaneGroup(const LaneKey& laneKey)
     {
         std::ostringstream os;
-        os << "lane_r" << FormatV3DotGroupValue(laneKey.rankId, INVALID_RANK_ID) << "_s"
+        os << "lane_d" << FormatV3DotGroupValue(laneKey.deviceId, INVALID_DEVICE_ID) << "_s"
            << FormatV3DotGroupValue(laneKey.streamId, INVALID_STREAM_ID) << "_q"
            << FormatV3DotGroupValue(laneKey.queueId, INVALID_QUEUE_ID);
         return os.str();
@@ -787,7 +899,7 @@ namespace {
 
         const auto& loc = node->GetPosition();
         std::ostringstream os;
-        os << "node_r" << FormatV3DotGroupValue(loc.rankId, INVALID_RANK_ID) << "_s"
+        os << "node_d" << FormatV3DotGroupValue(loc.deviceId, INVALID_DEVICE_ID) << "_s"
            << FormatV3DotGroupValue(loc.streamId, INVALID_STREAM_ID) << "_q"
            << FormatV3DotGroupValue(NormalizeQueueId(GetV3GraphvizQueueId(node)), INVALID_QUEUE_ID);
         return os.str();
@@ -950,7 +1062,8 @@ namespace {
             EmitV3DotSolidEdgeGroup(os, edgeGroup.second, nodePrefix);
         }
 
-        os << "\n  // Other real DAG edges are shown as dashed semantic dependencies.\n";
+        os << "\n  // Other real DAG edges are shown as dashed semantic "
+              "dependencies.\n";
         for (const auto& edge : dashedEdges) {
             os << "  " << nodePrefix << edge.first << " -> " << nodePrefix << edge.second;
             EmitV3DotDashedEdgeAttrs(os);
@@ -960,6 +1073,7 @@ namespace {
 
     std::string BuildV3GraphvizDot(const std::vector<const V3TaskNode*>& nodes)
     {
+        const V3CommNameMap commNames = BuildV3CommNameMap();
         std::map<const V3TaskNode*, size_t> nodeIndexByPtr;
         for (size_t i = 0; i < nodes.size(); ++i) {
             nodeIndexByPtr[nodes[i]] = i;
@@ -984,14 +1098,18 @@ namespace {
 
         std::ostringstream os;
         os << "digraph v3_task_graph {\n";
-        os << "  // Coordinates come from the dump_v3 DAG lane/column layout. Render with neato -n2 to honor pos.\n";
-        os << "  graph [layout=neato, label=\"v3 graph fixed-lane DAG\", labelloc=t, fontsize=20, "
+        os << "  // Coordinates come from the dump_v3 DAG lane/column layout. "
+              "Render with neato -n2 to honor pos.\n";
+        os << "  graph [layout=neato, label=\"v3 graph fixed-lane DAG\", "
+              "labelloc=t, fontsize=20, "
            << "splines=ortho, overlap=false, outputorder=nodesfirst];\n";
-        os << "  node [shape=box, style=\"rounded,filled\", fillcolor=\"#eef7ff\", fontname=\"Courier\", pin=true];\n";
+        os << "  node [shape=box, style=\"rounded,filled\", fillcolor=\"#eef7ff\", "
+              "fontname=\"Courier\", pin=true];\n";
         os << "  edge [fontname=\"Courier\", arrowhead=normal, arrowsize=" << V3_DOT_EDGE_ARROWSIZE << "];\n\n";
         for (size_t i = 0; i < nodes.size(); ++i) {
             const std::string group = MakeV3DotNodeGroup(nodes[i], layout);
-            os << "  v3_" << i << " [label=\"" << EscapeGraphvizLabel(MakeV3GraphvizNodeLabel(nodes[i])) << "\"";
+            os << "  v3_" << i << " [label=\"" << EscapeGraphvizLabel(MakeV3GraphvizNodeLabel(nodes[i], commNames))
+               << "\"";
             const auto pos = GetV3DotNodePosition(nodes[i], layout, i);
             os << std::fixed << std::setprecision(3) << ", pos=\"" << pos.first << "," << pos.second << "!\"";
             if (!group.empty()) {
@@ -1036,7 +1154,8 @@ namespace {
 HcclResult DumpDagGraphvizDot(const TaskGraphGeneratorV3::TaskNode* start, std::string* dumpPath)
 {
     if (start == nullptr) {
-        HCCL_VM_WARN("[TaskGraphGeneratorV3][GraphvizDot][v3] Skip DAG dot dump, start is null.");
+        HCCL_VM_WARN("[TaskGraphGeneratorV3][GraphvizDot][v3] Skip DAG dot "
+                     "dump, start is null.");
         return HCCL_E_PTR;
     }
 
@@ -1045,22 +1164,29 @@ HcclResult DumpDagGraphvizDot(const TaskGraphGeneratorV3::TaskNode* start, std::
     HcclResult ret = EnsureDirectory(outputDir);
     if (ret != HCCL_SUCCESS) {
         HCCL_VM_WARN(
-            "[TaskGraphGeneratorV3][GraphvizDot][v3] Failed to create dump dir: {}, ret={}", outputDir,
-            static_cast<uint32_t>(ret));
+            "[TaskGraphGeneratorV3][GraphvizDot][v3] Failed to create "
+            "dump dir: {}, ret={}",
+            outputDir, static_cast<uint32_t>(ret));
         return ret;
     }
 
     const std::string path = MakeDagGraphvizDumpPath();
     std::ofstream out(path.c_str(), std::ios::out | std::ios::trunc);
     if (!out.is_open()) {
-        HCCL_VM_WARN("[TaskGraphGeneratorV3][GraphvizDot][v3] Failed to open graph file: {}", path);
+        HCCL_VM_WARN(
+            "[TaskGraphGeneratorV3][GraphvizDot][v3] Failed to open "
+            "graph file: {}",
+            path);
         return HCCL_E_INTERNAL;
     }
 
     out << BuildV3GraphvizDot(v3BfsNodes);
     out.close();
     if (!out) {
-        HCCL_VM_WARN("[TaskGraphGeneratorV3][GraphvizDot][v3] Failed to write graph file: {}", path);
+        HCCL_VM_WARN(
+            "[TaskGraphGeneratorV3][GraphvizDot][v3] Failed to write "
+            "graph file: {}",
+            path);
         return HCCL_E_INTERNAL;
     }
 
@@ -1068,7 +1194,9 @@ HcclResult DumpDagGraphvizDot(const TaskGraphGeneratorV3::TaskNode* start, std::
         *dumpPath = path;
     }
     HCCL_VM_INFO(
-        "[TaskGraphGeneratorV3][GraphvizDot][v3] Graphviz DAG dumped, path={}, nodeCount={}", path, v3BfsNodes.size());
+        "[TaskGraphGeneratorV3][GraphvizDot][v3] Graphviz DAG dumped, "
+        "path={}, nodeCount={}",
+        path, v3BfsNodes.size());
     return HCCL_SUCCESS;
 }
 

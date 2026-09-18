@@ -11,8 +11,8 @@
 #ifndef SIM_COMMON_MACRO_H
 #define SIM_COMMON_MACRO_H
 
-#include <iostream>
 #include "sim_log.h"
+#include <iostream>
 
 #define UNLIKELY(x) __builtin_expect(!!(x), 0)
 

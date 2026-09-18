@@ -14,8 +14,8 @@
 #include <gtest/gtest.h>
 #include <unistd.h>
 
-#include "store_binary_data_operator.h"
 #include "sim_binary_data_type_pub.h"
+#include "store_binary_data_operator.h"
 
 namespace HcclSim {
 class BinaryDataOperatorTest : public testing::Test {

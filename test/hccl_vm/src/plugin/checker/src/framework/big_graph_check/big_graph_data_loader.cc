@@ -18,13 +18,14 @@
 namespace HcclSim {
 namespace BigGraphCheckV3 {
 
-    HcclResult BigGraphDataLoader::DecodeTaskMeta(const sim::OpTaskTab& task, HcclTaskMetaData& taskMeta)
+    HcclResult BigGraphDataLoader::DecodeTaskMeta(const sim::operation::OpTaskTab& task, HcclTaskMetaData& taskMeta)
     {
         if (task.optaskMeta.size() < sizeof(HcclTaskMetaData)) {
             HCCL_VM_ERROR(
-                "Cannot load operator task metadata because the payload is too small, taskSeq={}, "
+                "Cannot load operator task metadata because the payload "
+                "is too small, taskId={}, "
                 "actualSize={}, expectedSize={}",
-                task.taskSeq, task.optaskMeta.size(), sizeof(HcclTaskMetaData));
+                task.id, task.optaskMeta.size(), sizeof(HcclTaskMetaData));
             return HCCL_E_PARA;
         }
         std::memcpy(&taskMeta, task.optaskMeta.data(), sizeof(HcclTaskMetaData));
@@ -46,13 +47,19 @@ namespace BigGraphCheckV3 {
             data.Clear();
             return ret;
         }
+        ret = loader.GetHalfRTTInfo(data.halfRTT);
+        if (ret != HCCL_SUCCESS) {
+            data.Clear();
+            return ret;
+        }
 
-        std::map<uint32_t, std::vector<sim::CompositeOpDetail>> compositeData;
+        std::map<uint32_t, std::vector<sim::operation::CompositeOpDetail>> compositeData;
         ret = loader.LoadCompositeOpDetailBySyncIter(syncIter, compositeData);
         if (ret != HCCL_SUCCESS) {
             HCCL_VM_ERROR(
-                "Failed to load operator data for a sync window, syncIter={}, ret={}", syncIter,
-                static_cast<uint32_t>(ret));
+                "Failed to load operator data for a sync window, "
+                "syncIter={}, ret={}",
+                syncIter, static_cast<uint32_t>(ret));
             data.Clear();
             return ret;
         }
@@ -63,7 +70,9 @@ namespace BigGraphCheckV3 {
         }
         if (operatorCount > static_cast<size_t>(TaskGraphGeneratorV3::INVALID_OPERATOR_ID)) {
             HCCL_VM_ERROR(
-                "Too many operators in one sync window, syncIter={}, operatorCount={}", syncIter, operatorCount);
+                "Too many operators in one sync window, syncIter={}, "
+                "operatorCount={}",
+                syncIter, operatorCount);
             data.Clear();
             return HCCL_E_PARA;
         }
@@ -80,7 +89,7 @@ namespace BigGraphCheckV3 {
                     continue;
                 }
 
-                const sim::CompositeOpDetail& compositeOp = rankEntry.second[operatorIndex];
+                const sim::operation::CompositeOpDetail& compositeOp = rankEntry.second[operatorIndex];
                 if (!hasOp) {
                     opParam.opIter = compositeOp.detail.opIter;
                     hasOp = true;
@@ -90,7 +99,7 @@ namespace BigGraphCheckV3 {
                 rankData.rankId = rankEntry.first;
                 rankData.op = compositeOp;
                 rankData.taskMetas.reserve(compositeOp.tasks.size());
-                for (const sim::OpTaskTab& task : compositeOp.tasks) {
+                for (const sim::operation::OpTaskTab& task : compositeOp.tasks) {
                     HcclTaskMetaData taskMeta;
                     const HcclResult decodeRet = DecodeTaskMeta(task, taskMeta);
                     if (decodeRet != HCCL_SUCCESS) {
@@ -109,8 +118,9 @@ namespace BigGraphCheckV3 {
         }
 
         HCCL_VM_INFO(
-            "Loaded multi-operator data, syncIter={}, operatorCount={}, rankCount={}", syncIter, data.operators.size(),
-            compositeData.size());
+            "Loaded multi-operator data, syncIter={}, operatorCount={}, "
+            "rankCount={}",
+            syncIter, data.operators.size(), compositeData.size());
         return HCCL_SUCCESS;
     }
 

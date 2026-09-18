@@ -28,7 +28,7 @@ chmod +x Ascend-cann-950-ops_9.1.0_linux-x86_64.run
 
 ### 2.2 hccl_test Compilation
 
-hccl_test is the official HCCL performance test tool provided by Ascend. For details, refer to [HCCL Performance Test Tool](https://www.hiascend.com/en/document/redirect/CANNCommunityToolHcclTest). HCCL-VM supports running hccl_test cases in the virtual environment. First follow the [hccl_test Case Build](#42-hccl-test-case-build) section to compile the case binary program.
+hccl_test is the official HCCL performance test tool provided by Ascend. For details, refer to [HCCL Performance Test Tool](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/910beta1/devaids/hccltool/HCCLpertest_16_0001.html). HCCL-VM supports running hccl_test cases in the virtual environment. First follow the [hccl_test Case Build](#42-hccl-test-case-build) section to compile the case binary program.
 
 Note: Optional. PyTorch cases will be supported in the future.
 
@@ -36,39 +36,7 @@ Note: Optional. PyTorch cases will be supported in the future.
 
 ## 3. Quick Start
 
-### 3.1 One-Click Installation
-
-One command completes dependency installation, source code retrieval, CANN detection, and compilation (the default uses the `main` profile, corresponding to the `master` branch of hcomm/hccl). The working directory remains consistent with manual installation, using `/home/workspace` (all sample paths below follow this convention):
-
-```bash
-# Create and enter the working directory (the script installs to the current directory by default)
-mkdir -p /home/workspace && cd /home/workspace
-curl -fsSL https://raw.gitcode.com/cann/hcomm/raw/master/test/hccl_vm/hccl_vm_installer | bash
-```
-
-You may also download and run locally (for review or offline distribution): `bash hccl_vm_installer`; or specify explicitly with `--workspace`: `... | bash -s -- --workspace /home/workspace`.
-
-**Prerequisites**: x86_64 Linux; the toolchain must meet hcomm build.md requirements: gcc/g++ 7.3.0-13.3.x, cmake >= 3.16.0 (constraints apply to both host and aarch64 cross-compilers). Ubuntu 22.04 / 24.04 work out of the box; newer versions with default gcc (14/15) exceed the supported range. The script issues a warning and continues. Compile in an environment that meets the version range.
-
-**CANN**: The script probes CANN only in the working directory `<workspace>/Ascend` (or the path specified by `--ascend-path`). If CANN is not found, the script downloads and installs the matching version to that location. Behavior is identical for root and regular users. `--offline` only detects and never downloads. On internal networks without public internet access, the script falls back to printing a self-service CANN preparation guide.
-
-**hccl_test**: The script compiles OpenMPI and the hccl_test performance test tool by default. Use `--skip-hccl-test` to disable this.
-
-**Common Parameters**:
-
-- `--profile <name>`: configuration profile (default `main`, use `--list-profiles` to list all)
-- `--workspace <path>`: working directory for source code, compilation, and artifacts (default is the current directory)
-- `--ascend-path <path>`: specify the CANN directory; reuse if present, install there if absent
-- `--reinstall-cann`: re-download and overwrite existing CANN (use when versions do not match; default preserves existing)
-- `--offline`: use only existing CANN, never download
-- `--skip-hccl-test`: skip hccl_test compilation
-- `-h`: full help
-
-After completion, the tool resides at `/home/workspace/hcomm/test/hccl_vm/hccl_vm_install/bin/hccl-vm`. Delete the working directory to clean up tool artifacts (use `apt remove` manually to uninstall system dependencies installed by apt). This tool does not modify CANN. (If you specified a different directory with `--workspace`, replace `/home/workspace` in the examples below accordingly.)
-
-> The one-click installation automatically completes `build.sh` compilation and `build_pkg.sh` sub-package installation (including device-side symbols required by AICPU/AIV). After installation, all CCU/AICPU/AIV modes in [Usage Examples](#33-usage-examples) run directly. No separate `build_pkg.sh` execution is needed.
-
-### 3.2 Manual Build & Installation
+### 3.1 Manual Build & Installation
 
 ```bash
 # 1. Create the working directory
@@ -94,128 +62,128 @@ bash ./build.sh --full
 bash build_pkg.sh
 ```
 
-### 3.3 Usage Examples
+### 3.2 Usage Examples
 
-#### 3.3.1 Environment Configuration
+#### 3.2.1 Environment Configuration
 
 Refer to [hccl_rootinfo File Content](#47-hccl_rootinfojson-file) to create and configure the hccl_rootinfo.json file.
 
-#### 3.3.2 CCU Mode
+#### 3.2.2 CCU Mode
 
-1. Configure environment variables.
+1. Environment variable configuration
 
-   ```bash
-   # Enter the tool installation directory
-   cd /home/workspace/hcomm/test/hccl_vm/hccl_vm_install
-   source /home/workspace/Ascend/cann/set_env.sh
-   export LD_LIBRARY_PATH=$ASCEND_HOME_PATH/lib64:$ASCEND_HOME_PATH/devlib:$LD_LIBRARY_PATH
-   export RANK_TABLE_FILE=$(pwd)/data/ranktable.json
-   export HCCL_OP_EXPANSION_MODE="CCU_SCHED"
-   ```
+```bash
+# Enter the tool installation directory
+cd /home/workspace/hcomm/test/hccl_vm/hccl_vm_install
+source /home/workspace/Ascend/cann/set_env.sh
+export LD_LIBRARY_PATH=$ASCEND_HOME_PATH/lib64:$ASCEND_HOME_PATH/devlib:$LD_LIBRARY_PATH
+export RANK_TABLE_FILE=$(pwd)/data/ranktable.json
+export HCCL_OP_EXPANSION_MODE="CCU_SCHED"
+```
 
-2. Execute.
+2. Execute
 
-   ```bash
-   # Enter the new bin directory to execute hccl-vm
-   cd /home/workspace/hcomm/test/hccl_vm/hccl_vm_install/bin
-   
-   # Select the Ascend cluster topology configuration file, start the tool, initialize the cluster environment, and enter the tool command line
-   ./hccl-vm start ascend950_cluster_32_server_normal.yaml
-   
-   # Enable the runner plugin if needed (optional)
-   (hvm)$> hccl-vm plugin install @runner
-   
-   # Select the communication domain configuration file for this operator execution (run hccl_test cases in a cluster environment with 1 supernode, 1 server, and 1 NPU)
-   (hvm)$> hccl-vm mock-comm 112
-   (hvm)$> mpirun --allow-run-as-root --oversubscribe -np 2 ${ASCEND_HOME_PATH}/tools/hccl_test/bin/reduce_scatter_test -b 64 -e 64 -d int32 -o sum -w 0 -n 1 -c 1 > log.txt
-   
-   # Execute checker verification
-   (hvm)$> hccl-vm plugin run @checker
-   
-   # Exit the tool terminal
-   (hvm)$> exit
-   ```
 
-3. Verify hccl_test case execution results.
+```bash
+# Enter the new bin directory to execute hccl-vm
+cd /home/workspace/hcomm/test/hccl_vm/hccl_vm_install/bin
 
-   [View Runner Results](#491-runner-plugin-results) 
-   [View Checker Results](#492-checker-plugin-results)
+# Select the Ascend cluster topology configuration file, start the tool, initialize the cluster environment, and enter the tool command line
+./hccl-vm start ascend950_cluster_32_server_normal.yaml
 
-#### 3.3.3 AICPU Mode
+# Enable the runner plugin if needed (optional)
+(hvm)$> hccl-vm plugin install @runner
+
+# Select the communication domain configuration file for this operator execution (run hccl_test cases in a cluster environment with 1 supernode, 1 server, and 1 NPU)
+(hvm)$> hccl-vm mock-comm 112
+(hvm)$> mpirun --allow-run-as-root --oversubscribe -np 2 ${ASCEND_HOME_PATH}/tools/hccl_test/bin/reduce_scatter_test -b 64 -e 64 -d int32 -o sum -w 0 -n 1 -c 1 > log.txt
+
+# Execute checker verification
+(hvm)$> hccl-vm plugin run @checker
+
+# Exit the tool terminal
+(hvm)$> exit
+```
+
+3. Verify hccl_test case execution results
+[View Runner Results](#491-runner-plugin-results) 
+[View Checker Results](#492-checker-plugin-results)
+
+#### 3.2.3 AICPU Mode
 
 The AICPU expansion mode executes algorithm expansion steps on the device side. Therefore the hccl-vm tool compiles and simulates HCCL device-side symbols. Device-side symbols use the ARM architecture. Compilation on x86 environments requires a cross-compiler. Execution requires QEMU to simulate AICPU mode.
 
-1. Configure environment variables.
+1. Environment variable configuration
 
-   ```bash
-   # Enter the tool installation directory
-   cd /home/workspace/hcomm/test/hccl_vm/hccl_vm_install
-   source /home/workspace/Ascend/cann/set_env.sh
-   export LD_LIBRARY_PATH=$ASCEND_HOME_PATH/lib64:$ASCEND_HOME_PATH/devlib:$LD_LIBRARY_PATH
-   export RANK_TABLE_FILE=$(pwd)/data/ranktable.json
-   export HCCL_OP_EXPANSION_MODE="AI_CPU"
-   ```
+```bash
+# Enter the tool installation directory
+cd /home/workspace/hcomm/test/hccl_vm/hccl_vm_install
+source /home/workspace/Ascend/cann/set_env.sh
+export LD_LIBRARY_PATH=$ASCEND_HOME_PATH/lib64:$ASCEND_HOME_PATH/devlib:$LD_LIBRARY_PATH
+export RANK_TABLE_FILE=$(pwd)/data/ranktable.json
+export HCCL_OP_EXPANSION_MODE="AI_CPU"
+```
 
 2. Execute
 
-   ```bash
-   # Enter the new bin directory to execute hccl-vm
-   cd /home/workspace/hcomm/test/hccl_vm/hccl_vm_install/bin
-   
-   # Select the Ascend cluster topology configuration file, start the tool, initialize the cluster environment, and enter the tool command line
-   ./hccl-vm start ascend950_cluster_32_server_normal.yaml
-   
-   # Enable the runner plugin if needed (optional)
-   (hvm)$> hccl-vm plugin install @runner
-   
-   # Select the communication domain configuration file for this operator execution (run hccl_test cases in a cluster environment with 1 supernode, 1 server, and 1 NPU)
-   (hvm)$> hccl-vm mock-comm 112
-   (hvm)$> mpirun --allow-run-as-root --oversubscribe -np 2 ${ASCEND_HOME_PATH}/tools/hccl_test/bin/reduce_scatter_test -b 64 -e 64 -d int32 -o sum -w 0 -n 1 -c 1 > log.txt
-   
-   # Execute checker verification
-   (hvm)$> hccl-vm plugin run @checker
-   
-   # Exit the tool terminal
-   (hvm)$> exit
-   ```
+```bash
+# Enter the new bin directory to execute hccl-vm
+cd /home/workspace/hcomm/test/hccl_vm/hccl_vm_install/bin
+
+# Select the Ascend cluster topology configuration file, start the tool, initialize the cluster environment, and enter the tool command line
+./hccl-vm start ascend950_cluster_32_server_normal.yaml
+
+# Enable the runner plugin if needed (optional)
+(hvm)$> hccl-vm plugin install @runner
+
+# Select the communication domain configuration file for this operator execution (run hccl_test cases in a cluster environment with 1 supernode, 1 server, and 1 NPU)
+(hvm)$> hccl-vm mock-comm 112
+(hvm)$> mpirun --allow-run-as-root --oversubscribe -np 2 ${ASCEND_HOME_PATH}/tools/hccl_test/bin/reduce_scatter_test -b 64 -e 64 -d int32 -o sum -w 0 -n 1 -c 1 > log.txt
+
+# Execute checker verification
+(hvm)$> hccl-vm plugin run @checker
+
+# Exit the tool terminal
+(hvm)$> exit
+```
 
 3. Verify hccl_test case execution results [View Runner Results](#491-runner-plugin-results) [View Checker Results](#492-checker-plugin-results)
 
-#### 3.3.4 AIV Mode
+#### 3.2.4 AIV Mode
 
-1. Configure environment variables.
+1. Environment variable configuration
 
-   ```bash
-   # Enter the tool installation directory
-   cd /home/workspace/hcomm/test/hccl_vm/hccl_vm_install
-   source /home/workspace/Ascend/cann/set_env.sh
-   export LD_LIBRARY_PATH=$ASCEND_HOME_PATH/lib64:$ASCEND_HOME_PATH/devlib:$LD_LIBRARY_PATH
-   export RANK_TABLE_FILE=$(pwd)/data/ranktable.json
-   export HCCL_OP_EXPANSION_MODE="AIV"
-   ```
+```bash
+# Enter the tool installation directory
+cd /home/workspace/hcomm/test/hccl_vm/hccl_vm_install
+source /home/workspace/Ascend/cann/set_env.sh
+export LD_LIBRARY_PATH=$ASCEND_HOME_PATH/lib64:$ASCEND_HOME_PATH/devlib:$LD_LIBRARY_PATH
+export RANK_TABLE_FILE=$(pwd)/data/ranktable.json
+export HCCL_OP_EXPANSION_MODE="AIV"
+```
 
 2. Execute
 
-   ```bash
-   # Enter the new bin directory to execute hccl-vm
-   cd /home/workspace/hcomm/test/hccl_vm/hccl_vm_install/bin
-   
-   # Select the Ascend cluster topology configuration file, start the tool, initialize the cluster environment, and enter the tool command line
-   ./hccl-vm start ascend950_cluster_32_server_normal.yaml
-   
-   # Enable the runner plugin if needed (optional)
-   (hvm)$> hccl-vm plugin install @runner
-   
-   # Select the communication domain configuration file for this operator execution (run hccl_test cases in a cluster environment with 1 supernode, 1 server, and 1 NPU)
-   (hvm)$> hccl-vm mock-comm 112
-   (hvm)$> mpirun --allow-run-as-root --oversubscribe -np 2 ${ASCEND_HOME_PATH}/tools/hccl_test/bin/reduce_scatter_test -b 64 -e 64 -d int32 -o sum -w 0 -n 1 -c 1 > log.txt
-   
-   # Execute checker verification
-   (hvm)$> hccl-vm plugin run @checker
-   
-   # Exit the tool terminal
-   (hvm)$> exit
-   ```
+```bash
+# Enter the new bin directory to execute hccl-vm
+cd /home/workspace/hcomm/test/hccl_vm/hccl_vm_install/bin
+
+# Select the Ascend cluster topology configuration file, start the tool, initialize the cluster environment, and enter the tool command line
+./hccl-vm start ascend950_cluster_32_server_normal.yaml
+
+# Enable the runner plugin if needed (optional)
+(hvm)$> hccl-vm plugin install @runner
+
+# Select the communication domain configuration file for this operator execution (run hccl_test cases in a cluster environment with 1 supernode, 1 server, and 1 NPU)
+(hvm)$> hccl-vm mock-comm 112
+(hvm)$> mpirun --allow-run-as-root --oversubscribe -np 2 ${ASCEND_HOME_PATH}/tools/hccl_test/bin/reduce_scatter_test -b 64 -e 64 -d int32 -o sum -w 0 -n 1 -c 1 > log.txt
+
+# Execute checker verification
+(hvm)$> hccl-vm plugin run @checker
+
+# Exit the tool terminal
+(hvm)$> exit
+```
 
 3. Verify hccl_test case execution results [View Runner Results](#491-runner-plugin-results) [View Checker Results](#492-checker-plugin-results)
 

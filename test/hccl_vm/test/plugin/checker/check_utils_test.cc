@@ -8,17 +8,12 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#include <gtest/gtest.h>
-#include <memory>
-
 #include "check_utils.h"
 #include "data_slice.h"
+#include <gtest/gtest.h>
 
 namespace HcclSim {
 bool IsSendRecvType(HcclCMDType opType);
-bool DataSliceSizeIsEqual(std::unique_ptr<DataSlice>& a, std::unique_ptr<DataSlice>& b);
-bool DataSliceSizeIsEqual(std::unique_ptr<DataSlice>& a, std::unique_ptr<DataSlice>& b, std::unique_ptr<DataSlice>& c);
-std::vector<std::string> SplitString(const std::string& str, const char c);
 
 class CheckUtilsTest : public testing::Test {
 protected:
@@ -92,65 +87,11 @@ TEST_F(CheckUtilsTest, CalcDataSize_LargeCount)
     EXPECT_EQ(dataSize, 4000000);
 }
 
-TEST_F(CheckUtilsTest, GenTopoMeta_SingleServer)
-{
-    TopoMeta topoMeta;
-    GenTopoMeta(topoMeta, 1, 1, 8);
-
-    EXPECT_EQ(topoMeta.size(), 1);
-    EXPECT_EQ(topoMeta[0].size(), 1);
-    EXPECT_EQ(topoMeta[0][0].size(), 8);
-}
-
-TEST_F(CheckUtilsTest, GenTopoMeta_MultipleServers)
-{
-    TopoMeta topoMeta;
-    GenTopoMeta(topoMeta, 1, 4, 8);
-
-    EXPECT_EQ(topoMeta.size(), 1);
-    EXPECT_EQ(topoMeta[0].size(), 4);
-}
-
-TEST_F(CheckUtilsTest, GenTopoMeta_MultipleSuperPods)
-{
-    TopoMeta topoMeta;
-    GenTopoMeta(topoMeta, 2, 4, 8);
-
-    EXPECT_EQ(topoMeta.size(), 2);
-}
-
-TEST_F(CheckUtilsTest, CalRankSize_SingleServer)
-{
-    TopoMeta topoMeta;
-    GenTopoMeta(topoMeta, 1, 1, 8);
-
-    u32 rankSize = CalRankSize(topoMeta);
-    EXPECT_EQ(rankSize, 8);
-}
-
-TEST_F(CheckUtilsTest, CalRankSize_MultipleServers)
-{
-    TopoMeta topoMeta;
-    GenTopoMeta(topoMeta, 1, 4, 8);
-
-    u32 rankSize = CalRankSize(topoMeta);
-    EXPECT_EQ(rankSize, 32);
-}
-
-TEST_F(CheckUtilsTest, CalRankSize_MultipleSuperPods)
-{
-    TopoMeta topoMeta;
-    GenTopoMeta(topoMeta, 2, 4, 8);
-
-    u32 rankSize = CalRankSize(topoMeta);
-    EXPECT_EQ(rankSize, 64);
-}
-
 TEST_F(CheckUtilsTest, SrcBufDes_Constructor)
 {
     SrcBufDes srcBuf(1, BufferType::INPUT, 0x1000);
 
-    EXPECT_EQ(srcBuf.rankId, 1);
+    EXPECT_EQ(srcBuf.deviceId, 1);
     EXPECT_EQ(srcBuf.bufType, BufferType::INPUT);
     EXPECT_EQ(srcBuf.srcAddr, 0x1000);
 }
@@ -188,77 +129,6 @@ TEST_F(CheckUtilsTest, BufferSemantic_Comparison)
 
     EXPECT_TRUE(bufSem1 < bufSem2);
     EXPECT_FALSE(bufSem2 < bufSem1);
-}
-
-TEST_F(CheckUtilsTest, SplitString_SingleChar)
-{
-    std::string str = "a,b,c";
-    auto result = SplitString(str, ',');
-
-    EXPECT_EQ(result.size(), 3);
-    EXPECT_EQ(result[0], "a");
-    EXPECT_EQ(result[1], "b");
-    EXPECT_EQ(result[2], "c");
-}
-
-TEST_F(CheckUtilsTest, SplitString_EmptyString)
-{
-    std::string str = "";
-    auto result = SplitString(str, ',');
-
-    EXPECT_EQ(result.size(), 0);
-}
-
-TEST_F(CheckUtilsTest, SplitString_NoDelimiter)
-{
-    std::string str = "abc";
-    auto result = SplitString(str, ',');
-
-    EXPECT_EQ(result.size(), 1);
-    EXPECT_EQ(result[0], "abc");
-}
-
-TEST_F(CheckUtilsTest, SplitString_ConsecutiveDelimiters)
-{
-    std::string str = "a,,b";
-    auto result = SplitString(str, ',');
-
-    EXPECT_EQ(result.size(), 3);
-    EXPECT_EQ(result[0], "a");
-    EXPECT_EQ(result[1], "");
-    EXPECT_EQ(result[2], "b");
-}
-
-TEST_F(CheckUtilsTest, DataSliceSizeIsEqual_Equal)
-{
-    auto slice1 = std::make_unique<DataSlice>();
-    auto slice2 = std::make_unique<DataSlice>();
-    slice1->SetSize(100);
-    slice2->SetSize(100);
-
-    EXPECT_TRUE(DataSliceSizeIsEqual(slice1, slice2));
-}
-
-TEST_F(CheckUtilsTest, DataSliceSizeIsEqual_NotEqual)
-{
-    auto slice1 = std::make_unique<DataSlice>();
-    auto slice2 = std::make_unique<DataSlice>();
-    slice1->SetSize(100);
-    slice2->SetSize(200);
-
-    EXPECT_FALSE(DataSliceSizeIsEqual(slice1, slice2));
-}
-
-TEST_F(CheckUtilsTest, DataSliceSizeIsEqual_ThreeSlices)
-{
-    auto slice1 = std::make_unique<DataSlice>();
-    auto slice2 = std::make_unique<DataSlice>();
-    auto slice3 = std::make_unique<DataSlice>();
-    slice1->SetSize(100);
-    slice2->SetSize(100);
-    slice3->SetSize(100);
-
-    EXPECT_TRUE(DataSliceSizeIsEqual(slice1, slice2, slice3));
 }
 
 TEST_F(CheckUtilsTest, CalcInputOutputSize_AllReduce)

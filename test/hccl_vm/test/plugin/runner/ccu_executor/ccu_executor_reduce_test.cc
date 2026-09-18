@@ -8,6 +8,12 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: unit test for
+ * ReduceAddExecutor, ReduceMaxExecutor, ReduceMinExecutor Author: xx
+ */
+
 #include <cstdint>
 #include <cstring>
 #include <gtest/gtest.h>
@@ -62,6 +68,7 @@ TEST_F(ReduceAddExecutorTest, DefaultConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     ReduceAddExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -72,6 +79,7 @@ TEST_F(ReduceAddExecutorTest, ParameterizedConstructor)
     memset(&instr, 0, sizeof(instr));
 
     ReduceAddExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -82,6 +90,7 @@ TEST_F(ReduceAddExecutorTest, ParserZeroValues)
     memset(&instr, 0, sizeof(instr));
 
     ReduceAddExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -93,6 +102,7 @@ TEST_F(ReduceAddExecutorTest, ParserMaxValues)
     memset(&instr, 0xFF, sizeof(instr));
 
     ReduceAddExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -113,6 +123,7 @@ TEST_F(ReduceAddExecutorTest, ParserSpecificParameters)
     instr.v1.add.waitCKEMask = 0xF0;
 
     ReduceAddExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -127,6 +138,7 @@ TEST_F(ReduceAddExecutorTest, DifferentDataTypes)
     for (uint16_t dataType = 0; dataType <= 6; dataType++) {
         instr.v1.add.dataType = dataType;
         ReduceAddExecutor executor(0, 0, 0, instr, nullptr);
+        executor.SetVersion(RunnerCcuVersion::CCU_V1);
         EXPECT_NO_THROW(executor.Parser());
         EXPECT_NO_THROW(executor.Describe());
     }
@@ -143,6 +155,7 @@ TEST_F(ReduceAddExecutorTest, DifferentCountValues)
     for (auto count : counts) {
         instr.v1.add.count = count;
         ReduceAddExecutor executor(0, 0, 0, instr, nullptr);
+        executor.SetVersion(RunnerCcuVersion::CCU_V1);
         EXPECT_NO_THROW(executor.Parser());
         EXPECT_NO_THROW(executor.Describe());
     }
@@ -157,6 +170,7 @@ TEST_F(ReduceAddExecutorTest, DifferentCastEnValues)
     for (uint16_t castEn = 0; castEn <= 1; castEn++) {
         instr.v1.add.castEn = castEn;
         ReduceAddExecutor executor(0, 0, 0, instr, nullptr);
+        executor.SetVersion(RunnerCcuVersion::CCU_V1);
         EXPECT_NO_THROW(executor.Parser());
         EXPECT_NO_THROW(executor.Describe());
     }
@@ -171,6 +185,7 @@ TEST_F(ReduceAddExecutorTest, DescribeContent)
     instr.v1.add.dataType = 0;
 
     ReduceAddExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -184,6 +199,7 @@ TEST_F(ReduceAddExecutorTest, InheritanceCheck)
     memset(&instr, 0, sizeof(instr));
 
     ReduceAddExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     CcuExecutorBase* base = &executor;
     EXPECT_NE(base, nullptr);
 }
@@ -199,6 +215,7 @@ TEST_F(ReduceAddExecutorTest, VariousMsIds)
     }
 
     ReduceAddExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -212,6 +229,7 @@ TEST_F(ReduceMaxExecutorTest, DefaultConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     ReduceMaxExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -222,6 +240,7 @@ TEST_F(ReduceMaxExecutorTest, ParameterizedConstructor)
     memset(&instr, 0, sizeof(instr));
 
     ReduceMaxExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -232,6 +251,7 @@ TEST_F(ReduceMaxExecutorTest, ParserZeroValues)
     memset(&instr, 0, sizeof(instr));
 
     ReduceMaxExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -243,6 +263,7 @@ TEST_F(ReduceMaxExecutorTest, ParserMaxValues)
     memset(&instr, 0xFF, sizeof(instr));
 
     ReduceMaxExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -262,6 +283,7 @@ TEST_F(ReduceMaxExecutorTest, ParserSpecificParameters)
     instr.v1.max.waitCKEMask = 0xF0;
 
     ReduceMaxExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -276,6 +298,7 @@ TEST_F(ReduceMaxExecutorTest, DifferentDataTypes)
     for (uint16_t dataType = 0; dataType <= 8; dataType++) {
         instr.v1.max.dataType = dataType;
         ReduceMaxExecutor executor(0, 0, 0, instr, nullptr);
+        executor.SetVersion(RunnerCcuVersion::CCU_V1);
         EXPECT_NO_THROW(executor.Parser());
         EXPECT_NO_THROW(executor.Describe());
     }
@@ -292,6 +315,7 @@ TEST_F(ReduceMaxExecutorTest, DifferentCountValues)
     for (auto count : counts) {
         instr.v1.max.count = count;
         ReduceMaxExecutor executor(0, 0, 0, instr, nullptr);
+        executor.SetVersion(RunnerCcuVersion::CCU_V1);
         EXPECT_NO_THROW(executor.Parser());
         EXPECT_NO_THROW(executor.Describe());
     }
@@ -306,6 +330,7 @@ TEST_F(ReduceMaxExecutorTest, DescribeContent)
     instr.v1.max.dataType = 0;
 
     ReduceMaxExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -319,6 +344,7 @@ TEST_F(ReduceMaxExecutorTest, InheritanceCheck)
     memset(&instr, 0, sizeof(instr));
 
     ReduceMaxExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     CcuExecutorBase* base = &executor;
     EXPECT_NE(base, nullptr);
 }
@@ -334,6 +360,7 @@ TEST_F(ReduceMaxExecutorTest, VariousMsIds)
     }
 
     ReduceMaxExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -351,6 +378,7 @@ TEST_F(ReduceMaxExecutorTest, Parser_SpecificHighBitCount)
     instr.v1.max.waitCKEMask = 0xFFFF;
 
     ReduceMaxExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -368,6 +396,7 @@ TEST_F(ReduceMaxExecutorTest, Describe_ContainsReduceMaxInfo)
     instr.v1.max.waitCKEMask = 0xCCDD;
 
     ReduceMaxExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     std::string desc = executor.Describe();
     EXPECT_NE(desc.find("Max"), std::string::npos);
@@ -384,6 +413,7 @@ TEST_F(ReduceMinExecutorTest, DefaultConstructor)
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     ReduceMinExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -394,6 +424,7 @@ TEST_F(ReduceMinExecutorTest, ParameterizedConstructor)
     memset(&instr, 0, sizeof(instr));
 
     ReduceMinExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Describe());
 }
 
@@ -404,6 +435,7 @@ TEST_F(ReduceMinExecutorTest, ParserZeroValues)
     memset(&instr, 0, sizeof(instr));
 
     ReduceMinExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -415,6 +447,7 @@ TEST_F(ReduceMinExecutorTest, ParserMaxValues)
     memset(&instr, 0xFF, sizeof(instr));
 
     ReduceMinExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -434,6 +467,7 @@ TEST_F(ReduceMinExecutorTest, ParserSpecificParameters)
     instr.v1.min.waitCKEMask = 0xF0;
 
     ReduceMinExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -448,6 +482,7 @@ TEST_F(ReduceMinExecutorTest, DifferentDataTypes)
     for (uint16_t dataType = 0; dataType <= 8; dataType++) {
         instr.v1.min.dataType = dataType;
         ReduceMinExecutor executor(0, 0, 0, instr, nullptr);
+        executor.SetVersion(RunnerCcuVersion::CCU_V1);
         EXPECT_NO_THROW(executor.Parser());
         EXPECT_NO_THROW(executor.Describe());
     }
@@ -464,6 +499,7 @@ TEST_F(ReduceMinExecutorTest, DifferentCountValues)
     for (auto count : counts) {
         instr.v1.min.count = count;
         ReduceMinExecutor executor(0, 0, 0, instr, nullptr);
+        executor.SetVersion(RunnerCcuVersion::CCU_V1);
         EXPECT_NO_THROW(executor.Parser());
         EXPECT_NO_THROW(executor.Describe());
     }
@@ -478,6 +514,7 @@ TEST_F(ReduceMinExecutorTest, DescribeContent)
     instr.v1.min.dataType = 0;
 
     ReduceMinExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     executor.Parser();
     std::string desc = executor.Describe();
     EXPECT_FALSE(desc.empty());
@@ -491,6 +528,7 @@ TEST_F(ReduceMinExecutorTest, InheritanceCheck)
     memset(&instr, 0, sizeof(instr));
 
     ReduceMinExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     CcuExecutorBase* base = &executor;
     EXPECT_NE(base, nullptr);
 }
@@ -506,6 +544,7 @@ TEST_F(ReduceMinExecutorTest, VariousMsIds)
     }
 
     ReduceMinExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
     EXPECT_NO_THROW(executor.Describe());
 }
@@ -521,6 +560,7 @@ TEST_F(ReduceMinExecutorTest, BoundaryDataTypes)
     for (auto dataType : reservedTypes) {
         instr.v1.min.dataType = dataType;
         ReduceMinExecutor executor(0, 0, 0, instr, nullptr);
+        executor.SetVersion(RunnerCcuVersion::CCU_V1);
         EXPECT_NO_THROW(executor.Parser());
         EXPECT_NO_THROW(executor.Describe());
     }
@@ -533,6 +573,7 @@ TEST_F(ReduceAddExecutorTest, Process_UnsupportedDataType_ReturnsEarly)
     instr.v1.add.count = 1;
     instr.v1.add.dataType = 9;
     ReduceAddExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     EXPECT_NO_THROW(executor.Parser());
 }
 
@@ -544,6 +585,7 @@ TEST_F(ReduceMinExecutorTest, Process_ReservedDataType4_ReturnsEarly)
     instr.v1.min.dataType = static_cast<uint16_t>(ReduceMaxMinDataType::MAX_MIN_RESERVED4);
 
     ReduceMinExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     ASSERT_NO_THROW(executor.Parser());
     CcuResourceManager& ccuResMgr = CcuResourceManager::GetInstance();
     EXPECT_NO_THROW(executor.Process(ccuResMgr));
@@ -560,6 +602,7 @@ TEST_F(ReduceMinExecutorTest, Process_SupportedDataType_INT16)
 
     auto simulator = std::make_unique<CcuSimulator>(0, 0, 0, 10, 10, RunnerCcuVersion::CCU_V1);
     ReduceMinExecutor executor(0, 0, 0, instr, simulator.get());
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     ASSERT_NO_THROW(executor.Parser());
     CcuResourceManager& ccuResMgr = CcuResourceManager::GetInstance();
     EXPECT_NO_THROW(executor.Process(ccuResMgr));
@@ -576,6 +619,7 @@ TEST_F(ReduceMinExecutorTest, Process_SupportedDataType_INT32)
 
     auto simulator = std::make_unique<CcuSimulator>(0, 0, 0, 10, 10, RunnerCcuVersion::CCU_V1);
     ReduceMinExecutor executor(0, 0, 0, instr, simulator.get());
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     ASSERT_NO_THROW(executor.Parser());
     CcuResourceManager& ccuResMgr = CcuResourceManager::GetInstance();
     EXPECT_NO_THROW(executor.Process(ccuResMgr));
@@ -592,6 +636,7 @@ TEST_F(ReduceMinExecutorTest, Process_SupportedDataType_UINT8)
 
     auto simulator = std::make_unique<CcuSimulator>(0, 0, 0, 10, 10, RunnerCcuVersion::CCU_V1);
     ReduceMinExecutor executor(0, 0, 0, instr, simulator.get());
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     ASSERT_NO_THROW(executor.Parser());
     CcuResourceManager& ccuResMgr = CcuResourceManager::GetInstance();
     EXPECT_NO_THROW(executor.Process(ccuResMgr));
@@ -608,6 +653,7 @@ TEST_F(ReduceMinExecutorTest, Process_SupportedDataType_INT8)
 
     auto simulator = std::make_unique<CcuSimulator>(0, 0, 0, 10, 10, RunnerCcuVersion::CCU_V1);
     ReduceMinExecutor executor(0, 0, 0, instr, simulator.get());
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     ASSERT_NO_THROW(executor.Parser());
     CcuResourceManager& ccuResMgr = CcuResourceManager::GetInstance();
     EXPECT_NO_THROW(executor.Process(ccuResMgr));
@@ -624,6 +670,7 @@ TEST_F(ReduceMinExecutorTest, Process_SupportedDataType_FP32)
 
     auto simulator = std::make_unique<CcuSimulator>(0, 0, 0, 10, 10, RunnerCcuVersion::CCU_V1);
     ReduceMinExecutor executor(0, 0, 0, instr, simulator.get());
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     ASSERT_NO_THROW(executor.Parser());
     CcuResourceManager& ccuResMgr = CcuResourceManager::GetInstance();
     EXPECT_NO_THROW(executor.Process(ccuResMgr));
@@ -640,6 +687,7 @@ TEST_F(ReduceMinExecutorTest, Process_SupportedDataType_FP16)
 
     auto simulator = std::make_unique<CcuSimulator>(0, 0, 0, 10, 10, RunnerCcuVersion::CCU_V1);
     ReduceMinExecutor executor(0, 0, 0, instr, simulator.get());
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     ASSERT_NO_THROW(executor.Parser());
     CcuResourceManager& ccuResMgr = CcuResourceManager::GetInstance();
     EXPECT_NO_THROW(executor.Process(ccuResMgr));
@@ -661,6 +709,7 @@ TEST_F(ReduceMinExecutorTest, Process_LoopState_Normal)
     simulator->InitLoopGroupInfo(loopGroupInfo);
 
     ReduceMinExecutor executor(0, 0, 0, instr, simulator.get());
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     ASSERT_NO_THROW(executor.Parser());
     CcuResourceManager& ccuResMgr = CcuResourceManager::GetInstance();
     EXPECT_NO_THROW(executor.Process(ccuResMgr));
@@ -680,6 +729,7 @@ TEST_F(ReduceMinExecutorTest, Run_Normal)
 
     auto simulator = std::make_unique<CcuSimulator>(0, 0, 0, 10, 10, RunnerCcuVersion::CCU_V1);
     ReduceMinExecutor executor(0, 0, 0, instr, simulator.get());
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     ASSERT_NO_THROW(executor.Parser());
 
     CcuResourceManager& ccuResMgr = CcuResourceManager::GetInstance();
@@ -697,6 +747,7 @@ TEST_F(ReduceMaxExecutorTest, Process_ReservedDataType_ReturnsEarly)
     instr.v1.max.dataType = static_cast<uint16_t>(ReduceMaxMinDataType::MAX_MIN_RESERVED4);
 
     ReduceMaxExecutor executor(0, 0, 0, instr, nullptr);
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     ASSERT_NO_THROW(executor.Parser());
     CcuResourceManager& ccuResMgr = CcuResourceManager::GetInstance();
     EXPECT_NO_THROW(executor.Process(ccuResMgr));
@@ -713,6 +764,7 @@ TEST_F(ReduceMaxExecutorTest, Process_SupportedDataType_INT16)
 
     auto simulator = std::make_unique<CcuSimulator>(0, 0, 0, 10, 10, RunnerCcuVersion::CCU_V1);
     ReduceMaxExecutor executor(0, 0, 0, instr, simulator.get());
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     ASSERT_NO_THROW(executor.Parser());
     CcuResourceManager& ccuResMgr = CcuResourceManager::GetInstance();
     EXPECT_NO_THROW(executor.Process(ccuResMgr));
@@ -729,6 +781,7 @@ TEST_F(ReduceMaxExecutorTest, Process_SupportedDataType_INT32)
 
     auto simulator = std::make_unique<CcuSimulator>(0, 0, 0, 10, 10, RunnerCcuVersion::CCU_V1);
     ReduceMaxExecutor executor(0, 0, 0, instr, simulator.get());
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     ASSERT_NO_THROW(executor.Parser());
     CcuResourceManager& ccuResMgr = CcuResourceManager::GetInstance();
     EXPECT_NO_THROW(executor.Process(ccuResMgr));
@@ -745,6 +798,7 @@ TEST_F(ReduceMaxExecutorTest, Process_SupportedDataType_UINT8)
 
     auto simulator = std::make_unique<CcuSimulator>(0, 0, 0, 10, 10, RunnerCcuVersion::CCU_V1);
     ReduceMaxExecutor executor(0, 0, 0, instr, simulator.get());
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     ASSERT_NO_THROW(executor.Parser());
     CcuResourceManager& ccuResMgr = CcuResourceManager::GetInstance();
     EXPECT_NO_THROW(executor.Process(ccuResMgr));
@@ -761,6 +815,7 @@ TEST_F(ReduceMaxExecutorTest, Process_SupportedDataType_FP32)
 
     auto simulator = std::make_unique<CcuSimulator>(0, 0, 0, 10, 10, RunnerCcuVersion::CCU_V1);
     ReduceMaxExecutor executor(0, 0, 0, instr, simulator.get());
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     ASSERT_NO_THROW(executor.Parser());
     CcuResourceManager& ccuResMgr = CcuResourceManager::GetInstance();
     EXPECT_NO_THROW(executor.Process(ccuResMgr));
@@ -777,6 +832,7 @@ TEST_F(ReduceMaxExecutorTest, Process_SupportedDataType_INT8)
 
     auto simulator = std::make_unique<CcuSimulator>(0, 0, 0, 10, 10, RunnerCcuVersion::CCU_V1);
     ReduceMaxExecutor executor(0, 0, 0, instr, simulator.get());
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     ASSERT_NO_THROW(executor.Parser());
     CcuResourceManager& ccuResMgr = CcuResourceManager::GetInstance();
     EXPECT_NO_THROW(executor.Process(ccuResMgr));
@@ -793,6 +849,7 @@ TEST_F(ReduceMaxExecutorTest, Process_SupportedDataType_FP16)
 
     auto simulator = std::make_unique<CcuSimulator>(0, 0, 0, 10, 10, RunnerCcuVersion::CCU_V1);
     ReduceMaxExecutor executor(0, 0, 0, instr, simulator.get());
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     ASSERT_NO_THROW(executor.Parser());
     CcuResourceManager& ccuResMgr = CcuResourceManager::GetInstance();
     EXPECT_NO_THROW(executor.Process(ccuResMgr));
@@ -814,6 +871,7 @@ TEST_F(ReduceMaxExecutorTest, Process_LoopState_Normal)
     simulator->InitLoopGroupInfo(loopGroupInfo);
 
     ReduceMaxExecutor executor(0, 0, 0, instr, simulator.get());
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     ASSERT_NO_THROW(executor.Parser());
     CcuResourceManager& ccuResMgr = CcuResourceManager::GetInstance();
     EXPECT_NO_THROW(executor.Process(ccuResMgr));
@@ -833,6 +891,7 @@ TEST_F(ReduceMaxExecutorTest, Run_Normal)
 
     auto simulator = std::make_unique<CcuSimulator>(0, 0, 0, 10, 10, RunnerCcuVersion::CCU_V1);
     ReduceMaxExecutor executor(0, 0, 0, instr, simulator.get());
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     ASSERT_NO_THROW(executor.Parser());
 
     CcuResourceManager& ccuResMgr = CcuResourceManager::GetInstance();
@@ -853,6 +912,7 @@ TEST_F(ReduceAddExecutorTest, Process_SupportedDataType_INT16)
 
     auto simulator = std::make_unique<CcuSimulator>(0, 0, 0, 10, 10, RunnerCcuVersion::CCU_V1);
     ReduceAddExecutor executor(0, 0, 0, instr, simulator.get());
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     ASSERT_NO_THROW(executor.Parser());
     CcuResourceManager& ccuResMgr = CcuResourceManager::GetInstance();
     EXPECT_NO_THROW(executor.Process(ccuResMgr));
@@ -869,6 +929,7 @@ TEST_F(ReduceAddExecutorTest, Process_SupportedDataType_INT32)
 
     auto simulator = std::make_unique<CcuSimulator>(0, 0, 0, 10, 10, RunnerCcuVersion::CCU_V1);
     ReduceAddExecutor executor(0, 0, 0, instr, simulator.get());
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     ASSERT_NO_THROW(executor.Parser());
     CcuResourceManager& ccuResMgr = CcuResourceManager::GetInstance();
     EXPECT_NO_THROW(executor.Process(ccuResMgr));
@@ -885,6 +946,7 @@ TEST_F(ReduceAddExecutorTest, Process_SupportedDataType_UINT8)
 
     auto simulator = std::make_unique<CcuSimulator>(0, 0, 0, 10, 10, RunnerCcuVersion::CCU_V1);
     ReduceAddExecutor executor(0, 0, 0, instr, simulator.get());
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     ASSERT_NO_THROW(executor.Parser());
     CcuResourceManager& ccuResMgr = CcuResourceManager::GetInstance();
     EXPECT_NO_THROW(executor.Process(ccuResMgr));
@@ -901,6 +963,7 @@ TEST_F(ReduceAddExecutorTest, Process_SupportedDataType_INT8)
 
     auto simulator = std::make_unique<CcuSimulator>(0, 0, 0, 10, 10, RunnerCcuVersion::CCU_V1);
     ReduceAddExecutor executor(0, 0, 0, instr, simulator.get());
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     ASSERT_NO_THROW(executor.Parser());
     CcuResourceManager& ccuResMgr = CcuResourceManager::GetInstance();
     EXPECT_NO_THROW(executor.Process(ccuResMgr));
@@ -917,6 +980,7 @@ TEST_F(ReduceAddExecutorTest, Process_SupportedDataType_FP32)
 
     auto simulator = std::make_unique<CcuSimulator>(0, 0, 0, 10, 10, RunnerCcuVersion::CCU_V1);
     ReduceAddExecutor executor(0, 0, 0, instr, simulator.get());
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     ASSERT_NO_THROW(executor.Parser());
     CcuResourceManager& ccuResMgr = CcuResourceManager::GetInstance();
     EXPECT_NO_THROW(executor.Process(ccuResMgr));
@@ -933,6 +997,7 @@ TEST_F(ReduceAddExecutorTest, Process_SupportedDataType_FP16)
 
     auto simulator = std::make_unique<CcuSimulator>(0, 0, 0, 10, 10, RunnerCcuVersion::CCU_V1);
     ReduceAddExecutor executor(0, 0, 0, instr, simulator.get());
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     ASSERT_NO_THROW(executor.Parser());
     CcuResourceManager& ccuResMgr = CcuResourceManager::GetInstance();
     EXPECT_NO_THROW(executor.Process(ccuResMgr));
@@ -954,6 +1019,7 @@ TEST_F(ReduceAddExecutorTest, Process_LoopState_Normal)
     simulator->InitLoopGroupInfo(loopGroupInfo);
 
     ReduceAddExecutor executor(0, 0, 0, instr, simulator.get());
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     ASSERT_NO_THROW(executor.Parser());
     CcuResourceManager& ccuResMgr = CcuResourceManager::GetInstance();
     EXPECT_NO_THROW(executor.Process(ccuResMgr));
@@ -973,6 +1039,7 @@ TEST_F(ReduceAddExecutorTest, Run_Normal)
 
     auto simulator = std::make_unique<CcuSimulator>(0, 0, 0, 10, 10, RunnerCcuVersion::CCU_V1);
     ReduceAddExecutor executor(0, 0, 0, instr, simulator.get());
+    executor.SetVersion(RunnerCcuVersion::CCU_V1);
     ASSERT_NO_THROW(executor.Parser());
 
     CcuResourceManager& ccuResMgr = CcuResourceManager::GetInstance();

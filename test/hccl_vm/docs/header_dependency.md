@@ -7,7 +7,6 @@
 本文档列出项目中通过 `#include` 实际引用的所有三方头文件，标注其来源（CANN / HCCL / HCOMM）及在磁盘上的实际路径。
 
 **路径约定**：
-
 - CANN 根目录：`/home/teamserver/workspace/Ascend/cann-9.1.0/`（下文以 `CANN/` 缩写）
 - HCOMM 根目录：`/home/teamserver/workspace/hcomm/`（下文以 `HCOMM/` 缩写）
 - HCCL 根目录：`/home/teamserver/workspace/hccl/`（下文以 `HCCL/` 缩写）
@@ -30,7 +29,7 @@
 
 | #include | 实际文件路径 | 引用位置 |
 |----------|------------|---------|
-| `hccl/hccl_types.h` | `CANN/include/hccl/hccl_types.h` | proxy/aclrt_kernel_stub.cc、hccl_op_stub.cc、hccl_proxy_common.h；plugin/runner/ccu_executor/ccu_fp16.h；common/sim_data_dump.cc；device_arm/proxy/device_sqe_parse_stub.h；test/proxy/ |
+| `hccl/hccl_types.h` | `CANN/include/hccl/hccl_types.h` | proxy/aclrt_kernel_stub.cc、hccl_op_stub.cc、hccl_proxy_common.h；plugin/runner/ccu_executor/ccu_fp16.h；common/sim_data_dump.cc；device_arm/level2/proxy/device_sqe_parse_stub.h；test/proxy/ |
 | `hccl/hccl.h` | `CANN/include/hccl/hccl.h` | **proxy/hccl_op_stub.cc**；test/proxy/hccl_comm_stub_test.cc |
 | `hccl/hcom.h` | `CANN/include/hccl/hcom.h` | proxy/hccl_inner_stub.cc；test/proxy/hccl_inner_stub_test.cc |
 | `hccl/base.h` | `CANN/include/hccl/base.h` | proxy/aclrt_context_stub.cc；plugin/runner/ccu_executor/ccu_fp16.h；plugin/checker/header/external/task_param.h；include/sim_ip_address.h |
@@ -49,13 +48,13 @@
 |----------|------------|---------|
 | `"runtime/base.h"` | `CANN/pkg_inc/runtime/runtime/base.h` | proxy/hccl_comm_stub.cc、aclrt_runtime_config.cc、aclrt_notify_stub.cc、hccp_stub.cc、aclrt_device_stub.cc、hccp_ra_socket_stub.cc、aclrt_stream_stub.cc、aclrt_stub.cc；test/proxy/ |
 | `"runtime/event.h"` | `CANN/pkg_inc/runtime/runtime/event.h` | proxy/aclrt_runtime_config.cc、aclrt_notify_stub.cc |
-| `"runtime/rt.h"` | `CANN/pkg_inc/runtime/runtime/rt.h` | device_arm/proxy/device_sqe_parse_stub.h |
+| `"runtime/rt.h"` | `CANN/pkg_inc/runtime/runtime/rt.h` | device_arm/level2/proxy/device_sqe_parse_stub.h |
 
 ### 1.5 CANN Profiling 接口（`CANN/pkg_inc/profiling/`）
 
 | #include | 实际文件路径 | 引用位置 |
 |----------|------------|---------|
-| `"aprof_pub.h"` | `CANN/pkg_inc/profiling/aprof_pub.h` | proxy/aprofiling_stub.cc；device_arm/proxy/aprofiling_stub.cc；test/proxy/aprofiling_stub_test.cc |
+| `"aprof_pub.h"` | `CANN/pkg_inc/profiling/aprof_pub.h` | proxy/aprofiling_stub.cc；device_arm/level2/proxy/aprofiling_stub.cc；test/proxy/aprofiling_stub_test.cc |
 
 ### 1.6 CANN Trace 接口（`CANN/pkg_inc/trace/`）
 
@@ -68,7 +67,7 @@
 
 | #include | 实际文件路径 | 引用位置 |
 |----------|------------|---------|
-| `"ascend_hal.h"` | `CANN/include/driver/ascend_hal.h` | proxy/adapter_rts_stub.cc、aclrt_new_stub.cc、ascend_hal_stub.cc；device_arm/proxy/device_sqe_parse_stub.h、ascend_hal_stub.cc；test/device_arm/ |
+| `"ascend_hal.h"` | `CANN/include/driver/ascend_hal.h` | proxy/adapter_rts_stub.cc、aclrt_new_stub.cc、ascend_hal_stub.cc；device_arm/level2/proxy/device_sqe_parse_stub.h、ascend_hal_stub.cc；test/device_arm/ |
 
 ### 1.8 CANN Base 接口（`CANN/pkg_inc/base/`）
 
@@ -175,12 +174,11 @@
 
 **原始来源**：HCOMM 仓库的 `hccl_aiv_utils.h` 头文件
 
-**备份位置**：`src/proxy/aclrt_kernel_stub.cc` 第 597-628 行
+**备份位置**：`src/proxy/level2/aclrt_kernel_stub.cc` 第 597-628 行
 
 **说明**：`AivOpArgs` 是 AIV 集合通信算子的参数结构体，用于在 host 端与 device 端之间传递 AIV kernel 的执行参数。工具原本通过 `dlsym` 动态加载 HCOMM 库中的 `ops_hccl::ExecuteKernelLaunch()` 函数（符号名：`_ZN8ops_hccl19ExecuteKernelLaunchERKNS_9AivOpArgsE`），该函数接收此结构体作为参数。为了解除对 HCOMM 运行时库的依赖，工具在项目内部做了结构体的完整备份。
 
 **结构体定义**：
-
 ```cpp
 struct AivOpArgs {
     HcclCMDType cmdType = HcclCMDType::HCCL_CMD_MAX;   // 集合通信命令类型
@@ -220,7 +218,7 @@ struct AivOpArgs {
 
 **原始来源**：HCOMM 仓库的同名头文件
 
-**备份位置**：`src/proxy/aiv_kernel/hccl_op_stub/aiv_communication_base_v2.h`
+**备份位置**：`src/proxy/level2/aiv_kernel/hccl_op_stub/aiv_communication_base_v2.h`
 
 **说明**：此头文件定义了 AIV 集合通信算子的基类 `AivCommBase`，以及相关的内核参数宏定义（`KERNEL_ARGS_DEF`、`KERNEL_ARGS_CALL` 等）。工具原本直接 include HCOMM 仓库中的该文件，为了解除依赖，在项目内部做了完整备份。
 
@@ -240,7 +238,7 @@ struct AivOpArgs {
 
 ### 5.3 AIV 算子 Op 头文件（HCOMM / HCCL 依赖）
 
-工具中每种集合通信算子的 AIV kernel 实现文件（`src/proxy/aiv_kernel/hccl_op_stub/*/aiv_communication_v2.cc`）通过 `#include` 引用了对应算子的 op 头文件。这些头文件**不存在于项目内部**，分别来自 HCOMM 和 HCCL 仓库：
+工具中每种集合通信算子的 AIV kernel 实现文件（`src/proxy/level2/aiv_kernel/hccl_op_stub/*/aiv_communication_v2.cc`）通过 `#include` 引用了对应算子的 op 头文件。这些头文件**不存在于项目内部**，分别来自 HCOMM 和 HCCL 仓库：
 
 | #include | 来源 | 实际文件路径 | 引用位置 |
 |----------|------|------------|---------|
@@ -250,14 +248,14 @@ struct AivOpArgs {
 | `"aiv_broadcast_op.h"` | HCOMM | `hcomm/src/legacy/ascend910/algorithm/base/alg_aiv_template/broadcast/` | hccl_op_stub/broadcast/aiv_communication_v2.cc |
 | `"aiv_all_to_all_op.h"` | HCOMM | `hcomm/src/legacy/ascend910/algorithm/base/alg_aiv_template/all_to_all/` | hccl_op_stub/all_to_all_v/aiv_communication_v2.cc |
 | `"aiv_all_to_all_v_op.h"` | HCOMM | `hcomm/src/legacy/ascend910/algorithm/base/alg_aiv_template/all_to_all/` | hccl_op_stub/all_to_all_v/aiv_communication_v2.cc |
-| `"aiv_scatter_op.h"` | HCCL | `hccl/src/ops/scatter/algorithm/template/aiv/kernel/` | hccl_op_stub/scatter/aiv_communication_v2.cc |
-| `"aiv_reduce_op.h"` | HCCL | `hccl/src/ops/reduce/algorithm/template/aiv/kernel/` | hccl_op_stub/reduce/aiv_communication_v2.cc |
+| `"aiv_scatter_op.h"` | HCCL | `hccl/src/ops/scatter/template/aiv/kernel/` | hccl_op_stub/scatter/aiv_communication_v2.cc |
+| `"aiv_reduce_op.h"` | HCCL | `hccl/src/ops/reduce/template/aiv/kernel/` | hccl_op_stub/reduce/aiv_communication_v2.cc |
 
 **依赖风险**：若 HCOMM 或 HCCL 侧算子 op 头文件的接口签名、模板参数或成员函数发生变化，工具的 AIV kernel 编译将失败，或导致运行时行为不一致。
 
 ### 5.4 AscendC 接口依赖
 
-工具依赖 CANN 包提供的 AscendC 编程接口来模拟 AIV kernel 的执行。项目中的 AscendC 接口全部通过 `src/proxy/aiv_kernel/ascendc_stub/` 目录下的本地 stub 文件实现，而非直接使用 CANN SDK 中的 AscendC 头文件。
+工具依赖 CANN 包提供的 AscendC 编程接口来模拟 AIV kernel 的执行。项目中的 AscendC 接口全部通过 `src/proxy/level2/aiv_kernel/ascendc_stub/` 目录下的本地 stub 文件实现，而非直接使用 CANN SDK 中的 AscendC 头文件。
 
 **使用的 AscendC 接口**（通过 stub 实现）：
 
@@ -271,7 +269,6 @@ struct AivOpArgs {
 | `ascendc_utils_stub.h` | `PipeBarrier` 等工具函数 | ascendc_stub/kernel_operator.h |
 
 **依赖风险**：
-
 1. AscendC 接口 API 变化（如类成员函数签名变更、模板参数调整）可能导致 stub 实现与真实接口不匹配
 2. AscendC 新增数据类型（如 `fp8_e4m3fn_t`、`fp8_e5m2_t`、`hifloat8_t`）需要同步更新 stub 支持
 3. `AivCommBase` 类内部大量使用 AscendC 模板类（`GlobalTensor<T>`、`LocalTensor<T>`、`TQueBind` 等），这些类型的语义变化会影响 AIV 仿真的正确性
@@ -284,11 +281,11 @@ struct AivOpArgs {
 
 ### 6.1 AICPU 交互数据结构
 
-工具在 `src/device_arm/aicpu_args_stub.h` 中对以下数据结构做了本地备份，以解除对 HCOMM 运行时库的强依赖：
+工具在 `src/device_arm/common/aicpu_args_stub.h` 中对以下数据结构做了本地备份，以解除对 HCOMM 运行时库的强依赖：
 
 | 数据结构 | 用途 | 对应 kernel 函数 |
 |---------|------|-----------------|
-| `CommAicpuParam` | 通信域初始化参数（hcomId、设备 ID、H2D/D2H 传输参数） | `RunAicpuCommInit` |
+| `CommAicpuParam` | 通信域初始化参数（hcomId、设备 ID、H2D/D2H 传输参数） | `RunAicpuIndOpCommInit` |
 | `HDCommunicateParams` | H2D/D2H 控制传输参数（deviceAddr、readCacheAddr） | 被 `CommAicpuParam` 引用 |
 | `ThreadMgrAicpuParam` | 线程管理参数（threadNum、序列化 threadParam 数组、deviceHandle） | `RunAicpuIndOpThreadInit`、`RunAicpuThreadSupplementNotify` |
 | `AicpuTsThread` | AICPU 线程信息（streamType、notifyLoadType、devId） | 被 `ThreadMgrAicpuParam` 引用 |
@@ -311,15 +308,14 @@ struct AivOpArgs {
 
 | dlsym 符号名 | 所在库 | 功能 |
 |-------------|-------|------|
-| `RunAicpuCommInit` | `libccl_kernel.so` | AICPU 通信域初始化 |
+| `RunAicpuIndOpCommInit` | `libccl_kernel.so` | AICPU 通信域初始化 |
 | `RunAicpuIndOpThreadInit` | `libccl_kernel.so` | AICPU 线程初始化 |
 | `RunAicpuIndOpChannelInitV2` | `libccl_kernel.so` | AICPU 通道初始化 V2 |
-| `RunAicpuDfxInitV2` | `libccl_kernel.so` | AICPU DFX 算子信息初始化 V2 |
+| `RunAicpuDfxOpInfoInitV2` | `libccl_kernel.so` | AICPU DFX 算子信息初始化 V2 |
 | `RunAicpuThreadSupplementNotify` | `libccl_kernel.so` | AICPU 资源补充通知 |
 | `HcclLaunchAicpuKernel` | `libscatter_aicpu_kernel.so` | AICPU 集合通信 kernel 启动 |
 
 **依赖风险**：
-
 1. 若 HCOMM 侧上述 kernel 函数的签名或行为发生变化，工具的 `dlsym` 调用可能失败或产生错误结果
 2. 若 `libccl_kernel.so` 或 `libscatter_aicpu_kernel.so` 新增/移除 kernel 函数，工具需同步更新函数指针列表
 3. `CommAicpuParam`、`ThreadMgrAicpuParam`、`HcclChannelUrmaRes` 等本地备份结构体若与 HCOMM 侧实际定义不一致，将导致地址转换错误和内存越界
@@ -330,13 +326,12 @@ struct AivOpArgs {
 
 | 硬编码 SO 名称 | 加载的 dlsym 符号 | 说明 |
 |--------------|-----------------|------|
-| `libccl_kernel.so` | `RunAicpuCommInit`、`RunAicpuIndOpThreadInit`、`RunAicpuIndOpChannelInitV2`、`RunAicpuDfxInitV2`、`RunAicpuThreadSupplementNotify` | HCOMM 通信框架核心库 |
+| `libccl_kernel.so` | `RunAicpuIndOpCommInit`、`RunAicpuIndOpThreadInit`、`RunAicpuIndOpChannelInitV2`、`RunAicpuDfxOpInfoInitV2`、`RunAicpuThreadSupplementNotify` | HCOMM 通信框架核心库 |
 | `libscatter_aicpu_kernel.so` | `HcclLaunchAicpuKernel` | AICPU 集合通信算子 kernel 库 |
 | `libslog.so` | （日志库依赖） | CANN 安全日志库 |
 | `libc_sec.so` | （安全库依赖） | CANN 安全函数库 |
 
 **依赖风险**：
-
 1. **SO 名称变更**：若 HCOMM 侧重命名或拆分上述 SO（如将 `libccl_kernel.so` 重命名），工具的 `dlopen` 将加载失败，导致所有 AICPU kernel 无法执行
 2. **算子 kernel SO 名称歧义**：当前无论算子类型如何（AllReduce、AllGather、ReduceScatter 等），算子 kernel 的 SO 名称固定为 `libscatter_aicpu_kernel.so`。这一命名可能引起歧义——名称中的 "scatter" 暗示仅适用于 Scatter 算子，但实际上承载了所有集合通信算子的 kernel。若 HCOMM 侧后续按算子类型拆分 SO（如 `liballreduce_aicpu_kernel.so`），工具将无法适配
 3. **用户自定义算子场景**：HCCL 业务层未对用户自定义算子的 SO 名称做严格规定，用户可能自行编译出私有 SO（如 `libcustom_alltoall_kernel.so`）。工具目前仅识别上述固定 SO 名称，对于用户自定义算子的私有 SO 将无法加载和仿真
@@ -355,3 +350,5 @@ struct AivOpArgs {
 | **AIV 算子 Op** | 8 个头文件（6 个 HCOMM + 2 个 HCCL） | 仅 proxy/aiv_kernel 模块（AIV 算子仿真） |
 | **AscendC 接口** | 6 个 stub 头文件 | 仅 proxy/aiv_kernel 模块（AIV 算子仿真） |
 | **AICPU 备份** | 8 个本地结构体 + 6 个 kernel 函数 + 4 个 SO 库名 | 仅 device_arm 模块（AICPU 模式 host-device 交互） |
+
+

@@ -17,10 +17,11 @@
 
 namespace HcclSim {
 HcclResult TaskCheckSendRecvSemantics(
-    std::map<RankId, RankMemorySemantics>& allRankMemSemantics, u64 dataSize, RankId srcRank, RankId dstRank);
+    std::map<DeviceId, RankMemorySemantics>& allRankMemSemantics, u64 dataSize, DeviceId srcDeviceId,
+    DeviceId dstDeviceId, const std::vector<DeviceId>& rankToDevice);
 HcclResult TaskCheckSendRecvGroupSemantics(
-    std::map<RankId, RankMemorySemantics>& allRankMemSemantics, u64 dataSize,
-    const std::vector<SendRecvPairParam>& pairs);
+    std::map<DeviceId, RankMemorySemantics>& allRankMemSemantics, u64 dataSize,
+    const std::vector<SendRecvPairParam>& pairs, const std::vector<DeviceId>& rankToDevice);
 } // namespace HcclSim
 
 #endif

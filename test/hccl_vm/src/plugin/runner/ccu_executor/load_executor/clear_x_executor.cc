@@ -8,6 +8,12 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: ccu executor -- ClearX
+ * Executor Author: caiyifan
+ */
+
 #include "clear_x_executor.h"
 
 #include <cstdint>
@@ -24,14 +30,12 @@ REG_CCU_EXECUTOR_CREATE_FUNC_V2(SimCcuV2::LOAD_TYPE, SimCcuV2::CLEARX_CODE, Clea
 void ClearXExecutor::Parser()
 {
     ValidateVersionExclusive(RunnerCcuVersion::CCU_V2, "ClearXExecutor");
-#ifdef BUILD_A6_CCU_INSTR
     xnId_ = instr_.v2.clearX.xnId;
     xmId_ = instr_.v2.clearX.xmId;
     xnIdMode_ = instr_.v2.clearX.xnIdMode;
     xmIdMode_ = instr_.v2.clearX.xmIdMode;
     ckeId_ = instr_.v2.clearX.setCKEId;
     ckeMask_ = instr_.v2.clearX.setCKEMask;
-#endif
 }
 
 void ClearXExecutor::Run()

@@ -8,7 +8,7 @@
  * See LICENSE in the root of the software repository for the full text of the License.
 -->
 
-<script setup>
+﻿<script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { Connection, Cpu, InfoFilled, Share, WarningFilled } from '@element-plus/icons-vue'
 import sidebarHandle from '../assets/sidebar-handle.svg'

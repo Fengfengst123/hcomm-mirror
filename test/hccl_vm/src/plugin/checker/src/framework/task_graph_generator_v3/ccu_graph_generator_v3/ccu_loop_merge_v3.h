@@ -11,6 +11,7 @@
 #ifndef HCCLV2_CCU_LOOP_MERGE_V3_H
 #define HCCLV2_CCU_LOOP_MERGE_V3_H
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <set>
@@ -25,6 +26,16 @@ namespace TaskGraphGeneratorV3 {
     struct CcuLoopCkeOpV3 {
         uint16_t ckeId{INVALID_CCU_CKE};
         uint16_t mask{0};
+    };
+
+    // A6要求一个Loop内waitCKE不能重复使用同一个CKE ID。
+    // 有新特性 A6通过添加空泡以支持CKE复用，但是Checker暂时严格校验 zhangxin
+    class CcuLoopWaitCkeChecker {
+    public:
+        HcclResult Check(size_t instrIndex, CcuLoopCkeOpV3 waitOp);
+
+    private:
+        std::set<uint16_t> usedWaitCkeIds_{};
     };
 
     class CcuLoopInstrV3 {
@@ -50,7 +61,7 @@ namespace TaskGraphGeneratorV3 {
         static std::set<uint16_t> GetUsedCKEFromOps(const std::vector<CcuLoopCkeOpV3>& ops);
 
     public:
-        RankId rankId{INVALID_RANK_ID};
+        DeviceId deviceId{INVALID_DEVICE_ID};
         uint32_t dieId{INVALID_DIE_ID};
         uint16_t instrId{UINT16_MAX};
         std::vector<CcuLoopCkeOpV3> waitOps{};
@@ -140,15 +151,15 @@ namespace TaskGraphGeneratorV3 {
     };
 
     template <typename T>
-    std::shared_ptr<T>
-    EnsureCcuLoopInstr(std::shared_ptr<CcuLoopInstrV3>& instrInLoop, RankId rankId, uint32_t dieId, uint16_t instrId)
+    std::shared_ptr<T> EnsureCcuLoopInstr(
+        std::shared_ptr<CcuLoopInstrV3>& instrInLoop, DeviceId deviceId, uint32_t dieId, uint16_t instrId)
     {
         if (instrInLoop == nullptr) {
             auto newInstr = std::make_shared<T>();
             if (newInstr == nullptr) {
                 return nullptr;
             }
-            newInstr->rankId = rankId;
+            newInstr->deviceId = deviceId;
             newInstr->dieId = dieId;
             newInstr->instrId = instrId;
             instrInLoop = newInstr;

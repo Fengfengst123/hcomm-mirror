@@ -10,6 +10,7 @@
 
 #include "sim_plugin.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <cstdlib>
 #include <fcntl.h>
@@ -113,7 +114,8 @@ HcclVmResult HcclPlugin::Start()
         ::close(fds[0]); // 关闭不需要的读端
         m_stdinFd = fds[1];
 
-        // 建议：设置管道写端为非阻塞模式，防止 PostMessage 时因插件不读取而卡死主程序
+        // 建议：设置管道写端为非阻塞模式，防止 PostMessage
+        // 时因插件不读取而卡死主程序
         int flags = fcntl(m_stdinFd, F_GETFL, 0);
         fcntl(m_stdinFd, F_SETFL, flags | O_NONBLOCK);
 
@@ -187,7 +189,12 @@ HcclVmResult HcclPlugin::Stop()
     bool exited = false;
     auto start = std::chrono::steady_clock::now();
 
-    // 使用 1 秒一次的频率进行非阻塞检查 (满足你之前的 sleep(1) 想法)
+    // 细粒度指数退避轮询: 插件正常退出仅需几十毫秒, 固定1秒粒度的轮询会引入
+    // 平均约1秒的纯等待; 从2ms起倍增至100ms上限, 正常场景近乎即时回收,
+    // 异常场景仍保持低频轮询直至5秒超时(MonitorThread抢先回收时waitpid
+    // 返回ECHILD, 同样视为已退出)
+    auto pollInterval = std::chrono::milliseconds(2);
+    constexpr auto kMaxPollInterval = std::chrono::milliseconds(100);
     while (true) {
         int32_t stas;
         pid_t ret = waitpid(m_pid, &stas, WNOHANG);
@@ -203,7 +210,8 @@ HcclVmResult HcclPlugin::Stop()
             break;
         }
 
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+        std::this_thread::sleep_for(pollInterval);
+        pollInterval = std::min(pollInterval * 2, kMaxPollInterval);
     }
 
     // 4. 超时后不强制 kill，而是输出告警信息

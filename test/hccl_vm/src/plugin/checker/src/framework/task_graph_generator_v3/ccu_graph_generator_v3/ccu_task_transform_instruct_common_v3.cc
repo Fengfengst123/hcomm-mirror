@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2026 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
  * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -8,15 +8,24 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: 用于存放指令公共功能文件
+ * Author: zhanhaifeng、caiyifan
+ * Create: 2025-06-19
+ */
+
 #include "ccu_task_transform_instruct_common_v3.h"
 #include "storage_manager.h"
 
 extern HcclSim::TaskGraphGeneratorV3::AllRankChannelInfoV3 g_allRankChannelInfo;
+extern HcclSim::TaskGraphGeneratorV3::AllDeviceHalfRTTInfoV3 g_allDeviceHalfRTTInfo;
 
 namespace HcclSim {
 namespace TaskGraphGeneratorV3 {
 
     AllRankChannelInfoV3& g_allRankChannelInfo = ::g_allRankChannelInfo;
+    AllDeviceHalfRTTInfoV3& g_allDeviceHalfRTTInfo = ::g_allDeviceHalfRTTInfo;
 
     std::string ParseMSList(const CcuRep::CcuInstr* instr)
     {

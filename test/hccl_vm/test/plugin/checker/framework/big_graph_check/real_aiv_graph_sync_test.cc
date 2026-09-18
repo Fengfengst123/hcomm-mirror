@@ -81,25 +81,16 @@ namespace {
         MakeEvent(RankId rankId, uint32_t blockId, uint32_t srcPipe, uint32_t dstPipe, int32_t eventId)
         {
             AivPipeEvent event;
-            event.rankId = rankId;
-            event.launchIdx = 1;
-            event.blockId = blockId;
-            event.curPipe = dstPipe;
             event.srcPipe = srcPipe;
             event.dstPipe = dstPipe;
             event.eventId = eventId;
             return event;
         }
 
-        static AivFlagSync MakeFlag(RankId currentRank, RankId ownerRank, uint64_t offset, int32_t value)
+        static AivFlagSync MakeFlag(RankId /*currentRank*/, DeviceId ownerDevice, uint64_t offset, int32_t value)
         {
             AivFlagSync flag;
-            flag.currentRank = currentRank;
-            flag.flagOwnerRank = ownerRank;
-            flag.launchIdx = 1;
-            flag.blockId = 0;
-            flag.curPipe = 0;
-            flag.taskId = 3;
+            flag.flagOwnerDevice = ownerDevice;
             flag.commInfoOffset = offset;
             flag.value = value;
             return flag;
@@ -108,7 +99,6 @@ namespace {
         TaskAivPipeBarrier* AddBarrier(const TaskPosition& position, uint32_t taskId)
         {
             AivBarrierInfo info;
-            info.taskLoc = position;
             info.pipeType = 3;
             info.merged = true;
             info.memberTaskIds = {taskId, taskId + 1, taskId + 2};
@@ -118,7 +108,6 @@ namespace {
         TaskAivSyncAll* AddSyncAll(const TaskPosition& position, uint32_t syncRound)
         {
             AivSyncAllInfo info;
-            info.taskLoc = position;
             info.syncRound = syncRound;
             info.merged = true;
             info.memberTaskIds = {18, 19, 20, 267, 268, 269};
@@ -215,7 +204,8 @@ namespace {
             AddEdge(rank0Graph, rank0Start);
             AddEdge(rank1Graph, rank1Start);
 
-            // The three merged pipe queues in the example use queue IDs 3072, 3075 and 3078.
+            // The three merged pipe queues in the example use queue IDs 3072, 3075
+            // and 3078.
             std::vector<TaskAivPipeBarrier*> rank0Pipelines;
             std::vector<TaskAivPipeBarrier*> rank1Pipelines;
             for (uint32_t blockId = 0; blockId < 3; ++blockId) {
@@ -231,7 +221,8 @@ namespace {
                     BuildEventPipeline(rank1Start, 1, 0, blockId, 3072 + blockId * 3, nullptr, nullptr));
             }
 
-            // Each owner has a SendFlag fanning out to local and remote RecvFlag nodes.
+            // Each owner has a SendFlag fanning out to local and remote RecvFlag
+            // nodes.
             graph.flagSend0 = AddNode(
                 std::make_unique<TaskAivSendFlag>(MakeFlag(0, 0, 0x900000, 2)),
                 Position(0, 0, INVALID_STREAM_ID, 3072, 0, 10));

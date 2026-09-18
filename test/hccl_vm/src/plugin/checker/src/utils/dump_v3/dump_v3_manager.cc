@@ -13,8 +13,8 @@
 #include <fstream>
 
 #include "file_utils.h"
-#include "sim_log.h"
 #include "setting_manager.h"
+#include "sim_log.h"
 #include "utils/error_codes.h"
 
 namespace {
@@ -28,7 +28,8 @@ HcclResult DumpV3Manager::Initialize(const std::string& dataId)
     std::lock_guard<std::mutex> lock(m_mutex);
     if (dataId.empty()) {
         HCCL_VM_ERROR(
-            "{} dataId is empty, the dump output path cannot be built, outputRoot=null",
+            "{} dataId is empty, the dump output path cannot be "
+            "built, outputRoot=null",
             MakeErrorCodeText(ErrorCode::DUMP_FAILED));
         return HcclResult::HCCL_E_PARA;
     }
@@ -37,7 +38,8 @@ HcclResult DumpV3Manager::Initialize(const std::string& dataId)
     m_pluginRootDir = HcclSim::GetCurrentPath();
     if (m_pluginRootDir.empty()) {
         HCCL_VM_ERROR(
-            "{} Failed to get the current working directory for dump output, dataId={}",
+            "{} Failed to get the current working directory for dump "
+            "output, dataId={}",
             MakeErrorCodeText(ErrorCode::DUMP_FAILED), m_dataId);
         return HcclResult::HCCL_E_INTERNAL;
     }
@@ -98,7 +100,8 @@ HcclResult DumpV3Manager::WriteMsgpack(const std::string& relativePath, const nl
         nlohmann::json::to_msgpack(document, nlohmann::detail::output_adapter<char>(out));
     } catch (const std::exception& ex) {
         HCCL_VM_ERROR(
-            "{} Failed to serialize dump content into msgpack, file={}, dataId={}, reason={}",
+            "{} Failed to serialize dump content into msgpack, "
+            "file={}, dataId={}, reason={}",
             MakeErrorCodeText(ErrorCode::DUMP_FAILED), fullPath, m_dataId, ex.what());
         return HcclResult::HCCL_E_INTERNAL;
     }
@@ -106,7 +109,8 @@ HcclResult DumpV3Manager::WriteMsgpack(const std::string& relativePath, const nl
     out.flush();
     if (!out.good()) {
         HCCL_VM_ERROR(
-            "{} Failed to flush dump file to disk, file={}, format=msgpack, dataId={}",
+            "{} Failed to flush dump file to disk, file={}, "
+            "format=msgpack, dataId={}",
             MakeErrorCodeText(ErrorCode::DUMP_FAILED), fullPath, m_dataId);
         return HcclResult::HCCL_E_INTERNAL;
     }
@@ -136,14 +140,16 @@ HcclResult DumpV3Manager::WriteJson(const std::string& relativePath, const nlohm
         out << document.dump(2) << std::endl;
     } catch (const std::exception& ex) {
         HCCL_VM_ERROR(
-            "{} Failed to serialize dump content into JSON, file={}, dataId={}, reason={}",
+            "{} Failed to serialize dump content into JSON, file={}, "
+            "dataId={}, reason={}",
             MakeErrorCodeText(ErrorCode::DUMP_FAILED), fullPath, m_dataId, ex.what());
         return HcclResult::HCCL_E_INTERNAL;
     }
 
     if (!out.good()) {
         HCCL_VM_ERROR(
-            "{} Failed to write dump file content, file={}, format=json, dataId={}",
+            "{} Failed to write dump file content, file={}, "
+            "format=json, dataId={}",
             MakeErrorCodeText(ErrorCode::DUMP_FAILED), fullPath, m_dataId);
         return HcclResult::HCCL_E_INTERNAL;
     }

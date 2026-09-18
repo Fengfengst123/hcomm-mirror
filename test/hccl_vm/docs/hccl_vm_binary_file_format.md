@@ -328,8 +328,8 @@ struct FileHeader {
 |  1 | ROCE    | RDMA over Converged Ethernet |
 |  2 | PCIE    | PCIe 通信                    |
 |  3 | SIO     | Socket I/O                   |
-|  4 | UB_CTP | UB CTP 协议                  |
-|  5 | UBC_TP  | UBC TP 协议（历史兼容值，不建议新开发使用） |
+|  4 | UBC_CTP | UBC CTP 协议                 |
+|  5 | UBC_TP  | UBC TP 协议                  |
 |  6 | UB_MEM  | UB 内存协议                  |
 
 ### 6.3 缓冲区类型 (BufferType)

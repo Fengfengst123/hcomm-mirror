@@ -24,16 +24,20 @@ extern "C" {
 
 /**
  * @brief           get module debug loglevel and enableEvent
- * @param [in]      moduleId       moudule id(see log_types.h, eg: CCE), others: invalid
+ * @param [in]      moduleId       moudule id(see log_types.h, eg: CCE), others:
+ * invalid
  * @param [out]     enableEvent    1: enable; 0: disable
- * @return          module level   0: debug, 1: info, 2: warning, 3: error, 4: null output
+ * @return          module level   0: debug, 1: info, 2: warning, 3: error, 4:
+ * null output
  */
 LOG_FUNC_VISIBILITY int32_t dlog_getlevel(int32_t moduleId, int32_t* enableEvent);
 
 /**
  * @brief           set module loglevel and enableEvent
- * @param [in]      moduleId       moudule id(see log_types.h, eg: CCE), -1: all modules, others: invalid
- * @param [in]      level          log level, eg: DLOG_ERROR/DLOG_WARN/DLOG_INFO/DLOG_DEBUG
+ * @param [in]      moduleId       moudule id(see log_types.h, eg: CCE), -1: all
+ * modules, others: invalid
+ * @param [in]      level          log level, eg:
+ * DLOG_ERROR/DLOG_WARN/DLOG_INFO/DLOG_DEBUG
  * @param [in]      enableEvent    1: enable; 0: disable, others:invalid
  * @return          0: SUCCEED, others: FAILED
  */
@@ -42,22 +46,27 @@ LOG_FUNC_VISIBILITY int32_t dlog_setlevel(int32_t moduleId, int32_t level, int32
 /**
  * @brief           check module level enable or not
  * @param [in]      moduleId       module id, eg: CCE
- * @param [in]      logLevel       log level, eg: DLOG_ERROR/DLOG_WARN/DLOG_INFO/DLOG_DEBUG
+ * @param [in]      logLevel       log level, eg:
+ * DLOG_ERROR/DLOG_WARN/DLOG_INFO/DLOG_DEBUG
  * @return          1:enable, 0:disable
  */
 LOG_FUNC_VISIBILITY int32_t CheckLogLevel(int32_t moduleId, int32_t logLevel);
 
 /**
- * @brief           set log attr, default pid is 0, default device id is 0, default process type is APPLICATION
- * @param [in]      logAttrInfo    attr info, include pid(must be larger than 0), process type and device id(chip ID)
+ * @brief           set log attr, default pid is 0, default device id is 0,
+ * default process type is APPLICATION
+ * @param [in]      logAttrInfo    attr info, include pid(must be larger than
+ * 0), process type and device id(chip ID)
  * @return          0: SUCCEED, others: FAILED
  */
 LOG_FUNC_VISIBILITY int32_t DlogSetAttr(LogAttr logAttrInfo);
 
 /**
- * @brief           print log, need va_list variable, exec CheckLogLevel() before call this function
+ * @brief           print log, need va_list variable, exec CheckLogLevel()
+ * before call this function
  * @param[in]       moduleId      module id, eg: CCE
- * @param[in]       level         log level, eg: DLOG_ERROR/DLOG_WARN/DLOG_INFO/DLOG_DEBUG
+ * @param[in]       level         log level, eg:
+ * DLOG_ERROR/DLOG_WARN/DLOG_INFO/DLOG_DEBUG
  * @param[in]       fmt           log content
  * @param[in]       list          variable list of log content
  * @return          NA
@@ -83,7 +92,8 @@ LOG_FUNC_VISIBILITY void DlogFlush(void);
 
 /**
  * @brief           print warning log
- * call CheckLogLevel in advance to optimize performance, call interface with fmt input take time
+ * call CheckLogLevel in advance to optimize performance, call interface with
+ * fmt input take time
  * @param [in]      moduleId      module id, eg: CCE
  * @param [in]      fmt           log content
  * @return          NA
@@ -97,7 +107,8 @@ LOG_FUNC_VISIBILITY void DlogFlush(void);
 
 /**
  * @brief           print info log
- * call CheckLogLevel in advance to optimize performance, call interface with fmt input take time
+ * call CheckLogLevel in advance to optimize performance, call interface with
+ * fmt input take time
  * @param [in]      moduleId      module id, eg: CCE
  * @param [in]      fmt           log content
  * @return          NA
@@ -111,7 +122,8 @@ LOG_FUNC_VISIBILITY void DlogFlush(void);
 
 /**
  * @brief           print debug log
- * call CheckLogLevel in advance to optimize performance, call interface with fmt input take time
+ * call CheckLogLevel in advance to optimize performance, call interface with
+ * fmt input take time
  * @param [in]      moduleId      module id, eg: CCE
  * @param [in]      fmt           log content
  * @return          NA
@@ -125,9 +137,11 @@ LOG_FUNC_VISIBILITY void DlogFlush(void);
 
 /**
  * @brief           print log, need caller to specify level
- * call CheckLogLevel in advance to optimize performance, call interface with fmt input take time
+ * call CheckLogLevel in advance to optimize performance, call interface with
+ * fmt input take time
  * @param [in]      moduleId      module id, eg: CCE
- * @param [in]      level         log level, eg: DLOG_ERROR/DLOG_WARN/DLOG_INFO/DLOG_DEBUG
+ * @param [in]      level         log level, eg:
+ * DLOG_ERROR/DLOG_WARN/DLOG_INFO/DLOG_DEBUG
  * @param [in]      fmt           log content
  * @return          NA
  */
@@ -140,10 +154,12 @@ LOG_FUNC_VISIBILITY void DlogFlush(void);
 
 /**
  * @brief           print log, need caller to specify level and submodule
- * call CheckLogLevel in advance to optimize performance, call interface with fmt input take time
+ * call CheckLogLevel in advance to optimize performance, call interface with
+ * fmt input take time
  * @param [in]      moduleId      module id, eg: CCE
  * @param [in]      submodule     eg: engine
- * @param [in]      level         log level, eg: DLOG_ERROR/DLOG_WARN/DLOG_INFO/DLOG_DEBUG
+ * @param [in]      level         log level, eg:
+ * DLOG_ERROR/DLOG_WARN/DLOG_INFO/DLOG_DEBUG
  * @param [in]      fmt           log content
  * @return          NA
  */
@@ -157,7 +173,8 @@ LOG_FUNC_VISIBILITY void DlogFlush(void);
 /**
  * @brief           record log
  * @param [in]      moduleId   module id, eg: SLOG
- * @param [in]      level      log level, eg: DLOG_ERROR/DLOG_WARN/DLOG_INFO/DLOG_DEBUG
+ * @param [in]      level      log level, eg:
+ * DLOG_ERROR/DLOG_WARN/DLOG_INFO/DLOG_DEBUG
  * @param [in]      fmt        log content
  * @return:         NA
  */

@@ -8,49 +8,16 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#include "dump/dump_graph.h"
+#include "dump/validation_issue_recorder.h"
 #include "dump/dump_json_utils.h"
 #include "dump/dump_manager.h"
 #include "dump/dump_run_manifest.h"
-#include "dump/validation_issue_recorder.h"
 
 namespace HcclSim {
 using Json = nlohmann::json;
 
 static const std::string VALIDATION_ISSUE_DUMP_TYPE = "validation_issues";
 static const std::string VALIDATION_ISSUE_DUMP_PATH = "validation/issues.msgpack";
-
-static Json DumpIssueTaskNodeRefToJson(const TaskNode* node)
-{
-    Json nodeRefJson = Json::object();
-    if (node == nullptr) {
-        return nodeRefJson;
-    }
-    nodeRefJson["rank_id"] = node->rankIdx;
-    nodeRefJson["queue_id"] = node->queIdx;
-    nodeRefJson["pos"] = node->pos;
-    return nodeRefJson;
-}
-
-Json DumpIssueTaskNodeToJson(TaskNode* node, const std::string& nodeId)
-{
-    Json nodeJson = Json::object();
-    if (node == nullptr) {
-        return nodeJson;
-    }
-
-    nodeJson = DumpIssueTaskNodeRefToJson(node);
-    if (!nodeId.empty()) {
-        nodeJson["node_id"] = nodeId;
-    } else if (node->task != nullptr && !node->task->GetTaskId().empty()) {
-        nodeJson["node_id"] = node->task->GetTaskId();
-    } else if (node->rankIdx != static_cast<RankId>(-1)) {
-        nodeJson["node_id"] = StringFormat("r%un%u", node->rankIdx, node->pos);
-    } else {
-        nodeJson["node_id"] = "dummy_start";
-    }
-    return nodeJson;
-}
 
 void ValidationIssueRecorder::Reset()
 {

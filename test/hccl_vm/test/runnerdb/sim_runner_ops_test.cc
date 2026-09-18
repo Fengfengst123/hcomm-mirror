@@ -14,6 +14,7 @@
 #include <gtest/gtest.h>
 #include <unistd.h>
 
+#include "db_sim_runner_common.h"
 #include "db_sim_runner_db.h"
 #include "db_sim_runner_ops.h"
 #include "db_sim_sqlite_db.h"
@@ -31,6 +32,7 @@ void CleanUpDb()
 void SetupTestData()
 {
     CleanUpDb();
+    g_cur_comm_key = 0;
     sim::SqliteDatabase::SetDbPath(kTestDbPath);
     SimRunnerSqliteDB::Instance().ClearAll();
 
@@ -57,10 +59,12 @@ void SetupTestData()
     ctx.run_id = 1;
     RunnerDB::Add<sim::Context>(ctx);
 
-    sim::Rank rank{};
-    rank.rank_id = 0;
-    rank.device_id = 1;
-    RunnerDB::Add<sim::Rank>(rank);
+    sim::Communicator comm{};
+    std::strncpy(comm.comm_id, "test_comm", sizeof(comm.comm_id) - 1);
+    comm.rank_size = 1;
+    comm.rank_id = 0;
+    comm.device_id = 1;
+    g_cur_comm_key = RunnerDB::Add<sim::Communicator>(comm);
 }
 } // namespace
 
@@ -109,29 +113,6 @@ TEST_F(SimRunnerOpsTest, GetHostSize_ReturnsCorrectCount)
     EXPECT_GE(size, 1);
 }
 
-TEST_F(SimRunnerOpsTest, GetCurrentStreamId_SameKey_ReturnsSameId)
-{
-    uint64_t streamKey = 1000;
-
-    uint32_t id1 = sim::GetCurrentStreamId(streamKey);
-    uint32_t id2 = sim::GetCurrentStreamId(streamKey);
-
-    EXPECT_EQ(id1, id2);
-}
-
-TEST_F(SimRunnerOpsTest, GetCurrentStreamId_DifferentKeys_ReturnsDifferentIds)
-{
-    uint32_t id1 = sim::GetCurrentStreamId(1000);
-    uint32_t id2 = sim::GetCurrentStreamId(2000);
-    uint32_t id3 = sim::GetCurrentStreamId(3000);
-
-    EXPECT_NE(id1, id2);
-    EXPECT_NE(id2, id3);
-    EXPECT_EQ(id1, static_cast<uint32_t>(0));
-    EXPECT_EQ(id2, static_cast<uint32_t>(1));
-    EXPECT_EQ(id3, static_cast<uint32_t>(2));
-}
-
 TEST_F(SimRunnerOpsTest, SetCurrCtxTls_UpdatesContext)
 {
     bool ret = sim::SetCurrCtxTls(1);
@@ -157,71 +138,32 @@ TEST_F(SimRunnerOpsTest, GetCurrDeviceKey_WithInvalidCtx_ReturnsZero)
     EXPECT_EQ(deviceKey, 0);
 }
 
-TEST_F(SimRunnerOpsTest, GetRankIdByCtxId_WithValidCtx_ReturnsRankId)
+TEST_F(SimRunnerOpsTest, GetDeviceIdByCtxId_WithValidCtx_ReturnsDeviceId)
 {
-    uint64_t rankId = sim::GetRankIdByCtxId(1);
+    uint64_t deviceId = sim::GetDeviceIdByCtxId(1);
 
-    EXPECT_EQ(rankId, 0);
+    EXPECT_EQ(deviceId, 1);
 }
 
-TEST_F(SimRunnerOpsTest, GetRankIdByCtxId_WithInvalidCtx_ReturnsZero)
+TEST_F(SimRunnerOpsTest, GetDeviceIdByCtxId_WithInvalidCtx_ReturnsZero)
 {
-    uint64_t rankId = sim::GetRankIdByCtxId(99999);
+    uint64_t deviceId = sim::GetDeviceIdByCtxId(99999);
 
-    EXPECT_EQ(rankId, 0);
+    EXPECT_EQ(deviceId, 0);
 }
 
-TEST_F(SimRunnerOpsTest, GetCurrentStreamId_SequentialIncrease)
-{
-    uint32_t firstId = sim::GetCurrentStreamId(static_cast<uint64_t>(100));
-    EXPECT_GE(firstId, static_cast<uint32_t>(0));
-}
-
-class SimRunnerOpsRankTest : public testing::Test {
-protected:
-    void SetUp() override
-    {
-        SetupTestData();
-
-        sim::Device device{};
-        auto ret = RunnerDB::GetOneByPred<sim::Device>([](const sim::Device& d) {
-            return d.physical_id == 0;
-        });
-        ASSERT_TRUE(ret.second);
-
-        sim::Rank rank1{};
-        rank1.rank_id = 1;
-        rank1.device_id = ret.first.id;
-        RunnerDB::Add<sim::Rank>(rank1);
-
-        sim::Rank rank2{};
-        rank2.rank_id = 2;
-        rank2.device_id = ret.first.id;
-        RunnerDB::Add<sim::Rank>(rank2);
-    }
-
-    void TearDown() override { CleanUpDb(); }
-};
-
-TEST_F(SimRunnerOpsRankTest, GetRankSize_AfterAddingRanks)
-{
-    uint32_t size = sim::GetRankSize();
-
-    EXPECT_GE(size, 1);
-}
-
-TEST_F(SimRunnerOpsRankTest, GetCurrRankId_WithValidContext)
+TEST_F(SimRunnerOpsTest, GetCurrDeviceId_WithValidContext)
 {
     sim::SetCurrCtxTls(1);
 
-    uint64_t rankId = sim::GetCurrRankId();
+    uint64_t deviceId = sim::GetCurrDeviceId();
 
-    EXPECT_GE(rankId, 0);
+    EXPECT_EQ(deviceId, 1);
 }
 
-// ==================== 新增：GetCurrRankId 错误路径 ====================
+// ==================== GetCurrDeviceId 错误路径 ====================
 
-class SimRunnerOpsGetCurrRankIdTest : public testing::Test {
+class SimRunnerOpsGetCurrDeviceIdTest : public testing::Test {
 protected:
     void SetUp() override
     {
@@ -233,65 +175,59 @@ protected:
     void TearDown() override { CleanUpDb(); }
 };
 
-TEST_F(SimRunnerOpsGetCurrRankIdTest, GetCurrRankId_InvalidCtx_ReturnsZero)
+TEST_F(SimRunnerOpsGetCurrDeviceIdTest, GetCurrDeviceId_InvalidCtx_ReturnsZero)
 {
     // 设置一个不存在的 context id
     sim::SetCurrCtxTls(99999);
-    uint64_t rankId = sim::GetCurrRankId();
-    EXPECT_EQ(rankId, 0);
+    uint64_t deviceId = sim::GetCurrDeviceId();
+    EXPECT_EQ(deviceId, 0);
 }
 
-TEST_F(SimRunnerOpsGetCurrRankIdTest, GetCurrRankId_NoRankForDevice_ReturnsZero)
+TEST_F(SimRunnerOpsGetCurrDeviceIdTest, GetCurrDeviceId_MissingContextDevice_ReturnsZero)
 {
-    // 添加一个 context，其 device_id 没有对应的 rank
-    sim::Device device2{};
-    device2.server_id = 1;
-    device2.logic_id = 2;
-    device2.physical_id = 2;
-    RunnerDB::Add<sim::Device>(device2);
-
+    // 添加一个 context，其 device_id 没有对应的设备。
     sim::Context ctx2{};
-    ctx2.device_id = 2; // device_id=2 没有对应的 rank
+    ctx2.device_id = 999;
     ctx2.is_default = 1;
     ctx2.run_id = 1;
-    RunnerDB::Add<sim::Context>(ctx2);
+    const uint64_t ctxId = RunnerDB::Add<sim::Context>(ctx2);
 
-    sim::SetCurrCtxTls(2);
-    uint64_t rankId = sim::GetCurrRankId();
-    EXPECT_EQ(rankId, 0);
+    sim::SetCurrCtxTls(ctxId);
+    uint64_t deviceId = sim::GetCurrDeviceId();
+    EXPECT_EQ(deviceId, 0);
 }
 
-// ==================== 新增：GetRankIdByCtxId 错误路径 ====================
+// ==================== GetDeviceIdByCtxId 错误路径 ====================
 
-class SimRunnerOpsGetRankIdByCtxIdTest : public testing::Test {
+class SimRunnerOpsGetDeviceIdByCtxIdTest : public testing::Test {
 protected:
     void SetUp() override { SetupTestData(); }
 
     void TearDown() override { CleanUpDb(); }
 };
 
-TEST_F(SimRunnerOpsGetRankIdByCtxIdTest, GetRankIdByCtxId_InvalidCtx_ReturnsZero)
+TEST_F(SimRunnerOpsGetDeviceIdByCtxIdTest, GetDeviceIdByCtxId_InvalidCtx_ReturnsZero)
 {
-    uint64_t rankId = sim::GetRankIdByCtxId(99999);
-    EXPECT_EQ(rankId, 0);
+    uint64_t deviceId = sim::GetDeviceIdByCtxId(99999);
+    EXPECT_EQ(deviceId, 0);
 }
 
-TEST_F(SimRunnerOpsGetRankIdByCtxIdTest, GetRankIdByCtxId_NoDevice_ReturnsZero)
+TEST_F(SimRunnerOpsGetDeviceIdByCtxIdTest, GetDeviceIdByCtxId_NoDevice_ReturnsZero)
 {
     // 添加一个 context，其 device_id 没有对应的 device
     sim::Context ctx2{};
     ctx2.device_id = 999; // device_id=999 不存在
     ctx2.is_default = 1;
     ctx2.run_id = 1;
-    RunnerDB::Add<sim::Context>(ctx2);
+    const uint64_t ctxId = RunnerDB::Add<sim::Context>(ctx2);
 
-    uint64_t rankId = sim::GetRankIdByCtxId(2);
-    EXPECT_EQ(rankId, 0);
+    uint64_t deviceId = sim::GetDeviceIdByCtxId(ctxId);
+    EXPECT_EQ(deviceId, 0);
 }
 
 // ==================== 新增：GetCurrDeviceKey 错误路径 ====================
 
-TEST_F(SimRunnerOpsGetCurrRankIdTest, GetCurrDeviceKey_InvalidCtx_ReturnsZero)
+TEST_F(SimRunnerOpsGetCurrDeviceIdTest, GetCurrDeviceKey_InvalidCtx_ReturnsZero)
 {
     sim::SetCurrCtxTls(99999);
     uint64_t deviceKey = sim::GetCurrDeviceKey();

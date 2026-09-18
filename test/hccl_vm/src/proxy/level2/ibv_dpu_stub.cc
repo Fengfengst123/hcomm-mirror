@@ -1,0 +1,437 @@
+/**
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd.
+ * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+ * CANN Open Software License Agreement Version 2.0 (the "License").
+ * Please refer to the License for details. You may not use this file except in compliance with the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
+ */
+
+#define HCCL_VM_MODULE "IBV_DPU_STUB"
+
+#include "ibv_dpu_stub.h"
+#include "db_sim_runner_db.h"
+#include "hccl_proxy_common.h"
+#include "sim_common_defs.h"
+#include "sim_log.h"
+#include "store_sim_store_pub.h"
+#include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <cstdint>
+#include <cstring>
+#include <mutex>
+#include <thread>
+
+static uint64_t GetElapsedUs()
+{
+    static std::atomic<uint64_t> s_firstUs{0};
+    auto nowUs
+        = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch())
+              .count();
+    uint64_t firstUs = s_firstUs.load(std::memory_order_relaxed);
+    if (firstUs == 0) {
+        firstUs = nowUs;
+        s_firstUs.store(firstUs, std::memory_order_relaxed);
+    }
+    return nowUs - firstUs;
+}
+
+static uint16_t GetTidShort()
+{
+    return static_cast<uint16_t>(std::hash<std::thread::id>{}(std::this_thread::get_id()) & 0xFFFF);
+}
+
+IbvDpuContext g_dpuCtx;
+
+static constexpr uint8_t DPU_PROTOCOL_ROCE = 2;
+
+static uint64_t GetDpuStreamIdByRank(uint32_t rankId)
+{
+    auto dpuRet = RunnerDB::GetOneByPred<sim::DpuRankInfo>([rankId](const sim::DpuRankInfo& d) {
+        return d.rank_id == rankId;
+    });
+    if (dpuRet.second) {
+        if (dpuRet.first.stream_id != 0) {
+            return dpuRet.first.stream_id;
+        }
+    }
+
+    HCCL_VM_ERROR("cannot find streamId on dpu, rankId={}", rankId);
+    return 0;
+}
+
+static std::atomic<uint32_t> s_notifySeq{1};
+
+static inline uint32_t MakeUniqueNotifyId(uint32_t rank)
+{
+    return (((rank + 1) & 0xFFFFu) << 16) | (s_notifySeq.fetch_add(1, std::memory_order_relaxed) & 0xFFFFu);
+}
+
+void RegisterDpuQp(
+    ibv_qp* fakeQp, uint64_t dbQpId, uint32_t qpNum, uint32_t localRankId, ibv_cq* sendCq, ibv_cq* recvCq)
+{
+    std::lock_guard<std::mutex> lock(g_dpuCtx.mtx);
+    g_dpuCtx.qpInfo[fakeQp] = {dbQpId, qpNum, localRankId, INVALID_RANK, {}, sendCq, recvCq, false};
+    g_dpuCtx.sendCqToQp[sendCq] = fakeQp;
+    g_dpuCtx.recvCqToQp[recvCq] = fakeQp;
+    g_dpuCtx.pendingWqeCount[sendCq] = 0;
+}
+
+#ifdef __cplusplus
+extern "C" {
+#endif // __cplusplus
+
+int IbvPostSendStub(struct ibv_qp* qp, struct ibv_send_wr* wr, struct ibv_send_wr** bad_wr);
+int IbvPostRecvStub(struct ibv_qp* qp, struct ibv_recv_wr* wr, struct ibv_recv_wr** bad_wr);
+int IbvPollCqStub(struct ibv_cq* cq, int num_entries, struct ibv_wc* wc);
+
+struct ibv_context* CreateFakeIbvContext()
+{
+    static struct ibv_context_ops fakeOps = {
+        .poll_cq = IbvPollCqStub,
+        .post_send = IbvPostSendStub,
+        .post_recv = IbvPostRecvStub,
+    };
+    static struct ibv_context fakeCtx {};
+    fakeCtx.ops = fakeOps;
+    return &fakeCtx;
+}
+
+struct ibv_cq* CreateFakeCq(uint32_t cqe)
+{
+    auto* cq = new ibv_cq{};
+    cq->context = CreateFakeIbvContext();
+    cq->cqe = cqe;
+    return cq;
+}
+
+struct ibv_qp* CreateFakeQp(struct ibv_cq* sendCq, struct ibv_cq* recvCq, uint32_t qpNum)
+{
+    auto* qp = new ibv_qp{};
+    qp->context = CreateFakeIbvContext();
+    qp->send_cq = sendCq;
+    qp->recv_cq = recvCq;
+    qp->qp_num = qpNum;
+    qp->state = IBV_QPS_RESET;
+    return qp;
+}
+
+static void EmitNotifyRecordTask(struct ibv_send_wr* wr, const DpuQpInfo& qpInfo)
+{
+    uint32_t checkerNotifyId = MakeUniqueNotifyId(qpInfo.localRankId);
+
+    HcclTaskMetaData task{};
+    task.taskType = HccLTaskMetaType::NOTIFY_RECORD;
+    task.rankId = qpInfo.localRankId;
+    task.streamId = GetDpuStreamIdByRank(qpInfo.localRankId);
+    task.taskData.notify.srcRankId = qpInfo.localRankId;
+    task.taskData.notify.notifyId = checkerNotifyId;
+    task.taskData.notify.dstRankId = qpInfo.remoteRankId;
+    task.taskData.notify.notifyCount = 1;
+    task.taskData.notify.protocol = DPU_PROTOCOL_ROCE;
+
+    uint32_t idx = 0;
+    InsertTaskToCollection(&task, &idx);
+
+    if (qpInfo.remoteRankId != INVALID_RANK) {
+        sim::DpuPendingNotify pending{};
+        pending.dstRankId = qpInfo.remoteRankId;
+        pending.notifyId = checkerNotifyId;
+        pending.srcRankId = qpInfo.localRankId;
+        pending.immData = wr->imm_data;
+        pending.consumed = 0;
+        auto pid = RunnerDB::Add<sim::DpuPendingNotify>(pending);
+        HCCL_VM_INFO(
+            "postSend::NotifyRecord: DpuPendingNotify INSERT id={} "
+            "destRank={} srcRank={} notifyId={} immData={}",
+            pid, pending.dstRankId, pending.srcRankId, pending.notifyId, pending.immData);
+    } else {
+        HCCL_VM_WARN(
+            "postSend::NotifyRecord: DpuPendingNotify SKIPPED "
+            "(remoteRankId=INVALID) localRank={}",
+            qpInfo.localRankId);
+    }
+}
+
+static void EmitWriteWithNotifyTask(struct ibv_send_wr* wr, const DpuQpInfo& qpInfo)
+{
+    HcclTaskMetaData memTask{};
+    memTask.taskType = HccLTaskMetaType::MEM_CPY;
+    memTask.rankId = qpInfo.localRankId;
+    memTask.streamId = GetDpuStreamIdByRank(qpInfo.localRankId);
+    memTask.taskData.transMem.srcRankId = qpInfo.localRankId;
+    memTask.taskData.transMem.srcOffset
+        = sim::GetVirPtrByDevPtr(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(wr->sg_list[0].addr)));
+    memTask.taskData.transMem.dstRankId = qpInfo.remoteRankId;
+    memTask.taskData.transMem.dstOffset
+        = sim::TransRemoteAddrToVirtualByRank(wr->wr.rdma.remote_addr, qpInfo.remoteRankId);
+    memTask.taskData.transMem.len = wr->sg_list[0].length;
+    memTask.taskData.transMem.protocol = DPU_PROTOCOL_ROCE;
+
+    uint32_t idx = 0;
+    InsertTaskToCollection(&memTask, &idx);
+
+    uint32_t checkerNotifyId = MakeUniqueNotifyId(qpInfo.localRankId);
+
+    HcclTaskMetaData nrTask{};
+    nrTask.taskType = HccLTaskMetaType::NOTIFY_RECORD;
+    nrTask.rankId = qpInfo.localRankId;
+    nrTask.streamId = GetDpuStreamIdByRank(qpInfo.localRankId);
+    nrTask.taskData.notify.srcRankId = qpInfo.localRankId;
+    nrTask.taskData.notify.notifyId = checkerNotifyId;
+    nrTask.taskData.notify.dstRankId = qpInfo.remoteRankId;
+    nrTask.taskData.notify.notifyCount = 1;
+    nrTask.taskData.notify.protocol = DPU_PROTOCOL_ROCE;
+    InsertTaskToCollection(&nrTask, &idx);
+
+    if (qpInfo.remoteRankId != INVALID_RANK) {
+        sim::DpuPendingNotify pending{};
+        pending.dstRankId = qpInfo.remoteRankId;
+        pending.notifyId = checkerNotifyId;
+        pending.srcRankId = qpInfo.localRankId;
+        pending.immData = wr->imm_data;
+        pending.consumed = 0;
+        auto pid = RunnerDB::Add<sim::DpuPendingNotify>(pending);
+        HCCL_VM_INFO(
+            "postSend::WriteWithNotify: DpuPendingNotify INSERT id={} "
+            "destRank={} srcRank={} notifyId={} immData={}",
+            pid, pending.dstRankId, pending.srcRankId, pending.notifyId, pending.immData);
+    } else {
+        HCCL_VM_WARN(
+            "postSend::WriteWithNotify: DpuPendingNotify SKIPPED "
+            "(remoteRankId=INVALID) localRank={}",
+            qpInfo.localRankId);
+    }
+}
+
+static void EmitMemCpyTask(struct ibv_send_wr* wr, const DpuQpInfo& qpInfo, bool isRead)
+{
+    if (wr->num_sge == 0 || wr->sg_list == nullptr)
+        return;
+
+    HcclTaskMetaData task{};
+    task.taskType = HccLTaskMetaType::MEM_CPY;
+    task.rankId = qpInfo.localRankId;
+    task.streamId = GetDpuStreamIdByRank(qpInfo.localRankId);
+
+    if (isRead) {
+        task.taskData.transMem.srcRankId = qpInfo.remoteRankId;
+        task.taskData.transMem.srcOffset
+            = sim::TransRemoteAddrToVirtualByRank(wr->wr.rdma.remote_addr, qpInfo.remoteRankId);
+        task.taskData.transMem.dstRankId = qpInfo.localRankId;
+        task.taskData.transMem.dstOffset
+            = sim::GetVirPtrByDevPtr(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(wr->sg_list[0].addr)));
+    } else {
+        task.taskData.transMem.srcRankId = qpInfo.localRankId;
+        task.taskData.transMem.srcOffset
+            = sim::GetVirPtrByDevPtr(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(wr->sg_list[0].addr)));
+        task.taskData.transMem.dstRankId = qpInfo.remoteRankId;
+        task.taskData.transMem.dstOffset
+            = sim::TransRemoteAddrToVirtualByRank(wr->wr.rdma.remote_addr, qpInfo.remoteRankId);
+    }
+    task.taskData.transMem.len = wr->sg_list[0].length;
+    task.taskData.transMem.protocol = DPU_PROTOCOL_ROCE;
+
+    uint32_t idx = 0;
+    InsertTaskToCollection(&task, &idx);
+}
+
+static void EmitHybridNotifyRecordTask(struct ibv_send_wr* wr, const DpuQpInfo& qpInfo)
+{
+    HCCL_VM_INFO("EmitHybridNotifyRecordTask STUB");
+    uint32_t checkerNotifyId = MakeUniqueNotifyId(qpInfo.localRankId);
+
+    HcclTaskMetaData task{};
+    task.taskType = HccLTaskMetaType::NOTIFY_RECORD;
+    task.rankId = qpInfo.localRankId;
+    task.streamId = GetDpuStreamIdByRank(qpInfo.localRankId);
+    task.taskData.notify.srcRankId = qpInfo.localRankId;
+    task.taskData.notify.notifyId = checkerNotifyId;
+    task.taskData.notify.dstRankId = qpInfo.remoteRankId;
+    task.taskData.notify.notifyCount = 1;
+    task.taskData.notify.protocol = DPU_PROTOCOL_ROCE;
+
+    uint32_t idx = 0;
+    InsertTaskToCollection(&task, &idx);
+
+    if (qpInfo.remoteRankId != INVALID_RANK) {
+        sim::DpuPendingNotify pending{};
+        pending.dstRankId = qpInfo.remoteRankId;
+        pending.notifyId = checkerNotifyId;
+        pending.srcRankId = qpInfo.localRankId;
+        pending.immData = 0;
+        pending.consumed = 0;
+        auto pid = RunnerDB::Add<sim::DpuPendingNotify>(pending);
+        HCCL_VM_INFO(
+            "postSend::HybridNotify: DpuPendingNotify INSERT id={} "
+            "destRank={} srcRank={} notifyId={}",
+            pid, pending.dstRankId, pending.srcRankId, pending.notifyId);
+    } else {
+        HCCL_VM_WARN(
+            "postSend::HybridNotify: DpuPendingNotify SKIPPED "
+            "(remoteRankId=INVALID) localRank={}",
+            qpInfo.localRankId);
+    }
+}
+
+static bool IsHybridNotifyAddr(uint64_t remoteAddr) { return g_dpuCtx.hybridNotifyAddrSet.count(remoteAddr) > 0; }
+
+static void ProcessSendWr(struct ibv_send_wr* wr, const DpuQpInfo& qpInfo)
+{
+    switch (wr->opcode) {
+        case IBV_WR_RDMA_WRITE_WITH_IMM:
+            if (wr->num_sge > 0 && wr->sg_list && wr->sg_list[0].length > 0) {
+                EmitWriteWithNotifyTask(wr, qpInfo);
+            } else {
+                EmitNotifyRecordTask(wr, qpInfo);
+            }
+            break;
+
+        case IBV_WR_RDMA_WRITE:
+            if (wr->num_sge > 0 && wr->sg_list && IsHybridNotifyAddr(wr->wr.rdma.remote_addr)) {
+                EmitHybridNotifyRecordTask(wr, qpInfo);
+            } else {
+                EmitMemCpyTask(wr, qpInfo, false);
+            }
+            break;
+
+        case IBV_WR_RDMA_READ:
+            EmitMemCpyTask(wr, qpInfo, true);
+            break;
+
+        default:
+            HCCL_VM_WARN("IbvPostSendStub: unhandled opcode {}", static_cast<int>(wr->opcode));
+            break;
+    }
+}
+
+static uint32_t ConsumeDpuPendingNotifyAndEmit(const DpuQpInfo& qpInfo)
+{
+    uint32_t myRank = qpInfo.localRankId;
+    uint32_t expectedSrcRank = qpInfo.remoteRankId;
+
+    auto pending
+        = RunnerDB::GetOneByPred<sim::DpuPendingNotify>([myRank, expectedSrcRank](const sim::DpuPendingNotify& p) {
+              return p.dstRankId == myRank && p.srcRankId == expectedSrcRank && p.consumed == 0;
+          });
+
+    if (!pending.second) {
+        return UINT32_MAX;
+    }
+
+    RunnerDB::Update<sim::DpuPendingNotify>(pending.first.id, [](sim::DpuPendingNotify& p) {
+        p.consumed = 1;
+    });
+
+    HcclTaskMetaData task{};
+    task.taskType = HccLTaskMetaType::NOTIFY_WAIT;
+    task.rankId = myRank;
+    task.streamId = GetDpuStreamIdByRank(myRank);
+    task.taskData.notify.srcRankId = pending.first.srcRankId;
+    task.taskData.notify.notifyId = pending.first.notifyId;
+    task.taskData.notify.dstRankId = myRank;
+    task.taskData.notify.notifyCount = 1;
+    task.taskData.notify.protocol = DPU_PROTOCOL_ROCE;
+
+    uint32_t idx = 0;
+    InsertTaskToCollection(&task, &idx);
+
+    HCCL_VM_INFO(
+        "pollCq::consumePending: FOUND id={} destRank={} srcRank={} "
+        "notifyId={} immData={} -> NOTIFY_WAIT emitted",
+        pending.first.id, pending.first.dstRankId, pending.first.srcRankId, pending.first.notifyId,
+        pending.first.immData);
+
+    return pending.first.immData;
+}
+
+int IbvPostSendStub(struct ibv_qp* qp, struct ibv_send_wr* wr, struct ibv_send_wr** bad_wr)
+{
+    // 锁顺序说明：全程持有 g_dpuCtx.mtx，以保证 qpInfo map
+    // 查询、pendingWqeCount 计数与 ProcessSendWr 产生的 notify
+    // 配对/任务插入的一致性。RunnerDB/InsertTaskToCollection 内部锁不会反向获取
+    // g_dpuCtx.mtx，无锁循环。
+    std::lock_guard<std::mutex> lock(g_dpuCtx.mtx);
+    auto it = g_dpuCtx.qpInfo.find(qp);
+    if (it == g_dpuCtx.qpInfo.end()) {
+        return 0;
+    }
+
+    int wrCount = 0;
+    for (struct ibv_send_wr* cur = wr; cur != nullptr; cur = cur->next) {
+        wrCount++;
+    }
+    if (qp->send_cq != nullptr) {
+        g_dpuCtx.pendingWqeCount[qp->send_cq] += wrCount;
+    }
+
+    if (!it->second.isDpu) {
+        return 0;
+    }
+
+    const auto& qpInfo = it->second;
+    for (struct ibv_send_wr* cur = wr; cur != nullptr; cur = cur->next) {
+        ProcessSendWr(cur, qpInfo);
+    }
+
+    HCCL_VM_INFO(
+        "[IBV-POST] tid={:#x} elapsed={}us qp={} local={} remote={} "
+        "firstOp={} firstImm={} WRcount={}",
+        GetTidShort(), GetElapsedUs(), (void*)qp, qpInfo.localRankId, qpInfo.remoteRankId, static_cast<int>(wr->opcode),
+        wr->imm_data, wrCount);
+
+    return 0;
+}
+
+// recv 为 no-op：hostdpu 模拟层中接收完成依赖 send 侧生成的 notify 在 poll_cq
+// 中配对， 此处不维护 recv 队列，bad_wr 出参不设置。
+int IbvPostRecvStub(struct ibv_qp* qp, struct ibv_recv_wr* wr, struct ibv_recv_wr** bad_wr) { return 0; }
+
+int IbvPollCqStub(struct ibv_cq* cq, int num_entries, struct ibv_wc* wc)
+{
+    if (num_entries < 1 || wc == nullptr)
+        return 0;
+
+    // 锁顺序说明：同 IbvPostSendStub，poll_cq 需与 post_send 对 g_dpuCtx 的
+    // pendingWqeCount/ notify 配对状态做原子化读写，故全程持 g_dpuCtx.mtx。
+    std::lock_guard<std::mutex> lock(g_dpuCtx.mtx);
+
+    auto recvIt = g_dpuCtx.recvCqToQp.find(cq);
+    if (recvIt == g_dpuCtx.recvCqToQp.end()) {
+        auto& wqeCnt = g_dpuCtx.pendingWqeCount[cq];
+        int toComplete = std::min(static_cast<int>(num_entries), wqeCnt);
+        for (int i = 0; i < toComplete; i++) {
+            std::memset(&wc[i], 0, sizeof(struct ibv_wc));
+            wc[i].status = IBV_WC_SUCCESS;
+            wc[i].opcode = IBV_WC_RDMA_WRITE;
+        }
+        wqeCnt -= toComplete;
+        return toComplete;
+    }
+
+    ibv_qp* qp = recvIt->second;
+    DpuQpInfo qpInfo{};
+    auto qIt = g_dpuCtx.qpInfo.find(qp);
+    if (qIt != g_dpuCtx.qpInfo.end()) {
+        qpInfo = qIt->second;
+    }
+
+    uint32_t matched = ConsumeDpuPendingNotifyAndEmit(qpInfo);
+    if (matched == UINT32_MAX) {
+        return 0;
+    }
+
+    std::memset(&wc[0], 0, sizeof(struct ibv_wc));
+    wc[0].status = IBV_WC_SUCCESS;
+    wc[0].opcode = IBV_WC_RECV_RDMA_WITH_IMM;
+    wc[0].wc_flags = IBV_WC_WITH_IMM;
+    wc[0].imm_data = matched;
+    wc[0].qp_num = qp->qp_num;
+    return 1;
+}
+
+#ifdef __cplusplus
+}
+#endif // __cplusplus

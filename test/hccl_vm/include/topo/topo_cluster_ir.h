@@ -20,7 +20,7 @@ enum class LinkType { UNKNOWN, PEER2PEER, PEER2NET };
 
 enum class TopoType { UNKNOWN, MESH_1D, MESH_2D, CLOS, RING };
 
-enum class Protocol { UNKNOWN, UB_CTP, UB_MEM, UB_TP, ROCE };
+enum class Protocol { UNKNOWN, UB_CTP, UB_MEM, UB_TP, UBG, UBOE, ROCE };
 
 enum class Position { UNKNOWN, DEVICE, HOST };
 
@@ -54,6 +54,7 @@ struct Port {
     TopoType topoType;
     int topoInstanceId;
     Position position;
+    std::string netInstanceId;
 
     Port()
         : portId(""),
@@ -65,7 +66,8 @@ struct Port {
           protocols(),
           topoType(TopoType::UNKNOWN),
           topoInstanceId(0),
-          position(Position::UNKNOWN)
+          position(Position::UNKNOWN),
+          netInstanceId("")
     {}
 };
 

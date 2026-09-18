@@ -11,13 +11,14 @@
 #ifndef SIM_SUB_PROCESS_MANAGER_H
 #define SIM_SUB_PROCESS_MANAGER_H
 
-#include <sys/types.h>
-#include <cstdint>
-#include <mutex>
-#include <map>
-#include <string>
-#include <vector>
 #include "sim_aicpu_pipe_msg.h"
+#include <cstdint>
+#include <map>
+#include <mutex>
+#include <string>
+#include <sys/types.h>
+#include <sys/uio.h>
+#include <vector>
 
 namespace sim {
 
@@ -46,6 +47,10 @@ public:
         uint8_t reqCmd, const void* reqData, uint32_t reqLen, uint8_t& rspCmd, void* rspData, uint32_t rspMaxLen,
         uint32_t& rspLen);
 
+    int RequestV(
+        uint8_t reqCmd, const struct iovec* reqIov, uint32_t reqSegCnt, uint8_t& rspCmd, void* rspData,
+        uint32_t rspMaxLen, uint32_t& rspLen);
+
 private:
     static constexpr int kH2dReadFd = 200;
     static constexpr int kD2hWriteFd = 201;
@@ -60,6 +65,7 @@ private:
     int WaitForReady();
 
     int HostSendMsg(uint8_t cmd, const void* data, uint32_t len);
+    int HostSendMsgV(uint8_t cmd, const struct iovec* iov, uint32_t iovcnt);
     int HostRecvMsg(uint8_t& outCmd, void* outData, uint32_t maxLen, uint32_t& outLen);
 };
 

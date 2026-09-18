@@ -17,8 +17,8 @@
 #include <string>
 #include <vector>
 
-#include "sim_common_defs.h"
 #include "db_hccl_db.h"
+#include "sim_common_defs.h"
 #include "sim_op_db_types.h"
 
 namespace HcclSim {

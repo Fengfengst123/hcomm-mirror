@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2026 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
  * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -8,14 +8,20 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#include "ccu_task_transform_v3.h"
-#include "type_conversion.h"
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: ccu instruction transform to
+ * checker task Author: huangweihao Create: 2025-06-19
+ */
+
 #include "ccu_all_rank_param_recorder_v3.h"
-#include "ccu_task_common_v3.h"
-#include "storage_manager.h"
-#include "sim_log.h"
 #include "ccu_loop_merge_v3.h"
+#include "ccu_task_common_v3.h"
 #include "ccu_task_transform_instruct_common_v3.h"
+#include "ccu_task_transform_v3.h"
+#include "sim_log.h"
+#include "storage_manager.h"
+#include "type_conversion.h"
 #include "utils/error_codes.h"
 
 namespace {
@@ -55,40 +61,40 @@ constexpr uint16_t MIN_CODE = 0x2;
 
 constexpr uint64_t UB_MAX_SIZE = 256 * 1024 * 1024;
 
-#define CHK_GET_XN_V3(curCcuTask, queId, xnId, xnValue)                                                        \
-    do {                                                                                                       \
-        uint32_t _checkerDieId = INVALID_DIE_ID;                                                               \
-        (curCcuTask)->GetDieId((queId), _checkerDieId);                                                        \
-        const uint32_t _checkerInstrId                                                                         \
-            = (curCcuTask)->microCodePosInQue[(queId)] + (curCcuTask)->startInstrIdInQue[(queId)];             \
-        if (AllRankParamRecorder::Global()->GetXn((curCcuTask)->GetRankId(), _checkerDieId, (xnId), (xnValue)) \
-            != HCCL_SUCCESS) {                                                                                 \
-            HCCL_VM_ERROR(                                                                                     \
-                "{} Failed to read XN register before it was initialized, rankId={}, "                         \
-                "dieId={}, instrId={}, xnId={}",                                                               \
-                MakeErrorCodeText(ErrorCode::GRAPH_REGISTER_UNINITIALIZED).c_str(),                            \
-                static_cast<uint32_t>((curCcuTask)->GetRankId()), _checkerDieId, _checkerInstrId,              \
-                static_cast<uint16_t>(xnId));                                                                  \
-            return HCCL_E_PARA;                                                                                \
-        }                                                                                                      \
+#define CHK_GET_XN_V3(curCcuTask, queId, xnId, xnValue)                                                          \
+    do {                                                                                                         \
+        uint32_t _checkerDieId = INVALID_DIE_ID;                                                                 \
+        (curCcuTask)->GetDieId((queId), _checkerDieId);                                                          \
+        const uint32_t _checkerInstrId                                                                           \
+            = (curCcuTask)->microCodePosInQue[(queId)] + (curCcuTask)->startInstrIdInQue[(queId)];               \
+        if (AllRankParamRecorder::Global()->GetXn((curCcuTask)->GetDeviceId(), _checkerDieId, (xnId), (xnValue)) \
+            != HCCL_SUCCESS) {                                                                                   \
+            HCCL_VM_ERROR(                                                                                       \
+                "{} Failed to read XN register before it was initialized, "                                      \
+                "commId={}, deviceId={}, dieId={}, instrId={}, xnId={}",                                         \
+                MakeErrorCodeText(ErrorCode::GRAPH_REGISTER_UNINITIALIZED).c_str(), (curCcuTask)->GetCommId(),   \
+                static_cast<uint32_t>((curCcuTask)->GetDeviceId()), _checkerDieId, _checkerInstrId,              \
+                static_cast<uint16_t>(xnId));                                                                    \
+            return HCCL_E_PARA;                                                                                  \
+        }                                                                                                        \
     } while (0)
 
-#define CHK_GET_GSA_V3(curCcuTask, queId, gsaId, gsaValue)                                                        \
-    do {                                                                                                          \
-        uint32_t _checkerDieId = INVALID_DIE_ID;                                                                  \
-        (curCcuTask)->GetDieId((queId), _checkerDieId);                                                           \
-        const uint32_t _checkerInstrId                                                                            \
-            = (curCcuTask)->microCodePosInQue[(queId)] + (curCcuTask)->startInstrIdInQue[(queId)];                \
-        if (AllRankParamRecorder::Global()->GetGSA((curCcuTask)->GetRankId(), _checkerDieId, (gsaId), (gsaValue)) \
-            != HCCL_SUCCESS) {                                                                                    \
-            HCCL_VM_ERROR(                                                                                        \
-                "{} Failed to read GSA register before it was initialized, rankId={}, "                           \
-                "dieId={}, instrId={}, gsaId={}",                                                                 \
-                MakeErrorCodeText(ErrorCode::GRAPH_REGISTER_UNINITIALIZED).c_str(),                               \
-                static_cast<uint32_t>((curCcuTask)->GetRankId()), _checkerDieId, _checkerInstrId,                 \
-                static_cast<uint16_t>(gsaId));                                                                    \
-            return HCCL_E_PARA;                                                                                   \
-        }                                                                                                         \
+#define CHK_GET_GSA_V3(curCcuTask, queId, gsaId, gsaValue)                                                          \
+    do {                                                                                                            \
+        uint32_t _checkerDieId = INVALID_DIE_ID;                                                                    \
+        (curCcuTask)->GetDieId((queId), _checkerDieId);                                                             \
+        const uint32_t _checkerInstrId                                                                              \
+            = (curCcuTask)->microCodePosInQue[(queId)] + (curCcuTask)->startInstrIdInQue[(queId)];                  \
+        if (AllRankParamRecorder::Global()->GetGSA((curCcuTask)->GetDeviceId(), _checkerDieId, (gsaId), (gsaValue)) \
+            != HCCL_SUCCESS) {                                                                                      \
+            HCCL_VM_ERROR(                                                                                          \
+                "{} Failed to read GSA register before it was initialized, "                                        \
+                "commId={}, deviceId={}, dieId={}, instrId={}, gsaId={}",                                           \
+                MakeErrorCodeText(ErrorCode::GRAPH_REGISTER_UNINITIALIZED).c_str(), (curCcuTask)->GetCommId(),      \
+                static_cast<uint32_t>((curCcuTask)->GetDeviceId()), _checkerDieId, _checkerInstrId,                 \
+                static_cast<uint16_t>(gsaId));                                                                      \
+            return HCCL_E_PARA;                                                                                     \
+        }                                                                                                           \
     } while (0)
 
 } // namespace
@@ -168,11 +174,11 @@ namespace TaskGraphGeneratorV3 {
         uint64_t argVal = 0;
         curCcuTask->GetSqe(queId, sqeArgsId, argVal);
 
-        RankId rankId = curCcuTask->GetRankId();
+        DeviceId deviceId = curCcuTask->GetDeviceId();
         uint32_t dieId;
         curCcuTask->GetDieId(queId, dieId);
 
-        CHK_RET(AllRankParamRecorder::Global()->SetGSA(rankId, dieId, gsaId, argVal));
+        CHK_RET(AllRankParamRecorder::Global()->SetGSA(deviceId, dieId, gsaId, argVal));
         HCCL_VM_DEBUG("Load SqeArg[{}]({}) to GSA[{}]", sqeArgsId, argVal, gsaId);
         return HCCL_SUCCESS;
     }
@@ -187,11 +193,11 @@ namespace TaskGraphGeneratorV3 {
         uint64_t argVal = 0;
         curCcuTask->GetSqe(queId, sqeArgsId, argVal);
 
-        RankId rankId = curCcuTask->GetRankId();
+        DeviceId deviceId = curCcuTask->GetDeviceId();
         uint32_t dieId;
         curCcuTask->GetDieId(queId, dieId);
 
-        CHK_RET(AllRankParamRecorder::Global()->SetXn(rankId, dieId, xnId, argVal));
+        CHK_RET(AllRankParamRecorder::Global()->SetXn(deviceId, dieId, xnId, argVal));
         HCCL_VM_DEBUG("Load SqeArg[{}]({}) to Xn[{}]", sqeArgsId, argVal, xnId);
         return HCCL_SUCCESS;
     }
@@ -204,11 +210,11 @@ namespace TaskGraphGeneratorV3 {
         uint16_t gsaId = instr->v1.loadImdToGSA.gsaId;
         uint64_t immediate = instr->v1.loadImdToGSA.immediate;
 
-        RankId rankId = curCcuTask->GetRankId();
+        DeviceId deviceId = curCcuTask->GetDeviceId();
         uint32_t dieId;
         curCcuTask->GetDieId(queId, dieId);
 
-        CHK_RET(AllRankParamRecorder::Global()->SetGSA(rankId, dieId, gsaId, immediate));
+        CHK_RET(AllRankParamRecorder::Global()->SetGSA(deviceId, dieId, gsaId, immediate));
         HCCL_VM_DEBUG("Load immediate[{}] to GSA[{}]", immediate, gsaId);
         return HCCL_SUCCESS;
     }
@@ -221,11 +227,11 @@ namespace TaskGraphGeneratorV3 {
         uint16_t xnId = instr->v1.loadImdToXn.xnId;
         uint64_t immediate = instr->v1.loadImdToXn.immediate;
 
-        RankId rankId = curCcuTask->GetRankId();
+        DeviceId deviceId = curCcuTask->GetDeviceId();
         uint32_t dieId;
         curCcuTask->GetDieId(queId, dieId);
 
-        CHK_RET(AllRankParamRecorder::Global()->SetXn(rankId, dieId, xnId, immediate));
+        CHK_RET(AllRankParamRecorder::Global()->SetXn(deviceId, dieId, xnId, immediate));
         HCCL_VM_DEBUG("Load immediate[{}] to Xn[{}]", immediate, xnId);
         return HCCL_SUCCESS;
     }
@@ -239,7 +245,7 @@ namespace TaskGraphGeneratorV3 {
         uint16_t xnId = instr->v1.loadGSAXn.xnId;
         uint16_t gsAdId = instr->v1.loadGSAXn.gsAdId;
 
-        RankId rankId = curCcuTask->GetRankId();
+        DeviceId deviceId = curCcuTask->GetDeviceId();
         uint32_t dieId;
         curCcuTask->GetDieId(queId, dieId);
 
@@ -247,7 +253,7 @@ namespace TaskGraphGeneratorV3 {
         uint64_t argVal2 = 0;
         CHK_GET_GSA_V3(curCcuTask, queId, gsAmId, argVal1);
         CHK_GET_XN_V3(curCcuTask, queId, xnId, argVal2);
-        CHK_RET(AllRankParamRecorder::Global()->SetGSA(rankId, dieId, gsAdId, argVal1 + argVal2));
+        CHK_RET(AllRankParamRecorder::Global()->SetGSA(deviceId, dieId, gsAdId, argVal1 + argVal2));
         HCCL_VM_DEBUG(
             "Load GSA[{}]({}) + Xn[{}]({}) to GSA[{}]({})", gsAmId, argVal1, xnId, argVal2, gsAdId, argVal1 + argVal2);
         return HCCL_SUCCESS;
@@ -262,7 +268,7 @@ namespace TaskGraphGeneratorV3 {
         uint16_t gsAnId = instr->v1.loadGSAGSA.gsAnId;
         uint16_t gsAdId = instr->v1.loadGSAGSA.gsAdId;
 
-        RankId rankId = curCcuTask->GetRankId();
+        DeviceId deviceId = curCcuTask->GetDeviceId();
         uint32_t dieId;
         curCcuTask->GetDieId(queId, dieId);
 
@@ -270,7 +276,7 @@ namespace TaskGraphGeneratorV3 {
         uint64_t argVal2 = 0;
         CHK_GET_GSA_V3(curCcuTask, queId, gsAmId, argVal1);
         CHK_GET_GSA_V3(curCcuTask, queId, gsAnId, argVal2);
-        CHK_RET(AllRankParamRecorder::Global()->SetGSA(rankId, dieId, gsAdId, argVal1 + argVal2));
+        CHK_RET(AllRankParamRecorder::Global()->SetGSA(deviceId, dieId, gsAdId, argVal1 + argVal2));
         HCCL_VM_DEBUG(
             "Load GSA[{}]({}) + GSA[{}]({}) to GSA[{}]({})", gsAmId, argVal1, gsAnId, argVal2, gsAdId,
             argVal1 + argVal2);
@@ -288,13 +294,13 @@ namespace TaskGraphGeneratorV3 {
         uint64_t argVal1 = 0;
         uint64_t argVal2 = 0;
 
-        RankId rankId = curCcuTask->GetRankId();
+        DeviceId deviceId = curCcuTask->GetDeviceId();
         uint32_t dieId;
         curCcuTask->GetDieId(queId, dieId);
 
         CHK_GET_XN_V3(curCcuTask, queId, xmId, argVal1);
         CHK_GET_XN_V3(curCcuTask, queId, xnId, argVal2);
-        CHK_RET(AllRankParamRecorder::Global()->SetXn(rankId, dieId, xdId, argVal1 + argVal2));
+        CHK_RET(AllRankParamRecorder::Global()->SetXn(deviceId, dieId, xdId, argVal1 + argVal2));
         HCCL_VM_DEBUG(
             "Load Xn[{}]({}) + Xn[{}]({}) to Xn[{}]({})", xmId, argVal1, xnId, argVal2, xdId, argVal1 + argVal2);
         return HCCL_SUCCESS;
@@ -315,20 +321,20 @@ namespace TaskGraphGeneratorV3 {
             HCCL_VM_ERROR(
                 "{} CheckerV3 only supports clearType=1 for this instruction, "
                 "instruction=SetCKE, actualClearType={}",
-                MakeErrorCodeText(ErrorCode::GRAPH_UNSUPPORTED).c_str(), clearType);
+                MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID).c_str(), clearType);
             return HCCL_E_INTERNAL;
         }
 
-        RankId rankId = curCcuTask->GetRankId();
+        DeviceId deviceId = curCcuTask->GetDeviceId();
         uint32_t dieId;
         curCcuTask->GetDieId(queId, dieId);
 
-        CHK_RET(ProcessWaitMask(rankId, dieId, curCcuTask, queId, waitCKEId, waitCKEMask, isContinue));
+        CHK_RET(ProcessWaitMask(deviceId, dieId, curCcuTask, queId, waitCKEId, waitCKEMask, isContinue));
         if (!isContinue) {
             return HCCL_SUCCESS;
         }
-        CHK_RET(ProcessSetMask(rankId, dieId, curCcuTask, queId, setCKEId, setCKEMask, true));
-        CHK_RET(ClearWaitMask(rankId, dieId, waitCKEId, waitCKEMask));
+        CHK_RET(ProcessSetMask(deviceId, dieId, curCcuTask, queId, setCKEId, setCKEMask, true));
+        CHK_RET(ClearWaitMask(deviceId, dieId, waitCKEId, waitCKEMask));
         HCCL_VM_DEBUG(
             "Wait CKE[{}:0x{:04x}], Set CKE[{}:0x{:04x}], clearType[{}]", waitCKEId, waitCKEMask, setCKEId, setCKEMask,
             clearType);
@@ -404,22 +410,23 @@ namespace TaskGraphGeneratorV3 {
         uint16_t waitCKEId = instr->v1.transLocMemToRmtMem.waitCKEId;
         uint16_t waitCKEMask = instr->v1.transLocMemToRmtMem.waitCKEMask;
 
-        RankId rankId = curCcuTask->GetRankId();
+        DeviceId deviceId = curCcuTask->GetDeviceId();
         uint32_t dieId;
         curCcuTask->GetDieId(queId, dieId);
 
-        CHK_RET(ProcessWaitMask(rankId, dieId, curCcuTask, queId, waitCKEId, waitCKEMask, isContinue));
+        CHK_RET(ProcessWaitMask(deviceId, dieId, curCcuTask, queId, waitCKEId, waitCKEMask, isContinue));
         if (!isContinue) {
             return HCCL_SUCCESS;
         }
 
         // 获取远端rankId与dieId
         // todo: 从共享内存获取channel映射表
-        if (g_allRankChannelInfo[rankId][dieId].count(channelId) == 0) {
+        if (g_allRankChannelInfo[deviceId][dieId].count(channelId) == 0) {
             HCCL_VM_ERROR(
-                "{} Cannot find channel mapping for this instruction, instruction=TransLocMemToRmtMem, "
-                "localRankId={}, localDieId={}, channelId={}",
-                MakeErrorCodeText(ErrorCode::GRAPH_RESOURCE_NOT_FOUND).c_str(), static_cast<uint32_t>(rankId), dieId,
+                "{} Cannot find channel mapping for this instruction, "
+                "instruction=TransLocMemToRmtMem, "
+                "localDeviceId={}, localDieId={}, channelId={}",
+                MakeErrorCodeText(ErrorCode::GRAPH_RESOURCE_NOT_FOUND).c_str(), static_cast<uint32_t>(deviceId), dieId,
                 channelId);
             return HCCL_E_INTERNAL;
         }
@@ -434,43 +441,54 @@ namespace TaskGraphGeneratorV3 {
         if (len == 0) {
             HCCL_VM_ERROR(
                 "{} Transfer size is 0, instruction=TransLocMemToRmtMem:\n"
-                "  ctx: rankId={}, dieId={}, queueId={}, instrId={}\n"
+                "  ctx: commId={}, rankId={}, deviceId={}, dieId={}, queueId={}, "
+                "instrId={}\n"
                 "  size: transferSize={}",
-                MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID).c_str(), static_cast<uint32_t>(rankId), dieId,
-                queId, instrId, static_cast<unsigned long long>(len));
+                MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID).c_str(), curCcuTask->GetCommId(),
+                curCcuTask->GetDeviceId(), static_cast<uint32_t>(deviceId), dieId, queId, instrId,
+                static_cast<unsigned long long>(len));
             return HCCL_E_INTERNAL;
         }
         if (len > UB_MAX_SIZE) {
             HCCL_VM_ERROR(
-                "{} Transfer size exceeds the UB upper limit, instruction=TransLocMemToRmtMem:\n"
+                "{} Transfer size exceeds the UB upper limit, "
+                "instruction=TransLocMemToRmtMem:\n"
                 "  size: transferSize={}, ubLimit={}\n"
-                "  ctx: rankId={}, dieId={}, queueId={}, instrId={}",
+                "  ctx: commId={}, rankId={}, deviceId={}, dieId={}, queueId={}, "
+                "instrId={}",
                 MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID).c_str(), static_cast<unsigned long long>(len),
-                static_cast<unsigned long long>(UB_MAX_SIZE), static_cast<uint32_t>(rankId), dieId, queId, instrId);
+                static_cast<unsigned long long>(UB_MAX_SIZE), curCcuTask->GetCommId(), curCcuTask->GetDeviceId(),
+                static_cast<uint32_t>(deviceId), dieId, queId, instrId);
             return HCCL_E_INTERNAL;
         }
         DataSlice srcSlice;
-        DataSlice dstSlice;
-        RankId rId;
-        // todo: 后续插件通过读取vm的输出文件，重建memlayout的地址类型信息
-        // 南向接口：input/output buffer同北向一样劫持算子入口函数；CCL buffer需要劫持北向接口HcclGetHcclBuffer
-        CHK_RET(curCcuTask->GetStorageManager().GetSlice(locAddr, len, srcSlice));
-        CHK_RET(curCcuTask->GetStorageManager().GetSlice(rmtAddr, len, dstSlice, &rId));
 
-        RankId rmtRankId = g_allRankChannelInfo[rankId][dieId][channelId].dstRank;
+        DataSlice dstSlice;
+        DeviceId rId;
+        // todo: 后续插件通过读取vm的输出文件，重建memlayout的地址类型信息
+        // 南向接口：input/output buffer同北向一样劫持算子入口函数；CCL
+        // buffer需要劫持北向接口HcclGetHcclBuffer
+        CHK_RET(curCcuTask->GetSlice(locAddr, len, srcSlice));
+        CHK_RET(curCcuTask->GetSlice(rmtAddr, len, dstSlice, &rId));
+
+        DeviceId rmtDeviceId = g_allRankChannelInfo[deviceId][dieId][channelId].dstDeviceId;
         HCCL_VM_DEBUG(
-            "Preparing local-memory to remote-memory transfer, localRankId={}, remoteRankId={}", rankId, rmtRankId);
+            "Preparing local-memory to remote-memory transfer, "
+            "localDeviceId={}, remoteDeviceId={}",
+            deviceId, rmtDeviceId);
         // 说明transportId写错了
-        if (rId != rmtRankId) {
+        if (rId != rmtDeviceId) {
             HCCL_VM_ERROR(
-                "{} Remote address resolves to a different rank than the selected channel, "
+                "{} Remote address resolves to a different rank than the selected "
+                "channel, "
                 "instruction=TransLocMemToRmtMem:\n"
-                "  ctx: rankId={}, dieId={}, queueId={}, instrId={}, channelId={}\n"
-                "  rank: expectedRemoteRankId={}, actualRemoteRankId={}\n"
+                "  ctx: commId={}, rankId={}, deviceId={}, dieId={}, queueId={}, "
+                "instrId={}, channelId={}\n"
+                "  rank: expectedRemoteDeviceId={}, actualRemoteDeviceId={}\n"
                 "  addr: remoteAddr={}",
-                MakeErrorCodeText(ErrorCode::GRAPH_REMOTE_RANK_MISMATCH).c_str(), static_cast<uint32_t>(rankId), dieId,
-                queId, instrId, channelId, static_cast<uint32_t>(rmtRankId), static_cast<uint32_t>(rId),
-                static_cast<unsigned long long>(rmtAddr));
+                MakeErrorCodeText(ErrorCode::GRAPH_REMOTE_RANK_MISMATCH).c_str(), curCcuTask->GetCommId(),
+                curCcuTask->GetDeviceId(), static_cast<uint32_t>(deviceId), dieId, queId, instrId, channelId,
+                static_cast<uint32_t>(rmtDeviceId), static_cast<uint32_t>(rId), static_cast<uint64_t>(rmtAddr));
             return HCCL_E_INTERNAL;
         }
         HcclReduceOp checkerReduceOp;
@@ -482,23 +500,23 @@ namespace TaskGraphGeneratorV3 {
             checkerDataType = g_DataType2CheckerDataType_aicpu[hcclDataType];
         }
 
-        if (rmtRankId != rankId) {
+        if (rmtDeviceId != deviceId) {
             if (reduceEn) {
                 AddWriteReduce(
-                    rankId, rmtRankId, queId, curCcuTask, srcSlice, dstSlice, checkerDataType, checkerReduceOp);
+                    deviceId, rmtDeviceId, queId, curCcuTask, srcSlice, dstSlice, checkerDataType, checkerReduceOp);
             } else {
-                AddWrite(rankId, rmtRankId, queId, curCcuTask, srcSlice, dstSlice);
+                AddWrite(deviceId, rmtDeviceId, queId, curCcuTask, srcSlice, dstSlice);
             }
         } else {
             if (reduceEn) {
-                AddLocalReduce(rankId, queId, curCcuTask, srcSlice, dstSlice, checkerDataType, checkerReduceOp);
+                AddLocalReduce(deviceId, queId, curCcuTask, srcSlice, dstSlice, checkerDataType, checkerReduceOp);
             } else {
-                AddLocalCopy(rankId, queId, curCcuTask, srcSlice, dstSlice);
+                AddLocalCopy(deviceId, queId, curCcuTask, srcSlice, dstSlice);
             }
         }
 
-        CHK_RET(ProcessSetMask(rankId, dieId, curCcuTask, queId, setCKEId, setCKEMask));
-        CHK_RET(ClearWaitMask(rankId, dieId, waitCKEId, waitCKEMask));
+        CHK_RET(ProcessSetMask(deviceId, dieId, curCcuTask, queId, setCKEId, setCKEMask));
+        CHK_RET(ClearWaitMask(deviceId, dieId, waitCKEId, waitCKEMask));
 
         HCCL_VM_DEBUG(
             "Completed local-memory to remote-memory transfer:\n"
@@ -507,7 +525,8 @@ namespace TaskGraphGeneratorV3 {
             "  dst: dstGsaId={}, dstOffsetXnId={}\n"
             "  xfer: lengthXnId={}, channelId={}\n"
             "  set: setCkeId={}, setMask=0x{:04x}\n"
-            "  ctrl: clearType={}, lengthEnabled={}, reduceEnabled={}, reduceDataType={}, reduceOpCode={}",
+            "  ctrl: clearType={}, lengthEnabled={}, reduceEnabled={}, "
+            "reduceDataType={}, reduceOpCode={}",
             waitCKEId, waitCKEMask, locGSAId, locXnId, rmtGSAId, rmtXnId, lengthXnId, channelId, setCKEId, setCKEMask,
             clearType, lengthEn, reduceEn, reduceDataType, reduceOpCode);
         return HCCL_SUCCESS;
@@ -531,11 +550,11 @@ namespace TaskGraphGeneratorV3 {
         uint16_t waitCKEId = instr->v1.transLocMemToLocMem.waitCKEId;
         uint16_t waitCKEMask = instr->v1.transLocMemToLocMem.waitCKEMask;
 
-        RankId rankId = curCcuTask->GetRankId();
+        DeviceId deviceId = curCcuTask->GetDeviceId();
         uint32_t dieId;
         curCcuTask->GetDieId(queId, dieId);
 
-        CHK_RET(ProcessWaitMask(rankId, dieId, curCcuTask, queId, waitCKEId, waitCKEMask, isContinue));
+        CHK_RET(ProcessWaitMask(deviceId, dieId, curCcuTask, queId, waitCKEId, waitCKEMask, isContinue));
         if (!isContinue) {
             return HCCL_SUCCESS;
         }
@@ -550,38 +569,42 @@ namespace TaskGraphGeneratorV3 {
         if (len == 0) {
             HCCL_VM_ERROR(
                 "{} Transfer size is 0, instruction=TransLocMemToLocMem:\n"
-                "  ctx: rankId={}, dieId={}, queueId={}, instrId={}\n"
+                "  ctx: deviceId={}, dieId={}, queueId={}, instrId={}\n"
                 "  size: transferSize={}",
-                MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID).c_str(), static_cast<uint32_t>(rankId), dieId,
+                MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID).c_str(), static_cast<uint32_t>(deviceId), dieId,
                 queId, instrId, static_cast<unsigned long long>(len));
             return HCCL_E_INTERNAL;
         }
         if (len > UB_MAX_SIZE) {
             HCCL_VM_ERROR(
-                "{} Transfer size exceeds the UB upper limit, instruction=TransLocMemToLocMem:\n"
+                "{} Transfer size exceeds the UB upper limit, "
+                "instruction=TransLocMemToLocMem:\n"
                 "  size: transferSize={}, ubLimit={}\n"
-                "  ctx: rankId={}, dieId={}, queueId={}, instrId={}",
+                "  ctx: commId={}, rankId={}, deviceId={}, dieId={}, queueId={}, "
+                "instrId={}",
                 MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID).c_str(), static_cast<unsigned long long>(len),
-                static_cast<unsigned long long>(UB_MAX_SIZE), static_cast<uint32_t>(rankId), dieId, queId, instrId);
+                static_cast<unsigned long long>(UB_MAX_SIZE), curCcuTask->GetCommId(), curCcuTask->GetDeviceId(),
+                static_cast<uint32_t>(deviceId), dieId, queId, instrId);
             return HCCL_E_INTERNAL;
         }
 
         DataSlice srcSlice;
         DataSlice dstSlice;
         // todo: 后续插件通过读取vm的输出文件，重建memlayout的地址类型信息
-        CHK_RET(curCcuTask->GetStorageManager().GetSlice(srcAddr, len, srcSlice));
-        CHK_RET(curCcuTask->GetStorageManager().GetSlice(dstAddr, len, dstSlice));
+        CHK_RET(curCcuTask->GetSlice(srcAddr, len, srcSlice));
+        CHK_RET(curCcuTask->GetSlice(dstAddr, len, dstSlice));
 
         HCCL_VM_DEBUG(
-            "Built local-memory to local-memory copy, rankId={}, srcSlice={}, dstSlice={}, "
+            "Built local-memory to local-memory copy, deviceId={}, "
+            "srcSlice={}, dstSlice={}, "
             "transferSize={}",
-            rankId, srcSlice.Describe(), dstSlice.Describe(), len);
+            deviceId, srcSlice.Describe(), dstSlice.Describe(), len);
 
-        AddLocalCopy(rankId, queId, curCcuTask, srcSlice, dstSlice);
+        AddLocalCopy(deviceId, queId, curCcuTask, srcSlice, dstSlice);
 
-        CHK_RET(ProcessSetMask(rankId, dieId, curCcuTask, queId, setCKEId, setCKEMask));
+        CHK_RET(ProcessSetMask(deviceId, dieId, curCcuTask, queId, setCKEId, setCKEMask));
 
-        CHK_RET(ClearWaitMask(rankId, dieId, waitCKEId, waitCKEMask));
+        CHK_RET(ClearWaitMask(deviceId, dieId, waitCKEId, waitCKEMask));
 
         HCCL_VM_DEBUG(
             "Completed local-memory to local-memory transfer:\n"
@@ -611,48 +634,49 @@ namespace TaskGraphGeneratorV3 {
         uint16_t waitCKEId = instr->v1.syncCKE.waitCKEId;
         uint16_t waitCKEMask = instr->v1.syncCKE.waitCKEMask;
 
-        RankId rankId = curCcuTask->GetRankId();
+        DeviceId deviceId = curCcuTask->GetDeviceId();
         uint32_t dieId;
         curCcuTask->GetDieId(queId, dieId);
 
-        CHK_RET(ProcessWaitMask(rankId, dieId, curCcuTask, queId, waitCKEId, waitCKEMask, isContinue));
+        CHK_RET(ProcessWaitMask(deviceId, dieId, curCcuTask, queId, waitCKEId, waitCKEMask, isContinue));
         if (!isContinue) {
             return HCCL_SUCCESS;
         }
 
         // 获取远端rankId与dieId
-        if (g_allRankChannelInfo[rankId][dieId].count(channelId) == 0) {
+        if (g_allRankChannelInfo[deviceId][dieId].count(channelId) == 0) {
             HCCL_VM_ERROR(
-                "{} Cannot find channel mapping for this instruction, instruction=SyncCKE, "
-                "localRankId={}, localDieId={}, channelId={}",
-                MakeErrorCodeText(ErrorCode::GRAPH_RESOURCE_NOT_FOUND).c_str(), static_cast<uint32_t>(rankId), dieId,
+                "{} Cannot find channel mapping for this instruction, "
+                "instruction=SyncCKE, "
+                "localDeviceId={}, localDieId={}, channelId={}",
+                MakeErrorCodeText(ErrorCode::GRAPH_RESOURCE_NOT_FOUND).c_str(), static_cast<uint32_t>(deviceId), dieId,
                 channelId);
             return HCCL_E_INTERNAL;
         }
 
-        RankId rmtRankId = g_allRankChannelInfo[rankId][dieId][channelId].dstRank;
-        uint32_t rmtDieId = g_allRankChannelInfo[rankId][dieId][channelId].remoteDieId;
+        DeviceId rmtDeviceId = g_allRankChannelInfo[deviceId][dieId][channelId].dstDeviceId;
+        uint32_t rmtDieId = g_allRankChannelInfo[deviceId][dieId][channelId].remoteDieId;
 
         if (locCKEMask != 0x0000) {
-            AddPost(rankId, rmtRankId, queId, curCcuTask, rmtDieId, rmtCKEId, locCKEMask);
+            AddPost(deviceId, rmtDeviceId, queId, curCcuTask, rmtDieId, rmtCKEId, locCKEMask);
 
             // 将对应的bit位置一
             uint16_t ckeValue = 0;
             uint16_t localCkeValue = 0;
-            CHK_RET(AllRankParamRecorder::Global()->GetCKE(rankId, dieId, locCKEId, localCkeValue));
+            CHK_RET(AllRankParamRecorder::Global()->GetCKE(deviceId, dieId, locCKEId, localCkeValue));
             const uint16_t maskedLocalCkeValue = static_cast<uint16_t>(localCkeValue & locCKEMask);
             HCCL_VM_DEBUG(
                 "CKE[{}]({}) & mask[0x{:04x}] -> {}", locCKEId, localCkeValue, locCKEMask, maskedLocalCkeValue);
-            CHK_RET(AllRankParamRecorder::Global()->GetCKE(rmtRankId, rmtDieId, rmtCKEId, ckeValue));
+            CHK_RET(AllRankParamRecorder::Global()->GetCKE(rmtDeviceId, rmtDieId, rmtCKEId, ckeValue));
             const uint16_t mergedCkeValue = static_cast<uint16_t>(ckeValue | maskedLocalCkeValue);
-            CHK_RET(AllRankParamRecorder::Global()->SetCKE(rmtRankId, rmtDieId, rmtCKEId, mergedCkeValue));
+            CHK_RET(AllRankParamRecorder::Global()->SetCKE(rmtDeviceId, rmtDieId, rmtCKEId, mergedCkeValue));
             HCCL_VM_DEBUG(
                 "CKE[{}]({}) | {} -> CKE[{}]({})", rmtCKEId, ckeValue, maskedLocalCkeValue, rmtCKEId, mergedCkeValue);
         }
 
-        CHK_RET(ProcessSetMask(rankId, dieId, curCcuTask, queId, setCKEId, setCKEMask, true));
+        CHK_RET(ProcessSetMask(deviceId, dieId, curCcuTask, queId, setCKEId, setCKEMask, true));
 
-        CHK_RET(ClearWaitMask(rankId, dieId, waitCKEId, waitCKEMask));
+        CHK_RET(ClearWaitMask(deviceId, dieId, waitCKEId, waitCKEMask));
 
         HCCL_VM_DEBUG(
             "Wait CKE[{}:0x{:04x}]:\n"
@@ -680,44 +704,46 @@ namespace TaskGraphGeneratorV3 {
         uint16_t waitCKEId = instr->v1.syncXn.waitCKEId;
         uint16_t waitCKEMask = instr->v1.syncXn.waitCKEMask;
 
-        RankId rankId = curCcuTask->GetRankId();
+        DeviceId deviceId = curCcuTask->GetDeviceId();
         uint32_t dieId;
         curCcuTask->GetDieId(queId, dieId);
 
-        CHK_RET(ProcessWaitMask(rankId, dieId, curCcuTask, queId, waitCKEId, waitCKEMask, isContinue));
+        CHK_RET(ProcessWaitMask(deviceId, dieId, curCcuTask, queId, waitCKEId, waitCKEMask, isContinue));
         if (!isContinue) {
             return HCCL_SUCCESS;
         }
 
         // 获取远端rankId与dieId
-        if (g_allRankChannelInfo[rankId][dieId].count(channelId) == 0) {
+        if (g_allRankChannelInfo[deviceId][dieId].count(channelId) == 0) {
             HCCL_VM_ERROR(
-                "{} Cannot find channel mapping for this instruction, instruction=SyncXn, "
-                "localRankId={}, localDieId={}, channelId={}",
-                MakeErrorCodeText(ErrorCode::GRAPH_RESOURCE_NOT_FOUND).c_str(), static_cast<uint32_t>(rankId), dieId,
+                "{} Cannot find channel mapping for this instruction, "
+                "instruction=SyncXn, "
+                "localDeviceId={}, localDieId={}, channelId={}",
+                MakeErrorCodeText(ErrorCode::GRAPH_RESOURCE_NOT_FOUND).c_str(), static_cast<uint32_t>(deviceId), dieId,
                 channelId);
             return HCCL_E_INTERNAL;
         }
 
-        RankId rmtRankId = g_allRankChannelInfo[rankId][dieId][channelId].dstRank;
-        uint32_t rmtDieId = g_allRankChannelInfo[rankId][dieId][channelId].remoteDieId;
+        DeviceId rmtDeviceId = g_allRankChannelInfo[deviceId][dieId][channelId].dstDeviceId;
+        uint32_t rmtDieId = g_allRankChannelInfo[deviceId][dieId][channelId].remoteDieId;
 
         uint64_t localXnValue = 0;
         CHK_GET_XN_V3(curCcuTask, queId, locXnId, localXnValue);
-        CHK_RET(AllRankParamRecorder::Global()->SetXn(rmtRankId, rmtDieId, rmtXnId, localXnValue));
+        CHK_RET(AllRankParamRecorder::Global()->SetXn(rmtDeviceId, rmtDieId, rmtXnId, localXnValue));
 
         if (setRmtCKEMask != 0x0000) {
-            AddPost(rankId, rmtRankId, queId, curCcuTask, rmtDieId, setRmtCKEId, setRmtCKEMask);
+            AddPost(deviceId, rmtDeviceId, queId, curCcuTask, rmtDieId, setRmtCKEId, setRmtCKEMask);
 
             // 将对应的bit位置一
             uint16_t ckeValue = 0;
-            CHK_RET(AllRankParamRecorder::Global()->GetCKE(rmtRankId, rmtDieId, setRmtCKEId, ckeValue));
-            CHK_RET(AllRankParamRecorder::Global()->SetCKE(rmtRankId, rmtDieId, setRmtCKEId, ckeValue | setRmtCKEMask));
+            CHK_RET(AllRankParamRecorder::Global()->GetCKE(rmtDeviceId, rmtDieId, setRmtCKEId, ckeValue));
+            CHK_RET(
+                AllRankParamRecorder::Global()->SetCKE(rmtDeviceId, rmtDieId, setRmtCKEId, ckeValue | setRmtCKEMask));
         }
 
-        CHK_RET(ProcessSetMask(rankId, dieId, curCcuTask, queId, setCKEId, setCKEMask, true));
+        CHK_RET(ProcessSetMask(deviceId, dieId, curCcuTask, queId, setCKEId, setCKEMask, true));
 
-        CHK_RET(ClearWaitMask(rankId, dieId, waitCKEId, waitCKEMask));
+        CHK_RET(ClearWaitMask(deviceId, dieId, waitCKEId, waitCKEMask));
 
         HCCL_VM_DEBUG(
             "Wait CKE[{}:0x{:04x}]:\n"
@@ -738,7 +764,7 @@ namespace TaskGraphGeneratorV3 {
         uint64_t expectData = instr->v1.jmp.expectData;
         uint16_t dstInstrXnId = instr->v1.jmp.dstInstrXnId;
 
-        RankId rankId = curCcuTask->GetRankId();
+        DeviceId deviceId = curCcuTask->GetDeviceId();
         uint32_t dieId;
         curCcuTask->GetDieId(queId, dieId);
 
@@ -772,11 +798,11 @@ namespace TaskGraphGeneratorV3 {
         uint16_t waitCKEId = UpdateCKEId(instr->v1.transLocMemToLocMS.waitCKEId, loopGroupParam);
         uint16_t waitCKEMask = instr->v1.transLocMemToLocMS.waitCKEMask;
 
-        RankId rankId = curCcuTask->GetRankId();
+        DeviceId deviceId = curCcuTask->GetDeviceId();
         uint32_t dieId;
         curCcuTask->GetDieId(queId, dieId);
 
-        CHK_RET(ProcessWaitMask(rankId, dieId, curCcuTask, queId, waitCKEId, waitCKEMask, isContinue));
+        CHK_RET(ProcessWaitMask(deviceId, dieId, curCcuTask, queId, waitCKEId, waitCKEMask, isContinue));
         if (!isContinue) {
             return HCCL_SUCCESS;
         }
@@ -790,9 +816,9 @@ namespace TaskGraphGeneratorV3 {
         if (len == 0) {
             HCCL_VM_ERROR(
                 "{} Transfer size is 0, instruction=TransLocMemToLocMS:\n"
-                "  ctx: rankId={}, dieId={}, queueId={}, instrId={}\n"
+                "  ctx: deviceId={}, dieId={}, queueId={}, instrId={}\n"
                 "  size: transferSize={}",
-                MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID).c_str(), static_cast<uint32_t>(rankId), dieId,
+                MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID).c_str(), static_cast<uint32_t>(deviceId), dieId,
                 queId, instrId, static_cast<unsigned long long>(len));
             return HCCL_E_INTERNAL;
         }
@@ -800,14 +826,14 @@ namespace TaskGraphGeneratorV3 {
         DataSlice srcSlice;
         DataSlice dstSlice;
         // todo: 后续插件通过读取vm的输出文件，重建memlayout的地址类型信息
-        CHK_RET(curCcuTask->GetStorageManager().GetSlice(locMemAddr, len, srcSlice));
+        CHK_RET(curCcuTask->GetSlice(locMemAddr, len, srcSlice));
         CHK_RET(GenSliceFromMs(locMSId, len, dstSlice));
 
-        AddLocalCopy(rankId, queId, curCcuTask, srcSlice, dstSlice);
+        AddLocalCopy(deviceId, queId, curCcuTask, srcSlice, dstSlice);
 
-        CHK_RET(ProcessSetMask(rankId, dieId, curCcuTask, queId, setCKEId, setCKEMask));
+        CHK_RET(ProcessSetMask(deviceId, dieId, curCcuTask, queId, setCKEId, setCKEMask));
 
-        CHK_RET(ClearWaitMask(rankId, dieId, waitCKEId, waitCKEMask));
+        CHK_RET(ClearWaitMask(deviceId, dieId, waitCKEId, waitCKEMask));
 
         HCCL_VM_DEBUG(
             "Completed local-memory to local-MS transfer:\n"
@@ -819,7 +845,6 @@ namespace TaskGraphGeneratorV3 {
             "  ctrl: clearType={}, lengthEnabled={}",
             waitCKEId, waitCKEMask, locGSAId, locXnId, locMSId / 0x8000, locMSId % 0x8000, lengthXnId, channelId,
             setCKEId, setCKEMask, clearType, lengthEn);
-
         return HCCL_SUCCESS;
     }
 
@@ -839,11 +864,11 @@ namespace TaskGraphGeneratorV3 {
         uint16_t waitCKEId = UpdateCKEId(instr->v1.transLocMSToLocMem.waitCKEId, loopGroupParam);
         uint16_t waitCKEMask = instr->v1.transLocMSToLocMem.waitCKEMask;
 
-        RankId rankId = curCcuTask->GetRankId();
+        DeviceId deviceId = curCcuTask->GetDeviceId();
         uint32_t dieId;
         curCcuTask->GetDieId(queId, dieId);
 
-        CHK_RET(ProcessWaitMask(rankId, dieId, curCcuTask, queId, waitCKEId, waitCKEMask, isContinue));
+        CHK_RET(ProcessWaitMask(deviceId, dieId, curCcuTask, queId, waitCKEId, waitCKEMask, isContinue));
         if (!isContinue) {
             return HCCL_SUCCESS;
         }
@@ -854,9 +879,9 @@ namespace TaskGraphGeneratorV3 {
         if (len == 0) {
             HCCL_VM_ERROR(
                 "{} Transfer size is 0, instruction=TransLocMSToLocMem:\n"
-                "  ctx: rankId={}, dieId={}, queueId={}, instrId={}\n"
+                "  ctx: deviceId={}, dieId={}, queueId={}, instrId={}\n"
                 "  size: transferSize={}",
-                MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID).c_str(), static_cast<uint32_t>(rankId), dieId,
+                MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID).c_str(), static_cast<uint32_t>(deviceId), dieId,
                 queId, instrId, static_cast<unsigned long long>(len));
             return HCCL_E_INTERNAL;
         }
@@ -867,13 +892,13 @@ namespace TaskGraphGeneratorV3 {
         CHK_GET_GSA_V3(curCcuTask, queId, locGSAId, locMemAddr);
         locMemAddr = UpdateGSAValue(locMemAddr, loopGroupParam);
         DataSlice dstSlice;
-        CHK_RET(curCcuTask->GetStorageManager().GetSlice(locMemAddr, len, dstSlice));
+        CHK_RET(curCcuTask->GetSlice(locMemAddr, len, dstSlice));
 
-        AddLocalCopy(rankId, queId, curCcuTask, srcSlice, dstSlice);
+        AddLocalCopy(deviceId, queId, curCcuTask, srcSlice, dstSlice);
 
-        CHK_RET(ProcessSetMask(rankId, dieId, curCcuTask, queId, setCKEId, setCKEMask));
+        CHK_RET(ProcessSetMask(deviceId, dieId, curCcuTask, queId, setCKEId, setCKEMask));
 
-        CHK_RET(ClearWaitMask(rankId, dieId, waitCKEId, waitCKEMask));
+        CHK_RET(ClearWaitMask(deviceId, dieId, waitCKEId, waitCKEMask));
 
         HCCL_VM_DEBUG(
             "Completed local-MS to local-memory transfer:\n"
@@ -885,7 +910,6 @@ namespace TaskGraphGeneratorV3 {
             "  ctrl: clearType={}, lengthEnabled={}",
             waitCKEId, waitCKEMask, locMSId / 0x8000, locMSId % 0x8000, locGSAId, locXnId, lengthXnId, channelId,
             setCKEId, setCKEMask, clearType, lengthEn);
-
         return HCCL_SUCCESS;
     }
 
@@ -904,11 +928,11 @@ namespace TaskGraphGeneratorV3 {
         uint16_t waitCKEId = UpdateCKEId(instr->v1.transLocMSToLocMS.waitCKEId, loopGroupParam);
         uint16_t waitCKEMask = instr->v1.transLocMSToLocMS.waitCKEMask;
 
-        RankId rankId = curCcuTask->GetRankId();
+        DeviceId deviceId = curCcuTask->GetDeviceId();
         uint32_t dieId;
         curCcuTask->GetDieId(queId, dieId);
 
-        CHK_RET(ProcessWaitMask(rankId, dieId, curCcuTask, queId, waitCKEId, waitCKEMask, isContinue));
+        CHK_RET(ProcessWaitMask(deviceId, dieId, curCcuTask, queId, waitCKEId, waitCKEMask, isContinue));
         if (!isContinue) {
             return HCCL_SUCCESS;
         }
@@ -919,9 +943,9 @@ namespace TaskGraphGeneratorV3 {
         if (len == 0) {
             HCCL_VM_ERROR(
                 "{} Transfer size is 0, instruction=TransLocMSToLocMS:\n"
-                "  ctx: rankId={}, dieId={}, queueId={}, instrId={}\n"
+                "  ctx: deviceId={}, dieId={}, queueId={}, instrId={}\n"
                 "  size: transferSize={}",
-                MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID).c_str(), static_cast<uint32_t>(rankId), dieId,
+                MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID).c_str(), static_cast<uint32_t>(deviceId), dieId,
                 queId, instrId, static_cast<unsigned long long>(len));
             return HCCL_E_INTERNAL;
         }
@@ -930,11 +954,11 @@ namespace TaskGraphGeneratorV3 {
         DataSlice dstSlice;
         CHK_RET(GenSliceFromMs(dstMSId, len, dstSlice));
 
-        AddLocalCopy(rankId, queId, curCcuTask, srcSlice, dstSlice);
+        AddLocalCopy(deviceId, queId, curCcuTask, srcSlice, dstSlice);
 
-        CHK_RET(ProcessSetMask(rankId, dieId, curCcuTask, queId, setCKEId, setCKEMask));
+        CHK_RET(ProcessSetMask(deviceId, dieId, curCcuTask, queId, setCKEId, setCKEMask));
 
-        CHK_RET(ClearWaitMask(rankId, dieId, waitCKEId, waitCKEMask));
+        CHK_RET(ClearWaitMask(deviceId, dieId, waitCKEId, waitCKEMask));
 
         HCCL_VM_DEBUG(
             "Completed local-MS to local-MS transfer:\n"
@@ -946,7 +970,6 @@ namespace TaskGraphGeneratorV3 {
             "  ctrl: clearType={}, lengthEnabled={}",
             waitCKEId, waitCKEMask, srcMSId / 0x8000, srcMSId % 0x8000, dstMSId / 0x8000, dstMSId % 0x8000, lengthXnId,
             channelId, setCKEId, setCKEMask, clearType, lengthEn);
-
         return HCCL_SUCCESS;
     }
 
@@ -966,11 +989,11 @@ namespace TaskGraphGeneratorV3 {
         uint16_t waitCKEId = UpdateCKEId(instr->v1.transLocMSToRmtMem.waitCKEId, loopGroupParam);
         uint16_t waitCKEMask = instr->v1.transLocMSToRmtMem.waitCKEMask;
 
-        RankId rankId = curCcuTask->GetRankId();
+        DeviceId deviceId = curCcuTask->GetDeviceId();
         uint32_t dieId;
         curCcuTask->GetDieId(queId, dieId);
 
-        CHK_RET(ProcessWaitMask(rankId, dieId, curCcuTask, queId, waitCKEId, waitCKEMask, isContinue));
+        CHK_RET(ProcessWaitMask(deviceId, dieId, curCcuTask, queId, waitCKEId, waitCKEMask, isContinue));
         if (!isContinue) {
             return HCCL_SUCCESS;
         }
@@ -981,9 +1004,9 @@ namespace TaskGraphGeneratorV3 {
         if (len == 0) {
             HCCL_VM_ERROR(
                 "{} Transfer size is 0, instruction=TransLocMSToRmtMem:\n"
-                "  ctx: rankId={}, dieId={}, queueId={}, instrId={}\n"
+                "  ctx: deviceId={}, dieId={}, queueId={}, instrId={}\n"
                 "  size: transferSize={}",
-                MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID).c_str(), static_cast<uint32_t>(rankId), dieId,
+                MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID).c_str(), static_cast<uint32_t>(deviceId), dieId,
                 queId, instrId, static_cast<unsigned long long>(len));
             return HCCL_E_INTERNAL;
         }
@@ -995,14 +1018,14 @@ namespace TaskGraphGeneratorV3 {
         rmtMemAddr = UpdateGSAValue(rmtMemAddr, loopGroupParam);
         DataSlice dstSlice;
         // todo: 后续插件通过读取vm的输出文件，重建memlayout的地址类型信息
-        CHK_RET(curCcuTask->GetStorageManager().GetSlice(rmtMemAddr, len, dstSlice));
+        CHK_RET(curCcuTask->GetSlice(rmtMemAddr, len, dstSlice));
 
-        RankId rmtRankId = g_allRankChannelInfo[rankId][dieId][channelId].dstRank;
-        AddWrite(rankId, rmtRankId, queId, curCcuTask, srcSlice, dstSlice);
+        DeviceId rmtDeviceId = g_allRankChannelInfo[deviceId][dieId][channelId].dstDeviceId;
+        AddWrite(deviceId, rmtDeviceId, queId, curCcuTask, srcSlice, dstSlice);
 
-        CHK_RET(ProcessSetMask(rankId, dieId, curCcuTask, queId, setCKEId, setCKEMask));
+        CHK_RET(ProcessSetMask(deviceId, dieId, curCcuTask, queId, setCKEId, setCKEMask));
 
-        CHK_RET(ClearWaitMask(rankId, dieId, waitCKEId, waitCKEMask));
+        CHK_RET(ClearWaitMask(deviceId, dieId, waitCKEId, waitCKEMask));
 
         HCCL_VM_DEBUG(
             "Completed local-MS to remote-memory transfer:\n"
@@ -1014,7 +1037,6 @@ namespace TaskGraphGeneratorV3 {
             "  ctrl: clearType={}, lengthEnabled={}",
             waitCKEId, waitCKEMask, locMSId / 0x8000, locMSId % 0x8000, rmtGSAId, rmtXnId, lengthXnId, channelId,
             setCKEId, setCKEMask, clearType, lengthEn);
-
         return HCCL_SUCCESS;
     }
 
@@ -1036,11 +1058,11 @@ namespace TaskGraphGeneratorV3 {
         uint16_t waitCKEId = UpdateCKEId(instr->v1.transLocMSToRmtMS.waitCKEId, loopGroupParam);
         uint16_t waitCKEMask = instr->v1.transLocMSToRmtMS.waitCKEMask;
 
-        RankId rankId = curCcuTask->GetRankId();
+        DeviceId deviceId = curCcuTask->GetDeviceId();
         uint32_t dieId;
         curCcuTask->GetDieId(queId, dieId);
 
-        CHK_RET(ProcessWaitMask(rankId, dieId, curCcuTask, queId, waitCKEId, waitCKEMask, isContinue));
+        CHK_RET(ProcessWaitMask(deviceId, dieId, curCcuTask, queId, waitCKEId, waitCKEMask, isContinue));
         if (!isContinue) {
             return HCCL_SUCCESS;
         }
@@ -1051,9 +1073,9 @@ namespace TaskGraphGeneratorV3 {
         if (len == 0) {
             HCCL_VM_ERROR(
                 "{} Transfer size is 0, instruction=TransLocMSToRmtMS:\n"
-                "  ctx: rankId={}, dieId={}, queueId={}, instrId={}\n"
+                "  ctx: deviceId={}, dieId={}, queueId={}, instrId={}\n"
                 "  size: transferSize={}",
-                MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID).c_str(), static_cast<uint32_t>(rankId), dieId,
+                MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID).c_str(), static_cast<uint32_t>(deviceId), dieId,
                 queId, instrId, static_cast<unsigned long long>(len));
             return HCCL_E_INTERNAL;
         }
@@ -1063,23 +1085,24 @@ namespace TaskGraphGeneratorV3 {
         DataSlice dstSlice;
         CHK_RET(GenSliceFromMs(rmtMSId, len, dstSlice));
 
-        RankId rmtRankId = g_allRankChannelInfo[rankId][dieId][channelId].dstRank;
-        uint32_t rmtDieId = g_allRankChannelInfo[rankId][dieId][channelId].remoteDieId;
+        DeviceId rmtDeviceId = g_allRankChannelInfo[deviceId][dieId][channelId].dstDeviceId;
+        uint32_t rmtDieId = g_allRankChannelInfo[deviceId][dieId][channelId].remoteDieId;
 
-        AddWrite(rankId, rmtRankId, queId, curCcuTask, srcSlice, dstSlice);
+        AddWrite(deviceId, rmtDeviceId, queId, curCcuTask, srcSlice, dstSlice);
 
         if (setRmtCKEMask != 0x0000) {
-            AddPost(rankId, rmtRankId, queId, curCcuTask, rmtDieId, setRmtCKEId, setRmtCKEMask);
+            AddPost(deviceId, rmtDeviceId, queId, curCcuTask, rmtDieId, setRmtCKEId, setRmtCKEMask);
 
             // 将对应的bit位置一
             uint16_t ckeValue = 0;
-            CHK_RET(AllRankParamRecorder::Global()->GetCKE(rmtRankId, rmtDieId, setRmtCKEId, ckeValue));
-            CHK_RET(AllRankParamRecorder::Global()->SetCKE(rmtRankId, rmtDieId, setRmtCKEId, ckeValue | setRmtCKEMask));
+            CHK_RET(AllRankParamRecorder::Global()->GetCKE(rmtDeviceId, rmtDieId, setRmtCKEId, ckeValue));
+            CHK_RET(
+                AllRankParamRecorder::Global()->SetCKE(rmtDeviceId, rmtDieId, setRmtCKEId, ckeValue | setRmtCKEMask));
         }
 
-        CHK_RET(ProcessSetMask(rankId, dieId, curCcuTask, queId, setCKEId, setCKEMask));
+        CHK_RET(ProcessSetMask(deviceId, dieId, curCcuTask, queId, setCKEId, setCKEMask));
 
-        CHK_RET(ClearWaitMask(rankId, dieId, waitCKEId, waitCKEMask));
+        CHK_RET(ClearWaitMask(deviceId, dieId, waitCKEId, waitCKEMask));
 
         HCCL_VM_DEBUG(
             "Completed local-MS to remote-MS transfer:\n"
@@ -1087,7 +1110,8 @@ namespace TaskGraphGeneratorV3 {
             "  src: srcMsPage={}, srcMsOffset={}\n"
             "  dst: dstMsPage={}, dstMsOffset={}\n"
             "  xfer: lengthXnId={}, channelId={}\n"
-            "  set: remoteSetCkeId={}, remoteSetMask=0x{:04x}, localSetCkeId={}, localSetMask=0x{:04x}\n"
+            "  set: remoteSetCkeId={}, remoteSetMask=0x{:04x}, "
+            "localSetCkeId={}, localSetMask=0x{:04x}\n"
             "  ctrl: clearType={}, lengthEnabled={}",
             waitCKEId, waitCKEMask, locMSId / 0x8000, locMSId % 0x8000, rmtMSId / 0x8000, rmtMSId % 0x8000, lengthXnId,
             channelId, setRmtCKEId, setRmtCKEMask, setCKEId, setCKEMask, clearType, lengthEn);
@@ -1110,11 +1134,11 @@ namespace TaskGraphGeneratorV3 {
         uint16_t waitCKEId = UpdateCKEId(instr->v1.transRmtMemToLocMS.waitCKEId, loopGroupParam);
         uint16_t waitCKEMask = instr->v1.transRmtMemToLocMS.waitCKEMask;
 
-        RankId rankId = curCcuTask->GetRankId();
+        DeviceId deviceId = curCcuTask->GetDeviceId();
         uint32_t dieId;
         curCcuTask->GetDieId(queId, dieId);
 
-        CHK_RET(ProcessWaitMask(rankId, dieId, curCcuTask, queId, waitCKEId, waitCKEMask, isContinue));
+        CHK_RET(ProcessWaitMask(deviceId, dieId, curCcuTask, queId, waitCKEId, waitCKEMask, isContinue));
         if (!isContinue) {
             return HCCL_SUCCESS;
         }
@@ -1128,9 +1152,9 @@ namespace TaskGraphGeneratorV3 {
         if (len == 0) {
             HCCL_VM_ERROR(
                 "{} Transfer size is 0, instruction=TransRmtMemToLocMS:\n"
-                "  ctx: rankId={}, dieId={}, queueId={}, instrId={}\n"
+                "  ctx: deviceId={}, dieId={}, queueId={}, instrId={}\n"
                 "  size: transferSize={}",
-                MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID).c_str(), static_cast<uint32_t>(rankId), dieId,
+                MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID).c_str(), static_cast<uint32_t>(deviceId), dieId,
                 queId, instrId, static_cast<unsigned long long>(len));
             return HCCL_E_INTERNAL;
         }
@@ -1138,25 +1162,26 @@ namespace TaskGraphGeneratorV3 {
         DataSlice srcSlice;
         DataSlice dstSlice;
         // todo: 后续插件通过读取vm的输出文件，重建memlayout的地址类型信息
-        CHK_RET(curCcuTask->GetStorageManager().GetSlice(rmtAddr, len, srcSlice));
+        CHK_RET(curCcuTask->GetSlice(rmtAddr, len, srcSlice));
         CHK_RET(GenSliceFromMs(locMSId, len, dstSlice));
 
         // 获取远端rankId与dieId
-        if (g_allRankChannelInfo[rankId][dieId].count(channelId) == 0) {
+        if (g_allRankChannelInfo[deviceId][dieId].count(channelId) == 0) {
             HCCL_VM_ERROR(
-                "{} Cannot find channel mapping for this instruction, instruction=TransRmtMemToLocMS, "
-                "localRankId={}, localDieId={}, channelId={}",
-                MakeErrorCodeText(ErrorCode::GRAPH_RESOURCE_NOT_FOUND).c_str(), static_cast<uint32_t>(rankId), dieId,
+                "{} Cannot find channel mapping for this instruction, "
+                "instruction=TransRmtMemToLocMS, "
+                "localDeviceId={}, localDieId={}, channelId={}",
+                MakeErrorCodeText(ErrorCode::GRAPH_RESOURCE_NOT_FOUND).c_str(), static_cast<uint32_t>(deviceId), dieId,
                 channelId);
             return HCCL_E_INTERNAL;
         }
 
-        RankId rmtRankId = g_allRankChannelInfo[rankId][dieId][channelId].dstRank;
-        AddRead(rankId, rmtRankId, queId, curCcuTask, srcSlice, dstSlice);
+        DeviceId rmtDeviceId = g_allRankChannelInfo[deviceId][dieId][channelId].dstDeviceId;
+        AddRead(deviceId, rmtDeviceId, queId, curCcuTask, srcSlice, dstSlice);
 
-        CHK_RET(ProcessSetMask(rankId, dieId, curCcuTask, queId, setCKEId, setCKEMask));
+        CHK_RET(ProcessSetMask(deviceId, dieId, curCcuTask, queId, setCKEId, setCKEMask));
 
-        CHK_RET(ClearWaitMask(rankId, dieId, waitCKEId, waitCKEMask));
+        CHK_RET(ClearWaitMask(deviceId, dieId, waitCKEId, waitCKEMask));
 
         HCCL_VM_DEBUG(
             "Completed remote-memory to local-MS transfer:\n"
@@ -1187,11 +1212,11 @@ namespace TaskGraphGeneratorV3 {
         uint16_t waitCKEId = UpdateCKEId(instr->v1.transRmtMSToLocMem.waitCKEId, loopGroupParam);
         uint16_t waitCKEMask = instr->v1.transRmtMSToLocMem.waitCKEMask;
 
-        RankId rankId = curCcuTask->GetRankId();
+        DeviceId deviceId = curCcuTask->GetDeviceId();
         uint32_t dieId;
         curCcuTask->GetDieId(queId, dieId);
 
-        CHK_RET(ProcessWaitMask(rankId, dieId, curCcuTask, queId, waitCKEId, waitCKEMask, isContinue));
+        CHK_RET(ProcessWaitMask(deviceId, dieId, curCcuTask, queId, waitCKEId, waitCKEMask, isContinue));
         if (!isContinue) {
             return HCCL_SUCCESS;
         }
@@ -1202,9 +1227,9 @@ namespace TaskGraphGeneratorV3 {
         if (len == 0) {
             HCCL_VM_ERROR(
                 "{} Transfer size is 0, instruction=TransRmtMSToLocMem:\n"
-                "  ctx: rankId={}, dieId={}, queueId={}, instrId={}\n"
+                "  ctx: deviceId={}, dieId={}, queueId={}, instrId={}\n"
                 "  size: transferSize={}",
-                MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID).c_str(), static_cast<uint32_t>(rankId), dieId,
+                MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID).c_str(), static_cast<uint32_t>(deviceId), dieId,
                 queId, instrId, static_cast<unsigned long long>(len));
             return HCCL_E_INTERNAL;
         }
@@ -1216,14 +1241,14 @@ namespace TaskGraphGeneratorV3 {
         CHK_GET_GSA_V3(curCcuTask, queId, locGSAId, localAddr);
         localAddr = UpdateGSAValue(localAddr, loopGroupParam);
         DataSlice dstSlice;
-        CHK_RET(curCcuTask->GetStorageManager().GetSlice(localAddr, len, dstSlice));
+        CHK_RET(curCcuTask->GetSlice(localAddr, len, dstSlice));
 
-        RankId rmtRankId = g_allRankChannelInfo[rankId][dieId][channelId].dstRank;
-        AddRead(rankId, rmtRankId, queId, curCcuTask, srcSlice, dstSlice);
+        DeviceId rmtDeviceId = g_allRankChannelInfo[deviceId][dieId][channelId].dstDeviceId;
+        AddRead(deviceId, rmtDeviceId, queId, curCcuTask, srcSlice, dstSlice);
 
-        CHK_RET(ProcessSetMask(rankId, dieId, curCcuTask, queId, setCKEId, setCKEMask));
+        CHK_RET(ProcessSetMask(deviceId, dieId, curCcuTask, queId, setCKEId, setCKEMask));
 
-        CHK_RET(ClearWaitMask(rankId, dieId, waitCKEId, waitCKEMask));
+        CHK_RET(ClearWaitMask(deviceId, dieId, waitCKEId, waitCKEMask));
 
         HCCL_VM_DEBUG(
             "Completed remote-MS to local-memory transfer:\n"
@@ -1253,11 +1278,11 @@ namespace TaskGraphGeneratorV3 {
         uint16_t waitCKEId = UpdateCKEId(instr->v1.transRmtMSToLocMS.waitCKEId, loopGroupParam);
         uint16_t waitCKEMask = instr->v1.transRmtMSToLocMS.waitCKEMask;
 
-        RankId rankId = curCcuTask->GetRankId();
+        DeviceId deviceId = curCcuTask->GetDeviceId();
         uint32_t dieId;
         curCcuTask->GetDieId(queId, dieId);
 
-        CHK_RET(ProcessWaitMask(rankId, dieId, curCcuTask, queId, waitCKEId, waitCKEMask, isContinue));
+        CHK_RET(ProcessWaitMask(deviceId, dieId, curCcuTask, queId, waitCKEId, waitCKEMask, isContinue));
         if (!isContinue) {
             return HCCL_SUCCESS;
         }
@@ -1268,9 +1293,9 @@ namespace TaskGraphGeneratorV3 {
         if (len == 0) {
             HCCL_VM_ERROR(
                 "{} Transfer size is 0, instruction=TransRmtMSToLocMS:\n"
-                "  ctx: rankId={}, dieId={}, queueId={}, instrId={}\n"
+                "  ctx: deviceId={}, dieId={}, queueId={}, instrId={}\n"
                 "  size: transferSize={}",
-                MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID).c_str(), static_cast<uint32_t>(rankId), dieId,
+                MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID).c_str(), static_cast<uint32_t>(deviceId), dieId,
                 queId, instrId, static_cast<unsigned long long>(len));
             return HCCL_E_INTERNAL;
         }
@@ -1280,12 +1305,12 @@ namespace TaskGraphGeneratorV3 {
         DataSlice dstSlice;
         CHK_RET(GenSliceFromMs(locMSId, len, dstSlice));
 
-        RankId rmtRankId = g_allRankChannelInfo[rankId][dieId][channelId].dstRank;
-        AddRead(rankId, rmtRankId, queId, curCcuTask, srcSlice, dstSlice);
+        DeviceId rmtDeviceId = g_allRankChannelInfo[deviceId][dieId][channelId].dstDeviceId;
+        AddRead(deviceId, rmtDeviceId, queId, curCcuTask, srcSlice, dstSlice);
 
-        CHK_RET(ProcessSetMask(rankId, dieId, curCcuTask, queId, setCKEId, setCKEMask));
+        CHK_RET(ProcessSetMask(deviceId, dieId, curCcuTask, queId, setCKEId, setCKEMask));
 
-        CHK_RET(ClearWaitMask(rankId, dieId, waitCKEId, waitCKEMask));
+        CHK_RET(ClearWaitMask(deviceId, dieId, waitCKEId, waitCKEMask));
 
         HCCL_VM_DEBUG(
             "Completed remote-MS to local-MS transfer:\n"
@@ -1322,11 +1347,11 @@ namespace TaskGraphGeneratorV3 {
         uint16_t waitCKEId = instr->v1.transRmtMemToLocMem.waitCKEId;
         uint16_t waitCKEMask = instr->v1.transRmtMemToLocMem.waitCKEMask;
 
-        RankId rankId = curCcuTask->GetRankId();
+        DeviceId deviceId = curCcuTask->GetDeviceId();
         uint32_t dieId;
         curCcuTask->GetDieId(queId, dieId);
 
-        CHK_RET(ProcessWaitMask(rankId, dieId, curCcuTask, queId, waitCKEId, waitCKEMask, isContinue));
+        CHK_RET(ProcessWaitMask(deviceId, dieId, curCcuTask, queId, waitCKEId, waitCKEMask, isContinue));
         if (!isContinue) {
             return HCCL_SUCCESS;
         }
@@ -1337,19 +1362,22 @@ namespace TaskGraphGeneratorV3 {
         if (len == 0) {
             HCCL_VM_ERROR(
                 "{} Transfer size is 0, instruction=TransRmtMemToLocMem:\n"
-                "  ctx: rankId={}, dieId={}, queueId={}, instrId={}\n"
+                "  ctx: deviceId={}, dieId={}, queueId={}, instrId={}\n"
                 "  size: transferSize={}",
-                MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID).c_str(), static_cast<uint32_t>(rankId), dieId,
+                MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID).c_str(), static_cast<uint32_t>(deviceId), dieId,
                 queId, instrId, static_cast<unsigned long long>(len));
             return HCCL_E_INTERNAL;
         }
         if (len > UB_MAX_SIZE) {
             HCCL_VM_ERROR(
-                "{} Transfer size exceeds the UB upper limit, instruction=TransRmtMemToLocMem:\n"
+                "{} Transfer size exceeds the UB upper limit, "
+                "instruction=TransRmtMemToLocMem:\n"
                 "  size: transferSize={}, ubLimit={}\n"
-                "  ctx: rankId={}, dieId={}, queueId={}, instrId={}",
+                "  ctx: commId={}, rankId={}, deviceId={}, dieId={}, queueId={}, "
+                "instrId={}",
                 MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID).c_str(), static_cast<unsigned long long>(len),
-                static_cast<unsigned long long>(UB_MAX_SIZE), static_cast<uint32_t>(rankId), dieId, queId, instrId);
+                static_cast<unsigned long long>(UB_MAX_SIZE), curCcuTask->GetCommId(), curCcuTask->GetDeviceId(),
+                static_cast<uint32_t>(deviceId), dieId, queId, instrId);
             return HCCL_E_INTERNAL;
         }
 
@@ -1359,24 +1387,28 @@ namespace TaskGraphGeneratorV3 {
         CHK_GET_GSA_V3(curCcuTask, queId, rmtGSAId, rmtAddr);
 
         DataSlice srcSlice;
-        RankId rId;
-        CHK_RET(curCcuTask->GetStorageManager().GetSlice(rmtAddr, len, srcSlice, &rId));
+        DeviceId rId;
+        CHK_RET(curCcuTask->GetSlice(rmtAddr, len, srcSlice, &rId));
         DataSlice dstSlice;
-        CHK_RET(curCcuTask->GetStorageManager().GetSlice(localAddr, len, dstSlice));
+        CHK_RET(curCcuTask->GetSlice(localAddr, len, dstSlice));
 
-        RankId rmtRankId = g_allRankChannelInfo[rankId][dieId][channelId].dstRank;
+        DeviceId rmtDeviceId = g_allRankChannelInfo[deviceId][dieId][channelId].dstDeviceId;
         HCCL_VM_DEBUG(
-            "Preparing remote-memory to local-memory transfer, localRankId={}, remoteRankId={}", rankId, rmtRankId);
+            "Preparing remote-memory to local-memory transfer, "
+            "localDeviceId={}, remoteDeviceId={}",
+            deviceId, rmtDeviceId);
         // 说明transportId写错了
-        if (rId != rmtRankId) {
+        if (rId != rmtDeviceId) {
             HCCL_VM_ERROR(
-                "{} Remote address resolves to a different rank than the selected channel, "
+                "{} Remote address resolves to a different rank than the selected "
+                "channel, "
                 "instruction=TransRmtMemToLocMem:\n"
-                "  ctx: rankId={}, dieId={}, queueId={}, instrId={}, channelId={}\n"
-                "  rank: expectedRemoteRankId={}, actualRemoteRankId={}\n"
+                "  ctx: deviceId={}, dieId={}, queueId={}, instrId={}, "
+                "channelId={}\n"
+                "  rank: expectedRemoteDeviceId={}, actualRemoteDeviceId={}\n"
                 "  addr: remoteAddr={}",
-                MakeErrorCodeText(ErrorCode::GRAPH_REMOTE_RANK_MISMATCH).c_str(), static_cast<uint32_t>(rankId), dieId,
-                queId, instrId, channelId, static_cast<uint32_t>(rmtRankId), static_cast<uint32_t>(rId),
+                MakeErrorCodeText(ErrorCode::GRAPH_REMOTE_RANK_MISMATCH).c_str(), static_cast<uint32_t>(deviceId),
+                dieId, queId, instrId, channelId, static_cast<uint32_t>(rmtDeviceId), static_cast<uint32_t>(rId),
                 static_cast<unsigned long long>(rmtAddr));
             return HCCL_E_INTERNAL;
         }
@@ -1390,23 +1422,23 @@ namespace TaskGraphGeneratorV3 {
             checkerDataType = g_DataType2CheckerDataType_aicpu[hcclDataType];
         }
 
-        if (rmtRankId != rankId) {
+        if (rmtDeviceId != deviceId) {
             if (reduceEn) {
                 AddReadReduce(
-                    rankId, rmtRankId, queId, curCcuTask, srcSlice, dstSlice, checkerDataType, checkerReduceOp);
+                    deviceId, rmtDeviceId, queId, curCcuTask, srcSlice, dstSlice, checkerDataType, checkerReduceOp);
             } else {
-                AddRead(rankId, rmtRankId, queId, curCcuTask, srcSlice, dstSlice);
+                AddRead(deviceId, rmtDeviceId, queId, curCcuTask, srcSlice, dstSlice);
             }
         } else {
             if (reduceEn) {
-                AddLocalReduce(rankId, queId, curCcuTask, srcSlice, dstSlice, checkerDataType, checkerReduceOp);
+                AddLocalReduce(deviceId, queId, curCcuTask, srcSlice, dstSlice, checkerDataType, checkerReduceOp);
             } else {
-                AddLocalCopy(rankId, queId, curCcuTask, srcSlice, dstSlice);
+                AddLocalCopy(deviceId, queId, curCcuTask, srcSlice, dstSlice);
             }
         }
 
-        CHK_RET(ProcessSetMask(rankId, dieId, curCcuTask, queId, setCKEId, setCKEMask));
-        CHK_RET(ClearWaitMask(rankId, dieId, waitCKEId, waitCKEMask));
+        CHK_RET(ProcessSetMask(deviceId, dieId, curCcuTask, queId, setCKEId, setCKEMask));
+        CHK_RET(ClearWaitMask(deviceId, dieId, waitCKEId, waitCKEMask));
 
         HCCL_VM_DEBUG(
             "Completed remote-memory to local-memory transfer:\n"
@@ -1415,10 +1447,10 @@ namespace TaskGraphGeneratorV3 {
             "  dst: dstGsaId={}, dstOffsetXnId={}\n"
             "  xfer: lengthXnId={}, channelId={}\n"
             "  set: setCkeId={}, setMask=0x{:04x}\n"
-            "  ctrl: clearType={}, lengthEnabled={}, reduceEnabled={}, reduceDataType={}, reduceOpCode={}",
+            "  ctrl: clearType={}, lengthEnabled={}, reduceEnabled={}, "
+            "reduceDataType={}, reduceOpCode={}",
             waitCKEId, waitCKEMask, rmtGSAId, rmtXnId, locGSAId, locXnId, lengthXnId, channelId, setCKEId, setCKEMask,
             clearType, lengthEn, reduceEn, reduceDataType, reduceOpCode);
-
         return HCCL_SUCCESS;
     }
 
@@ -1447,7 +1479,8 @@ namespace TaskGraphGeneratorV3 {
     {
         if (len == 0) {
             HCCL_VM_ERROR(
-                "{} Loop-merged transfer size is 0, instruction=LoopMergedTransfer, "
+                "{} Loop-merged transfer size is 0, "
+                "instruction=LoopMergedTransfer, "
                 "transferSize={}",
                 MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID).c_str(), static_cast<unsigned long long>(len));
             return HCCL_E_INTERNAL;
@@ -1455,19 +1488,20 @@ namespace TaskGraphGeneratorV3 {
         return HCCL_SUCCESS;
     }
 
-    static HcclResult
-    GetRemoteRankByChannel(RankId rankId, uint32_t dieId, uint16_t channelId, RankId& rmtRankId, uint32_t& rmtDieId)
+    static HcclResult GetRemoteRankByChannel(
+        DeviceId deviceId, uint32_t dieId, uint16_t channelId, DeviceId& rmtDeviceId, uint32_t& rmtDieId)
     {
-        if (g_allRankChannelInfo[rankId][dieId].count(channelId) == 0) {
+        if (g_allRankChannelInfo[deviceId][dieId].count(channelId) == 0) {
             HCCL_VM_ERROR(
-                "{} Cannot find channel mapping for this instruction, instruction=LoopMergedTransfer, "
-                "localRankId={}, localDieId={}, channelId={}",
-                MakeErrorCodeText(ErrorCode::GRAPH_RESOURCE_NOT_FOUND).c_str(), static_cast<uint32_t>(rankId), dieId,
+                "{} Cannot find channel mapping for this instruction, "
+                "instruction=LoopMergedTransfer, "
+                "localDeviceId={}, localDieId={}, channelId={}",
+                MakeErrorCodeText(ErrorCode::GRAPH_RESOURCE_NOT_FOUND).c_str(), static_cast<uint32_t>(deviceId), dieId,
                 channelId);
             return HCCL_E_INTERNAL;
         }
-        rmtRankId = g_allRankChannelInfo[rankId][dieId][channelId].dstRank;
-        rmtDieId = g_allRankChannelInfo[rankId][dieId][channelId].remoteDieId;
+        rmtDeviceId = g_allRankChannelInfo[deviceId][dieId][channelId].dstDeviceId;
+        rmtDieId = g_allRankChannelInfo[deviceId][dieId][channelId].remoteDieId;
         return HCCL_SUCCESS;
     }
 
@@ -1615,10 +1649,10 @@ namespace TaskGraphGeneratorV3 {
         const CcuRep::CcuInstr* instr, CcuGraphStateV3* curCcuTask, uint32_t queId, uint16_t instrId,
         const LoopGroupParam& sampleParam, uint64_t loopCnt, std::shared_ptr<CcuLoopInstrV3>& instrInLoop)
     {
-        RankId rankId = curCcuTask->GetRankId();
+        DeviceId deviceId = curCcuTask->GetDeviceId();
         uint32_t dieId = INVALID_DIE_ID;
         curCcuTask->GetDieId(queId, dieId);
-        auto transInstr = EnsureCcuLoopInstr<CcuLoopTransMemV3>(instrInLoop, rankId, dieId, instrId);
+        auto transInstr = EnsureCcuLoopInstr<CcuLoopTransMemV3>(instrInLoop, deviceId, dieId, instrId);
         if (transInstr == nullptr) {
             return HCCL_E_MEMORY;
         }
@@ -1634,7 +1668,7 @@ namespace TaskGraphGeneratorV3 {
             uint64_t len = 0;
             DataSlice srcSlice;
             DataSlice dstSlice;
-            RankId rmtRankId = INVALID_RANK_ID;
+            DeviceId rmtDeviceId = INVALID_DEVICE_ID;
             uint32_t rmtDieId = INVALID_DIE_ID;
             switch (instr->header.code) {
                 case TRANSLOCMEMTOLOCMS_CODE: {
@@ -1644,27 +1678,27 @@ namespace TaskGraphGeneratorV3 {
                     CHK_GET_XN_V3(curCcuTask, queId, op.lengthXnId, len);
                     CHK_RET(ValidateLoopLen(len));
                     locMemAddr = UpdateGSAValue(locMemAddr, &iterParam);
-                    CHK_RET(curCcuTask->GetStorageManager().GetSlice(locMemAddr, len, srcSlice));
+                    CHK_RET(curCcuTask->GetSlice(locMemAddr, len, srcSlice));
                     const uint16_t locMSId = UpdateMSId(op.locMSId, &iterParam);
                     CHK_RET(GenSliceFromMs(locMSId, len, dstSlice));
-                    transInstr->srcs.push_back(MakeCcuMemSlice(rankId, srcSlice));
-                    transInstr->dsts.push_back(MakeCcuMemSlice(rankId, dstSlice));
+                    transInstr->srcs.push_back(MakeCcuMemSlice(deviceId, srcSlice));
+                    transInstr->dsts.push_back(MakeCcuMemSlice(deviceId, dstSlice));
                     transInstr->msIds.insert(locMSId);
                     break;
                 }
                 case TRANSRMTMEMTOLOCMS_CODE: {
                     const auto& op = instr->v1.transRmtMemToLocMS;
-                    CHK_RET(GetRemoteRankByChannel(rankId, dieId, op.channelId, rmtRankId, rmtDieId));
+                    CHK_RET(GetRemoteRankByChannel(deviceId, dieId, op.channelId, rmtDeviceId, rmtDieId));
                     uint64_t rmtAddr = 0;
                     CHK_GET_GSA_V3(curCcuTask, queId, op.rmtGSAId, rmtAddr);
                     CHK_GET_XN_V3(curCcuTask, queId, op.lengthXnId, len);
                     CHK_RET(ValidateLoopLen(len));
                     rmtAddr = UpdateGSAValue(rmtAddr, &iterParam);
-                    CHK_RET(curCcuTask->GetStorageManager().GetSlice(rmtAddr, len, srcSlice));
+                    CHK_RET(curCcuTask->GetSlice(rmtAddr, len, srcSlice));
                     const uint16_t locMSId = UpdateMSId(op.locMSId, &iterParam);
                     CHK_RET(GenSliceFromMs(locMSId, len, dstSlice));
-                    transInstr->srcs.push_back(MakeCcuMemSlice(rmtRankId, srcSlice));
-                    transInstr->dsts.push_back(MakeCcuMemSlice(rankId, dstSlice));
+                    transInstr->srcs.push_back(MakeCcuMemSlice(rmtDeviceId, srcSlice));
+                    transInstr->dsts.push_back(MakeCcuMemSlice(deviceId, dstSlice));
                     transInstr->msIds.insert(locMSId);
                     break;
                 }
@@ -1677,15 +1711,15 @@ namespace TaskGraphGeneratorV3 {
                     uint64_t locMemAddr = 0;
                     CHK_GET_GSA_V3(curCcuTask, queId, op.locGSAId, locMemAddr);
                     locMemAddr = UpdateGSAValue(locMemAddr, &iterParam);
-                    CHK_RET(curCcuTask->GetStorageManager().GetSlice(locMemAddr, len, dstSlice));
-                    transInstr->srcs.push_back(MakeCcuMemSlice(rankId, srcSlice));
-                    transInstr->dsts.push_back(MakeCcuMemSlice(rankId, dstSlice));
+                    CHK_RET(curCcuTask->GetSlice(locMemAddr, len, dstSlice));
+                    transInstr->srcs.push_back(MakeCcuMemSlice(deviceId, srcSlice));
+                    transInstr->dsts.push_back(MakeCcuMemSlice(deviceId, dstSlice));
                     transInstr->msIds.insert(locMSId);
                     break;
                 }
                 case TRANSLOCMSTORMTMEM_CODE: {
                     const auto& op = instr->v1.transLocMSToRmtMem;
-                    CHK_RET(GetRemoteRankByChannel(rankId, dieId, op.channelId, rmtRankId, rmtDieId));
+                    CHK_RET(GetRemoteRankByChannel(deviceId, dieId, op.channelId, rmtDeviceId, rmtDieId));
                     CHK_GET_XN_V3(curCcuTask, queId, op.lengthXnId, len);
                     CHK_RET(ValidateLoopLen(len));
                     const uint16_t locMSId = UpdateMSId(op.locMSId, &iterParam);
@@ -1693,15 +1727,15 @@ namespace TaskGraphGeneratorV3 {
                     uint64_t rmtMemAddr = 0;
                     CHK_GET_GSA_V3(curCcuTask, queId, op.rmtGSAId, rmtMemAddr);
                     rmtMemAddr = UpdateGSAValue(rmtMemAddr, &iterParam);
-                    CHK_RET(curCcuTask->GetStorageManager().GetSlice(rmtMemAddr, len, dstSlice));
-                    transInstr->srcs.push_back(MakeCcuMemSlice(rankId, srcSlice));
-                    transInstr->dsts.push_back(MakeCcuMemSlice(rmtRankId, dstSlice));
+                    CHK_RET(curCcuTask->GetSlice(rmtMemAddr, len, dstSlice));
+                    transInstr->srcs.push_back(MakeCcuMemSlice(deviceId, srcSlice));
+                    transInstr->dsts.push_back(MakeCcuMemSlice(rmtDeviceId, dstSlice));
                     transInstr->msIds.insert(locMSId);
                     break;
                 }
                 case TRANSRMTMSTOLOCMEM_CODE: {
                     const auto& op = instr->v1.transRmtMSToLocMem;
-                    CHK_RET(GetRemoteRankByChannel(rankId, dieId, op.channelId, rmtRankId, rmtDieId));
+                    CHK_RET(GetRemoteRankByChannel(deviceId, dieId, op.channelId, rmtDeviceId, rmtDieId));
                     CHK_GET_XN_V3(curCcuTask, queId, op.lengthXnId, len);
                     CHK_RET(ValidateLoopLen(len));
                     const uint16_t rmtMSId = UpdateMSId(op.rmtMSId, &iterParam);
@@ -1709,9 +1743,9 @@ namespace TaskGraphGeneratorV3 {
                     uint64_t localAddr = 0;
                     CHK_GET_GSA_V3(curCcuTask, queId, op.locGSAId, localAddr);
                     localAddr = UpdateGSAValue(localAddr, &iterParam);
-                    CHK_RET(curCcuTask->GetStorageManager().GetSlice(localAddr, len, dstSlice));
-                    transInstr->srcs.push_back(MakeCcuMemSlice(rmtRankId, srcSlice));
-                    transInstr->dsts.push_back(MakeCcuMemSlice(rankId, dstSlice));
+                    CHK_RET(curCcuTask->GetSlice(localAddr, len, dstSlice));
+                    transInstr->srcs.push_back(MakeCcuMemSlice(rmtDeviceId, srcSlice));
+                    transInstr->dsts.push_back(MakeCcuMemSlice(deviceId, dstSlice));
                     transInstr->msIds.insert(rmtMSId);
                     break;
                 }
@@ -1723,23 +1757,23 @@ namespace TaskGraphGeneratorV3 {
                     const uint16_t dstMSId = UpdateMSId(op.dstMSId, &iterParam);
                     CHK_RET(GenSliceFromMs(srcMSId, len, srcSlice));
                     CHK_RET(GenSliceFromMs(dstMSId, len, dstSlice));
-                    transInstr->srcs.push_back(MakeCcuMemSlice(rankId, srcSlice));
-                    transInstr->dsts.push_back(MakeCcuMemSlice(rankId, dstSlice));
+                    transInstr->srcs.push_back(MakeCcuMemSlice(deviceId, srcSlice));
+                    transInstr->dsts.push_back(MakeCcuMemSlice(deviceId, dstSlice));
                     transInstr->msIds.insert(srcMSId);
                     transInstr->msIds.insert(dstMSId);
                     break;
                 }
                 case TRANSRMTMSTOLOCMS_CODE: {
                     const auto& op = instr->v1.transRmtMSToLocMS;
-                    CHK_RET(GetRemoteRankByChannel(rankId, dieId, op.channelId, rmtRankId, rmtDieId));
+                    CHK_RET(GetRemoteRankByChannel(deviceId, dieId, op.channelId, rmtDeviceId, rmtDieId));
                     CHK_GET_XN_V3(curCcuTask, queId, op.lengthXnId, len);
                     CHK_RET(ValidateLoopLen(len));
                     const uint16_t rmtMSId = UpdateMSId(op.rmtMSId, &iterParam);
                     const uint16_t locMSId = UpdateMSId(op.locMSId, &iterParam);
                     CHK_RET(GenSliceFromMs(rmtMSId, len, srcSlice));
                     CHK_RET(GenSliceFromMs(locMSId, len, dstSlice));
-                    transInstr->srcs.push_back(MakeCcuMemSlice(rmtRankId, srcSlice));
-                    transInstr->dsts.push_back(MakeCcuMemSlice(rankId, dstSlice));
+                    transInstr->srcs.push_back(MakeCcuMemSlice(rmtDeviceId, srcSlice));
+                    transInstr->dsts.push_back(MakeCcuMemSlice(deviceId, dstSlice));
                     transInstr->msIds.insert(rmtMSId);
                     transInstr->msIds.insert(locMSId);
                     break;
@@ -1749,15 +1783,15 @@ namespace TaskGraphGeneratorV3 {
                     if (op.setRmtCKEMask != 0) {
                         return HCCL_E_NOT_SUPPORT;
                     }
-                    CHK_RET(GetRemoteRankByChannel(rankId, dieId, op.channelId, rmtRankId, rmtDieId));
+                    CHK_RET(GetRemoteRankByChannel(deviceId, dieId, op.channelId, rmtDeviceId, rmtDieId));
                     CHK_GET_XN_V3(curCcuTask, queId, op.lengthXnId, len);
                     CHK_RET(ValidateLoopLen(len));
                     const uint16_t locMSId = UpdateMSId(op.locMSId, &iterParam);
                     const uint16_t rmtMSId = UpdateMSId(op.rmtMSId, &iterParam);
                     CHK_RET(GenSliceFromMs(locMSId, len, srcSlice));
                     CHK_RET(GenSliceFromMs(rmtMSId, len, dstSlice));
-                    transInstr->srcs.push_back(MakeCcuMemSlice(rankId, srcSlice));
-                    transInstr->dsts.push_back(MakeCcuMemSlice(rmtRankId, dstSlice));
+                    transInstr->srcs.push_back(MakeCcuMemSlice(deviceId, srcSlice));
+                    transInstr->dsts.push_back(MakeCcuMemSlice(rmtDeviceId, dstSlice));
                     transInstr->msIds.insert(locMSId);
                     transInstr->msIds.insert(rmtMSId);
                     break;
@@ -1773,10 +1807,10 @@ namespace TaskGraphGeneratorV3 {
         const CcuRep::CcuInstr* instr, CcuGraphStateV3* curCcuTask, uint32_t queId, uint16_t instrId,
         const LoopGroupParam& sampleParam, uint64_t loopCnt, std::shared_ptr<CcuLoopInstrV3>& instrInLoop)
     {
-        RankId rankId = curCcuTask->GetRankId();
+        DeviceId deviceId = curCcuTask->GetDeviceId();
         uint32_t dieId = INVALID_DIE_ID;
         curCcuTask->GetDieId(queId, dieId);
-        auto reduceInstr = EnsureCcuLoopInstr<CcuLoopReduceV3>(instrInLoop, rankId, dieId, instrId);
+        auto reduceInstr = EnsureCcuLoopInstr<CcuLoopReduceV3>(instrInLoop, deviceId, dieId, instrId);
         if (reduceInstr == nullptr) {
             return HCCL_E_MEMORY;
         }
@@ -1834,14 +1868,14 @@ namespace TaskGraphGeneratorV3 {
                 DataSlice srcSlice;
                 const uint16_t srcMSId = UpdateMSId(msIds[i], &iterParam);
                 CHK_RET(GenSliceFromMs(srcMSId, len, srcSlice));
-                srcGroup.push_back(MakeCcuMemSlice(rankId, srcSlice));
+                srcGroup.push_back(MakeCcuMemSlice(deviceId, srcSlice));
                 reduceInstr->msIds.insert(srcMSId);
             }
             DataSlice dstSlice;
             const uint16_t dstMSId = UpdateMSId(msIds[0], &iterParam);
             CHK_RET(GenSliceFromMs(dstMSId, len, dstSlice));
             reduceInstr->srcs.push_back(std::move(srcGroup));
-            reduceInstr->dsts.push_back(MakeCcuMemSlice(rankId, dstSlice));
+            reduceInstr->dsts.push_back(MakeCcuMemSlice(deviceId, dstSlice));
             reduceInstr->msIds.insert(dstMSId);
         }
         return HCCL_SUCCESS;
@@ -1854,10 +1888,10 @@ namespace TaskGraphGeneratorV3 {
         if (instr->header.code != CLEARCKE_CODE || instr->v1.clearCKE.clearMask != 0) {
             return HCCL_E_NOT_SUPPORT;
         }
-        RankId rankId = curCcuTask->GetRankId();
+        DeviceId deviceId = curCcuTask->GetDeviceId();
         uint32_t dieId = INVALID_DIE_ID;
         curCcuTask->GetDieId(queId, dieId);
-        auto clearInstr = EnsureCcuLoopInstr<CcuLoopClearCkeV3>(instrInLoop, rankId, dieId, instrId);
+        auto clearInstr = EnsureCcuLoopInstr<CcuLoopClearCkeV3>(instrInLoop, deviceId, dieId, instrId);
         if (clearInstr == nullptr) {
             return HCCL_E_MEMORY;
         }
@@ -1925,7 +1959,7 @@ namespace TaskGraphGeneratorV3 {
         if (loopInstr->header.type != CTRL_TYPE || loopInstr->header.code != LOOP_CODE) {
             return HCCL_E_NOT_SUPPORT;
         }
-        RankId rankId = curCcuTask->GetRankId();
+        DeviceId deviceId = curCcuTask->GetDeviceId();
         uint32_t dieId = INVALID_DIE_ID;
         curCcuTask->GetDieId(queId, dieId);
         uint64_t value = 0;
@@ -1948,7 +1982,7 @@ namespace TaskGraphGeneratorV3 {
     static HcclResult RecordMergedLoopParamA5(
         const CcuRep::CcuInstr* loopInstr, CcuGraphStateV3* curCcuTask, uint32_t queId, LoopGroupParam& loopParam)
     {
-        RankId rankId = curCcuTask->GetRankId();
+        DeviceId deviceId = curCcuTask->GetDeviceId();
         uint32_t dieId = INVALID_DIE_ID;
         curCcuTask->GetDieId(queId, dieId);
         uint64_t value = 0;
@@ -2011,7 +2045,8 @@ namespace TaskGraphGeneratorV3 {
         }
         const uint16_t loopInstructionId = static_cast<uint16_t>(loopInstr->v1.loop.startInstrId);
         HCCL_VM_INFO(
-            "Merged LoopGroup body successfully, loopInstructionId={}, loopCount={}, "
+            "Merged LoopGroup body successfully, loopInstructionId={}, "
+            "loopCount={}, "
             "expandTimes={}, mergedInstructionCount={}",
             loopInstructionId, mergedLoopCnt, expandTimes, mergedLoop.loopExpands.front().instrs.size());
         merged = true;
@@ -2033,7 +2068,7 @@ namespace TaskGraphGeneratorV3 {
         uint16_t xmId = instr->v1.loopGroup.xmId;
         uint16_t highPerfModeEn = instr->v1.loopGroup.highPerfModeEn;
 
-        RankId rankId = curCcuTask->GetRankId();
+        DeviceId deviceId = curCcuTask->GetDeviceId();
         uint32_t dieId;
         curCcuTask->GetDieId(queId, dieId);
 
@@ -2045,10 +2080,10 @@ namespace TaskGraphGeneratorV3 {
         auto loopGroupIdx = curCcuTask->loopGroupIdx++;
         uint64_t loopCnt = loopGroupParam.loopGroupXn.loopInsCnt;
         HCCL_VM_DEBUG(
-            "Parsed LoopGroup configuration, loopCount={}, expandOffset={}, expandCount={}", loopCnt,
-            static_cast<uint64_t>(loopGroupParam.loopGroupXn.expandOffset),
+            "Parsed LoopGroup configuration, loopCount={}, expandOffset={}, "
+            "expandCount={}",
+            loopCnt, static_cast<uint64_t>(loopGroupParam.loopGroupXn.expandOffset),
             static_cast<uint64_t>(loopGroupParam.loopGroupXn.expandCnt));
-
         for (u32 curLoopIdx = 0; curLoopIdx < loopCnt; curLoopIdx++) {
             loopGroupParam.curLoopIdx = curLoopIdx;
             // 计算当前Loop指令的位置
@@ -2081,7 +2116,8 @@ namespace TaskGraphGeneratorV3 {
         }
 
         HCCL_VM_DEBUG(
-            "Finished LoopGroup expansion, startLoopInstructionId={}, loopGroupXnId={}, "
+            "Finished LoopGroup expansion, startLoopInstructionId={}, "
+            "loopGroupXnId={}, "
             "loopGroupXmId={}, highPerfModeEnabled={}",
             startLoopInstrId, xnId, xmId, highPerfModeEn);
         return HCCL_SUCCESS;
@@ -2095,8 +2131,10 @@ namespace TaskGraphGeneratorV3 {
         uint16_t endInstrId = instr->v1.loop.endInstrId;
         uint16_t xnId = instr->v1.loop.xnId;
         HCCL_VM_ERROR(
-            "{} A loop instruction cannot be executed by itself; it must be triggered from a "
-            "LoopGroup, startInstructionId={}, endInstructionId={}, loopCountXnId={}",
+            "{} A loop instruction cannot be executed by itself; it must "
+            "be triggered from a "
+            "LoopGroup, startInstructionId={}, endInstructionId={}, "
+            "loopCountXnId={}",
             MakeErrorCodeText(ErrorCode::GRAPH_UNSUPPORTED).c_str(), startInstrId, endInstrId, xnId);
         // 当前Loop都需要通过LoopGoup来触发，暂不支持单独解析Loop命令
         return HCCL_E_INTERNAL;
@@ -2112,24 +2150,25 @@ namespace TaskGraphGeneratorV3 {
         uint16_t waitCKEId = UpdateCKEId(instr->v1.clearCKE.waitCKEId, loopGroupParam);
         uint16_t waitCKEMask = instr->v1.clearCKE.waitCKEMask;
 
-        RankId rankId = curCcuTask->GetRankId();
+        DeviceId deviceId = curCcuTask->GetDeviceId();
         uint32_t dieId;
         curCcuTask->GetDieId(queId, dieId);
 
-        CHK_RET(ProcessWaitMask(rankId, dieId, curCcuTask, queId, waitCKEId, waitCKEMask, isContinue));
+        CHK_RET(ProcessWaitMask(deviceId, dieId, curCcuTask, queId, waitCKEId, waitCKEMask, isContinue));
         if (!isContinue) {
             return HCCL_SUCCESS;
         }
 
         if (clearMask != 0x0000) {
             HCCL_VM_ERROR(
-                "{} CheckerV3 only supports clearing an entire CKE register here; partial clear "
+                "{} CheckerV3 only supports clearing an entire CKE register here; "
+                "partial clear "
                 "mask is not supported, clearCkeId={}, clearMask=0x{:04x}",
-                MakeErrorCodeText(ErrorCode::GRAPH_UNSUPPORTED).c_str(), clearCKEId, clearMask);
+                MakeErrorCodeText(ErrorCode::GRAPH_STRUCTURE_INVALID).c_str(), clearCKEId, clearMask);
             return HCCL_E_INTERNAL;
         }
 
-        CHK_RET(ClearWaitMask(rankId, dieId, waitCKEId, waitCKEMask));
+        CHK_RET(ClearWaitMask(deviceId, dieId, waitCKEId, waitCKEMask));
 
         HCCL_VM_DEBUG(
             "Wait CKE[{}:0x{:04x}], Clear CKE[{}:0x{:04x}], clearType[{}]", waitCKEId, waitCKEMask, clearCKEId,
@@ -2153,44 +2192,46 @@ namespace TaskGraphGeneratorV3 {
         uint16_t waitCKEId = instr->v1.syncGSA.waitCKEId;
         uint16_t waitCKEMask = instr->v1.syncGSA.waitCKEMask;
 
-        RankId rankId = curCcuTask->GetRankId();
+        DeviceId deviceId = curCcuTask->GetDeviceId();
         uint32_t dieId;
         curCcuTask->GetDieId(queId, dieId);
 
-        CHK_RET(ProcessWaitMask(rankId, dieId, curCcuTask, queId, waitCKEId, waitCKEMask, isContinue));
+        CHK_RET(ProcessWaitMask(deviceId, dieId, curCcuTask, queId, waitCKEId, waitCKEMask, isContinue));
         if (!isContinue) {
             return HCCL_SUCCESS;
         }
 
         // 获取远端rankId与dieId
-        if (g_allRankChannelInfo[rankId][dieId].count(channelId) == 0) {
+        if (g_allRankChannelInfo[deviceId][dieId].count(channelId) == 0) {
             HCCL_VM_ERROR(
-                "{} Cannot find channel mapping for this instruction, instruction=SyncGSA, "
-                "localRankId={}, localDieId={}, channelId={}",
-                MakeErrorCodeText(ErrorCode::GRAPH_RESOURCE_NOT_FOUND).c_str(), static_cast<uint32_t>(rankId), dieId,
+                "{} Cannot find channel mapping for this instruction, "
+                "instruction=SyncGSA, "
+                "localDeviceId={}, localDieId={}, channelId={}",
+                MakeErrorCodeText(ErrorCode::GRAPH_RESOURCE_NOT_FOUND).c_str(), static_cast<uint32_t>(deviceId), dieId,
                 channelId);
             return HCCL_E_INTERNAL;
         }
 
-        RankId rmtRankId = g_allRankChannelInfo[rankId][dieId][channelId].dstRank;
-        uint32_t rmtDieId = g_allRankChannelInfo[rankId][dieId][channelId].remoteDieId;
+        DeviceId rmtDeviceId = g_allRankChannelInfo[deviceId][dieId][channelId].dstDeviceId;
+        uint32_t rmtDieId = g_allRankChannelInfo[deviceId][dieId][channelId].remoteDieId;
 
         uint64_t localGSAValue = 0;
         CHK_GET_GSA_V3(curCcuTask, queId, locGSAId, localGSAValue);
-        CHK_RET(AllRankParamRecorder::Global()->SetGSA(rmtRankId, rmtDieId, rmtGSAId, localGSAValue));
+        CHK_RET(AllRankParamRecorder::Global()->SetGSA(rmtDeviceId, rmtDieId, rmtGSAId, localGSAValue));
 
         if (setRmtCKEMask != 0x0000) {
-            AddPost(rankId, rmtRankId, queId, curCcuTask, rmtDieId, setRmtCKEId, setRmtCKEMask);
+            AddPost(deviceId, rmtDeviceId, queId, curCcuTask, rmtDieId, setRmtCKEId, setRmtCKEMask);
 
             // 将对应的bit位置一
             uint16_t ckeValue = 0;
-            CHK_RET(AllRankParamRecorder::Global()->GetCKE(rmtRankId, rmtDieId, setRmtCKEId, ckeValue));
-            CHK_RET(AllRankParamRecorder::Global()->SetCKE(rmtRankId, rmtDieId, setRmtCKEId, ckeValue | setRmtCKEMask));
+            CHK_RET(AllRankParamRecorder::Global()->GetCKE(rmtDeviceId, rmtDieId, setRmtCKEId, ckeValue));
+            CHK_RET(
+                AllRankParamRecorder::Global()->SetCKE(rmtDeviceId, rmtDieId, setRmtCKEId, ckeValue | setRmtCKEMask));
         }
 
-        CHK_RET(ProcessSetMask(rankId, dieId, curCcuTask, queId, setCKEId, setCKEMask, true));
+        CHK_RET(ProcessSetMask(deviceId, dieId, curCcuTask, queId, setCKEId, setCKEMask, true));
 
-        CHK_RET(ClearWaitMask(rankId, dieId, waitCKEId, waitCKEMask));
+        CHK_RET(ClearWaitMask(deviceId, dieId, waitCKEId, waitCKEMask));
 
         HCCL_VM_DEBUG(
             "Wait CKE[{}:0x{:04x}]:\n"
@@ -2199,7 +2240,6 @@ namespace TaskGraphGeneratorV3 {
             "  ctrl: clearType[{}]",
             waitCKEId, waitCKEMask, locGSAId, localGSAValue, rmtGSAId, channelId, setRmtCKEId, setRmtCKEMask, setCKEId,
             setCKEMask, clearType);
-
         return HCCL_SUCCESS;
     }
 
@@ -2214,13 +2254,13 @@ namespace TaskGraphGeneratorV3 {
         static std::map<uint16_t, DataType> ccuMaxMinDataTypeMap = {
             {0, DataType::FP32},  {1, DataType::FP16},  {2, DataType::BFP16}, {6, DataType::INT8},
             {7, DataType::UINT8}, {8, DataType::INT16}, {9, DataType::INT32},
-
         };
 
         if (ccuReduceType == CcuRep::CCU_REDUCE_SUM) {
             if (ccuSumDataTypeMap.find(ccuDataType) == ccuSumDataTypeMap.end()) {
                 HCCL_VM_ERROR(
-                    "{} This CCU reduce data type is not supported for SUM, ccuDataType={}",
+                    "{} This CCU reduce data type is not supported for SUM, "
+                    "ccuDataType={}",
                     MakeErrorCodeText(ErrorCode::GRAPH_UNSUPPORTED).c_str(), ccuDataType);
                 return HCCL_E_INTERNAL;
             }
@@ -2264,11 +2304,11 @@ namespace TaskGraphGeneratorV3 {
         }
         // todo: 对于不支持的数据类型需要进行报错处理
 
-        RankId rankId = curCcuTask->GetRankId();
+        DeviceId deviceId = curCcuTask->GetDeviceId();
         uint32_t dieId;
         curCcuTask->GetDieId(queId, dieId);
 
-        CHK_RET(ProcessWaitMask(rankId, dieId, curCcuTask, queId, waitCKEId, waitCKEMask, isContinue));
+        CHK_RET(ProcessWaitMask(deviceId, dieId, curCcuTask, queId, waitCKEId, waitCKEMask, isContinue));
         if (!isContinue) {
             return HCCL_SUCCESS;
         }
@@ -2287,20 +2327,19 @@ namespace TaskGraphGeneratorV3 {
 
         DataType hcclDataType;
         CHK_RET(GetHcclDataTypeFromCCUDataType(dataType, CcuRep::CCU_REDUCE_SUM, hcclDataType));
-        AddLocalBatchReduce(rankId, queId, curCcuTask, srcSlices, dstSlice, hcclDataType);
+        AddLocalBatchReduce(deviceId, queId, curCcuTask, srcSlices, dstSlice, hcclDataType);
 
-        CHK_RET(ProcessSetMask(rankId, dieId, curCcuTask, queId, setCKEId, setCKEMask));
+        CHK_RET(ProcessSetMask(deviceId, dieId, curCcuTask, queId, setCKEId, setCKEMask));
 
-        CHK_RET(ClearWaitMask(rankId, dieId, waitCKEId, waitCKEMask));
+        CHK_RET(ClearWaitMask(deviceId, dieId, waitCKEId, waitCKEMask));
 
-        HCCL_VM_DEBUG(
+        HCCL_VM_INFO(
             "Completed local SUM reduce:\n"
             "  wait: waitCkeId={}, waitMask=0x{:04x}\n"
             "  src: msList={}, sourceCount={}, dataType={}, castEnabled={}\n"
             "  set: setCkeId={}, setMask=0x{:04x}\n"
             "  ctrl: clearType={}",
             waitCKEId, waitCKEMask, ParseMSList(instr), count, dataType, castEn, setCKEId, setCKEMask, clearType);
-
         return HCCL_SUCCESS;
     }
 
@@ -2323,11 +2362,11 @@ namespace TaskGraphGeneratorV3 {
         }
         // todo: 对于不支持的数据类型需要进行报错处理
 
-        RankId rankId = curCcuTask->GetRankId();
+        DeviceId deviceId = curCcuTask->GetDeviceId();
         uint32_t dieId;
         curCcuTask->GetDieId(queId, dieId);
 
-        CHK_RET(ProcessWaitMask(rankId, dieId, curCcuTask, queId, waitCKEId, waitCKEMask, isContinue));
+        CHK_RET(ProcessWaitMask(deviceId, dieId, curCcuTask, queId, waitCKEId, waitCKEMask, isContinue));
         if (!isContinue) {
             return HCCL_SUCCESS;
         }
@@ -2346,11 +2385,11 @@ namespace TaskGraphGeneratorV3 {
 
         DataType hcclDataType;
         CHK_RET(GetHcclDataTypeFromCCUDataType(dataType, CcuRep::CCU_REDUCE_MAX, hcclDataType));
-        AddLocalBatchReduce(rankId, queId, curCcuTask, srcSlices, dstSlice, hcclDataType);
+        AddLocalBatchReduce(deviceId, queId, curCcuTask, srcSlices, dstSlice, hcclDataType);
 
-        CHK_RET(ProcessSetMask(rankId, dieId, curCcuTask, queId, setCKEId, setCKEMask));
+        CHK_RET(ProcessSetMask(deviceId, dieId, curCcuTask, queId, setCKEId, setCKEMask));
 
-        CHK_RET(ClearWaitMask(rankId, dieId, waitCKEId, waitCKEMask));
+        CHK_RET(ClearWaitMask(deviceId, dieId, waitCKEId, waitCKEMask));
 
         HCCL_VM_DEBUG(
             "Completed local MAX reduce:\n"
@@ -2359,7 +2398,6 @@ namespace TaskGraphGeneratorV3 {
             "  set: setCkeId={}, setMask=0x{:04x}\n"
             "  ctrl: clearType={}",
             waitCKEId, waitCKEMask, ParseMSList(instr), count, dataType, setCKEId, setCKEMask, clearType);
-
         return HCCL_SUCCESS;
     }
 
@@ -2382,11 +2420,11 @@ namespace TaskGraphGeneratorV3 {
         }
         // todo: 对于不支持的数据类型需要进行报错处理
 
-        RankId rankId = curCcuTask->GetRankId();
+        DeviceId deviceId = curCcuTask->GetDeviceId();
         uint32_t dieId;
         curCcuTask->GetDieId(queId, dieId);
 
-        CHK_RET(ProcessWaitMask(rankId, dieId, curCcuTask, queId, waitCKEId, waitCKEMask, isContinue));
+        CHK_RET(ProcessWaitMask(deviceId, dieId, curCcuTask, queId, waitCKEId, waitCKEMask, isContinue));
         if (!isContinue) {
             return HCCL_SUCCESS;
         }
@@ -2405,11 +2443,11 @@ namespace TaskGraphGeneratorV3 {
 
         DataType hcclDataType;
         CHK_RET(GetHcclDataTypeFromCCUDataType(dataType, CcuRep::CCU_REDUCE_MIN, hcclDataType));
-        AddLocalBatchReduce(rankId, queId, curCcuTask, srcSlices, dstSlice, hcclDataType);
+        AddLocalBatchReduce(deviceId, queId, curCcuTask, srcSlices, dstSlice, hcclDataType);
 
-        CHK_RET(ProcessSetMask(rankId, dieId, curCcuTask, queId, setCKEId, setCKEMask));
+        CHK_RET(ProcessSetMask(deviceId, dieId, curCcuTask, queId, setCKEId, setCKEMask));
 
-        CHK_RET(ClearWaitMask(rankId, dieId, waitCKEId, waitCKEMask));
+        CHK_RET(ClearWaitMask(deviceId, dieId, waitCKEId, waitCKEMask));
 
         HCCL_VM_DEBUG(
             "Completed local MIN reduce:\n"
@@ -2663,7 +2701,7 @@ namespace TaskGraphGeneratorV3 {
         uint16_t endInstrId = instr->v1.loop.endInstrId;
         uint16_t xnId = instr->v1.loop.xnId;
 
-        RankId rankId = curCcuTask->GetRankId();
+        DeviceId deviceId = curCcuTask->GetDeviceId();
         uint32_t dieId;
         curCcuTask->GetDieId(queId, dieId);
 
@@ -2695,10 +2733,12 @@ namespace TaskGraphGeneratorV3 {
                 HCCL_VM_DEBUG("Expanding loop instruction, instructionId={}", insId);
                 if (transformA5InstrSqeMap.count(instructionHeader) == 0) {
                     HCCL_VM_ERROR(
-                        "{} This A5 CCU instruction type is not supported during loop expansion, "
-                        "rankId={}, queueId={}, instructionId={}, instructionHeader=0x{:04x}",
-                        MakeErrorCodeText(ErrorCode::GRAPH_UNSUPPORTED).c_str(), curCcuTask->GetRankId(), queId, insId,
-                        instructionHeader);
+                        "{} This A5 CCU instruction type is not supported during "
+                        "loop expansion, "
+                        "deviceId={}, queueId={}, instructionId={}, "
+                        "instructionHeader=0x{:04x}",
+                        MakeErrorCodeText(ErrorCode::GRAPH_UNSUPPORTED).c_str(), curCcuTask->GetDeviceId(), queId,
+                        insId, instructionHeader);
                     pos = savedPos;
                     return HCCL_E_INTERNAL;
                 }
@@ -2707,7 +2747,8 @@ namespace TaskGraphGeneratorV3 {
             }
         }
         pos = savedPos;
-        auto loopEnd = AddLoopEndTask(queId, loopIdx, loopGroupIdx, curCcuTask); // loop后新增loopEnd标记节点
+        auto loopEnd = AddLoopEndTask(queId, loopIdx, loopGroupIdx,
+                                      curCcuTask); // loop后新增loopEnd标记节点
 
         HCCL_VM_DEBUG(
             "Finished loop expansion, startInstructionId={}, endInstructionId={}, "
@@ -2725,10 +2766,11 @@ namespace TaskGraphGeneratorV3 {
         auto it = transformInstrSqeMap.find(instructionHeader);
         if (it == transformInstrSqeMap.end()) {
             HCCL_VM_ERROR(
-                "{} This A5 CCU instruction type is not supported by CheckerV3 graph expansion, "
-                "rankId={}, queueId={}, instructionHeader=0x{:04x}",
+                "{} This A5 CCU instruction type is not supported by "
+                "CheckerV3 graph expansion, "
+                "deviceId={}, queueId={}, instructionHeader=0x{:04x}",
                 MakeErrorCodeText(ErrorCode::GRAPH_UNSUPPORTED).c_str(),
-                curCcuTask == nullptr ? std::string("null") : std::to_string(curCcuTask->GetRankId()), queId,
+                curCcuTask == nullptr ? std::string("null") : std::to_string(curCcuTask->GetDeviceId()), queId,
                 instructionHeader);
             return HCCL_E_INTERNAL;
         }

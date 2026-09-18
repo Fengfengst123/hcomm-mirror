@@ -15,12 +15,13 @@
 #include <unistd.h>
 
 #include "hccl_device_pub.h"
-#include "db_sim_op_db_ops.h"
-#include "sim_log.h"
-#include "sim_aicpu_pipe_msg.h"
-#include "sim_pipe_io.h"
+#include "operation_data/operation_data_ops.h"
 #include "sim_aicpu_pipe_handler.h"
+#include "sim_aicpu_pipe_msg.h"
 #include "sim_kernel_lib_mgr.h"
+#include "sim_log.h"
+#include "sim_pipe_io.h"
+#include "storage/storage_runtime.h"
 
 int main(int argc, char* argv[])
 {
@@ -31,8 +32,18 @@ int main(int argc, char* argv[])
     setvbuf(stdout, nullptr, _IOLBF, 0);
     HCCL_VM_INFO("[device] main process start.");
 
-    if (argc < 4) {
-        HCCL_VM_ERROR("[device] Usage: {} <rankId> <h2d_read_fd> <d2h_write_fd>", argv[0]);
+    if (argc < 5) {
+        HCCL_VM_ERROR(
+            "[device] Usage: {} <rankId> <deviceKey> <h2d_read_fd> "
+            "<d2h_write_fd>",
+            argv[0]);
+        return -1;
+    }
+
+    // LD_PRELOAD rank/device 进程必须在首次 Table<T>() 前按自身 PID
+    // 安装独立会话， 不复用 Host 父进程继承的 SQLite 连接。
+    if (sim::operation::EnsureProcessStorageSession() != 0) {
+        HCCL_VM_ERROR("[device] failed to initialize the process storage session");
         return -1;
     }
 
@@ -41,8 +52,9 @@ int main(int argc, char* argv[])
     int h2dReadFd = std::atoi(argv[3]);
     int d2hWriteFd = std::atoi(argv[4]);
     HCCL_VM_INFO(
-        "[device] parse input args: rankId={} devKey={} h2dReadFd={} d2hWriteFd={}", rankId, devKey, h2dReadFd,
-        d2hWriteFd);
+        "[device] parse input args: rankId={} devKey={} h2dReadFd={} "
+        "d2hWriteFd={}",
+        rankId, devKey, h2dReadFd, d2hWriteFd);
 
     SetCurRankId(rankId);
     SetCurDeviceKey(devKey);
@@ -50,7 +62,7 @@ int main(int argc, char* argv[])
     DeviceSendMsg(PIPE_RSP_READY, nullptr, 0);
 
     uint8_t cmd = 0;
-    uint8_t payload[PAYLOAD_LEN_MAX] = {0};
+    static uint8_t payload[IPC_MSG_LEN_MAX] = {0}; // 定长接收缓冲，main 单线程安全
     uint32_t payloadLen = 0;
 
     while (true) {
@@ -76,6 +88,12 @@ int main(int argc, char* argv[])
             case PIPE_CMD_FREE_DEV_PTR:
                 sim::HandlePipeCmdFreeDevPtr(payload, payloadLen);
                 break;
+            case PIPE_CMD_GET_WQE_PTR:
+                sim::HandlePipeCmdGetWqePtr(payload, payloadLen);
+                break;
+            case PIPE_CMD_FREE_WQE_PTR:
+                sim::HandlePipeCmdFreeWqePtr(payload, payloadLen);
+                break;
             default:
                 HCCL_VM_ERROR("[device] Unknown command: 0x{:02x}", cmd);
                 break;
@@ -90,5 +108,9 @@ done:
 
     sim::PipeClose(h2dReadFd);
     sim::PipeClose(d2hWriteFd);
+    auto closed = HcclSim::Storage::StorageRuntime::CloseProcessSession();
+    if (!closed.ok()) {
+        HCCL_VM_WARN("[device] storage session close failed: {}", closed.diagnostic);
+    }
     _exit(0);
 }

@@ -17,10 +17,10 @@
 #include <thread>
 #include <unistd.h>
 
+#include "runtime_state/sim_models.h"
 #include "sim_log.h"
-#include "store_sim_memory_manager.h"
 #include "store_sim_comm_pool_policy.h"
-#include "sim_models.h"
+#include "store_sim_memory_manager.h"
 #include "store_sim_run_mode.h"
 
 namespace sim {
@@ -89,7 +89,8 @@ void* DeviceMemoryManager::AllocPhyMem(const char* name, uint64_t deviceId, size
     return MemoryManager::GetInstance().AllocMemByName(name, size);
 }
 
-// 释放物理内存（非复用区）：是否在复用区由调用方按 size 判断后分流，这里只做真正的释放。
+// 释放物理内存（非复用区）：是否在复用区由调用方按 size
+// 判断后分流，这里只做真正的释放。
 void DeviceMemoryManager::FreePhyMem(const char* name, uint64_t deviceId)
 {
     if (name == nullptr) {
@@ -110,8 +111,9 @@ void* DeviceMemoryManager::AcquirePhyMem(const char* name, uint64_t deviceId, si
     // 超过复用区上界直接报错，不回退真实分配。
     if (CommPoolPolicy::ExceedsCeiling(size, checkOnlyMode)) {
         HCCL_VM_ERROR(
-            "dev:{:d} acquire phy mem:{} size:{} exceeds pool ceiling:{}, reject", deviceId, name, size,
-            CommPoolPolicy::kPoolSize);
+            "dev:{:d} acquire phy mem:{} size:{} exceeds pool "
+            "ceiling:{}, reject",
+            deviceId, name, size, CommPoolPolicy::kPoolSize);
         return nullptr;
     }
     if (CommPoolPolicy::ShouldRedirect(size, checkOnlyMode)) {
@@ -120,7 +122,8 @@ void* DeviceMemoryManager::AcquirePhyMem(const char* name, uint64_t deviceId, si
     return MemoryManager::GetInstance().AcquireMemByName(name);
 }
 
-// 释放物理内存（非复用区）：是否在复用区由调用方按 size 判断后分流，这里只做真正的释放。
+// 释放物理内存（非复用区）：是否在复用区由调用方按 size
+// 判断后分流，这里只做真正的释放。
 int DeviceMemoryManager::ReleasePhyMem(const char* name, uint64_t deviceId)
 {
     if (name == nullptr) {

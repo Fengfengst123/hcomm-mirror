@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#include <cstdint>
 #include "hccl/hccl_types.h"
+#include <cstdint>
 
 extern "C" {
 HcclResult HcclCommInitClusterInfo(const char* clusterInfo, uint32_t rank, HcclComm* comm) { return HCCL_SUCCESS; }

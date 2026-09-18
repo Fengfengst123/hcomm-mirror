@@ -53,7 +53,8 @@ static void CrashDumpHandler(int sig)
 }
 
 namespace VirtualRunTime {
-// 增量落盘的默认间隔（指令条数），可通过环境变量 HCCLVM_TRACE_FLUSH_INTERVAL 覆盖
+// 增量落盘的默认间隔（指令条数），可通过环境变量 HCCLVM_TRACE_FLUSH_INTERVAL
+// 覆盖
 static constexpr uint32_t DEFAULT_TRACE_FLUSH_INTERVAL = 100;
 
 static uint32_t GetFlushInterval()
@@ -68,18 +69,18 @@ static uint32_t GetFlushInterval()
     return DEFAULT_TRACE_FLUSH_INTERVAL;
 }
 
-SqeuentialExecutor::SqeuentialExecutor(AllRankTaskQueues& allRankTaskQueues, const std::string& rootPath)
+SequentialExecutor::SequentialExecutor(AllRankTaskQueues& allRankTaskQueues, const std::string& rootPath)
 {
     allRankTaskQueues_ = allRankTaskQueues;
     rootPath_ = rootPath;
 }
 
-const std::map<HccLTaskMetaType, const std::string> SqeuentialExecutor::taskNames_
+const std::map<HccLTaskMetaType, const std::string> SequentialExecutor::taskNames_
     = {{HccLTaskMetaType::REDUCE, "reduce"},        {HccLTaskMetaType::MEM_CPY, "mem_cpy"},
        {HccLTaskMetaType::NOTIFY_RECORD, "record"}, {HccLTaskMetaType::CCU_GRAPH, "ccu_graph"},
        {HccLTaskMetaType::AIV_GRAPH, "aiv_graph"},  {HccLTaskMetaType::NOTIFY_WAIT, "wait"}};
 
-HcclVmResult SqeuentialExecutor::Execute()
+HcclVmResult SequentialExecutor::Execute()
 {
     auto rankSize = allRankTaskQueues_.size();
     auto& devResMgr = DeviceResourceManager::GetInstance();
@@ -125,8 +126,9 @@ HcclVmResult SqeuentialExecutor::Execute()
                         break;
                     } else if (ret != HcclVmResult::HCCL_SIM_SUCCESS) {
                         HCCL_VM_ERROR(
-                            "ExecuteOneTask failed, ret: {}, rankId = {}, type= {}", static_cast<int>(ret), rankId,
-                            taskNames_.at(task.taskType));
+                            "ExecuteOneTask failed, ret: {}, rankId "
+                            "= {}, type= {}",
+                            static_cast<int>(ret), rankId, taskNames_.at(task.taskType));
                         // 异常退出前也尝试 dump 已采集的 trace
                         if (traceCollector.IsEnabled()) {
                             traceCollector.EndRun();
@@ -171,7 +173,7 @@ HcclVmResult SqeuentialExecutor::Execute()
     return HcclVmResult::HCCL_SIM_SUCCESS;
 }
 
-HcclVmResult SqeuentialExecutor::ExecuteOneTask(HcclTaskMetaData& task)
+HcclVmResult SequentialExecutor::ExecuteOneTask(HcclTaskMetaData& task)
 {
     switch (task.taskType) {
         case HccLTaskMetaType::REDUCE:
@@ -184,15 +186,13 @@ HcclVmResult SqeuentialExecutor::ExecuteOneTask(HcclTaskMetaData& task)
             return TaskNotifyWait(task);
         case HccLTaskMetaType::CCU_GRAPH:
             return TaskCcuGraph(task);
-        case HccLTaskMetaType::AIV_GRAPH:
-            return TaskAivGraph(task);
         default:
             break;
     }
     return HcclVmResult::HCCL_SIM_SUCCESS;
 }
 
-bool SqeuentialExecutor::HasTask()
+bool SequentialExecutor::HasTask()
 {
     for (auto& rankTasks : allRankTaskQueues_) {
         for (auto& streamTasks : rankTasks) {

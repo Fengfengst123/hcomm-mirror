@@ -11,9 +11,9 @@
 #ifndef SIM_RUNNER_IMPL_INL
 #define SIM_RUNNER_IMPL_INL
 
+#include "db_sim_runner_db.h"
 #include "db_sim_sqlite_db.h"
 #include <optional>
-#include "db_sim_runner_db.h"
 
 namespace RunnerDB {
 

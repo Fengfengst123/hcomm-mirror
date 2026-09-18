@@ -8,6 +8,12 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: ccu executor resource manager
+ * Author: caiyifan
+ */
+
 #ifndef HCCL_SIM_CCU_RESOURCE_MANAGER_H
 #define HCCL_SIM_CCU_RESOURCE_MANAGER_H
 
@@ -60,8 +66,11 @@ public:
     void InitInstrInfo(int rankId, int dieId, const CcuInstrData& ccuInstrInfo);
     void InitChannelInfo(int rankId, const RankChannelInfo& channelInfo);
     void InitChannelId2RmtRankMap(int rankId, int dieId, uint16_t channelId, int rmtRank, uint16_t rmtDieId);
+    // 指定索引处是否已创建资源（用于增量初始化，避免重建已有资源丢失运行状态）
+    bool HasResource(int index) const;
 
-    void AddTaskInfo(int rankId, const HcclTaskMetaData& task); // 收集SQE参数信息
+    void AddTaskInfo(int rankId,
+                     const HcclTaskMetaData& task); // 收集SQE参数信息
     uint64_t GetXnValue(int rankId, int dieId, uint16_t xnId) const;
     uint64_t GetGsaValue(int rankId, int dieId, uint16_t gsaId) const;
     uint16_t GetCkeValue(int rankId, int dieId, uint16_t ckeId) const;

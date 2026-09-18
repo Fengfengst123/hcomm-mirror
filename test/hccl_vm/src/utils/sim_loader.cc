@@ -10,14 +10,21 @@
 
 #include "sim_loader.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <filesystem>
+#include <set>
+#include <string>
+#include <unistd.h>
+#include <vector>
 
+#include "operation_data/operation_data_ops.h"
+#include "runtime_state/db_sim_runner_common.h"
+#include "sim_common_api.h"
 #include "sim_common_defs.h"
 #include "sim_log.h"
-#include "sim_common_api.h"
 #include "sim_yaml_config.h"
-#include "db_sim_op_db_ops.h"
+#include "storage/table_access.h"
 
 namespace loader {
 Loader::Loader() {}
@@ -26,7 +33,7 @@ Loader::~Loader() {}
 
 HcclResult Loader::LoadOpTaskFile(const std::string dbPath)
 {
-    sim::DBConfig config;
+    sim::operation::DBConfig config;
     std::string targetPath;
 
     if (!dbPath.empty()) {
@@ -43,20 +50,233 @@ HcclResult Loader::LoadOpTaskFile(const std::string dbPath)
     }
 
     config.dbPath = targetPath;
-    sim::SetDbConfig(config);
+    sim::operation::SetDbConfig(config);
+    opExecutionEntriesByKey_.clear();
     HCCL_VM_INFO("Loading using default configuration path:{}.", config.dbPath);
+    return HcclResult::HCCL_SUCCESS;
+}
+
+HcclResult Loader::LoadOpExecutionKeys(std::vector<sim::operation::OpExecutionKey>& keys)
+{
+    std::vector<sim::operation::OpExecutionIndexEntry> entries;
+    if (sim::operation::QueryOpExecutionIndexEntries(entries) != 0) {
+        HCCL_VM_ERROR("QueryOpExecutionIndexEntries failed");
+        return HcclResult::HCCL_E_PARA;
+    }
+
+    keys.clear();
+    opExecutionEntriesByKey_.clear();
+    std::map<uint64_t, std::pair<std::string, uint64_t>> commIdentities;
+    for (const sim::operation::OpExecutionIndexEntry& entry : entries) {
+        auto commIdentityIt = commIdentities.find(entry.commId);
+        if (commIdentityIt == commIdentities.end()) {
+            std::string commName;
+            uint64_t commHash = 0;
+            if (!sim::runtime::GetCommunicatorIdentity(entry.commId, commName, commHash)) {
+                HCCL_VM_ERROR("Failed to resolve communicator identity, commId={}", entry.commId);
+                return HcclResult::HCCL_E_PARA;
+            }
+            commIdentityIt = commIdentities.emplace(entry.commId, std::make_pair(std::move(commName), commHash)).first;
+        }
+
+        sim::operation::OpExecutionKey key{commIdentityIt->second.first, commIdentityIt->second.second, entry.opIter};
+        const OpExecutionIdentity identity{key.commName, key.commHash, key.opIter};
+        auto [groupIt, inserted] = opExecutionEntriesByKey_.try_emplace(identity);
+        if (inserted) {
+            keys.push_back(key);
+        }
+        groupIt->second.push_back(entry);
+    }
+
+    HCCL_VM_INFO("Loaded operator execution keys, recordCount={}, opCount={}", entries.size(), keys.size());
+    return HcclResult::HCCL_SUCCESS;
+}
+
+HcclResult
+Loader::LoadOpExecutionByKey(const sim::operation::OpExecutionKey& key, sim::operation::OpExecution& opExecution)
+{
+    opExecution = sim::operation::OpExecution{};
+    opExecution.key = key;
+    const OpExecutionIdentity identity{key.commName, key.commHash, key.opIter};
+    const auto indexIt = opExecutionEntriesByKey_.find(identity);
+    if (indexIt == opExecutionEntriesByKey_.end()) {
+        HCCL_VM_ERROR("Operator execution key was not found, commName={}, opIter={}", key.commName, key.opIter);
+        return HcclResult::HCCL_E_PARA;
+    }
+
+    uint32_t rankSize = 0;
+    std::set<uint32_t> devices;
+    std::map<uint32_t, const sim::operation::OpExecutionIndexEntry*> entriesByRank;
+    std::set<uint32_t> detailIds;
+    for (const sim::operation::OpExecutionIndexEntry& entry : indexIt->second) {
+        if (entry.rankSize == 0 || entry.rankId >= entry.rankSize) {
+            HCCL_VM_ERROR(
+                "Invalid rank in operator execution, commName={}, "
+                "opIter={}, rankId={}, rankSize={}",
+                key.commName, key.opIter, entry.rankId, entry.rankSize);
+            return HcclResult::HCCL_E_PARA;
+        }
+        if (rankSize == 0) {
+            rankSize = entry.rankSize;
+        } else if (rankSize != entry.rankSize) {
+            HCCL_VM_ERROR(
+                "Inconsistent rankSize in operator execution, "
+                "commName={}, opIter={}",
+                key.commName, key.opIter);
+            return HcclResult::HCCL_E_PARA;
+        }
+        if (!devices.insert(entry.deviceId).second) {
+            HCCL_VM_ERROR(
+                "Duplicate device in operator execution, "
+                "commName={}, opIter={}, deviceId={}",
+                key.commName, key.opIter, entry.deviceId);
+            return HcclResult::HCCL_E_PARA;
+        }
+        if (!entriesByRank.emplace(entry.rankId, &entry).second) {
+            HCCL_VM_ERROR(
+                "Duplicate rank in operator execution, commName={}, "
+                "opIter={}, rankId={}",
+                key.commName, key.opIter, entry.rankId);
+            return HcclResult::HCCL_E_PARA;
+        }
+        if (!detailIds.insert(entry.opDetailId).second) {
+            HCCL_VM_ERROR(
+                "Duplicate operator detail ID in execution, "
+                "commName={}, opIter={}, opDetailId={}",
+                key.commName, key.opIter, entry.opDetailId);
+            return HcclResult::HCCL_E_PARA;
+        }
+    }
+
+    if (rankSize == 0 || entriesByRank.size() != rankSize) {
+        HCCL_VM_ERROR(
+            "Incomplete operator execution, commName={}, opIter={}, "
+            "expectedRankCount={}, actualRankCount={}",
+            key.commName, key.opIter, rankSize, indexIt->second.size());
+        return HcclResult::HCCL_E_PARA;
+    }
+    std::vector<sim::operation::CompositeOpDetail> details;
+    if (sim::operation::QueryCompositeOpDetailByOpIter(key.commName, key.commHash, key.opIter, details) != 0) {
+        HCCL_VM_ERROR(
+            "QueryCompositeOpDetailByOpIter failed, commName={}, "
+            "commHash={}, opIter={}",
+            key.commName, key.commHash, key.opIter);
+        return HcclResult::HCCL_E_PARA;
+    }
+    if (details.size() != entriesByRank.size()) {
+        HCCL_VM_ERROR(
+            "Operator execution records are incomplete, commName={}, "
+            "opIter={}, expected={}, actual={}",
+            key.commName, key.opIter, indexIt->second.size(), details.size());
+        return HcclResult::HCCL_E_PARA;
+    }
+
+    std::set<uint32_t> ranks;
+    for (const sim::operation::CompositeOpDetail& detail : details) {
+        sim::operation::DeviceOpExecutionRecord record;
+        record.deviceId = detail.deviceId;
+        record.rankId = detail.rankId;
+        record.detail = detail.detail;
+        record.memInfo = detail.memInfo;
+        record.tasks = detail.tasks;
+        const uint32_t rankId = record.rankId;
+        const auto expectedIt = entriesByRank.find(rankId);
+        if (expectedIt == entriesByRank.end() || record.detail.opIter != key.opIter
+            || record.detail.rankSize != rankSize || !ranks.insert(rankId).second) {
+            HCCL_VM_ERROR(
+                "Invalid rank mapping in operator execution, "
+                "commName={}, opIter={}, rankId={}",
+                key.commName, key.opIter, rankId);
+            return HcclResult::HCCL_E_PARA;
+        }
+        const sim::operation::OpExecutionIndexEntry& expected = *expectedIt->second;
+        if (record.detail.id != expected.opDetailId || record.deviceId != expected.deviceId
+            || record.detail.commId != expected.commId) {
+            HCCL_VM_ERROR(
+                "Loaded operator record does not match its index, "
+                "commName={}, opIter={}, rankId={}",
+                key.commName, key.opIter, rankId);
+            return HcclResult::HCCL_E_PARA;
+        }
+        if (record.detail.id != record.memInfo.opDetailId && record.memInfo.opDetailId != 0) {
+            HCCL_VM_ERROR(
+                "Operator memory record does not match its detail, "
+                "commName={}, opIter={}, rankId={}",
+                key.commName, key.opIter, rankId);
+            return HcclResult::HCCL_E_PARA;
+        }
+        for (const sim::operation::OpTaskTab& task : record.tasks) {
+            if (task.opDetailId != record.detail.id) {
+                HCCL_VM_ERROR(
+                    "Operator task does not match its detail, "
+                    "commName={}, opIter={}, rankId={}, taskId={}",
+                    key.commName, key.opIter, rankId, task.id);
+                return HcclResult::HCCL_E_PARA;
+            }
+        }
+        opExecution.deviceRecords.push_back(std::move(record));
+    }
+    std::sort(
+        opExecution.deviceRecords.begin(), opExecution.deviceRecords.end(),
+        [](const sim::operation::DeviceOpExecutionRecord& lhs, const sim::operation::DeviceOpExecutionRecord& rhs) {
+            return lhs.rankId < rhs.rankId;
+        });
+    return HcclResult::HCCL_SUCCESS;
+}
+
+HcclResult Loader::LoadAllOpExecutions(std::vector<sim::operation::OpExecution>& opExecutions)
+{
+    std::vector<sim::operation::OpExecutionKey> keys;
+    HcclResult ret = LoadOpExecutionKeys(keys);
+    if (ret != HcclResult::HCCL_SUCCESS) {
+        opExecutions.clear();
+        return ret;
+    }
+
+    opExecutions.clear();
+    opExecutions.reserve(keys.size());
+    for (const sim::operation::OpExecutionKey& key : keys) {
+        sim::operation::OpExecution opExecution;
+        ret = LoadOpExecutionByKey(key, opExecution);
+        if (ret != HcclResult::HCCL_SUCCESS) {
+            opExecutions.clear();
+            return ret;
+        }
+        opExecutions.push_back(std::move(opExecution));
+    }
+
+    std::vector<sim::operation::OpTaskTab> allTasks;
+    ret = LoadAllOpTasks(allTasks, false);
+    if (ret != HcclResult::HCCL_SUCCESS) {
+        opExecutions.clear();
+        return ret;
+    }
+    const size_t taskCount = allTasks.size();
+    std::map<uint32_t, std::vector<sim::operation::OpTaskTab>> tasksByDetailId;
+    for (sim::operation::OpTaskTab& task : allTasks) {
+        tasksByDetailId[task.opDetailId].push_back(std::move(task));
+    }
+    for (sim::operation::OpExecution& execution : opExecutions) {
+        for (sim::operation::DeviceOpExecutionRecord& record : execution.deviceRecords) {
+            auto taskIt = tasksByDetailId.find(record.detail.id);
+            record.tasks = taskIt == tasksByDetailId.end() ? std::vector<sim::operation::OpTaskTab>{} :
+                                                             std::move(taskIt->second);
+        }
+    }
+    HCCL_VM_INFO("Loaded all operator executions, operatorCount={}, taskCount={}", opExecutions.size(), taskCount);
     return HcclResult::HCCL_SUCCESS;
 }
 
 // 返回内部已组装好的完整 Pipeline 缓存
 const OpPipeline& Loader::GetOpTasks() const { return opTaskCache_; }
 
-// Runner: 每 sync 一次调用一次，只加载下一条 pending(status=0) 记录，根据业务传入的 syncIter，从 pending(status=0)
+// Runner: 每 sync 一次调用一次，只加载下一条 pending(status=0)
+// 记录，根据业务传入的 syncIter，从 pending(status=0)
 // 记录中查找并加载对应算子数据
 HcclResult Loader::LoadRunnerSingleSync(
-    const uint32_t& outSyncIter, std::map<uint32_t, std::vector<sim::CompositeOpDetail>>& compositeDataMap)
+    const uint32_t& outSyncIter, std::map<uint32_t, std::vector<sim::operation::CompositeOpDetail>>& compositeDataMap)
 {
-    if (sim::QueryCompositeOpDetailBySyncIter(outSyncIter, compositeDataMap) != 0) {
+    if (sim::operation::QueryCompositeOpDetailBySyncIter(outSyncIter, compositeDataMap) != 0) {
         HCCL_VM_ERROR("QueryCompositeOpDetailBySyncIter failed for syncIter: {}", outSyncIter);
         return HcclResult::HCCL_E_PARA;
     }
@@ -64,9 +284,9 @@ HcclResult Loader::LoadRunnerSingleSync(
     return HcclResult::HCCL_SUCCESS;
 }
 
-HcclResult Loader::GetCcuChannelInfo(std::vector<sim::CcuChannelTab>& channels)
+HcclResult Loader::GetCcuChannelInfo(std::vector<sim::operation::CcuChannelTab>& channels)
 {
-    if (sim::QueryCcuChannelAll(channels) != 0) {
+    if (sim::operation::QueryCcuChannelAll(channels) != 0) {
         HCCL_VM_ERROR("QueryCcuChannelAll failed");
         return HcclResult::HCCL_E_PARA;
     }
@@ -74,9 +294,19 @@ HcclResult Loader::GetCcuChannelInfo(std::vector<sim::CcuChannelTab>& channels)
     return HcclResult::HCCL_SUCCESS;
 }
 
-HcclResult Loader::GetJettyMapInfo(std::vector<sim::JettyMapTab>& jettyMaps)
+HcclResult Loader::GetHalfRTTInfo(std::vector<sim::operation::HalfRTTTab>& halfRTT)
 {
-    if (sim::QueryJettyMapAll(jettyMaps) != 0) {
+    if (sim::operation::QueryHalfRTTAll(halfRTT) != 0) {
+        HCCL_VM_ERROR("QueryHalfRTTAll failed");
+        return HcclResult::HCCL_E_PARA;
+    }
+    HCCL_VM_INFO("Get {} half RTT records", halfRTT.size());
+    return HcclResult::HCCL_SUCCESS;
+}
+
+HcclResult Loader::GetJettyMapInfo(std::vector<sim::operation::JettyMapTab>& jettyMaps)
+{
+    if (sim::operation::QueryJettyMapAll(jettyMaps) != 0) {
         HCCL_VM_ERROR("QueryJettyMapAll failed");
         return HcclResult::HCCL_E_PARA;
     }
@@ -84,9 +314,9 @@ HcclResult Loader::GetJettyMapInfo(std::vector<sim::JettyMapTab>& jettyMaps)
     return HcclResult::HCCL_SUCCESS;
 }
 
-HcclResult Loader::GetInstrResInfo(std::vector<sim::CcuInstrResTab>& instrRes)
+HcclResult Loader::GetInstrResInfo(std::vector<sim::operation::CcuInstrResTab>& instrRes)
 {
-    if (sim::QueryCcuInstrResAll(instrRes) != 0) {
+    if (sim::operation::QueryCcuInstrResAll(instrRes) != 0) {
         HCCL_VM_ERROR("QueryCcuInstrResAll failed");
         return HcclResult::HCCL_E_PARA;
     }
@@ -94,9 +324,9 @@ HcclResult Loader::GetInstrResInfo(std::vector<sim::CcuInstrResTab>& instrRes)
     return HcclResult::HCCL_SUCCESS;
 }
 
-HcclResult Loader::GetSyncInfo(std::vector<sim::SyncRecordTab>& syncRecords)
+HcclResult Loader::GetSyncInfo(std::vector<sim::operation::SyncRecordTab>& syncRecords)
 {
-    if (sim::QuerySyncRecordAll(syncRecords) != 0) {
+    if (sim::operation::QuerySyncRecordAll(syncRecords) != 0) {
         HCCL_VM_ERROR("QuerySyncRecordAll failed");
         return HcclResult::HCCL_E_PARA;
     }
@@ -104,9 +334,9 @@ HcclResult Loader::GetSyncInfo(std::vector<sim::SyncRecordTab>& syncRecords)
     return HcclResult::HCCL_SUCCESS;
 }
 
-HcclResult Loader::GetSyncRecordsByStatus(uint8_t status, std::vector<sim::SyncRecordTab>& syncRecords)
+HcclResult Loader::GetSyncRecordsByStatus(uint8_t status, std::vector<sim::operation::SyncRecordTab>& syncRecords)
 {
-    if (sim::QuerySyncRecordByStatus(status, syncRecords) != 0) {
+    if (sim::operation::QuerySyncRecordByStatus(status, syncRecords) != 0) {
         HCCL_VM_ERROR("QuerySyncRecordByStatus failed for status: {}", status);
         return HcclResult::HCCL_E_PARA;
     }
@@ -115,13 +345,45 @@ HcclResult Loader::GetSyncRecordsByStatus(uint8_t status, std::vector<sim::SyncR
 }
 
 HcclResult Loader::LoadCompositeOpDetailBySyncIter(
-    uint32_t syncIter, std::map<uint32_t, std::vector<sim::CompositeOpDetail>>& compositeDataMap)
+    uint32_t syncIter, std::map<uint32_t, std::vector<sim::operation::CompositeOpDetail>>& compositeDataMap)
 {
-    if (sim::QueryCompositeOpDetailBySyncIter(syncIter, compositeDataMap) != 0) {
+    if (sim::operation::QueryCompositeOpDetailBySyncIter(syncIter, compositeDataMap) != 0) {
         HCCL_VM_ERROR("QueryCompositeOpDetailsBySyncIter failed for syncIter: {}", syncIter);
         return HcclResult::HCCL_E_PARA;
     }
     HCCL_VM_INFO("syncIter={}, Rank Count: {}", syncIter, compositeDataMap.size());
     return HcclResult::HCCL_SUCCESS;
 }
+
+HcclResult Loader::LoadAllOpTasks(std::vector<sim::operation::OpTaskTab>& tasks, bool filterDone)
+{
+    // 上游语义：枚举全部动态 opTask 表（可选过滤未完成记录），经 opdb
+    // 域接口执行。
+    if (sim::operation::QueryAllOpTasks(tasks, filterDone) != 0) {
+        HCCL_VM_ERROR("QueryAllOpTasks failed");
+        return HcclResult::HCCL_E_PARA;
+    }
+    return HcclResult::HCCL_SUCCESS;
+}
+
+HcclResult Loader::LoadCompositeOpDetailByOpIter(
+    const std::string& commName, uint64_t commHash, uint32_t opIter,
+    std::vector<sim::operation::CompositeOpDetail>& details)
+{
+    if (sim::operation::QueryCompositeOpDetailByOpIter(commName, commHash, opIter, details) != 0) {
+        HCCL_VM_ERROR("QueryCompositeOpDetailByOpIter failed");
+        return HcclResult::HCCL_E_PARA;
+    }
+    return HcclResult::HCCL_SUCCESS;
+}
+
+HcclResult Loader::FinishOpTask(const sim::operation::OpTaskTab& task)
+{
+    if (sim::operation::FinishOpTask(task) != 0) {
+        HCCL_VM_ERROR("FinishOpTask failed");
+        return HcclResult::HCCL_E_PARA;
+    }
+    return HcclResult::HCCL_SUCCESS;
+}
+
 } // namespace loader

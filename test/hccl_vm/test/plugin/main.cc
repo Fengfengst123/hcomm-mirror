@@ -8,6 +8,12 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. This file is the main entrance for all test
+ * cases in test/plugin.
+ */
+
 #include <gtest/gtest.h>
 
 int main(int argc, char* argv[])

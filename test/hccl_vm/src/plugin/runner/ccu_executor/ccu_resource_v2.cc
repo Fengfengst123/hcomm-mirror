@@ -8,9 +8,15 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#include <cstdint>
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License. Description: ccu executor resource manager
+ * Author: caiyifan
+ */
+
 #include "ccu_microcode_common_v2.h"
 #include "ccu_resource_manager.h"
+#include <cstdint>
 
 void CcuResourceV2::Reset()
 {

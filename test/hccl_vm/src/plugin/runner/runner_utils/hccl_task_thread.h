@@ -23,7 +23,6 @@ HcclSim::HcclVmResult TaskReduce(const HcclTaskMetaData& task);
 HcclSim::HcclVmResult TaskNotifyRecord(const HcclTaskMetaData& task);
 HcclSim::HcclVmResult TaskNotifyWait(const HcclTaskMetaData& task);
 HcclSim::HcclVmResult TaskCcuGraph(const HcclTaskMetaData& task);
-HcclSim::HcclVmResult TaskAivGraph(const HcclTaskMetaData& task);
 } // namespace VirtualRunTime
 
 #endif
