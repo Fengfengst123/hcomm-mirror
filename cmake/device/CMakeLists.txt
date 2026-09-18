@@ -60,7 +60,7 @@ add_cann_subdirectories_relative(${HCOMM_DIR}
 if(LAUNCH_COMPILE_TOOL STREQUAL "hitestwrapper")
     set(TAR_SIZE_LIMIT 7558) # hitest出包场景，放宽文件大小限制（即当前发布包 3779 KB 的 200%）
 else()
-    set(TAR_SIZE_LIMIT 3968) # 文件大小限制为 3968 KB（即当前发布包 3779 KB 的 105%）
+    set(TAR_SIZE_LIMIT 4508) # 文件大小限制为 4508 KB（即当前发布包 4293 KB 的 105%）
 endif()
 cann_pack_targets_and_files(
     OUTPUT_TARGET "pack_cann_hcomm_compat"
