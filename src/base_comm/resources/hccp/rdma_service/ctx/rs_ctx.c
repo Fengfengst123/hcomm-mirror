@@ -890,7 +890,6 @@ RS_ATTRI_VISI_DEF int RsCtxGetUbContext(struct RaRsDevInfo *devInfo, unsigned in
 
 RS_ATTRI_VISI_DEF int RsCtxNotifyEvent(struct RaRsDevInfo *devInfo, struct CtxNotifyEvent *event)
 {
-    struct ub_service_errinfo errInfo = {0};
     struct RsUbDevCb *devCb = NULL;
     struct rs_cb *rscb = NULL;
     int ret;
@@ -898,24 +897,15 @@ RS_ATTRI_VISI_DEF int RsCtxNotifyEvent(struct RaRsDevInfo *devInfo, struct CtxNo
     RS_CHECK_POINTER_NULL_RETURN_INT(devInfo);
     RS_CHECK_POINTER_NULL_RETURN_INT(event);
 
-    hccp_info("[notify][event]serviceType:%u errorType:%u", event->serviceType, event->errorType);
-
     ret = RsGetRsCb(devInfo->phyId, &rscb);
     CHK_PRT_RETURN(ret != 0, hccp_err("get rscb failed, ret:%d", ret), ret);
     ret = RsUbGetDevCb(rscb, devInfo->devIndex, &devCb);
     CHK_PRT_RETURN(ret != 0, hccp_err("get devCb fail, ret:%d devIndex:0x%x", ret, devInfo->devIndex), ret);
 
-    if (devCb->devAttr.ub.dieId > UINT8_MAX || devCb->devAttr.ub.funcId > UINT8_MAX) {
-        hccp_warn("[notify][event]dieId:%u or funcId:%u out of range", devCb->devAttr.ub.dieId,
-            devCb->devAttr.ub.funcId);
+    if (event->eventType == 0U) {
+        return RsUbCtxNotifyServiceErrEvent(devCb, event);
     }
-    errInfo.dieid = (unsigned char)devCb->devAttr.ub.dieId;
-    errInfo.ueid = (unsigned char)devCb->devAttr.ub.funcId;
-    errInfo.servicetype = event->serviceType;
-    errInfo.errortype = event->errorType;
-    (void)memcpy_s(errInfo.srceid, sizeof(errInfo.srceid), event->srcEid.raw, sizeof(event->srcEid.raw));
-    (void)memcpy_s(errInfo.dsteid, sizeof(errInfo.dsteid), event->dstEid.raw, sizeof(event->dstEid.raw));
-    errInfo.value = (event->serviceType == UBMEM_TYPE) ? event->errorInfo.hpa : event->errorInfo.tpn;
 
-    return RsAubdfxNotifyEvent(devCb->devAttr.ub.dieId, 0, &errInfo, sizeof(errInfo));
+    hccp_run_warn("[notify][event]unsupported eventType:%u", event->eventType);
+    return -EINVAL;
 }

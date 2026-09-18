@@ -2197,30 +2197,32 @@ void CcuTaskException::NotifyControlPlaneOnUbError(
         auto addrPair = GetAddrPairByChannelId(channelIds[i], taskInfo, deviceId);
 
         struct CtxNotifyEvent event = {};
-        event.serviceType = URMA_TYPE;
-        event.errorType = missionStatus;
+        event.eventType = 0;
+        event.eventInfo.serviceErrInfo.serviceType = URMA_TYPE;
+        event.eventInfo.serviceErrInfo.errorType = missionStatus;
         s32 sRet = memcpy_s(
-            event.srcEid.raw, sizeof(event.srcEid.raw), addrPair.first.GetEid().raw,
-            sizeof(addrPair.first.GetEid().raw));
+            event.eventInfo.serviceErrInfo.srcEid.raw, sizeof(event.eventInfo.serviceErrInfo.srcEid.raw),
+            addrPair.first.GetEid().raw, sizeof(addrPair.first.GetEid().raw));
         if (sRet != EOK) {
             HCCL_ERROR("[%s]memcpy_s srcEid failed, ret[%d]", __func__, sRet);
             continue;
         }
         sRet = memcpy_s(
-            event.dstEid.raw, sizeof(event.dstEid.raw), addrPair.second.GetEid().raw,
-            sizeof(addrPair.second.GetEid().raw));
+            event.eventInfo.serviceErrInfo.dstEid.raw, sizeof(event.eventInfo.serviceErrInfo.dstEid.raw),
+            addrPair.second.GetEid().raw, sizeof(addrPair.second.GetEid().raw));
         if (sRet != EOK) {
             HCCL_ERROR("[%s]memcpy_s dstEid failed, ret[%d]", __func__, sRet);
             continue;
         }
-        event.errorInfo.tpn = ccuJettys[i]->GetTpn();
+        event.eventInfo.serviceErrInfo.errorInfo.tpn = ccuJettys[i]->GetTpn();
 
         int32_t retCode = RaCtxNotifyEvent(rdmaHandle, &event);
         std::string eventInfo = Hccl::StringFormat(
             "devPhyId[%u], rdmaHandle[%p], jettyHandle[%p], serviceType[%u], errorType[%u], tpn[%u], "
             "srcEid[%s], dstEid[%s]",
             devPhyId, static_cast<const void*>(rdmaHandle), static_cast<const void*>(jettyHandles[i]),
-            event.serviceType, event.errorType, event.errorInfo.tpn, addrPair.first.Describe().c_str(),
+            event.eventInfo.serviceErrInfo.serviceType, event.eventInfo.serviceErrInfo.errorType,
+            event.eventInfo.serviceErrInfo.errorInfo.tpn, addrPair.first.Describe().c_str(),
             addrPair.second.Describe().c_str());
         if (retCode != 0) {
             HCCL_ERROR("[%s]RaCtxNotifyEvent failed, ret[%d], %s", __func__, retCode, eventInfo.c_str());

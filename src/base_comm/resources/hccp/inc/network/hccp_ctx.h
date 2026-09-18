@@ -501,17 +501,30 @@ struct JettyAttr {
 #define HCCP_MAX_QP_DESTROY_BATCH_NUM 768U
 
 struct CtxNotifyEvent {
-    uint8_t resv0;
-    uint8_t resv1;
-    uint8_t serviceType;
-    uint8_t errorType;
-    union HccpEid srcEid;
-    union HccpEid dstEid;
-    uint32_t resv2;
+    unsigned int eventType;
     union {
-        uint32_t tpn; // corresponding serviceType URMA_TYPE:0
-        uint64_t hpa; // corresponding serviceType UBMEM_TYPE:1
-    } errorInfo;
+        struct {
+            uint8_t resv0;
+            uint8_t resv1;
+            uint8_t serviceType;
+            uint8_t errorType;
+            union HccpEid srcEid;
+            union HccpEid dstEid;
+            uint32_t resv2;
+            union {
+                uint32_t tpn; // corresponding serviceType URMA_TYPE:0
+                uint64_t hpa; // corresponding serviceType UBMEM_TYPE:1
+                uint64_t value;
+            } errorInfo;
+        } serviceErrInfo; // eventType 0
+
+        struct {
+            uint32_t pid;
+            uint32_t resv0;
+            uint8_t status; // 1:start, 0:end
+            uint8_t resv1[3U];
+        } netDfxInfo; // eventType 1
+    } eventInfo;
 };
 
 /**

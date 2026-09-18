@@ -8,10 +8,11 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#include "hccp_dl.h"
-#include "aubdfx_api.h"
-#include "ra_rs_err.h"
 #include "urma_types.h"
+#include "aubdfx_api.h"
+#include "hccp_dl.h"
+#include "config_log.h"
+#include "ra_rs_err.h"
 #include "dl_aubdfx_function.h"
 
 STATIC void *gAubdfxApiHandle = NULL;
@@ -70,11 +71,11 @@ void RsAubdfxApiDeinit(void)
 
 STATIC void RsAubdfxPrintUbServiceErrinfo(struct ub_service_errinfo *errInfo)
 {
-    hccp_info("[notify][event]ubServiceErrinfo: dieid:%u ueid:%u servicetype:%u errortype:%u", errInfo->dieid,
+    hccp_info_rma("[notify][event]ubServiceErrinfo: dieid:%u ueid:%u servicetype:%u errortype:%u", errInfo->dieid,
         errInfo->ueid, errInfo->servicetype, errInfo->errortype);
-    hccp_info("[notify][event]srceid:" EID_FMT " dsteid:" EID_FMT, EID_RAW_ARGS(((uint8_t *)errInfo->srceid)),
+    hccp_info_rma("[notify][event]srceid:" EID_FMT " dsteid:" EID_FMT, EID_RAW_ARGS(((uint8_t *)errInfo->srceid)),
         EID_RAW_ARGS(((uint8_t *)errInfo->dsteid)));
-    hccp_info("[notify][event]value:0x%llx", (unsigned long long)errInfo->value);
+    hccp_info_rma("[notify][event]value:0x%llx", (unsigned long long)errInfo->value);
 }
 
 int RsAubdfxNotifyEvent(unsigned int dieId, unsigned int notifyCmd, void *data, unsigned int dataLen)

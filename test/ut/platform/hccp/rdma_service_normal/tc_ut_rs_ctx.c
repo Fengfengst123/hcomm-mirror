@@ -805,8 +805,9 @@ void TcRsCtxNotifyEvent()
 
     devInfo.phyId = 0;
     devInfo.devIndex = 0;
-    event.serviceType = UBMEM_TYPE;
-    event.errorType = 1;
+    event.eventType = 0;
+    event.eventInfo.serviceErrInfo.serviceType = UBMEM_TYPE;
+    event.eventInfo.serviceErrInfo.errorType = 1;
     mocker_invoke(RsGetRsCb, StubRsGetRsCb, 1);
     mocker_invoke(RsUbGetDevCb, StubRsUbGetDevCb, 1);
     mocker(RsAubdfxNotifyEvent, 1, 0);

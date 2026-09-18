@@ -424,7 +424,6 @@ union OpCtxNotifyEventData {
     struct {
         unsigned int phyId;
         unsigned int devIndex;
-        uint32_t resv0;
         struct CtxNotifyEvent event;
         uint32_t resv1[RA_RSVD_NUM_512]; /* Reserved extension field for larger payload. */
     } txData;

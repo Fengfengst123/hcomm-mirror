@@ -428,28 +428,32 @@ void TaskExceptionHost::NotifyControlPlaneOnUbError(
     }
 
     struct CtxNotifyEvent event = {};
-    event.serviceType = URMA_TYPE;
-    event.errorType = static_cast<uint8_t>(errorMessage.ubCqeStatus);
+    event.eventType = 0;
+    event.eventInfo.serviceErrInfo.serviceType = URMA_TYPE;
+    event.eventInfo.serviceErrInfo.errorType = static_cast<uint8_t>(errorMessage.ubCqeStatus);
     s32 sRet = memcpy_s(
-        event.srcEid.raw, sizeof(event.srcEid.raw), errorMessage.locEid.raw, sizeof(errorMessage.locEid.raw));
+        event.eventInfo.serviceErrInfo.srcEid.raw, sizeof(event.eventInfo.serviceErrInfo.srcEid.raw),
+        errorMessage.locEid.raw, sizeof(errorMessage.locEid.raw));
     if (sRet != EOK) {
         HCCL_ERROR("[%s]memcpy_s srcEid failed, ret[%d]", __func__, sRet);
         return;
     }
     sRet = memcpy_s(
-        event.dstEid.raw, sizeof(event.dstEid.raw), errorMessage.rmtEid.raw, sizeof(errorMessage.rmtEid.raw));
+        event.eventInfo.serviceErrInfo.dstEid.raw, sizeof(event.eventInfo.serviceErrInfo.dstEid.raw),
+        errorMessage.rmtEid.raw, sizeof(errorMessage.rmtEid.raw));
     if (sRet != EOK) {
         HCCL_ERROR("[%s]memcpy_s dstEid failed, ret[%d]", __func__, sRet);
         return;
     }
-    event.errorInfo.tpn = errorMessage.tpn;
+    event.eventInfo.serviceErrInfo.errorInfo.tpn = errorMessage.tpn;
 
     int32_t retCode = RaCtxNotifyEvent(rdmaHandle, &event);
     std::string eventInfo = Hccl::StringFormat(
         "devPhyId[%u], rdmaHandle[%p], serviceType[%u], errorType[%u], tpn[%u], "
         "srcEid[%s], dstEid[%s]",
-        devPhyId, static_cast<const void*>(rdmaHandle), event.serviceType, event.errorType, errorMessage.tpn,
-        errorMessage.locEid.Describe().c_str(), errorMessage.rmtEid.Describe().c_str());
+        devPhyId, static_cast<const void*>(rdmaHandle), event.eventInfo.serviceErrInfo.serviceType,
+        event.eventInfo.serviceErrInfo.errorType, errorMessage.tpn, errorMessage.locEid.Describe().c_str(),
+        errorMessage.rmtEid.Describe().c_str());
     if (retCode != 0) {
         HCCL_ERROR("[%s]RaCtxNotifyEvent failed, ret[%d], %s", __func__, retCode, eventInfo.c_str());
         return;

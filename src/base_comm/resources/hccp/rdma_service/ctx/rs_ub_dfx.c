@@ -12,10 +12,12 @@
 #include <sys/types.h>
 #include <urma_opcode.h>
 #include <udma_u_ctl.h>
+#include "aubdfx_api.h"
 #include "securec.h"
 #include "user_log.h"
 #include "config_log.h"
 #include "dl_urma_function.h"
+#include "dl_aubdfx_function.h"
 #include "ra_rs_err.h"
 #include "rs_ctx_inner.h"
 #include "rs_ub.h"
@@ -399,5 +401,34 @@ int RsUbGetJettyContext(struct RsUbDevCb *devCb, unsigned int id, uint8_t contex
     CHK_PRT_RETURN(ret != 0, hccp_err("RsUrmaGetJettyOpt failed, ret:%d, jettyId:%u", ret, id), -EOPENSRC);
 
     *len = JETTY_CONTEXT_LEN;
+    return ret;
+}
+
+int RsUbCtxNotifyServiceErrEvent(struct RsUbDevCb *devCb, struct CtxNotifyEvent *event)
+{
+    struct ub_service_errinfo errInfo = {0};
+    int ret = 0;
+
+    if (devCb->devAttr.ub.dieId > UINT8_MAX || devCb->devAttr.ub.funcId > UINT8_MAX) {
+        hccp_warn("[notify][event]dieId:%u or funcId:%u out of range", devCb->devAttr.ub.dieId,
+            devCb->devAttr.ub.funcId);
+    }
+    errInfo.dieid = (unsigned char)devCb->devAttr.ub.dieId;
+    errInfo.ueid = (unsigned char)devCb->devAttr.ub.funcId;
+    errInfo.servicetype = event->eventInfo.serviceErrInfo.serviceType;
+    errInfo.errortype = event->eventInfo.serviceErrInfo.errorType;
+    (void)memcpy_s(errInfo.srceid, sizeof(errInfo.srceid), event->eventInfo.serviceErrInfo.srcEid.raw,
+        sizeof(event->eventInfo.serviceErrInfo.srcEid.raw));
+    (void)memcpy_s(errInfo.dsteid, sizeof(errInfo.dsteid), event->eventInfo.serviceErrInfo.dstEid.raw,
+        sizeof(event->eventInfo.serviceErrInfo.dstEid.raw));
+    if (event->eventInfo.serviceErrInfo.serviceType == UBMEM_TYPE) {
+        errInfo.value = event->eventInfo.serviceErrInfo.errorInfo.hpa;
+    } else {
+        errInfo.value = event->eventInfo.serviceErrInfo.errorInfo.tpn;
+    }
+
+    ret = RsAubdfxNotifyEvent(devCb->devAttr.ub.dieId, 0, &errInfo, sizeof(errInfo));
+    CHK_PRT_RETURN(ret != 0,
+        hccp_err("[notify][event]RsAubdfxNotifyEvent failed, ret:%d dieId:%u", ret, devCb->devAttr.ub.dieId), ret);
     return ret;
 }

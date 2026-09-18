@@ -1111,8 +1111,8 @@ HCCP_ATTRI_VISI_DEF int RaCtxNotifyEvent(void *ctxHandle, struct CtxNotifyEvent 
         return ConverReturnCode(RDMA_OP, -ENOTSUPP);
     }
 
-    hccp_run_info("Input parameters: phyId:%u, devIndex:0x%x serviceType:%u errorType:%u", ctxHandleTmp->attr.phyId,
-        ctxHandleTmp->devIndex, event->serviceType, event->errorType);
+    hccp_run_info("Input parameters: phyId:%u, devIndex:0x%x eventType:%u", ctxHandleTmp->attr.phyId,
+        ctxHandleTmp->devIndex, event->eventType);
 
     ret = ctxHandleTmp->ctxOps->raCtxNotifyEvent(ctxHandleTmp, event);
     CHK_PRT_RETURN(ret != 0,
