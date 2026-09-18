@@ -28,6 +28,7 @@
 #include <pthread.h>
 #include <syslog.h>
 #include "securec.h"
+#include "topo_addr_info_log.h"
 
 #define MAX_LINE_LENGTH 256                    // 每行最大长度
 #define TARGET_KEY "Driver_Install_Path_Param" // 要查找的key
@@ -91,6 +92,9 @@ static int (*aclrtGetUserDevIdByPhyDevId)(const int32_t phyId, int32_t* const us
 static int (*aclrtGetLogicDevIdByUserDevId)(const int32_t userDevId, int32_t* const logicId);
 
 static int (*halGetDeviceInfo)(unsigned int devId, uint32_t moduleType, int32_t infoType, int64_t* value);
+
+static int (*dcmiv2_get_topo_info_by_device_id_and_nic_name)(
+    int dev_id, char* nic_name, int nic_name_len, int* topo_type);
 
 void* hal_dlopen(const char* filename, int flag) { return dlopen(filename, flag); }
 
@@ -161,6 +165,34 @@ int load_dcmi()
         return -1;
     }
     (void)dcmi_init(); //  dcmi_init可能已经调用过了
+    isInit = HAL_TRUE;
+    pthread_mutex_unlock(&mutex);
+    return 0;
+}
+
+/* dcmiv2_get_topo_info_by_device_id_and_nic_name 为可选能力，取不到时仅跳过亲和矩阵构建，按需加载 */
+static int load_dcmiv2_get_topo_info_by_device_id_and_nic_name()
+{
+    static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+    static void* dcmi = NULL;
+    static int isInit = HAL_FALSE;
+    pthread_mutex_lock(&mutex);
+    if (dcmi != NULL && isInit == HAL_TRUE) {
+        pthread_mutex_unlock(&mutex);
+        return 0;
+    }
+    if (dcmi == NULL) {
+        dcmi = hal_dlopen("libdcmi.so", RTLD_LAZY);
+    }
+    if (dcmi == NULL) {
+        pthread_mutex_unlock(&mutex);
+        return -1;
+    }
+    dcmiv2_get_topo_info_by_device_id_and_nic_name = hal_dlsym(dcmi, "dcmiv2_get_topo_info_by_device_id_and_nic_name");
+    if (dcmiv2_get_topo_info_by_device_id_and_nic_name == NULL) {
+        pthread_mutex_unlock(&mutex);
+        return -1;
+    }
     isInit = HAL_TRUE;
     pthread_mutex_unlock(&mutex);
     return 0;
@@ -351,6 +383,27 @@ int hal_get_logicid_from_phyid(unsigned int phyId, unsigned int* logicId)
         return -1;
     }
     *logicId = (unsigned int)value;
+    return 0;
+}
+
+int hal_get_topo_info_by_device_id_and_nic_name(int dev_id, char* nic_name, int nic_name_len, int* topo_type)
+{
+    if (dev_id < 0 || nic_name == NULL || nic_name_len <= 0 || topo_type == NULL) {
+        TOPO_ERR(
+            "hal_get_topo_info_by_device_id_and_nic_name: invalid argument, "
+            "dev_id=%d, nic_name=%p, nic_name_len=%d, topo_type=%p",
+            dev_id, nic_name, nic_name_len, topo_type);
+        return -1;
+    }
+    if (load_dcmiv2_get_topo_info_by_device_id_and_nic_name() != 0) {
+        TOPO_INFO("hal_get_topo_info_by_device_id_and_nic_name: dcmi topo interface is not available");
+        return -1;
+    }
+    if (dcmiv2_get_topo_info_by_device_id_and_nic_name(dev_id, nic_name, nic_name_len, topo_type) != 0) {
+        TOPO_ERR(
+            "hal_get_topo_info_by_device_id_and_nic_name: dcmi query failed, dev_id=%d, nic_name=%s", dev_id, nic_name);
+        return -1;
+    }
     return 0;
 }
 

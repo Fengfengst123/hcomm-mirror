@@ -22,6 +22,7 @@ extern "C" {
  * 从 virtualTopology.xml 获取指定 NPU 的 RoCE IP。
  *
  * 解析 XML → 构建 NPU-NIC 亲和矩阵 → 轮询匹配 → HCA名 → eth → getifaddrs → IP
+ * 无 XML 时，通过 hal_get_topo_info_by_device_id_and_nic_name 驱动接口构建亲和矩阵。
  *
  * @param npuId  NPU 物理 ID
  * @param ip     输出 IP 字符串

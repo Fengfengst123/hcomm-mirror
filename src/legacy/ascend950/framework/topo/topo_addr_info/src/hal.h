@@ -104,6 +104,24 @@ int hal_get_npu_count();
 
 int hal_get_logicid_from_phyid(unsigned int phyId, unsigned int* logicId);
 
+/* DCMI 驱动拓扑类型，DCMI_TOPO_TYPE_UB 表示网卡与 NPU 亲和，枚举值需与驱动侧保持一致 */
+typedef enum {
+    DCMI_TOPO_TYPE_SELF = 0,
+    DCMI_TOPO_TYPE_SYS,
+    DCMI_TOPO_TYPE_PHB,
+    DCMI_TOPO_TYPE_HCCS,
+    DCMI_TOPO_TYPE_PXB,
+    DCMI_TOPO_TYPE_PIX,
+    DCMI_TOPO_TYPE_SIO,
+    DCMI_TOPO_TYPE_HCCS_SW,
+    DCMI_TOPO_TYPE_UB,
+    DCMI_TOPO_TYPE_BUTT,
+    DCMI_TOPO_TYPE_MAX
+} DCMI_TOPO_TYPE;
+
+/* nic_name_len不包含终止符长度 */
+int hal_get_topo_info_by_device_id_and_nic_name(int dev_id, char* nic_name, int nic_name_len, int* topo_type);
+
 int hal_get_userdevid_by_phyid(int phyId, int* userDevId);
 
 int get_server_id(char* server_id, size_t buf_size);

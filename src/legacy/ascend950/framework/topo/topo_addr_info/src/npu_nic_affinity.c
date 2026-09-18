@@ -15,6 +15,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <ifaddrs.h>
+#include <net/if.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
@@ -49,10 +50,18 @@ typedef struct {
 typedef struct {
     char nicNames[MAX_HCA_COUNT][MAX_NAME_LEN];
     unsigned int nicCount;
+    bool affined[MAX_NPU_COUNT][MAX_HCA_COUNT];
+} AffinityInfo;
+
+typedef struct {
+    const char (*npuBdfs)[MAX_NAME_LEN];
+    AffinityInfo* info;
     AffinityGroup groups[MAX_GROUP_CNT];
     unsigned int groupCount;
-    bool affined[MAX_NPU_COUNT][MAX_HCA_COUNT]; /* groups 展开后的 NPU×NIC 亲和矩阵 */
-} XmlInfo;
+    unsigned int curGroupIdx;
+    bool inGroup;
+    int containerDepth;
+} GroupCtx;
 
 static bool TagIs(const TagEntry* e, const char* name) { return strcmp(e->tagName, name) == 0; }
 
@@ -85,14 +94,13 @@ static void BuildNpuBdfTable(char bdfs[MAX_NPU_COUNT][MAX_NAME_LEN])
 
 /* ─── 亲和分组构建 ─── */
 
-static void TryAddNpuByBdf(
-    const TagEntry* e, unsigned int curGroupIdx, const char npuBdfs[MAX_NPU_COUNT][MAX_NAME_LEN], XmlInfo* info)
+static void TryAddNpuByBdf(const TagEntry* e, GroupCtx* ctx)
 {
     const char* busId = TagFindAttr(e, "busid");
     if (busId == NULL || busId[0] == '\0') {
         return;
     }
-    if (curGroupIdx >= MAX_GROUP_CNT) {
+    if (ctx->curGroupIdx >= MAX_GROUP_CNT) {
         return;
     }
 
@@ -103,15 +111,15 @@ static void TryAddNpuByBdf(
         tableSize = MAX_NPU_COUNT;
     }
     for (unsigned int npuIdx = 0; npuIdx < tableSize; npuIdx++) {
-        if (npuBdfs[npuIdx][0] == '\0') {
+        if (ctx->npuBdfs[npuIdx][0] == '\0') {
             continue;
         }
-        if (strcmp(busId, npuBdfs[npuIdx]) != 0) {
+        if (strcmp(busId, ctx->npuBdfs[npuIdx]) != 0) {
             continue;
         }
 
         /* busId 匹配 → 将 NPU[npuIdx] 加入亲和组 */
-        AffinityGroup* group = &info->groups[curGroupIdx];
+        AffinityGroup* group = &ctx->groups[ctx->curGroupIdx];
         unsigned int groupCnt = group->npuCnt;
         if (groupCnt > MAX_NPU_COUNT) {
             groupCnt = MAX_NPU_COUNT;
@@ -133,27 +141,16 @@ static void TryAddNpuByBdf(
     }
 }
 
-/* ─── 分组上下文，降低标签处理器的参数传递 ─── */
-typedef struct {
-    const char (*npuBdfs)[MAX_NAME_LEN];
-    XmlInfo* info;
-    unsigned int* curGroupIdx;
-    unsigned int* groupCount;
-    unsigned int* nicCount;
-    bool* inGroup;
-    int* containerDepth;
-} GroupCtx;
-
 static void GroupEnterOrSkip(GroupCtx* ctx, int depth)
 {
-    if (*ctx->inGroup && depth <= *ctx->containerDepth) {
-        *ctx->inGroup = false;
+    if (ctx->inGroup && depth <= ctx->containerDepth) {
+        ctx->inGroup = false;
     }
-    if (!*ctx->inGroup && *ctx->groupCount < MAX_GROUP_CNT) {
-        *ctx->curGroupIdx = *ctx->groupCount;
-        (*ctx->groupCount)++;
-        *ctx->containerDepth = depth;
-        *ctx->inGroup = true;
+    if (!ctx->inGroup && ctx->groupCount < MAX_GROUP_CNT) {
+        ctx->curGroupIdx = ctx->groupCount;
+        ctx->groupCount++;
+        ctx->containerDepth = depth;
+        ctx->inGroup = true;
     }
 }
 
@@ -161,13 +158,13 @@ static void HandlePciTag(const TagEntry* e, GroupCtx* ctx)
 {
     if (!e->isSelfClose) {
         GroupEnterOrSkip(ctx, e->depth);
-        if (*ctx->inGroup) {
-            TryAddNpuByBdf(e, *ctx->curGroupIdx, ctx->npuBdfs, ctx->info);
+        if (ctx->inGroup) {
+            TryAddNpuByBdf(e, ctx);
         }
         return;
     }
-    if (*ctx->inGroup) {
-        TryAddNpuByBdf(e, *ctx->curGroupIdx, ctx->npuBdfs, ctx->info);
+    if (ctx->inGroup) {
+        TryAddNpuByBdf(e, ctx);
     }
 }
 
@@ -180,7 +177,7 @@ static void HandleUbTag(const TagEntry* e, GroupCtx* ctx)
 
 static void HandleNpuTag(const TagEntry* e, GroupCtx* ctx)
 {
-    if (!*ctx->inGroup) {
+    if (!ctx->inGroup) {
         return;
     }
     const char* chipId = TagFindAttr(e, "chipphyid");
@@ -199,19 +196,15 @@ static void HandleNpuTag(const TagEntry* e, GroupCtx* ctx)
         TOPO_INFO("HandleNpuTag: hal_get_userdevid_by_phyid failed, phyId=%d", phyId);
         return;
     }
-    XmlInfo* info = ctx->info;
-    if (info == NULL) {
-        return;
-    }
 
-    unsigned int gIdx = *ctx->curGroupIdx;
+    unsigned int gIdx = ctx->curGroupIdx;
     if (gIdx >= MAX_GROUP_CNT) {
         TOPO_ERR("HandleNpuTag: group index overflow, gIdx=%u >= MAX_GROUP_CNT=%d", gIdx, MAX_GROUP_CNT);
         return;
     }
 
     /* 去重：同组已有该 phyId 则跳过，防止重复占用 npuIds 槽位 */
-    AffinityGroup* group = &info->groups[gIdx];
+    AffinityGroup* group = &ctx->groups[gIdx];
     unsigned int groupNpuCnt = group->npuCnt;
     if (groupNpuCnt > MAX_NPU_COUNT) {
         groupNpuCnt = MAX_NPU_COUNT;
@@ -227,10 +220,10 @@ static void HandleNpuTag(const TagEntry* e, GroupCtx* ctx)
     }
 }
 
-/* 将 NIC 名去重加入 info，返回 TOPO_SUCCESS 并通过 nicIdx 输出索引 */
-static TopoAddrResult DedupNetNic(XmlInfo* info, const char* name, unsigned int* nicCount, unsigned int* nicIdx)
+/* 将 NIC 名去重加入 info（网卡数累计到 info->nicCount），返回 TOPO_SUCCESS 并通过 nicIdx 输出索引 */
+static TopoAddrResult DedupNetNic(AffinityInfo* info, const char* name, unsigned int* nicIdx)
 {
-    unsigned int curCnt = *nicCount;
+    unsigned int curCnt = info->nicCount;
     if (curCnt > MAX_HCA_COUNT) {
         curCnt = MAX_HCA_COUNT;
     }
@@ -242,22 +235,22 @@ static TopoAddrResult DedupNetNic(XmlInfo* info, const char* name, unsigned int*
         }
     }
     if (idx >= MAX_HCA_COUNT) {
-        TOPO_ERR("DedupNetNic: NIC count overflow, name=%s", name);
-        return TOPO_ERR_INTERNAL;
+        TOPO_INFO("DedupNetNic: NIC count overflow, nicCount=%u, dropping name=%s", info->nicCount, name);
+        return TOPO_ERR_MEMORY;
     }
     int ret = strcpy_s(info->nicNames[idx], sizeof(info->nicNames[0]), name);
     if (ret != 0) {
         TOPO_ERR("DedupNetNic: strcpy_s failed for nic name=%s ret=%d", name, ret);
         return TOPO_ERR_INTERNAL;
     }
-    (*nicCount)++;
+    info->nicCount++;
     *nicIdx = idx;
     return TOPO_SUCCESS;
 }
 
 static void HandleNetTag(const TagEntry* e, GroupCtx* ctx)
 {
-    if (!*ctx->inGroup) {
+    if (!ctx->inGroup) {
         return;
     }
     const char* name = TagFindAttr(e, "name");
@@ -265,22 +258,21 @@ static void HandleNetTag(const TagEntry* e, GroupCtx* ctx)
         TOPO_WARN("HandleNetTag: net tag without name attr");
         return;
     }
-    XmlInfo* info = ctx->info;
-    if (info == NULL) {
+    if (ctx->info == NULL) {
         return;
     }
 
     unsigned int nicIdx;
-    if (DedupNetNic(info, name, ctx->nicCount, &nicIdx) != TOPO_SUCCESS) {
+    if (DedupNetNic(ctx->info, name, &nicIdx) != TOPO_SUCCESS) {
         return;
     }
 
-    unsigned int gIdx = *ctx->curGroupIdx;
+    unsigned int gIdx = ctx->curGroupIdx;
     if (gIdx >= MAX_GROUP_CNT) {
         TOPO_ERR("HandleNetTag: group index overflow, gIdx=%u >= MAX_GROUP_CNT=%d", gIdx, MAX_GROUP_CNT);
         return;
     }
-    AffinityGroup* group = &info->groups[gIdx];
+    AffinityGroup* group = &ctx->groups[gIdx];
     /* 组内去重：同名 NIC 只加入一次，避免重复占用 nicIdx 槽位 */
     unsigned int groupNicCnt = group->nicCnt;
     if (groupNicCnt > MAX_HCA_COUNT) {
@@ -297,31 +289,31 @@ static void HandleNetTag(const TagEntry* e, GroupCtx* ctx)
     }
 }
 
-/* 将 AffinityGroup 展开为 affined 二维矩阵，供 O(1) 亲和查询 */
-static void BuildAffinityMatrix(XmlInfo* info)
+/* 将 XML 解析期的分组中间态展开为 affined 二维矩阵，供 O(1) 亲和查询 */
+static void BuildAffinityMatrix(AffinityInfo* info, const AffinityGroup* groups, unsigned int groupCount)
 {
     TOPO_PERF_BEGIN(BuildAffinityMatrix);
-    unsigned int groupCnt = info->groupCount;
+    unsigned int groupCnt = groupCount;
     if (groupCnt > MAX_GROUP_CNT) {
         groupCnt = MAX_GROUP_CNT;
     }
 
     for (unsigned int g = 0; g < groupCnt; g++) {
-        unsigned int npuCnt = info->groups[g].npuCnt;
+        unsigned int npuCnt = groups[g].npuCnt;
         if (npuCnt > MAX_NPU_COUNT) {
             npuCnt = MAX_NPU_COUNT;
         }
-        unsigned int nicCnt = info->groups[g].nicCnt;
+        unsigned int nicCnt = groups[g].nicCnt;
         if (nicCnt > MAX_HCA_COUNT) {
             nicCnt = MAX_HCA_COUNT;
         }
         for (unsigned int ni = 0; ni < npuCnt; ni++) {
-            int npuId = info->groups[g].npuIds[ni];
+            int npuId = groups[g].npuIds[ni];
             if (npuId < 0 || npuId >= (int)MAX_NPU_COUNT) {
                 continue;
             }
             for (unsigned int nci = 0; nci < nicCnt; nci++) {
-                unsigned int nicIdx = info->groups[g].nicIdx[nci];
+                unsigned int nicIdx = groups[g].nicIdx[nci];
                 if (nicIdx < MAX_HCA_COUNT) {
                     info->affined[(unsigned int)npuId][nicIdx] = true;
                 }
@@ -331,26 +323,23 @@ static void BuildAffinityMatrix(XmlInfo* info)
     TOPO_PERF_END(BuildAffinityMatrix);
 }
 
-static TopoAddrResult BuildAffinityGroups(const TagEntry* tags, unsigned int tagCount, XmlInfo* info)
+static TopoAddrResult BuildAffinityGroups(const TagEntry* tags, unsigned int tagCount, AffinityInfo* info)
 {
+    if (info == NULL) {
+        TOPO_ERR("BuildAffinityGroups: invalid argument (info=%p)", info);
+        return TOPO_ERR_PARA;
+    }
     char npuBdfs[MAX_NPU_COUNT][MAX_NAME_LEN] = {{0}};
     BuildNpuBdfTable(npuBdfs);
     (void)memset_s(info, sizeof(*info), 0, sizeof(*info));
 
-    unsigned int curGroupIdx = 0;
-    unsigned int groupCount = 0;
-    unsigned int nicCount = 0;
-    bool inGroup = false;
-    int containerDepth = -1;
-
     GroupCtx ctx = {
         .npuBdfs = (const char(*)[MAX_NAME_LEN])npuBdfs,
         .info = info,
-        .curGroupIdx = &curGroupIdx,
-        .groupCount = &groupCount,
-        .nicCount = &nicCount,
-        .inGroup = &inGroup,
-        .containerDepth = &containerDepth,
+        .groupCount = 0,
+        .curGroupIdx = 0,
+        .inGroup = false,
+        .containerDepth = -1,
     };
 
     for (unsigned int i = 0; i < tagCount; i++) {
@@ -374,12 +363,9 @@ static TopoAddrResult BuildAffinityGroups(const TagEntry* tags, unsigned int tag
         }
     }
 
-    info->groupCount = groupCount;
-    info->nicCount = nicCount;
+    BuildAffinityMatrix(info, ctx.groups, ctx.groupCount);
 
-    BuildAffinityMatrix(info);
-
-    if (nicCount == 0) {
+    if (info->nicCount == 0) {
         TOPO_ERR("no NICs found in XML, cannot build affinity groups");
         return TOPO_ERR_NOT_FOUND;
     }
@@ -388,7 +374,7 @@ static TopoAddrResult BuildAffinityGroups(const TagEntry* tags, unsigned int tag
 
 /* ─── 合成：ParseXml = ParseXmlTags + BuildAffinityGroups ─── */
 
-static TopoAddrResult ParseXml(XmlInfo* info)
+static TopoAddrResult ParseXml(AffinityInfo* info)
 {
     TagEntry tags[MAX_TAG_ENTRIES];
     unsigned int tagCount = 0;
@@ -399,9 +385,124 @@ static TopoAddrResult ParseXml(XmlInfo* info)
     return BuildAffinityGroups(tags, tagCount, info);
 }
 
+/* 枚举系统网卡名（内核网口名），结果写入 info->nicNames/nicCount */
+static TopoAddrResult EnumerateNicNames(AffinityInfo* info)
+{
+    if (info == NULL) {
+        TOPO_ERR("EnumerateNicNames: invalid argument (info=%p)", info);
+        return TOPO_ERR_PARA;
+    }
+    struct ifaddrs* ifaddr = NULL;
+    if (getifaddrs(&ifaddr) == -1) {
+        TOPO_ERR("EnumerateNicNames: getifaddrs failed");
+        return TOPO_ERR_SYSCALL;
+    }
+
+    for (struct ifaddrs* ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+        if (ifa->ifa_name == NULL || strcmp(ifa->ifa_name, "lo") == 0) {
+            continue;
+        }
+        if (strlen(ifa->ifa_name) >= MAX_NAME_LEN) {
+            continue;
+        }
+        /* 只保留 UP 的业务网口：跳过回环、点对点网口（tunnel/PPP 等）与未 UP 的网口；
+           docker0/veth 等驱动不认识的虚拟网口即使残留，也会在后续查询失败时被跳过 */
+        if ((ifa->ifa_flags & (IFF_LOOPBACK | IFF_POINTOPOINT)) != 0 || (ifa->ifa_flags & IFF_UP) == 0) {
+            continue;
+        }
+        /* 同一网卡对应多条地址记录，DedupNetNic 去重后只保留名字一次，并顺带累计 nicCount */
+        unsigned int nicIdx = 0;
+        if (DedupNetNic(info, ifa->ifa_name, &nicIdx) == TOPO_ERR_MEMORY) {
+            break;
+        }
+    }
+    freeifaddrs(ifaddr);
+
+    if (info->nicCount == 0) {
+        TOPO_ERR("EnumerateNicNames: no NICs enumerated");
+        return TOPO_ERR_NOT_FOUND;
+    }
+    return TOPO_SUCCESS;
+}
+
+/* 逐个查询 NPU×网卡的拓扑类型，DCMI_TOPO_TYPE_UB 记为亲和，直接填充 affined 矩阵；
+   单个查询失败（驱动不识别该网口）跳过继续，全部查询失败才整体报错 */
+static TopoAddrResult BuildAffinityFromDriver(AffinityInfo* info)
+{
+    TOPO_PERF_BEGIN(BuildAffinityFromDriver);
+    (void)memset_s(info, sizeof(*info), 0, sizeof(*info));
+    TopoAddrResult ret = EnumerateNicNames(info);
+    if (ret != TOPO_SUCCESS) {
+        TOPO_ERR("BuildAffinityFromDriver: failed to enumerate NICs, ret=%d", ret);
+        TOPO_PERF_END(BuildAffinityFromDriver);
+        return ret;
+    }
+
+    int npuCount = hal_get_npu_count();
+    if (npuCount <= 0 || npuCount > (int)MAX_NPU_COUNT) {
+        TOPO_ERR("BuildAffinityFromDriver: invalid npuCount=%d", npuCount);
+        TOPO_PERF_END(BuildAffinityFromDriver);
+        return TOPO_ERR_INTERNAL;
+    }
+    unsigned int nicCount = info->nicCount;
+    if (nicCount > MAX_HCA_COUNT) {
+        TOPO_ERR("BuildAffinityFromDriver: NIC count overflow, nicCount=%u (max=%d)", nicCount, MAX_HCA_COUNT);
+        TOPO_PERF_END(BuildAffinityFromDriver);
+        return TOPO_ERR_INTERNAL;
+    }
+
+    unsigned int totalQuery = 0;
+    unsigned int failedQuery = 0;
+    for (int phyId = 0; phyId < npuCount; phyId++) {
+        /* 与 XML 路径一致：跳过当前进程不可见的 NPU */
+        int userDevId = -1;
+        if (hal_get_userdevid_by_phyid(phyId, &userDevId) != 0) {
+            TOPO_INFO("BuildAffinityFromDriver: skip invisible NPU, phyId=%d", phyId);
+            continue;
+        }
+        unsigned int logicId = 0;
+        if (hal_get_logicid_from_phyid((unsigned int)phyId, &logicId) != 0) {
+            TOPO_INFO("BuildAffinityFromDriver: skip NPU without logic id, phyId=%d", phyId);
+            continue;
+        }
+        for (unsigned int nicIdx = 0; nicIdx < nicCount; nicIdx++) {
+            int topoType = DCMI_TOPO_TYPE_BUTT;
+            int drvRet = hal_get_topo_info_by_device_id_and_nic_name(
+                (int)logicId, info->nicNames[nicIdx], (int)strlen(info->nicNames[nicIdx]), &topoType);
+
+            totalQuery++;
+            if (drvRet != 0) {
+                /* 驱动不识别该网口（如残留的 docker0/veth 等）：跳过并继续，单个查询失败不拖垮整条回退路径 */
+                failedQuery++;
+                TOPO_INFO(
+                    "BuildAffinityFromDriver: skip NIC unknown to driver, drvRet=%d, phyId=%d, nic=%s", drvRet, phyId,
+                    info->nicNames[nicIdx]);
+                continue;
+            }
+            TOPO_INFO(
+                "BuildAffinityFromDriver: phyId=%d, logicId=%u, drvRet=%d, topoType=%d, nic=%s", phyId, logicId, drvRet,
+                topoType, info->nicNames[nicIdx]);
+            /* 成功时拓扑类型在 topoType 出参，DCMI_TOPO_TYPE_UB 表示网卡与 NPU 亲和 */
+            if (topoType == DCMI_TOPO_TYPE_UB) {
+                info->affined[phyId][nicIdx] = true;
+            }
+        }
+    }
+    /* 全部查询均失败（含零查询）说明驱动拓扑接口不可用，才整体报错 */
+    if (failedQuery == totalQuery) {
+        TOPO_INFO(
+            "BuildAffinityFromDriver: no NIC topo query succeeded, totalQuery=%u, failedQuery=%u", totalQuery,
+            failedQuery);
+        TOPO_PERF_END(BuildAffinityFromDriver);
+        return TOPO_ERR_INTERNAL;
+    }
+    TOPO_PERF_END(BuildAffinityFromDriver);
+    return TOPO_SUCCESS;
+}
+
 /* ─── 打印 NPU → 网卡名 → IP 分配结果 ─── */
 static void LogAssignResult(
-    const XmlInfo* info, int npuCount, const bool nicValid[MAX_HCA_COUNT], const char nicIps[][MAX_IP_STR_LEN],
+    const AffinityInfo* info, int npuCount, const bool nicValid[MAX_HCA_COUNT], const char nicIps[][MAX_IP_STR_LEN],
     const char assignment[][MAX_IP_STR_LEN])
 {
     for (int ni = 0; ni < npuCount; ni++) {
@@ -423,7 +524,7 @@ static void LogAssignResult(
 /* ─── 轮询分发全量 NPU 的 RoCE IP ─── */
 
 static TopoAddrResult DispatchIpsRoundRobin(
-    int phyId, const XmlInfo* info, const bool nicValid[MAX_HCA_COUNT], const char nicIps[][MAX_IP_STR_LEN],
+    int phyId, const AffinityInfo* info, const bool nicValid[MAX_HCA_COUNT], const char nicIps[][MAX_IP_STR_LEN],
     char* outIp, size_t outLen)
 {
     if (phyId < 0 || phyId >= (int)MAX_NPU_COUNT) {
@@ -560,7 +661,7 @@ static TopoAddrResult NameToIp(const char* name, char* ip, size_t ipLen)
 
 /* ─── 打印 NPU-NIC 亲和关系（NIC 名 + IP） ─── */
 
-static void LogAffinityInfo(const XmlInfo* info, const char nicIps[][MAX_IP_STR_LEN])
+static void LogAffinityInfo(const AffinityInfo* info, const char nicIps[][MAX_IP_STR_LEN])
 {
     unsigned int nicCnt = info->nicCount;
     if (nicCnt > MAX_HCA_COUNT) {
@@ -583,7 +684,7 @@ static void LogAffinityInfo(const XmlInfo* info, const char nicIps[][MAX_IP_STR_
 
 /* ─── 预解析全部 NIC 的 IP → 调用轮询分发 → 直接出 IP ─── */
 
-static TopoAddrResult SelectNpuRoceIp(int npuId, const XmlInfo* info, char* ip, size_t ipLen)
+static TopoAddrResult SelectNpuRoceIp(int npuId, const AffinityInfo* info, char* ip, size_t ipLen)
 {
     unsigned int nicCnt = info->nicCount;
     if (nicCnt > MAX_HCA_COUNT) {
@@ -603,6 +704,42 @@ static TopoAddrResult SelectNpuRoceIp(int npuId, const XmlInfo* info, char* ip, 
 
 /* ─── 对外接口 ─── */
 
+static bool HasAnyAffinity(const AffinityInfo* info)
+{
+    unsigned int nicCnt = info->nicCount;
+    if (nicCnt > MAX_HCA_COUNT) {
+        nicCnt = MAX_HCA_COUNT;
+    }
+    for (unsigned int npuId = 0; npuId < MAX_NPU_COUNT; npuId++) {
+        for (unsigned int nicIdx = 0; nicIdx < nicCnt; nicIdx++) {
+            if (info->affined[npuId][nicIdx]) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/* 建立 NPU×NIC 亲和关系：优先解析 XML，
+   XML 不可用（文件缺失/解析失败/无 NIC）或解析结果无任何亲和时回退到驱动 topo 接口 */
+static TopoAddrResult BuildAffinity(AffinityInfo* info)
+{
+    if (info == NULL) {
+        TOPO_ERR("BuildAffinity: invalid argument (info=%p)", info);
+        return TOPO_ERR_PARA;
+    }
+    TopoAddrResult ret = ParseXml(info);
+    if (ret == TOPO_SUCCESS && HasAnyAffinity(info)) {
+        return TOPO_SUCCESS;
+    }
+    if (ret == TOPO_SUCCESS) {
+        TOPO_INFO("BuildAffinity: XML parsed but no affinity, fallback to driver topo interface");
+    } else {
+        TOPO_INFO("BuildAffinity: XML unavailable (ret=%d), fallback to driver topo interface", ret);
+    }
+    return BuildAffinityFromDriver(info);
+}
+
 TopoAddrResult GetRoceIpFromXml(int npuId, char* ip, size_t ipLen)
 {
     if (ip == NULL || ipLen == 0 || npuId < 0) {
@@ -610,18 +747,11 @@ TopoAddrResult GetRoceIpFromXml(int npuId, char* ip, size_t ipLen)
         return TOPO_ERR_PARA;
     }
 
-    /* 解析 XML，构建 NPU-NIC 亲和分组 */
-    XmlInfo info;
+    AffinityInfo info;
     (void)memset_s(&info, sizeof(info), 0, sizeof(info));
-    TopoAddrResult ret = ParseXml(&info);
+    TopoAddrResult ret = BuildAffinity(&info);
     if (ret != TOPO_SUCCESS) {
         return ret;
-    }
-
-    /* XML 中无 NIC 定义 */
-    if (info.nicCount == 0) {
-        TOPO_ERR("GetRoceIpFromXml: no NICs in XML for npuId=%d", npuId);
-        return TOPO_ERR_NOT_FOUND;
     }
 
     /* 从所有 NIC 中轮询选出当前 NPU 的 RoCE IP */
