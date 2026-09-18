@@ -4,47 +4,90 @@
 
 pre-commit是一个Git Hooks框架，用于在 `git commit` 时自动运行代码检查和格式化工具。本项目已配置以下检查：
 
-| Hook             | 功能             | 说明                             |
-| ---------------- | ---------------- | -------------------------------- |
-| **clang-format** | C/C++ 代码格式化 | 自动格式化代码，保持风格一致     |
-| **OAT Check**    | 开源合规检查     | 检测许可证头、禁止二进制文件提交 |
+| Hook             | 功能             | 说明                       |
+| ---------------- | ---------------- | -------------------------- |
+| **clang-format** | C/C++ 代码格式化 | 自动格式化代码，保持风格一致 |
+| **OAT Check**    | 开源合规检查     | 检查许可证头与文件类型     |
+
+两项依赖均为自动管理：
+
+- **clang-format** v18.1.8 由 pre-commit 按 [.pre-commit-config.yaml](../../../.pre-commit-config.yaml) 中的 `rev` 自动下载管理，无需手动安装。
+- OAT 检查（Python 版）同样由 pre-commit 按该配置中的远程仓自动下载安装，无需手动安装。
 
 ## 环境要求
 
 - **Git**: 2.0+
 - **Python**: 3.8+
-- **clang-format**: v18.1.8 (代码格式化工具，需与 [.pre-commit-config.yaml](../../../.pre-commit-config.yaml) 中 `rev` 保持一致)
-- **Java**: 17+ (OAT工具依赖，可自动安装)
-- **Maven**: 3.6+ (OAT工具依赖，可自动安装)
+- 首次运行需网络（拉取 clang-format 镜像仓与 OAT 检查仓）
 
 ## 安装步骤
 
-### 1. 安装pre-commit
+### 1. 安装Git与Python
 
-```bash
-# 方式一: 使用pip
-pip install pre-commit
-
-# 方式二: 使用系统包管理器 (Ubuntu/Debian)
-sudo apt install pre-commit
-```
-
-### 2. 安装依赖工具
+**Linux / macOS**：
 
 ```bash
 # Ubuntu/Debian
-sudo apt install clang-format openjdk-17-jre maven
+sudo apt install git python3 python3-pip python3-venv
 
-# macOS
-brew install clang-format openjdk@17 maven
+# Fedora/RHEL
+sudo dnf install git python3 python3-pip
+
+# openEuler/CentOS
+sudo yum install git python3 python3-pip
+
+# macOS (Homebrew)
+brew install git python3
+```
+
+> **注意**: Fedora/RHEL、openEuler/CentOS 的 python3 已内置 venv，但 pip（python3-pip）为独立包，上述命令已包含；Homebrew 的 python3 已自带 pip 与 venv，无需额外安装。
+
+**Windows**：
+
+- Git：从 [Git for Windows](https://git-scm.com/download/win) 官网下载安装。
+- Python：在 PowerShell 或 CMD 终端中执行 `winget install Python.Python.3.14`，或通过 Microsoft Store 安装。
+
+### 2. 安装pre-commit
+
+**Linux / macOS**：
+
+较新系统的 Python 受 PEP 668 保护（externally-managed），禁止直接使用 pip 安装到系统环境，需先创建并激活虚拟环境。虚拟环境建议放在用户主目录下（如 `~/.venv`），避免污染代码仓，也可被多个代码仓共用：
+
+```bash
+python3 -m venv ~/.venv
+source ~/.venv/bin/activate
+pip install pre-commit
+```
+
+> **注意**: 建议将激活命令写入 shell 配置文件（如 `~/.bashrc`，zsh 为 `~/.zshrc`），登录后自动激活，无需每次手动执行：
+
+```bash
+echo 'source ~/.venv/bin/activate' >> ~/.bashrc
+source ~/.bashrc
+```
+
+**Windows**：
+
+```bash
+py -m pip install pre-commit
 ```
 
 ### 3. 项目路径下安装Git Hooks
 
+**Linux / macOS**：
+
 ```bash
 # 进入代码仓根目录
-cd /path/to/hcomm
+cd /path/to/repo
 pre-commit install
+```
+
+**Windows**：
+
+```bash
+# 进入代码仓根目录
+cd /path/to/repo
+py -m pre_commit install
 ```
 
 安装成功后会显示：
@@ -52,6 +95,8 @@ pre-commit install
 ```bash
 pre-commit installed at .git/hooks/pre-commit
 ```
+
+> **注意**: 无需单独安装依赖工具，clang-format 与 OAT 检查环境均在首次运行时自动准备。
 
 ## 使用方法
 
@@ -68,21 +113,45 @@ git commit -m "your commit message"
 
 ```text
 clang-format.............................................................Passed
-OAT Compliance Check.....................................................Passed
+OAT Compliance Check (Python Edition)....................................Passed
 ```
 
 ### 手动运行检查
 
+**Linux / macOS**：
+
 ```bash
-# 运行所有检查
+# 运行所有检查（限于暂存区）
 pre-commit run
 
-# 运行特定类型检查
+# 运行特定类型检查（限于暂存区）
 pre-commit run clang-format
 pre-commit run oat-check
 
-# 检查所有文件（不限于暂存区）
+# 运行所有文件的所有检查（不限于暂存区）
 pre-commit run --all-files
+
+# 运行所有文件的特定类型检查（不限于暂存区）
+pre-commit run clang-format --all-files
+pre-commit run oat-check --all-files
+```
+
+**Windows**：
+
+```bash
+# 运行所有检查（限于暂存区）
+py -m pre_commit run
+
+# 运行特定类型检查（限于暂存区）
+py -m pre_commit run clang-format
+py -m pre_commit run oat-check
+
+# 运行所有文件的所有检查（不限于暂存区）
+py -m pre_commit run --all-files
+
+# 运行所有文件的特定类型检查（不限于暂存区）
+py -m pre_commit run clang-format --all-files
+py -m pre_commit run oat-check --all-files
 ```
 
 ### 跳过检查（紧急情况）
@@ -97,31 +166,102 @@ git commit --no-verify -m "emergency fix"
 
 ### 1. clang-format
 
-自动格式化C/C++ 代码，遵循项目根目录下 [.clang-format](../../../.clang-format) 配置：
+自动格式化C/C++代码，遵循项目根目录下 [.clang-format](../../../.clang-format) 配置。
 
 ### 2. OAT Compliance Check
 
-OAT (Open Source Audit Tool) 检查开源合规性：
+OAT（OSS Audit Tool，Python 版）检查开源合规性：
 
-| 检查项         | 说明                           |
-| -------------- | ------------------------------ |
-| 许可证头检查   | 确保源文件包含CANN License头 |
-| 二进制文件检查 | 禁止提交二进制文件             |
-| 归档文件检查   | 禁止提交zip/tar等归档文件    |
+| 检查项                 | 说明                                       |
+| ---------------------- | ------------------------------------------ |
+| Invalid File Type      | 禁止提交二进制、归档文件等非法文件类型     |
+| License Header Invalid | 确保源文件包含有效的CANN License头         |
 
-OAT检查脚本，首次运行时会自动：
+检查环境由 pre-commit 首次运行时自动创建并缓存，无需其他依赖。
 
-1. 检测/安装Java 17
-2. 检测/安装Maven
-3. 克隆并编译tools_oat工具（约1-2分钟）
+检查扫描 pre-commit 传入的文件：提交时为暂存文件，手动以 `--all-files` 运行时为所有文件。CI 多次触发 hook 时，同一 HEAD 的扫描结果会合并为一份累计报告。
+
+扫描结果摘要写入代码仓根目录 `oat_reports/result.txt`（该目录仅本地生成，不纳入 git 管理）。发现问题时提交会被阻塞。
+
+## License头三种风格
+
+新增文件必须按文件类型选择以下三种风格之一添加标准 CANN-2.0 License 头，年份取文件入仓年份。
+
+### 风格一：C/C++风格注释
+
+适用于 C/C++ 文件：
+
+```c
+/**
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd.
+ * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+ * CANN Open Software License Agreement Version 2.0 (the "License").
+ * Please refer to the License for details. You may not use this file except in compliance with the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
+ */
+```
+
+### 风格二：Python风格注释
+
+适用于 CMake/Make、Shell、Python、YAML 等配置与脚本文件：
+
+```bash
+# -----------------------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
+# Please refer to the License for details. You may not use this file except in compliance with the License.
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
+# -----------------------------------------------------------------------------------------------------------
+```
+
+### 风格三：XML风格注释
+
+适用于 XML 文件：
+
+```xml
+<!--
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd.
+ * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+ * CANN Open Software License Agreement Version 2.0 (the "License").
+ * Please refer to the License for details. You may not use this file except in compliance with the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
+-->
+```
+
+### 特殊规则
+
+- **Shell脚本（`.sh`）**：首行为 shebang（如 `#!/usr/bin/env bash`），第二行起为 License 头。
+- **Python脚本（`.py`）**：首行为 shebang（如 `#!/usr/bin/env python3`），第二行为 coding 声明（`# -*- coding: UTF-8 -*-`），第三行起为 License 头。例外：`__init__.py` 不需要 shebang，首行直接为 coding 声明。
+- **XML文件（`.xml`）**：首行为 XML 声明（`<?xml version="1.0" encoding="UTF-8"?>`），第二行起为 License 头。
+- License 头后保留且仅保留一个空行。
+- 未列出的文件类型，应根据其注释语法从上述三种风格中选择合适的一种。
 
 ## 常见问题
 
-### Q1: 首次提交时OAT检查很慢
+### Q1: 首次提交时检查很慢
 
-**原因**: 首次运行需要克隆并编译OAT工具。
+**原因**: 首次运行需要下载 pre-commit 管理的 clang-format 镜像仓与 OAT 检查仓。
 
-**解决**: 这是正常现象，后续提交会使用缓存的JAR，速度会很快。
+**解决**: 这是正常现象，后续运行速度会很快。
+
+### Q2: 提交被OAT检查阻塞
+
+**原因**: 发现合规问题（非法文件类型或 License 头缺失/非法）。
+
+**解决**: 查看代码仓根目录 `oat_reports/result.txt` 中的详情，按上述头风格修复对应文件后重新 `git add` 并提交。仅紧急情况可使用 `git commit --no-verify` 跳过。
+
+### Q3: 首次运行 OAT 检查环境安装失败
+
+**原因**: 无法访问网络或代码托管平台，pre-commit 未能拉取 OAT 检查仓。
+
+**解决**: 检查网络后重试。环境安装成功后会被 pre-commit 缓存，后续运行无需网络。
 
 ## 相关文档
 
