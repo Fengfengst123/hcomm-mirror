@@ -520,6 +520,56 @@ TEST_F(hcclCommTaskExceptionLiteTest, Ut_ReportErrMsg_When_ErrorAlreadyReported_
     EXPECT_EQ(ret, HCCL_SUCCESS);
 }
 
+TEST_F(hcclCommTaskExceptionLiteTest, Ut_ReportErrMsg_When_QueueMarkedAllRead_Expect_StillFindTask)
+{
+    CollCommAicpu aicpuComm;
+    aicpuComm.identifier_ = "test_report_err";
+    InitCommEngineResMgr(aicpuComm);
+    aicpuComm.isErrorReported_ = true;
+    auto streamLite = std::make_shared<Hccl::StreamLite>(0, 0, 0, 0);
+    Hccl::DfxTaskInfo* slot = static_cast<Hccl::DfxTaskInfo*>(streamLite->taskInfos_.NextSlot());
+    ASSERT_NE(slot, nullptr);
+    slot->taskId = (1U << 16) | 0U;
+    Hccl::DfxDfxOpInfo opInfo{};
+    slot->dfxOpInfo = reinterpret_cast<u64>(&opInfo);
+    streamLite->taskInfos_.MarkAllRead();
+    auto thread = std::make_shared<MockThreadForReportErr>(streamLite.get());
+
+    aicpuComm.GetCommEngineResMgr()->threadMgr_->threads_.push_back(thread);
+    rtLogicCqReport_t exceptionInfo{};
+    exceptionInfo.taskId = 1;
+    exceptionInfo.streamId = 0;
+    exceptionInfo.sqId = 0;
+    HcclResult ret = HcclCommTaskExceptionLite::GetInstance().ReportErrMsg(&aicpuComm, exceptionInfo);
+    EXPECT_EQ(ret, HCCL_SUCCESS);
+}
+
+TEST_F(hcclCommTaskExceptionLiteTest, Ut_CollectTaskContext_When_MarkAllRead_Expect_StopAtEmptySlot)
+{
+    CollCommAicpu aicpuComm;
+    aicpuComm.identifier_ = "test_collect_ctx";
+    InitCommEngineResMgr(aicpuComm);
+    auto streamLite = std::make_shared<Hccl::StreamLite>(0, 0, 0, 0);
+
+    Hccl::DfxDfxOpInfo opInfo{};
+    for (u32 i = 0; i < 3; i++) {
+        Hccl::DfxTaskInfo* slot = static_cast<Hccl::DfxTaskInfo*>(streamLite->taskInfos_.NextSlot());
+        ASSERT_NE(slot, nullptr);
+        slot->taskId = ((i + 1U) << 16) | 0U;
+        slot->dfxOpInfo = reinterpret_cast<u64>(&opInfo);
+    }
+    streamLite->taskInfos_.MarkAllRead();
+
+    auto thread = std::make_shared<MockThreadForReportErr>(streamLite.get());
+    aicpuComm.GetCommEngineResMgr()->threadMgr_->threads_.push_back(thread);
+
+    std::vector<Hccl::DfxTaskInfo*> taskContext;
+    HcclResult ret
+        = HcclCommTaskExceptionLite::GetInstance().CollectTaskContext(&aicpuComm, 0, (3U << 16) | 0U, taskContext);
+    EXPECT_EQ(ret, HCCL_SUCCESS);
+    EXPECT_EQ(taskContext.size(), 3u);
+}
+
 TEST_F(hcclCommTaskExceptionLiteTest, Ut_GenerateErrorMessageReport_When_UbTask_Expect_JettyFilled)
 {
     CollCommAicpu aicpuComm;

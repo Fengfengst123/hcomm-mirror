@@ -619,7 +619,7 @@ HcclResult HcclCommTaskExceptionLite::CollectTaskContext(
     u16 foundIdx = 0;
     for (u16 idx = 0; idx < queue->GetCapacity(); idx++) {
         Hccl::DfxTaskInfo* slot = queue->GetSlot(idx);
-        if (slot != nullptr && slot->taskId == targetTaskId) {
+        if (slot != nullptr && slot->dfxOpInfo != 0 && slot->taskId == targetTaskId) {
             found = slot;
             foundIdx = idx;
             break;
@@ -641,6 +641,10 @@ HcclResult HcclCommTaskExceptionLite::CollectTaskContext(
             HCCL_ERROR(
                 "[%s]prev taskId[%u] is bigger than err taskId[%u], taskNum[%u], stop traversal", __func__,
                 slot != nullptr ? slot->taskId : INVALID_U32, targetTaskId, taskContext.size());
+            break;
+        }
+        if (slot->dfxOpInfo == 0) {
+            HCCL_INFO("[%s] slot->dfxOpInfo[%llu], stop traversal", __func__, slot->dfxOpInfo);
             break;
         }
         taskContext.push_back(slot);
@@ -701,14 +705,14 @@ std::string HcclCommTaskExceptionLite::GetGroupInfo(CollCommAicpu* aicpuComm)
 Hccl::DfxTaskInfo* HcclCommTaskExceptionLite::FindDfxTaskInfo(CollCommAicpu* aicpuComm, u32 sqId, u32 sqeId)
 {
     Hccl::TaskInfoCircularQueue* queue = GetTaskQueueBySqId(aicpuComm, sqId);
-    if (queue == nullptr || queue->IsEmpty()) {
-        HCCL_ERROR("[%s]GetTaskQueueBySqId nullptr or queue is empty, devId[%u], sqId[%u].", __func__, devId_, sqId);
+    if (queue == nullptr) {
+        HCCL_ERROR("[%s]GetTaskQueueBySqId queue nullptr, devId[%u], sqId[%u].", __func__, devId_, sqId);
         return nullptr;
     }
     u32 targetTaskId = sqeId;
     for (u16 idx = 0; idx < queue->GetCapacity(); idx++) {
         Hccl::DfxTaskInfo* slot = queue->GetSlot(idx);
-        if (slot != nullptr && slot->taskId == targetTaskId) {
+        if (slot != nullptr && slot->dfxOpInfo != 0 && slot->taskId == targetTaskId) {
             return slot;
         }
     }
