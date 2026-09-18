@@ -2141,7 +2141,7 @@ void DfxProfilingReporterLite::ReportStreamTask(TaskInfoCircularQueue* taskQueue
 
 void DfxProfilingReporterLite::UpdateProfStat() {}
 
-void EnvPlfDebugConfig::Parse() {}
+HcclResult EnvPlfDebugConfig::Parse() { return HCCL_SUCCESS; }
 
 u64 EnvPlfDebugConfig::GetConfigValue() const { return 0; }
 

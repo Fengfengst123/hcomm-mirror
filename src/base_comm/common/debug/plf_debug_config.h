@@ -12,6 +12,8 @@
 #define HCCLV2_PLF_DEBUG_CONFIG_H
 
 #include "hccl/base.h"
+#include <atomic>
+#include <mutex>
 
 namespace Hccl {
 
@@ -26,12 +28,16 @@ void SetPlfDebugConfigValue(u64 value);
 
 class EnvPlfDebugConfig {
 public:
-    void Parse();
+    HcclResult Parse();
     u64 GetConfigValue() const;
 
 private:
-    u64 plfDebugConfig_ = 0;
+    std::atomic<u64> plfDebugConfig_{0};
+    HcclResult parseRet_{HCCL_SUCCESS};
+    std::once_flag parseOnce_;
 };
+
+EnvPlfDebugConfig& GetEnvPlfDebugConfig();
 
 } // namespace Hccl
 

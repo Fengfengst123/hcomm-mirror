@@ -12,24 +12,23 @@
 #include "log.h"
 #include <sstream>
 #include <atomic>
-#include <mutex>
 
 namespace Hccl {
 
 static std::atomic<u64> g_plfDebugConfig{0};
-static std::once_flag g_parseOnce;
 
-static u64 ParseDebugConfig(const char* envName, u64 domainMask)
+static HcclResult ParseDebugConfig(const char* envName, u64 domainMask, u64& result)
 {
     char* env = getenv(envName);
     if (env == nullptr) {
-        return 0;
+        result = 0;
+        return HCCL_SUCCESS;
     }
     std::string configDup(env);
 
     bool invert = (!configDup.empty() && configDup.front() == '^');
     // 第一个字符是'^', 使用取反模式，用户配置的项关闭，未配置的项打开
-    u64 result = invert ? domainMask : 0ULL;
+    result = invert ? domainMask : 0ULL;
     if (invert) {
         configDup.erase(configDup.begin()); // 去掉'^'符号
     }
@@ -53,30 +52,47 @@ static u64 ParseDebugConfig(const char* envName, u64 domainMask)
             mask = PLF_CHANNEL;
         } else {
             HCCL_ERROR("%s:%s subConfig:%s is not supported", envName, env, subConfig.c_str());
-            return 0;
+            result = 0;
+            return HCCL_E_PARA;
         }
         result = invert ? (result & ~mask) : (result | mask);
     }
     HCCL_RUN_INFO("[HCCL_ENV] %s set by [%s] to [0x%llx]", envName, env, result);
-    return result;
+    return HCCL_SUCCESS;
 }
 
-void EnvPlfDebugConfig::Parse()
+HcclResult EnvPlfDebugConfig::Parse()
 {
-    plfDebugConfig_ = ParseDebugConfig("HCCL_DEBUG_CONFIG", PLF_TASK | PLF_ALG | PLF_RES);
-    plfDebugConfig_ |= ParseDebugConfig("HCOMM_DEBUG_CONFIG", PLF_TASK | PLF_DATA_OP | PLF_RES | PLF_CHANNEL);
-    HCCL_RUN_INFO("[HCCL_ENV] plfDebugConfig set to [0x%llx]", plfDebugConfig_);
+    std::call_once(parseOnce_, [this]() {
+        u64 hcclDebugConfig = 0;
+        parseRet_ = ParseDebugConfig("HCCL_DEBUG_CONFIG", PLF_TASK | PLF_ALG | PLF_RES, hcclDebugConfig);
+        if (parseRet_ != HCCL_SUCCESS) {
+            return;
+        }
+        u64 hcommDebugConfig = 0;
+        parseRet_
+            = ParseDebugConfig("HCOMM_DEBUG_CONFIG", PLF_TASK | PLF_DATA_OP | PLF_RES | PLF_CHANNEL, hcommDebugConfig);
+        if (parseRet_ != HCCL_SUCCESS) {
+            return;
+        }
+        plfDebugConfig_.store(hcclDebugConfig | hcommDebugConfig, std::memory_order_relaxed);
+        g_plfDebugConfig.store(plfDebugConfig_.load(std::memory_order_relaxed), std::memory_order_relaxed);
+        HCCL_RUN_INFO("[HCCL_ENV] plfDebugConfig set to [0x%llx]", plfDebugConfig_.load(std::memory_order_relaxed));
+    });
+    return parseRet_;
 }
 
-u64 EnvPlfDebugConfig::GetConfigValue() const { return plfDebugConfig_; }
+u64 EnvPlfDebugConfig::GetConfigValue() const { return plfDebugConfig_.load(std::memory_order_relaxed); }
+
+EnvPlfDebugConfig& GetEnvPlfDebugConfig()
+{
+    static EnvPlfDebugConfig plfDebugConfig;
+    return plfDebugConfig;
+}
 
 u64 GetPlfDebugConfigValue()
 {
-    std::call_once(g_parseOnce, []() {
-        EnvPlfDebugConfig cfg;
-        cfg.Parse();
-        g_plfDebugConfig.store(cfg.GetConfigValue(), std::memory_order_relaxed);
-    });
+    (void)GetEnvPlfDebugConfig().Parse();
     return g_plfDebugConfig.load(std::memory_order_relaxed);
 }
 

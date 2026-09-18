@@ -22,6 +22,7 @@
 #include "hccl/hccl_channel.h"
 #include "hccl/hccl_rank_graph.h"
 #include "env_ub_config.h"
+#include "plf_debug_config.h"
 #include "adapter_rts_common.h"
 
 #include <algorithm>
@@ -166,6 +167,7 @@ HcclResult
 CollComm::InitFullMode(void* rankGraph, aclrtBinHandle binHandle, HcclMem cclBuffer, uint32_t opExpansionMode)
 {
     CHK_PTR_NULL(rankGraph);
+    CHK_RET(Hccl::GetEnvPlfDebugConfig().Parse());
 
     EXCEPTION_HANDLE_BEGIN
 

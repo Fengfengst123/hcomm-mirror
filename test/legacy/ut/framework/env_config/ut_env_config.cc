@@ -587,13 +587,49 @@ TEST_F(EnvConfigTest, Ut_EnvPlfDebugConfig_When_InvertTask_Expect_AllBitExceptTa
     unsetenv("HCCL_DEBUG_CONFIG");
 }
 
-TEST_F(EnvConfigTest, Ut_EnvPlfDebugConfig_When_SetInvalidToken_Expect_ReturnsZero)
+TEST_F(EnvConfigTest, Ut_EnvPlfDebugConfig_When_SetInvalidToken_Expect_ParseFailed)
 {
     setenv("HCCL_DEBUG_CONFIG", "INVALID", 1);
     EnvPlfDebugConfig plfCfg;
-    plfCfg.Parse();
+    EXPECT_NE(plfCfg.Parse(), HCCL_SUCCESS);
     EXPECT_EQ(plfCfg.GetConfigValue(), 0ULL);
     unsetenv("HCCL_DEBUG_CONFIG");
+}
+
+TEST_F(EnvConfigTest, Ut_EnvPlfDebugConfig_When_SetAivOpsExc_Expect_ParseFailed)
+{
+    setenv("HCCL_DEBUG_CONFIG", "AIV_OPS_EXC", 1);
+    EnvPlfDebugConfig plfCfg;
+    EXPECT_NE(plfCfg.Parse(), HCCL_SUCCESS);
+    unsetenv("HCCL_DEBUG_CONFIG");
+}
+
+TEST_F(EnvConfigTest, Ut_EnvPlfDebugConfig_When_HcommCrossDomainToken_Expect_ParseFailed)
+{
+    setenv("HCOMM_DEBUG_CONFIG", "ALG", 1);
+    EnvPlfDebugConfig plfCfg;
+    EXPECT_NE(plfCfg.Parse(), HCCL_SUCCESS);
+    unsetenv("HCOMM_DEBUG_CONFIG");
+}
+
+TEST_F(EnvConfigTest, Ut_EnvPlfDebugConfig_When_ValueHasSpace_Expect_ParseFailed)
+{
+    setenv("HCCL_DEBUG_CONFIG", "alg, task ", 1);
+    EnvPlfDebugConfig plfCfg;
+    EXPECT_NE(plfCfg.Parse(), HCCL_SUCCESS);
+    unsetenv("HCCL_DEBUG_CONFIG");
+}
+
+TEST_F(EnvConfigTest, Ut_EnvPlfDebugConfig_When_OneEnvInvalid_Expect_ParseFailed)
+{
+    // 非法配置整体失败（不保留另一个变量的合法项），仍由 InitFullMode 中断建链
+    setenv("HCCL_DEBUG_CONFIG", "INVALID", 1);
+    setenv("HCOMM_DEBUG_CONFIG", "data_op", 1);
+    EnvPlfDebugConfig plfCfg;
+    EXPECT_NE(plfCfg.Parse(), HCCL_SUCCESS);
+    EXPECT_EQ(plfCfg.GetConfigValue(), 0ULL);
+    unsetenv("HCCL_DEBUG_CONFIG");
+    unsetenv("HCOMM_DEBUG_CONFIG");
 }
 
 TEST_F(EnvConfigTest, Ut_EnvPlfDebugConfig_When_CaseInsensitive_Expect_SameResult)
