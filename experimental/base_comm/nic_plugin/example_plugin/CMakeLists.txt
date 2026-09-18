@@ -46,8 +46,10 @@ target_compile_options(example_plugin PRIVATE -Wall -Wextra -O2)
 
 target_link_libraries(example_plugin PRIVATE -ldl -lpthread -lrt)
 
-# 仅导出 3 个 dlsym 入口，其余符号隐藏
-target_link_options(example_plugin PRIVATE
-    "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/example_plugin.map")
-set_property(TARGET example_plugin APPEND PROPERTY LINK_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/example_plugin.map")
+# 符号隐藏: 仅导出 3 个 dlsym 入口; 非 release 模式依赖动态符号, 不挂载
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    target_link_options(example_plugin PRIVATE
+        "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/example_plugin.map")
+    set_property(TARGET example_plugin APPEND PROPERTY LINK_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/example_plugin.map")
+endif()

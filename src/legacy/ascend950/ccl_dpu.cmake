@@ -79,8 +79,8 @@ target_include_directories(ccl_dpu PRIVATE
     ${HCOMM_DIR}/src/coll_communicator_mgr/dfx/profiling/host
 )
 
-# 符号隐藏: 仅导出白名单符号; UT/ST 打桩依赖动态符号, 不挂载
-if(NOT ENABLE_TEST)
+# 符号隐藏: 仅导出白名单符号; 非 release 模式依赖动态符号, 不挂载
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
     target_link_options(ccl_dpu PRIVATE "-Wl,--version-script=${CMAKE_CURRENT_LIST_DIR}/ccl_dpu.map")
     set_property(TARGET ccl_dpu APPEND PROPERTY LINK_DEPENDS "${CMAKE_CURRENT_LIST_DIR}/ccl_dpu.map")
 endif()
