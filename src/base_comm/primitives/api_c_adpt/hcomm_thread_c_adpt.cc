@@ -184,14 +184,6 @@ HcommResult HcommThreadAllocWithStream(CommEngine engine, aclrtStream stream, ui
 {
     CHK_PTR_NULL(thread);
 
-    // 仅支持 CPU、CPU_TS
-    if (engine != COMM_ENGINE_CPU && engine != COMM_ENGINE_CPU_TS) {
-        HCCL_ERROR(
-            "[%s] commEngine[%s] not supported, only COMM_ENGINE_CPU and COMM_ENGINE_CPU_TS are supported", __func__,
-            GetEnumToString(GetCommEngineStatusStrMap(), engine).c_str());
-        return HCCL_E_PARA;
-    }
-
     HcommResult hcommRet = HcommResMgrInit();
     CHK_PRT_RET(
         hcommRet != HCCL_SUCCESS,

@@ -231,17 +231,8 @@ inline ThreadHandle MockThreadAllocWithStream(CommEngine commEngine)
     aclrtStream fakeStream{(void*)0x12345678};
     ThreadHandle fakeThreadHandle{};
 
-    // HcommThreadAllocWithStream仅支持CPU/CPU_TS引擎，其他引擎预期返回HCCL_E_PARA
-    bool engineSupported = (commEngine == COMM_ENGINE_CPU || commEngine == COMM_ENGINE_CPU_TS);
     EXPECT_EQ(
-        HcommThreadAllocWithStream(commEngine, fakeStream, fakeNotifyNum, &fakeThreadHandle),
-        engineSupported ? HcclResult::HCCL_SUCCESS : static_cast<HcclResult>(HCCL_E_PARA));
-
-    if (fakeThreadHandle == 0) {
-        EXPECT_EQ(
-            HcommThreadAllocWithStream(COMM_ENGINE_CPU_TS, fakeStream, fakeNotifyNum, &fakeThreadHandle),
-            HcclResult::HCCL_SUCCESS);
-    }
+        HcommThreadAllocWithStream(commEngine, fakeStream, fakeNotifyNum, &fakeThreadHandle), HcclResult::HCCL_SUCCESS);
 
     return fakeThreadHandle;
 }
