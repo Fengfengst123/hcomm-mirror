@@ -130,7 +130,7 @@ TEST_F(TestHcclThreadAcquireWithConfig, Ut_When_UnsupportedEngine_Expect_HCCL_E_
     ThreadHandle thread;
     void* comm = static_cast<HcclComm>(hcclCommPtr.get());
 
-    CommEngine unsupportedEngines[] = {COMM_ENGINE_AICPU_TS, COMM_ENGINE_CPU_TS, COMM_ENGINE_AIV, COMM_ENGINE_CCU};
+    CommEngine unsupportedEngines[] = {COMM_ENGINE_AICPU_TS, COMM_ENGINE_CPU_TS};
     for (auto engine : unsupportedEngines) {
         HcclResult ret = HcclThreadAcquireWithConfig(comm, engine, 1, THREAD_TYPE_TS, &config, &thread);
         EXPECT_EQ(ret, HCCL_E_PARA);

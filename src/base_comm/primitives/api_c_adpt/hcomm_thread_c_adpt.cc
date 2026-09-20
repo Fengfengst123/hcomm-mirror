@@ -118,12 +118,6 @@ HcommResult HcommThreadAllocWithCommConfigCheck(
             "[%s] commEngine[%d] CPU_TS/AICPU_TS not supported, use engine with ThreadType instead", __func__,
             static_cast<int32_t>(engine)),
         HCOMM_E_PARA);
-    CHK_PRT_RET(
-        engine == COMM_ENGINE_AIV || engine == COMM_ENGINE_CCU,
-        HCCL_ERROR(
-            "[%s] commEngine[%d] AIV/CCU not supported, supported engines: CPU/AICPU", __func__,
-            static_cast<int32_t>(engine)),
-        HCOMM_E_PARA);
     CHK_PRT_RET(threadNum == 0, HCCL_ERROR("[%s] threadNum[%u] is invalid", __func__, threadNum), HCOMM_E_PARA);
     HcommResult hcommRet = HcommResMgrInit();
     CHK_PRT_RET(
