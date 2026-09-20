@@ -41,15 +41,14 @@ int32_t：接口成功返回0，其他失败。
 ## 超时机制说明
 
 1. **默认超时时间**
-   - 如果未调用本接口设置，默认超时时间为1836秒（约30分钟）
-   
+   - 如果未调用本接口设置，默认超时时间为1836秒（约30分钟）。
+    
 2. **超时生效条件**
-   - 本接口设置的超时时间将应用于后续的 `*WithDefaultTimeout`系列接口
-   - 已调用 `HcommChannelNotifyWaitOnThread`或`HcommThreadNotifyWaitOnThread`设置的超时不受本接口影响
+   - 本接口设置的超时时间将原样应用于后续的 `*WithDefaultTimeout`系列接口，不再追加默认偏移量。
+   - 已调用 `HcommChannelNotifyWaitOnThread`或`HcommThreadNotifyWaitOnThread`设置的超时不受本接口影响。
 
 3. **非AICPU模式特殊处理**
-   - 在非AICPU模式下，如果未调用本接口设置默认超时时间
-   - 系统会自动在默认值基础上增加50秒的偏移量作为安全缓冲
+   - 在非AICPU模式下，如果未调用本接口设置默认超时时间，系统会自动在默认值基础上增加27秒的偏移量作为安全缓冲。
 
 ## 约束说明
 
