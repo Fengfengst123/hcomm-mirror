@@ -51,6 +51,7 @@ HcclResult HcclCommSetMemoryRange(HcclComm comm, void *baseVirPtr, size_t size, 
 - 该接口仅支持在范围是单Server的通信域内调用，否则会报错。
 - 多次调用该接口时，输入的内存地址不能重复或存在区间交叠。
 - 其他约束请参见[通用约束](./zero_copy_readme.md)。
+- comm必须为有效的通信域句柄（由通信域创建接口获得，调用期间保持有效）。禁止传入空指针、野指针或已销毁的句柄。
 
 ## 调用示例
 

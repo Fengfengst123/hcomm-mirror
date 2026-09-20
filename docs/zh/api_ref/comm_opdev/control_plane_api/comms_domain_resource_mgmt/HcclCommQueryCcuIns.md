@@ -65,6 +65,7 @@ HcclResult HcclCommQueryCcuIns(HcclComm comm, CcuInsHandle *insHandles, uint32_t
 4. 返回的CCU实例句柄仅供借用，所有权仍归通信域所有，由通信域负责释放。调用者不可销毁该实例，否则会造成对同一实例的重复释放，破坏通信域的资源管理。
 5. 本接口仅保证多次`HcclCommQueryCcuIns`调用之间的幂等性（已创建则直接返回，不重复创建）。调用方须保证本接口不与`HcclCommAssignCcuIns`或`HcclCommDestroy`并发执行。
 6. CCU资源不足时本接口仅在CCU_MS→CCU_SCHED之间自动降级一次，不会自动降级到AICPU_TS。调用方收到HCCL_E_UNAVAIL后需自行处理是否降级到AICPU_TS模式。
+7. comm必须为有效的通信域句柄（由通信域创建接口获得，调用期间保持有效）。禁止传入空指针、野指针或已销毁的句柄。
 
 ## 调用示例
 

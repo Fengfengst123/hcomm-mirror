@@ -60,6 +60,7 @@ HcclResult HcclCreateSubCommConfig(HcclComm *comm, uint32_t rankNum, uint32_t *r
 - 不需要创建子通信域的rank应当传入rankIds=nullptr和subCommId=0xFFFFFFFF，此场景不会对“subCommId”参数做校验。
 - 只支持从全局通信域切分子通信域，不支持在子通信域中进一步切分子通信域。
 - 不支持单卡在多个进程或者线程中调用该接口切分子通信域。
+- comm必须为有效的通信域句柄（由通信域创建接口获得，调用期间保持有效）。禁止传入空指针、野指针或已销毁的句柄。
 
 ## 调用示例
 

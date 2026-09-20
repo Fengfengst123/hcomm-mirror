@@ -47,8 +47,8 @@ HcclResult HcclTeamCreate(HcclComm comm, const HcclTeamCreateDesc* desc, HcommTe
 2. `desc`需先通过[HcclTeamCreateDescInit](HcclTeamCreateDescInit.md)初始化。`protocol`不可为COMM_PROTOCOL_RESERVED，当前只支持URMA协议（对应枚举值COMM_PROTOCOL_UB_CTP/UBC_TP/UBOE/UB_RTP）。
 
 3. 建链失败时，HcclTeamCreate会自动回滚已创建的team及其资源，`team`输出为NULL。
-
 4. 本接口不支持多线程并发调用。调用方须保证不同线程对本接口的调用串行执行。
+5. comm必须为有效的通信域句柄（由通信域创建接口获得，调用期间保持有效）。禁止传入空指针、野指针或已销毁的句柄。
 
 ## 调用示例
 

@@ -69,6 +69,7 @@ HcclResult HcclChannelAcquireWithConfig(HcclComm comm, CommEngine engine,
    - Channel的销毁由通信域统一管理，调用者无需单独销毁。
 
 5. config对象在本接口调用完成后即可通过[HcclChannelConfigDestroy](HcclChannelConfigDestroy.md)销毁，不影响已创建的Channel。
+6. comm必须为有效的通信域句柄（由通信域创建接口获得，调用期间保持有效）。禁止传入空指针、野指针或已销毁的句柄。
 
 ## 调用示例
 

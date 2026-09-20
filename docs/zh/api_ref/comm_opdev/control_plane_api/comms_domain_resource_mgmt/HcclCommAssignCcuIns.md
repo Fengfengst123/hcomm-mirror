@@ -58,6 +58,7 @@ HcclResult HcclCommAssignCcuIns(HcclComm comm, CcuInsHandle insHandle)
 - 同一个通信域不支持重复绑定。无论新旧句柄是否相同，再次调用本接口均返回`HCCL_E_PARA`，原绑定关系保持不变。
 - 本接口只保证多个`HcclCommAssignCcuIns`调用之间的并发安全。调用方须保证本接口不与`HcclCommQueryCcuIns`、`HcclCommQueryAssignedCcuIns`或`HcclCommDestroy`并发执行。
 - `insHandle`须在`comm`所在的当前Device上创建。
+- comm必须为有效的通信域句柄（由通信域创建接口获得，调用期间保持有效）。禁止传入空指针、野指针或已销毁的句柄。
 
 ## 调用示例
 

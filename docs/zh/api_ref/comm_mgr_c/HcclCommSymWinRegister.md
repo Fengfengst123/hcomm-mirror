@@ -124,6 +124,7 @@ HcclResult HcclCommSymWinRegister(HcclComm comm, void *addr, uint64_t size, Hccl
 - 使用对称内存功能时，算子的输入、输出内存必须调用此接口注册为对称内存。
 - 调用该接口注册的内存需要使用[HcclCommSymWinDeregister](HcclCommSymWinDeregister.md)接口解注册。
 - 本接口不支持多线程并发调用。调用方须保证不同线程对本接口的调用串行执行。
+- comm必须为有效的通信域句柄（由通信域创建接口获得，调用期间保持有效）。禁止传入空指针、野指针或已销毁的句柄。
 
 ## 调用示例
 

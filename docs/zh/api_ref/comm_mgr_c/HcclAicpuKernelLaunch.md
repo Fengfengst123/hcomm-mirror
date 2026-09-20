@@ -48,7 +48,7 @@ HcclResult HcclAicpuKernelLaunch(HcclComm comm, const HcclOpDesc *opInfo, const 
 ## 约束说明
 
 - 自定义通信算子场景使用（当前仅支持Send和Receive算子）。
-- 调用前需确保通信域已正确初始化。
+- comm必须为有效的通信域句柄（由通信域创建接口获得，调用期间保持有效）。禁止传入空指针、野指针或已销毁的句柄。
 
 ## 调用示例
 

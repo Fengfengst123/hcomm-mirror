@@ -73,6 +73,7 @@ HcclResult HcclDedicatedThreadAcquire(HcclComm comm, HcclDedicatedThreadType use
 6. 调用HcclDedicatedThreadAcquire接口申请专用线程前，必须先在同一线程上调用aclrtSetDevice接口指定deviceId。
 
 7. HCCL_DED_THREAD_TYPE_INVALID为无效值，传入将返回HCCL_E_PARA。
+8. comm必须为有效的通信域句柄（由通信域创建接口获得，调用期间保持有效）。禁止传入空指针、野指针或已销毁的句柄。
 
 ## 调用示例
 

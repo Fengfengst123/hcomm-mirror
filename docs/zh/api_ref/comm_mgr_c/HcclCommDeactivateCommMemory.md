@@ -44,7 +44,7 @@ HcclResult HcclCommDeactivateCommMemory(HcclComm comm, void *virPtr)
 
 ## 约束说明
 
-无
+- comm必须为有效的通信域句柄（由通信域创建接口获得，调用期间保持有效）。禁止传入空指针、野指针或已销毁的句柄。
 
 ## 调用示例
 

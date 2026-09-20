@@ -47,6 +47,8 @@ HcclResult HcclGetHcclBufferCleared(HcclComm comm, void **buffer, uint64_t *size
 
 如果通信域仅包含一个rank则不会申请HCCL通信内存，出参`buffer`为空指针，`size`为0。
 
+- comm必须为有效的通信域句柄（由通信域创建接口获得，调用期间保持有效）。禁止传入空指针、野指针或已销毁的句柄。
+
 ## 调用示例
 
 ```c

@@ -59,6 +59,7 @@ HcclResult HcclCommQueryAssignedCcuIns(HcclComm comm, CcuInsHandle *insHandles, 
 3. 本接口查询的CCU实例与通信域自有的CCU实例（由`HcclCommQueryCcuIns`查询/创建）相互独立，二者不会相互覆盖或影响。
 4. 返回的CCU实例句柄仅供借用，所有权仍归通信域所有，由通信域负责释放。调用者不可销毁该实例，否则会造成对同一实例的重复释放，破坏通信域的资源管理。
 5. 本接口不保证与`HcclCommAssignCcuIns`或`HcclCommDestroy`并发执行的安全。调用方须保证本接口不与`HcclCommAssignCcuIns`或`HcclCommDestroy`并发执行。
+6. comm必须为有效的通信域句柄（由通信域创建接口获得，调用期间保持有效）。禁止传入空指针、野指针或已销毁的句柄。
 
 ## 调用示例
 

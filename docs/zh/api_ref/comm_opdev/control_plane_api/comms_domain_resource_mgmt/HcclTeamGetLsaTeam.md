@@ -50,6 +50,7 @@ HcclResult HcclTeamGetLsaTeam(HcclComm comm, HcommTeamHandle *lsaTeam)
 1. 仅支持CommunicatorV2通信域。
 2. 通信域需要在初始化时成功预制UB Memory LSA WorldTeam，否则返回HCCL_E_NOT_FOUND。
 3. 返回的LSA WorldTeam由通信域持有，调用方不得通过HcclTeamDestroy单独销毁。通信域销毁后，该句柄失效。
+4. comm必须为有效的通信域句柄（由通信域创建接口获得，调用期间保持有效）。禁止传入空指针、野指针或已销毁的句柄。
 
 ## 调用示例
 
