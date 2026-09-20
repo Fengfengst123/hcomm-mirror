@@ -11,6 +11,7 @@
 #ifndef RANK_TABLE_CRC_BRIDGE_H
 #define RANK_TABLE_CRC_BRIDGE_H
 
+#include <mutex>
 #include <string>
 #include <unordered_map>
 #include "hccl/base.h"
@@ -24,6 +25,7 @@ public:
     u32 ConsumeRankTableJsonCrc(s32 deviceLogicId);
 
 private:
+    std::mutex rankTableJsonCrcMutex_;
     std::unordered_map<s32, u32> rankTableJsonCrcMap_;
 };
 

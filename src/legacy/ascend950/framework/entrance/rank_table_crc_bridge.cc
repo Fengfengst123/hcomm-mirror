@@ -30,12 +30,16 @@ void RankTableCrcBridge::RecordRankTableJsonCrc(s32 deviceLogicId, const std::st
         HCCL_ERROR("[RecordRankTableJsonCrc] CalcStringCrc failed, ret[%d]", ret);
         return;
     }
-    rankTableJsonCrcMap_[deviceLogicId] = crc;
+    {
+        std::lock_guard<std::mutex> lock(rankTableJsonCrcMutex_);
+        rankTableJsonCrcMap_[deviceLogicId] = crc;
+    }
     HCCL_INFO("[RecordRankTableJsonCrc] deviceLogicId[%d], crc[0x%08x] recorded.", deviceLogicId, crc);
 }
 
 u32 RankTableCrcBridge::ConsumeRankTableJsonCrc(s32 deviceLogicId)
 {
+    std::lock_guard<std::mutex> lock(rankTableJsonCrcMutex_);
     auto it = rankTableJsonCrcMap_.find(deviceLogicId);
     if (it == rankTableJsonCrcMap_.end()) {
         return 0;
