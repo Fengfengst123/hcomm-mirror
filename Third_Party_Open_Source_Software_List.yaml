@@ -8,30 +8,30 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
-json:
-  version: v3.11.3
-  type: build
-makeself:
-  version: release-2.5.0-patch1.0
-  type: build
-openssl:
-  version: v3.0.9
-  type: build
+abseil-cpp:
+  version: 20230802.1-h0
+  type: test
 boost:
   version: v1.87.0
-  type: test
-mockcpp:
-  version: v2.7-h4
   type: test
 googletest:
   version: v1.14.0
   type: test
+json:
+  version: v3.12.0
+  type: build
+makeself:
+  version: v2.5.0-h1
+  type: build
+mockcpp:
+  version: v2.7-h4
+  type: test
+openssl:
+  version: v3.0.9
+  type: build
 protobuf:
   version: v25.1
   type: test
-abseil-cpp:
-  version: 20250127.0
-  type: test
 rdma-core:
-  version: v42.7-h3
+  version: v42.7-h2
   type: build

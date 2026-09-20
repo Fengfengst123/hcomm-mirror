@@ -214,21 +214,30 @@ Developers can use the HCCL Test tool for collective communication function and 
 
 ### Open Source Third-Party Software Dependencies
 
-When compiling this project, the following third-party open source software dependencies are required:
+When compiling this project, the following third-party open source software dependencies are required (grouped by build scenario, sorted alphabetically by software name within each group):
 
-| Open Source Software | Version | Download URL |
-| ------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| json | 3.11.3 | [json-3.11.3.tar.gz](https://gitcode.com/cann-src-third-party/json/releases/download/v3.11.3/json-3.11.3.tar.gz) |
-| makeself | 2.5.0 | [makeself-release-2.5.0-patch1.tar.gz](https://gitcode.com/cann-src-third-party/makeself/releases/download/release-2.5.0-patch1.0/makeself-release-2.5.0-patch1.tar.gz) |
-| openssl | 3.0.9 | [openssl-openssl-3.0.9.tar.gz](https://gitcode.com/cann-src-third-party/openssl/releases/download/openssl-3.0.9/openssl-openssl-3.0.9.tar.gz) |
-| hcomm_utils | 9.0.0 (aarch64) | [cann-hcomm-utils_9.0.0_linux-aarch64.tar.gz](https://ascend-cann.obs.cn-north-4.myhuaweicloud.com/CANN/20260330_newest/cann-hcomm-utils_9.0.0_linux-aarch64.tar.gz) |
-| hcomm_utils | 9.0.0 (x86_64) | [cann-hcomm-utils_9.0.0_linux-x86_64.tar.gz](https://ascend-cann.obs.cn-north-4.myhuaweicloud.com/CANN/20260330_newest/cann-hcomm-utils_9.0.0_linux-x86_64.tar.gz) |
-| googletest | 1.14.0 | [googletest-1.14.0.tar.gz](https://gitcode.com/cann-src-third-party/googletest/releases/download/v1.14.0/googletest-1.14.0.tar.gz) |
-| boost | 1.87.0 | [boost_1_87_0.tar.gz](https://gitcode.com/cann-src-third-party/boost/releases/download/v1.87.0/boost_1_87_0.tar.gz) |
-| mockcpp | 2.7-h4 | [mockcpp-2.7.tar.gz](https://gitcode.com/cann-src-third-party/mockcpp/releases/download/v2.7-h4/mockcpp-2.7.tar.gz) |
-| mockcpp-patch | 2.7-h4 | [mockcpp-2.7_py3.patch](https://gitcode.com/cann-src-third-party/mockcpp/releases/download/v2.7-h4/mockcpp-2.7_py3.patch) |
-| abseil-cpp | 20250127.0 | [abseil-cpp-20250127.0.tar.gz](https://gitcode.com/cann-src-third-party/abseil-cpp/releases/download/20250127.0/abseil-cpp-20250127.0.tar.gz) |
-| protobuf | 25.1 | [protobuf-25.1.tar.gz](https://gitcode.com/cann-src-third-party/protobuf/releases/download/v25.1/protobuf-25.1.tar.gz) |
-| rdma-core | v42.7-h1 | [rdma-core-42.7.tar.gz](https://gitcode.com/cann-src-third-party/rdma-core/releases/download/v42.7-h1/rdma-core-42.7.tar.gz) |
-| rdma-core-patch | v42.7-h1 | [rdma-core-42.7.patch](https://gitcode.com/cann-src-third-party/rdma-core/releases/download/v42.7-h1/rdma-core-42.7.patch) |
-| cann-cmake | master-057 | [cmake-master-057.tar.gz](https://raw.gitcode.com/cann/cmake/archive/refs/heads/master-057.tar.gz) |
+**Required for package build (--pkg / --full)**
+
+| Open Source Software | Version         | Download URL                                                                                                                                                         |
+| -------------------- | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| cann-cmake           | master-057      | [cmake-master-057.tar.gz](https://raw.gitcode.com/cann/cmake/archive/refs/heads/master-057.tar.gz)                                                                   |
+| hcomm_utils          | 9.2.0 (aarch64) | [cann-hcomm-utils_9.2.0_linux-aarch64.tar.gz](https://ascend-cann.obs.cn-north-4.myhuaweicloud.com/CANN/20260729_newest/cann-hcomm-utils_9.2.0_linux-aarch64.tar.gz) |
+| hcomm_utils          | 9.2.0 (x86_64)  | [cann-hcomm-utils_9.2.0_linux-x86_64.tar.gz](https://ascend-cann.obs.cn-north-4.myhuaweicloud.com/CANN/20260729_newest/cann-hcomm-utils_9.2.0_linux-x86_64.tar.gz)   |
+| json                 | 3.12.0          | [json-3.12.0.tar.gz](https://gitcode.com/cann-src-third-party/json/releases/download/v3.12.0/json-3.12.0.tar.gz)                                                     |
+| makeself             | 2.5.0-h1        | [makeself-release-2.5.0.tar.gz](https://gitcode.com/cann-src-third-party/makeself/releases/download/v2.5.0-h1/makeself-release-2.5.0.tar.gz)                         |
+| makeself-patch       | 2.5.0-h1        | [makeself-2.5.0.patch](https://gitcode.com/cann-src-third-party/makeself/releases/download/v2.5.0-h1/makeself-2.5.0.patch)                                           |
+| openssl              | 3.0.9           | [openssl-openssl-3.0.9.tar.gz](https://gitcode.com/cann-src-third-party/openssl/releases/download/openssl-3.0.9/openssl-openssl-3.0.9.tar.gz)                        |
+| rdma-core            | 42.7-h2         | [rdma-core-42.7.tar.gz](https://gitcode.com/cann-src-third-party/rdma-core/releases/download/v42.7-h2/rdma-core-42.7.tar.gz)                                         |
+| rdma-core-patch      | 42.7-h2         | [rdma-core-42.7.patch](https://gitcode.com/cann-src-third-party/rdma-core/releases/download/v42.7-h2/rdma-core-42.7.patch)                                           |
+
+**Additional for UT/ST testing (--ut / --st)**
+
+| Open Source Software | Version       | Download URL                                                                                                                                     |
+| -------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| abseil-cpp           | 20230802.1    | [abseil-cpp-20230802.1.tar.gz](https://gitcode.com/cann-src-third-party/abseil-cpp/releases/download/20230802.1/abseil-cpp-20230802.1.tar.gz)    |
+| abseil-cpp-patch     | 20230802.1-h0 | [backport-CVE-2025-0838.patch](https://gitcode.com/cann-src-third-party/abseil-cpp/releases/download/20230802.1-h0/backport-CVE-2025-0838.patch) |
+| boost                | 1.87.0        | [boost_1_87_0.tar.gz](https://gitcode.com/cann-src-third-party/boost/releases/download/v1.87.0/boost_1_87_0.tar.gz)                              |
+| googletest           | 1.14.0        | [googletest-1.14.0.tar.gz](https://gitcode.com/cann-src-third-party/googletest/releases/download/v1.14.0/googletest-1.14.0.tar.gz)               |
+| mockcpp              | 2.7-h4        | [mockcpp-2.7.tar.gz](https://gitcode.com/cann-src-third-party/mockcpp/releases/download/v2.7-h4/mockcpp-2.7.tar.gz)                              |
+| mockcpp-patch        | 2.7-h4        | [mockcpp-2.7_py3.patch](https://gitcode.com/cann-src-third-party/mockcpp/releases/download/v2.7-h4/mockcpp-2.7_py3.patch)                        |
+| protobuf             | 25.1          | [protobuf-25.1.tar.gz](https://gitcode.com/cann-src-third-party/protobuf/releases/download/v25.1/protobuf-25.1.tar.gz)                           |
