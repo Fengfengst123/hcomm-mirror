@@ -2634,6 +2634,7 @@ HcclResult HcclSetConfig([[maybe_unused]] HcclConfig config, [[maybe_unused]] Hc
             CHK_RET(it->second->SetDeterministicConfig(configValue.value));
         }
     }
+    HCCL_RUN_INFO("Entry-HcclSetConfig successfully, config[%d], value[%u]", config, configValue.value);
 #endif
     return HCCL_SUCCESS;
 }
