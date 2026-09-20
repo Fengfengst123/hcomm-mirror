@@ -50,6 +50,7 @@ HcclResult HcclCommSymWinDeregister(HcclCommSymWindow winHandle)
 - 该接口需要配套[HcclCommSymWinRegister](HcclCommSymWinRegister.md)使用。
 - 支持范围与[HcclCommSymWinRegister](HcclCommSymWinRegister.md)一致。
 - 确保通信域中的所有rank同时调用该接口释放对称窗口资源。
+- 本接口不支持多线程并发调用。调用方须保证不同线程对本接口的调用串行执行。
 
 ## 调用示例
 

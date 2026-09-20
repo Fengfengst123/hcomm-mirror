@@ -58,6 +58,7 @@ HcclResult HcclCommSymWinGet(HcclComm comm, void *ptr, size_t size, HcclCommSymW
 - 针对Atlas A3系列产品，仅支持HCCS链路通信场景。
 <!-- end id9 -->
 - 仅支持通信算子展开模式为AI CPU的场景。
+- 本接口不支持多线程并发调用。调用方须保证不同线程对本接口的调用串行执行。
 
 ## 调用示例
 

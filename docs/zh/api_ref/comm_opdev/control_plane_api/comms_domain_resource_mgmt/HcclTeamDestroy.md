@@ -44,6 +44,8 @@ HcclResult HcclTeamDestroy(HcommTeamHandle team)
 
 2. team句柄销毁后不可再使用。
 
+3. 本接口不支持多线程并发调用。调用方须保证不同线程对本接口的调用串行执行。
+
 ## 调用示例
 
 ```c

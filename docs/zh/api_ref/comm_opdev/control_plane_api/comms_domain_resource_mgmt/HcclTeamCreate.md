@@ -48,6 +48,8 @@ HcclResult HcclTeamCreate(HcclComm comm, const HcclTeamCreateDesc* desc, HcommTe
 
 3. 建链失败时，HcclTeamCreate会自动回滚已创建的team及其资源，`team`输出为NULL。
 
+4. 本接口不支持多线程并发调用。调用方须保证不同线程对本接口的调用串行执行。
+
 ## 调用示例
 
 ```c
