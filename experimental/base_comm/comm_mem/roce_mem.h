@@ -11,7 +11,10 @@
 #ifndef HCOMM_EXPERIMENTAL_ROCE_MEM_H
 #define HCOMM_EXPERIMENTAL_ROCE_MEM_H
 
+#include <cstdint>
+#include <cstring>
 #include <memory>
+#include <mutex>
 #include <vector>
 #include <string>
 #include "reged_mem_mgr.h"
@@ -22,6 +25,39 @@
 #include "exchange_rdma_buffer_dto.h"
 
 namespace hcomm_experimental {
+
+/**
+ * @note 远端内存管理key：EndpointDesc标识网卡，pid标识该网卡上的远端进程。
+ */
+struct RemoteRdmaMemKey {
+    EndpointDesc endpointDesc{};
+    uint32_t pid{0};
+};
+
+inline bool operator==(const RemoteRdmaMemKey& lhs, const RemoteRdmaMemKey& rhs) noexcept
+{
+    return (lhs.pid == rhs.pid) && (std::memcmp(&lhs.endpointDesc, &rhs.endpointDesc, sizeof(EndpointDesc)) == 0);
+}
+
+struct RemoteRdmaMemKeyHash {
+    size_t operator()(const RemoteRdmaMemKey& key) const noexcept
+    {
+        // FNV-1a（64位）对EndpointDesc字节序列与pid做hash
+        const uint8_t* p = reinterpret_cast<const uint8_t*>(&key);
+        size_t h
+            = sizeof(size_t) == 8 ? static_cast<size_t>(14695981039346656037ull) : static_cast<size_t>(2166136261u);
+        const size_t prime
+            = sizeof(size_t) == 8 ? static_cast<size_t>(1099511628211ull) : static_cast<size_t>(16777619u);
+        for (size_t i = 0; i < sizeof(key.endpointDesc); ++i) {
+            h ^= static_cast<size_t>(p[i]);
+            h *= prime;
+        }
+        h ^= static_cast<size_t>(key.pid);
+        h *= prime;
+        return h;
+    }
+};
+
 /**
  * @note 职责：用于通信设备EndPoint的注册内存信息管理，支持基于RmaBufferMgr类的重叠内存的检测报错等。
  */
@@ -44,12 +80,15 @@ public:
     HcclResult GetAllMemHandles(void** memHandles, uint32_t* memHandleNum) override;
     HcclResult GetMemDesc(const EndpointDesc endpointDesc, Hccl::LocalRdmaRmaBuffer* localRdmaRmaBuffer);
     HcclResult GetParamsFromMemDesc(
-        const void* memDesc, uint32_t descLen, EndpointDesc& endpointDesc, Hccl::ExchangeRdmaBufferDto& dto);
+        const void* memDesc, uint32_t descLen, EndpointDesc& endpointDesc, Hccl::ExchangeRdmaBufferDto& dto,
+        uint32_t& pid);
 
 private:
     std::unique_ptr<LocalRdmaRmaBufferMgr> localRdmaRmaBufferMgr_{};
     std::vector<std::shared_ptr<Hccl::LocalRdmaRmaBuffer>> allRegisteredBuffers_;
-    std::unordered_map<EndpointDesc, std::unique_ptr<RemoteRdmaRmaBufferMgr>> remoteRdmaRmaBufferMgrs_;
+    std::unordered_map<RemoteRdmaMemKey, std::unique_ptr<RemoteRdmaRmaBufferMgr>, RemoteRdmaMemKeyHash>
+        remoteRdmaRmaBufferMgrs_;
+    mutable std::mutex memMtx_;
 };
 } // namespace hcomm_experimental
 
