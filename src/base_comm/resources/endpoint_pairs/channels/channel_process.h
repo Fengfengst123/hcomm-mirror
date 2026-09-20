@@ -29,6 +29,10 @@ class DeviceMem;
 namespace hcomm {
 
 // HcommChannelGetStatus 出参状态码
+// 注意：对外头文件 include/hcomm_channel.h 已定义全局枚举 HcommChannelStatus，
+// 其枚举值名与本枚举同名（READY/CONNECTING），取值一一对应，是对外取值契约的直接来源，
+// 修改取值须与对外枚举同步（ut_hcomm_c_adpt.cc 已有 static_assert 编译期锁定）；
+// 在 using namespace hcomm 的编译单元中引用本枚举值须加 hcomm:: 限定，否则与全局枚举二义。
 enum HcommChannelLinkStatus : int32_t {
     HCOMM_CHANNEL_STATUS_READY = 0,
     HCOMM_CHANNEL_STATUS_CONNECTING = 1,

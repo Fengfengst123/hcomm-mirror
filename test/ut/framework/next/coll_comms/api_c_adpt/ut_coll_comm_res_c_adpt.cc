@@ -259,12 +259,12 @@ static int32_t StubHcommChannelGetStatus(const ChannelHandle* channelList, uint3
     g_sharedJettyGetStatusCallCount++;
     if (g_sharedJettyGetStatusCallCount == 1) {
         for (uint32_t i = 0; i < listNum; ++i) {
-            statusList[i] = static_cast<int32_t>(HCOMM_CHANNEL_STATUS_CONNECTING);
+            statusList[i] = static_cast<int32_t>(hcomm::HCOMM_CHANNEL_STATUS_CONNECTING);
         }
         return static_cast<int32_t>(HCCL_E_AGAIN);
     }
     for (uint32_t i = 0; i < listNum; ++i) {
-        statusList[i] = static_cast<int32_t>(HCOMM_CHANNEL_STATUS_READY);
+        statusList[i] = static_cast<int32_t>(hcomm::HCOMM_CHANNEL_STATUS_READY);
     }
     return 0;
 }

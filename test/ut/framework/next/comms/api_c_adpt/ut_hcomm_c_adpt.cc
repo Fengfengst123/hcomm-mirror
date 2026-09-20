@@ -49,6 +49,21 @@
 
 using namespace hcomm;
 
+// 编译期校验：对外枚举 HcommChannelStatus 与内部 hcomm::HcommChannelLinkStatus 共享取值，
+// 防止内部枚举取值漂移破坏 HcommChannelGetStatus 出参对外契约
+static_assert(
+    static_cast<int32_t>(HcommChannelStatus::HCOMM_CHANNEL_STATUS_READY)
+        == static_cast<int32_t>(hcomm::HcommChannelLinkStatus::HCOMM_CHANNEL_STATUS_READY),
+    "HCOMM_CHANNEL_STATUS_READY value mismatch");
+static_assert(
+    static_cast<int32_t>(HcommChannelStatus::HCOMM_CHANNEL_STATUS_CONNECTING)
+        == static_cast<int32_t>(hcomm::HcommChannelLinkStatus::HCOMM_CHANNEL_STATUS_CONNECTING),
+    "HCOMM_CHANNEL_STATUS_CONNECTING value mismatch");
+static_assert(
+    static_cast<int32_t>(HcommChannelStatus::HCOMM_CHANNEL_STATUS_FAILED_INTERNAL)
+        == static_cast<int32_t>(hcomm::HcommChannelLinkStatus::HCOMM_CHANNEL_STATUS_FAILED),
+    "HCOMM_CHANNEL_STATUS_FAILED_INTERNAL value mismatch");
+
 HcclResult StubServerSocketGetListenPort(Endpoint* /*endpoint*/, uint32_t* port)
 {
     *port = 12345;

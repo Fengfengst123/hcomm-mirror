@@ -98,19 +98,19 @@ HcclResult AicpuTsChannelHelper::HandleStatus(
 {
     bool allReady = true;
     for (uint32_t i = 0; i < listNum; i++) {
-        if (linkStatusList[i] != HCOMM_CHANNEL_STATUS_READY) {
+        if (linkStatusList[i] != hcomm::HCOMM_CHANNEL_STATUS_READY) {
             allReady = false;
             break;
         }
     }
     if (!allReady) {
         for (uint32_t i = 0; i < listNum; i++) {
-            if (linkStatusList[i] == HCOMM_CHANNEL_STATUS_FAILED) {
-                statusList[i] = HCOMM_CHANNEL_STATUS_FAILED;
-            } else if (linkStatusList[i] == HCOMM_CHANNEL_STATUS_TIMEOUT) {
-                statusList[i] = HCOMM_CHANNEL_STATUS_TIMEOUT;
+            if (linkStatusList[i] == hcomm::HCOMM_CHANNEL_STATUS_FAILED) {
+                statusList[i] = hcomm::HCOMM_CHANNEL_STATUS_FAILED;
+            } else if (linkStatusList[i] == hcomm::HCOMM_CHANNEL_STATUS_TIMEOUT) {
+                statusList[i] = hcomm::HCOMM_CHANNEL_STATUS_TIMEOUT;
             } else {
-                statusList[i] = HCOMM_CHANNEL_STATUS_CONNECTING;
+                statusList[i] = hcomm::HCOMM_CHANNEL_STATUS_CONNECTING;
             }
         }
         return HCCL_SUCCESS;

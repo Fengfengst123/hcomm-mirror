@@ -142,6 +142,18 @@ typedef enum {
     HCOMM_CHANNEL_CONFIG_TYPE_IS_SHARED_QUEUE = 0,
 } HcommChannelConfigType;
 
+/**
+ * @brief 通道建链状态枚举（HcommChannelGetStatus 出参状态码）
+ * @note 取值为对外契约，已有取值严禁改动；新增状态只允许追加在尾部。
+ *       状态值大于等于 HCOMM_CHANNEL_STATUS_FAILED_INTERNAL 均表示建链失败，
+ *       其中细分状态值仅供调用方辅助定位失败原因，不作为对外契约。
+ */
+typedef enum {
+    HCOMM_CHANNEL_STATUS_READY = 0,           ///< 建链完成，通道就绪
+    HCOMM_CHANNEL_STATUS_CONNECTING = 1,      ///< 建链进行中，需继续调用本接口推动建链
+    HCOMM_CHANNEL_STATUS_FAILED_INTERNAL = 2, ///< 建链失败
+} HcommChannelStatus;
+
 extern HcommResult HcommChannelCreate(
     EndpointHandle endpointHandle, CommEngine engine, HcommChannelDesc* channelDescs, uint32_t channelNum,
     ChannelHandle* channels);

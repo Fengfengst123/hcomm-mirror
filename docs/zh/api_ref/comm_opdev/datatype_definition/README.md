@@ -40,6 +40,7 @@
 - [HcommChannelDesc](HcommChannelDesc.md)
 - [HcommChannelConfig](HcommChannelConfig.md)
 - [HcommChannelConfigType](HcommChannelConfigType.md)
+- [HcommChannelStatus](HcommChannelStatus.md)
 - [HcclComm](../../comm_mgr_c/data_type_definition/HcclComm.md)
 - [HcclHeterogMode](HcclHeterogMode.md)
 - [HcclMemHandle](HcclMemHandle.md)

@@ -27,7 +27,7 @@ HcclResult AivChannelHelper::FillDevEntities(
     CHK_PRT_RET((listNum == 0), HCCL_ERROR("[%s] Invalid listNum, listNum[%u]", __func__, listNum), HCCL_E_PARA);
 
     for (uint32_t i = 0; i < listNum; i++) {
-        if (linkStatusList[i] != HCOMM_CHANNEL_STATUS_READY) {
+        if (linkStatusList[i] != hcomm::HCOMM_CHANNEL_STATUS_READY) {
             continue;
         }
         CommProtocol protocol = channelDescs[i].remoteEndpoint.protocol;
