@@ -1061,3 +1061,30 @@ TEST_F(RankTableInfoParserTest, Ut_Deserialize_When_RootInfoRankIdMissing_Expect
         R"({"version": "2.0", "rank_count": 1, "rank_list": [{"device_id": 0}]})", RankTableSource::ROOTINFO);
     ExpectReportOnce("EI0016", {"value", "variable", "expect"}, {"device_id", "rank_id", "0 ~ UINT32_MAX"});
 }
+
+// 验证 rank_id 逆序时 Deserialize 后 ranks 已按 rankId 升序排列。
+TEST_F(RankTableInfoParserTest, Ut_Deserialize_When_RankIdOutOfOrder_Expect_SortedByRankId)
+{
+    DevType devType = DevType::DEV_TYPE_910A;
+    MOCKER(HrtGetDeviceType).stubs().will(returnValue(devType));
+
+    // rank_list[0] rank_id=1, rank_list[1] rank_id=0；逆序排列。
+    // 排序后应满足 ranks[i].rankId == i。
+    std::string rankTableString = R"(
+    {"version": "2.0", "rank_count": 2, "rank_list": [
+      {"rank_id": 1, "device_id": 0, "local_id": 1, "level_list": []},
+      {"rank_id": 0, "device_id": 1, "local_id": 0, "level_list": []}
+    ]})";
+
+    JsonParser rankTableParser;
+    RankTableInfo rankTableInfo;
+    rankTableParser.ParseString(rankTableString, rankTableInfo);
+
+    // 排序后 ranks[i].rankId == i
+    ASSERT_EQ(rankTableInfo.ranks.size(), 2U);
+    EXPECT_EQ(rankTableInfo.ranks[0].rankId, 0U);
+    EXPECT_EQ(rankTableInfo.ranks[1].rankId, 1U);
+    // rankId=0 对应 device_id=1，rankId=1 对应 device_id=0
+    EXPECT_EQ(rankTableInfo.ranks[0].deviceId, 1U);
+    EXPECT_EQ(rankTableInfo.ranks[1].deviceId, 0U);
+}

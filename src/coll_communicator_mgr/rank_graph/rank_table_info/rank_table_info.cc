@@ -14,6 +14,7 @@
 #include <unordered_map>
 #include <sstream>
 #include <string>
+#include <algorithm>
 #include "json_parser.h"
 #include "invalid_params_exception.h"
 #include "exception_util.h"
@@ -219,6 +220,11 @@ void RankTableInfo::Deserialize(const nlohmann::json& rankTableInfoJson, bool is
     if (isCheck) {
         Check();
     }
+    // 排序后保证 ranks[i].rankId == i，RankGraphBuilder::AddFabricInfo 等用
+    // rankId 做数组下标访问 ranks[rankId] 时不会错位。
+    std::sort(ranks.begin(), ranks.end(), [](const NewRankInfo& a, const NewRankInfo& b) {
+        return a.rankId < b.rankId;
+    });
 }
 
 void RankTableInfo::CheckAndInsert(
