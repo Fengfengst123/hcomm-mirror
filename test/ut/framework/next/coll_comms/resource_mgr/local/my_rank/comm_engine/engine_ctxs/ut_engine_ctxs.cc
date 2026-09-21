@@ -33,6 +33,16 @@ namespace {
 std::atomic<int> g_destroyCallCount{0};
 // 记录每次调用传入的 (engine, ctx) 对，用于校验分发路径
 std::vector<std::pair<CommEngine, void*>> g_destroyCallArgs;
+// 记录 HcommEngineCtxCopy 调用次数的原子计数器（mock 桩使用）
+std::atomic<int> g_copyCallCount{0};
+// 记录每次调用传入的 (engine, dst, src, size)，用于校验 CopyCommEngineCtx 传参
+struct CopyCallArgs {
+    CommEngine engine;
+    void* dstCtx;
+    const void* srcCtx;
+    uint64_t size;
+};
+std::vector<CopyCallArgs> g_copyCallArgs;
 } // namespace
 
 // ============ 辅助 mock 桩 ============
@@ -54,6 +64,14 @@ static HcommResult stub_HcommEngineCtxDestroy(CommEngine engine, void* ctx)
     return HCCL_SUCCESS;
 }
 
+// HcommEngineCtxCopy mock：计数 + 记录参数，不真正拷贝
+static HcommResult stub_HcommEngineCtxCopy(CommEngine engine, void* dstCtx, const void* srcCtx, uint64_t size)
+{
+    ++g_copyCallCount;
+    g_copyCallArgs.push_back({engine, dstCtx, srcCtx, size});
+    return HCCL_SUCCESS;
+}
+
 // ============ 测试 fixture ============
 
 class EngineCtxsTest : public testing::Test {
@@ -62,9 +80,12 @@ protected:
     {
         g_destroyCallCount = 0;
         g_destroyCallArgs.clear();
-        // 默认 mock：Create 分配哨兵，Destroy 计数
+        g_copyCallCount = 0;
+        g_copyCallArgs.clear();
+        // 默认 mock：Create 分配哨兵，Destroy 计数，Copy 计数 + 记录参数
         MOCKER(HcommEngineCtxCreate).stubs().will(invoke(stub_HcommEngineCtxCreate));
         MOCKER(HcommEngineCtxDestroy).stubs().will(invoke(stub_HcommEngineCtxDestroy));
+        MOCKER(HcommEngineCtxCopy).stubs().will(invoke(stub_HcommEngineCtxCopy));
     }
 
     void TearDown() override
@@ -72,6 +93,8 @@ protected:
         GlobalMockObject::verify();
         g_destroyCallCount = 0;
         g_destroyCallArgs.clear();
+        g_copyCallCount = 0;
+        g_copyCallArgs.clear();
     }
 };
 
@@ -201,5 +224,160 @@ TEST_F(EngineCtxsTest, Ut_EngineCtxsDtor_When_AfterExplicitDestroy_Expect_NoDoub
     EXPECT_EQ(g_destroyCallCount.load(), 1);
     EXPECT_EQ(g_destroyCallArgs.size(), 1u);
     EXPECT_EQ(g_destroyCallArgs[0].first, COMM_ENGINE_AICPU);
+    GlobalMockObject::verify();
+}
+
+// ============ GetCommEngineCtx：ctx 存在时返回创建的地址与大小 ============
+TEST_F(EngineCtxsTest, Ut_GetCommEngineCtx_When_CtxExist_Expect_SuccessWithAddrAndSize)
+{
+    {
+        EngineCtxs ctxs;
+        void* createdCtx = nullptr;
+        ASSERT_EQ(ctxs.CreateCommEngineCtx("tag", COMM_ENGINE_CPU, 1024, &createdCtx), HCCL_SUCCESS);
+
+        void* gotCtx = nullptr;
+        uint64_t gotSize = 0;
+        EXPECT_EQ(ctxs.GetCommEngineCtx("tag", COMM_ENGINE_CPU, &gotCtx, &gotSize), HCCL_SUCCESS);
+        EXPECT_EQ(gotCtx, createdCtx);
+        EXPECT_EQ(gotSize, 1024u);
+    }
+    GlobalMockObject::verify();
+}
+
+// ============ GetCommEngineCtx：tag 不存在返回 HCCL_E_NOT_FOUND ============
+TEST_F(EngineCtxsTest, Ut_GetCommEngineCtx_When_TagNotExist_Expect_NotFound)
+{
+    {
+        EngineCtxs ctxs;
+        void* ctx = nullptr;
+        ASSERT_EQ(ctxs.CreateCommEngineCtx("tag", COMM_ENGINE_CPU, 1024, &ctx), HCCL_SUCCESS);
+
+        void* gotCtx = nullptr;
+        uint64_t gotSize = 0;
+        EXPECT_EQ(ctxs.GetCommEngineCtx("not_exist_tag", COMM_ENGINE_CPU, &gotCtx, &gotSize), HCCL_E_NOT_FOUND);
+    }
+    GlobalMockObject::verify();
+}
+
+// ============ GetCommEngineCtx：engine 不存在返回 HCCL_E_NOT_FOUND ============
+TEST_F(EngineCtxsTest, Ut_GetCommEngineCtx_When_EngineNotExist_Expect_NotFound)
+{
+    {
+        EngineCtxs ctxs;
+        void* ctx = nullptr;
+        ASSERT_EQ(ctxs.CreateCommEngineCtx("tag", COMM_ENGINE_CPU, 1024, &ctx), HCCL_SUCCESS);
+
+        void* gotCtx = nullptr;
+        uint64_t gotSize = 0;
+        EXPECT_EQ(ctxs.GetCommEngineCtx("tag", COMM_ENGINE_CCU, &gotCtx, &gotSize), HCCL_E_NOT_FOUND);
+    }
+    GlobalMockObject::verify();
+}
+
+// ============ CopyCommEngineCtx：正常成功且目的地址按 dstCtxOffset 偏移 ============
+TEST_F(EngineCtxsTest, Ut_CopyCommEngineCtx_When_Normal_Expect_SuccessWithOffsetDst)
+{
+    {
+        EngineCtxs ctxs;
+        void* createdCtx = nullptr;
+        ASSERT_EQ(ctxs.CreateCommEngineCtx("tag", COMM_ENGINE_CPU, 1024, &createdCtx), HCCL_SUCCESS);
+
+        uint64_t srcBuf = 0;
+        const void* srcCtx = &srcBuf;
+        EXPECT_EQ(ctxs.CopyCommEngineCtx("tag", COMM_ENGINE_CPU, srcCtx, 256, 64), HCCL_SUCCESS);
+        // HcommEngineCtxCopy 恰好调用 1 次，参数与接口语义一致
+        ASSERT_EQ(g_copyCallCount.load(), 1);
+        EXPECT_EQ(g_copyCallArgs[0].engine, COMM_ENGINE_CPU);
+        EXPECT_EQ(g_copyCallArgs[0].dstCtx, static_cast<void*>(static_cast<uint8_t*>(createdCtx) + 64));
+        EXPECT_EQ(g_copyCallArgs[0].srcCtx, srcCtx);
+        EXPECT_EQ(g_copyCallArgs[0].size, 256u);
+
+        // 边界恰好放满（dstCtxOffset + size == dstSize）同样成功
+        EXPECT_EQ(ctxs.CopyCommEngineCtx("tag", COMM_ENGINE_CPU, srcCtx, 128, 896), HCCL_SUCCESS);
+        EXPECT_EQ(g_copyCallCount.load(), 2);
+        EXPECT_EQ(g_copyCallArgs[1].dstCtx, static_cast<void*>(static_cast<uint8_t*>(createdCtx) + 896));
+    }
+    GlobalMockObject::verify();
+}
+
+// ============ CopyCommEngineCtx：dstCtxOffset + size 超过 dstSize 返回 HCCL_E_PARA ============
+TEST_F(EngineCtxsTest, Ut_CopyCommEngineCtx_When_SizeOverflow_Expect_Para)
+{
+    {
+        EngineCtxs ctxs;
+        void* createdCtx = nullptr;
+        ASSERT_EQ(ctxs.CreateCommEngineCtx("tag", COMM_ENGINE_CPU, 100, &createdCtx), HCCL_SUCCESS);
+
+        uint64_t srcBuf = 0;
+        // 60 + 50 > 100，越界拒绝
+        EXPECT_EQ(ctxs.CopyCommEngineCtx("tag", COMM_ENGINE_CPU, &srcBuf, 50, 60), HCCL_E_PARA);
+        // 越界时不得执行拷贝
+        EXPECT_EQ(g_copyCallCount.load(), 0);
+    }
+    GlobalMockObject::verify();
+}
+
+// ============ CopyCommEngineCtx：dstCtxOffset 大于 dstSize（防回绕分支）返回 HCCL_E_PARA ============
+TEST_F(EngineCtxsTest, Ut_CopyCommEngineCtx_When_OffsetOverflow_Expect_Para)
+{
+    {
+        EngineCtxs ctxs;
+        void* createdCtx = nullptr;
+        ASSERT_EQ(ctxs.CreateCommEngineCtx("tag", COMM_ENGINE_CPU, 100, &createdCtx), HCCL_SUCCESS);
+
+        uint64_t srcBuf = 0;
+        // dstCtxOffset 200 > dstSize 100；若直接计算 dstSize - dstCtxOffset 将无符号回绕误判为可拷贝
+        EXPECT_EQ(ctxs.CopyCommEngineCtx("tag", COMM_ENGINE_CPU, &srcBuf, 10, 200), HCCL_E_PARA);
+        EXPECT_EQ(g_copyCallCount.load(), 0);
+    }
+    GlobalMockObject::verify();
+}
+
+// ============ CopyCommEngineCtx：dstCtxOffset + size 无符号回绕返回 HCCL_E_PARA ============
+TEST_F(EngineCtxsTest, Ut_CopyCommEngineCtx_When_OffsetPlusSizeWraparound_Expect_Para)
+{
+    {
+        EngineCtxs ctxs;
+        void* createdCtx = nullptr;
+        ASSERT_EQ(ctxs.CreateCommEngineCtx("tag", COMM_ENGINE_CPU, 100, &createdCtx), HCCL_SUCCESS);
+
+        uint64_t srcBuf = 0;
+        // dstCtxOffset + size 无符号回绕：(UINT64_MAX - 9) + 20 回绕为 10，旧 dstCtxOffset + size > dstSize
+        // 写法判 10 > 100 为假会误判可拷贝；新实现先判 dstCtxOffset > dstSize 直接拒绝，锁定防回绕修复
+        EXPECT_EQ(ctxs.CopyCommEngineCtx("tag", COMM_ENGINE_CPU, &srcBuf, 20, UINT64_MAX - 9), HCCL_E_PARA);
+        // 回绕场景不得执行拷贝
+        EXPECT_EQ(g_copyCallCount.load(), 0);
+    }
+    GlobalMockObject::verify();
+}
+
+// ============ CopyCommEngineCtx：tag 不存在返回 HCCL_E_NOT_FOUND ============
+TEST_F(EngineCtxsTest, Ut_CopyCommEngineCtx_When_TagNotExist_Expect_NotFound)
+{
+    {
+        EngineCtxs ctxs;
+        void* ctx = nullptr;
+        ASSERT_EQ(ctxs.CreateCommEngineCtx("tag", COMM_ENGINE_CPU, 1024, &ctx), HCCL_SUCCESS);
+
+        uint64_t srcBuf = 0;
+        EXPECT_EQ(ctxs.CopyCommEngineCtx("not_exist_tag", COMM_ENGINE_CPU, &srcBuf, 256, 0), HCCL_E_NOT_FOUND);
+        // 未查到 ctx 时不得执行拷贝
+        EXPECT_EQ(g_copyCallCount.load(), 0);
+    }
+    GlobalMockObject::verify();
+}
+
+// ============ CopyCommEngineCtx：engine 不存在返回 HCCL_E_NOT_FOUND ============
+TEST_F(EngineCtxsTest, Ut_CopyCommEngineCtx_When_EngineNotExist_Expect_NotFound)
+{
+    {
+        EngineCtxs ctxs;
+        void* ctx = nullptr;
+        ASSERT_EQ(ctxs.CreateCommEngineCtx("tag", COMM_ENGINE_CPU, 1024, &ctx), HCCL_SUCCESS);
+
+        uint64_t srcBuf = 0;
+        EXPECT_EQ(ctxs.CopyCommEngineCtx("tag", COMM_ENGINE_CCU, &srcBuf, 256, 0), HCCL_E_NOT_FOUND);
+        EXPECT_EQ(g_copyCallCount.load(), 0);
+    }
     GlobalMockObject::verify();
 }

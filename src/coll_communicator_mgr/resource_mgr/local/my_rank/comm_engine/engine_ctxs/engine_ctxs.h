@@ -30,6 +30,9 @@ public:
     HcclResult DestroyEngineCtx(const std::string& tag, CommEngine engine);
 
 private:
+    HcclResult GetCommEngineCtxNoLock(
+        const std::string& tag, CommEngine engine, void** ctx, uint64_t* size); // 调用前须已持有 mutex_，不加锁
+
     std::unordered_map<std::string, std::unordered_map<CommEngine, HcclMem, CommEngineHash>> contextMap_;
     std::mutex mutex_;
 };

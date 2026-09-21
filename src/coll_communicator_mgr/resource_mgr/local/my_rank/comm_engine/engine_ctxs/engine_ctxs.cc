@@ -40,7 +40,7 @@ HcclResult EngineCtxs::CreateCommEngineCtx(const std::string& tag, CommEngine en
     std::lock_guard<std::mutex> lock(mutex_);
     // 阻止重复创建
     if (contextMap_.find(tag) != contextMap_.end()) {
-        auto engineCtxMap = contextMap_[tag];
+        const auto& engineCtxMap = contextMap_[tag];
         CHK_PRT_RET(
             engineCtxMap.find(engine) != engineCtxMap.end(),
             HCCL_ERROR(
@@ -57,9 +57,8 @@ HcclResult EngineCtxs::CreateCommEngineCtx(const std::string& tag, CommEngine en
     return HCCL_SUCCESS;
 }
 
-HcclResult EngineCtxs::GetCommEngineCtx(const std::string& tag, CommEngine engine, void** ctx, uint64_t* size)
+HcclResult EngineCtxs::GetCommEngineCtxNoLock(const std::string& tag, CommEngine engine, void** ctx, uint64_t* size)
 {
-    std::lock_guard<std::mutex> lock(mutex_);
     // Ctx未创建返回
     const auto& tagIter = contextMap_.find(tag);
     if (tagIter == contextMap_.end()) {
@@ -79,20 +78,30 @@ HcclResult EngineCtxs::GetCommEngineCtx(const std::string& tag, CommEngine engin
     const auto& ctxRes = engineIter->second;
     *ctx = ctxRes.addr;
     *size = ctxRes.size;
-    HCCL_INFO(
-        "[%s] get context success, tag[%s], engine[%s]", __func__, tag.c_str(),
-        GetEnumToString(GetCommEngineStatusStrMap(), engine).c_str());
     return HCCL_SUCCESS;
+}
+
+HcclResult EngineCtxs::GetCommEngineCtx(const std::string& tag, CommEngine engine, void** ctx, uint64_t* size)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    HcclResult ret = GetCommEngineCtxNoLock(tag, engine, ctx, size);
+    if (ret == HCCL_SUCCESS) {
+        HCCL_INFO(
+            "[%s] get context success, tag[%s], engine[%s]", __func__, tag.c_str(),
+            GetEnumToString(GetCommEngineStatusStrMap(), engine).c_str());
+    }
+    return ret;
 }
 
 HcclResult EngineCtxs::CopyCommEngineCtx(
     const std::string& tag, CommEngine engine, const void* srcCtx, uint64_t size, uint64_t dstCtxOffset)
 {
-    void* dstCtx;
+    std::lock_guard<std::mutex> lock(mutex_);
+    void* dstCtx = nullptr;
     uint64_t dstSize = 0;
-    CHK_RET(GetCommEngineCtx(tag, engine, &dstCtx, &dstSize));
+    CHK_RET(GetCommEngineCtxNoLock(tag, engine, &dstCtx, &dstSize));
     CHK_PRT_RET(
-        dstCtxOffset + size > dstSize,
+        dstCtxOffset > dstSize || size > dstSize - dstCtxOffset, // 防止数据回绕
         HCCL_ERROR(
             "[%s]Copy engine ctx failed: buffer overflow detected. tag[%s], engine[%s], "
             "dstSize[%llu], dstCtxOffset[%llu], copySize[%llu]",
