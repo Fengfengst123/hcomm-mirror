@@ -90,7 +90,7 @@ private:
     void ClearOpTransportResponseLinks(OpCommTransport& opTransportResponse);
     OpCommTransport BuildChannelRequests(const std::vector<HcclChannelDesc>& descs);
 
-    HcclResult CheckChannelParam(CommEngine engine, const HcclChannelDesc* channelDesc, uint32_t descNum);
+    HcclResult CheckChannelParam(CommEngine engine, const HcclChannelDesc* channelDesc, uint32_t descNum) const;
     HcclResult RegisterHandle(
         const std::string& tag, CommEngine engine, const HcclChannelDesc& channelDesc, ChannelHandle channelHandle);
     HcclResult RegisterHandleHDPair(ChannelHandle deviceChannelHandle, ChannelHandle hostChannelHandle);

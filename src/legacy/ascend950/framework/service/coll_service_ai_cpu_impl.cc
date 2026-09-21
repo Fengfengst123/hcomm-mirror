@@ -273,7 +273,7 @@ void CollServiceAiCpuImpl::SetOpbaseBufferParam(
 }
 
 void CollServiceAiCpuImpl::SetOffloadBufferParam(
-    HcclKernelLaunchParam& param, CommunicatorImpl* comm, CollOperator& op) const
+    HcclKernelLaunchParam& param, const CommunicatorImpl* comm, CollOperator& op) const
 {
     HCCL_INFO("SetOffloadBufferParam");
     auto offloadInput = comm->GetDataBufferManager().Get(op.opTag, BufferType::INPUT);

@@ -55,7 +55,7 @@ private:
 
     DevBuffer* OpBasedCollProcess(CollOperator& op, const std::string& algName);
     void SetOpbaseBufferParam(HcclKernelLaunchParam& param, CommunicatorImpl* comm, CollOperator& op) const;
-    void SetOffloadBufferParam(HcclKernelLaunchParam& param, CommunicatorImpl* comm, CollOperator& op) const;
+    void SetOffloadBufferParam(HcclKernelLaunchParam& param, const CommunicatorImpl* comm, CollOperator& op) const;
     void SetHcclKernelLaunchParam(HcclKernelLaunchParam& param, CommunicatorImpl* comm, bool isLaunch = true);
     void SetDeviceEnvConfigParam(HcclKernelLaunchParam& param) const;
     void AicpuKernelLaunch(HcclKernelLaunchParam& param, Stream& stream, OpMode opMode);

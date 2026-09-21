@@ -83,7 +83,7 @@ public:
     EngineCtxs* GetEngineCtxs() const { return engineCtxs_.get(); }
 
     HcclResult UnregMemByTag(const std::string& tag);
-    uint32_t GetOpExpansionMode() { return opExpansionMode_; }
+    uint32_t GetOpExpansionMode() const { return opExpansionMode_; }
     CcuInsHandle GetCcuInstance() const { return ccuInsHandle_; }
     void SetCcuInstance(CcuInsHandle ccuInsHandle) { ccuInsHandle_ = ccuInsHandle; }
     CcuInsHandle GetAssignedCcuInstance() const { return assignedCcuInsHandle_; }
@@ -95,7 +95,7 @@ public:
 
     HcclResult CreateChannels(
         CommEngine engine, const std::string& commTag, const HcclChannelDesc* channelDescs, uint32_t channelNum,
-        ChannelHandle* channels);
+        ChannelHandle* channelHandles);
 
     HcclResult
     QueryChannels(CommEngine engine, const HcclChannelDesc* channelDescs, uint32_t channelNum, ChannelHandle* channels);
@@ -166,7 +166,7 @@ private:
         std::vector<HcommChannelDesc>& hcommDescs, ChannelHandle* channelHandles,
         std::vector<std::vector<MemHandle>>& allHandles);
     HcclResult
-    BatchConnectChannels(const HcclChannelDesc* channelDescs, ChannelHandle* channelHandles, uint32_t channelNum);
+    BatchConnectChannels(const HcclChannelDesc* channelDescs, ChannelHandle* channelHandles, uint32_t channelNum) const;
     void LogChannelCreationInfo(
         CommEngine engine, const std::string& commTag, const HcclChannelDesc* channelDescs, uint32_t channelNum,
         const ChannelHandle* hostChannelHandleList) const;

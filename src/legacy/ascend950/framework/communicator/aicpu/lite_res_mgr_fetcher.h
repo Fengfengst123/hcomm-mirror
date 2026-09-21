@@ -34,7 +34,7 @@ public:
     virtual CntNto1NotifyLiteMgr* GetCntNto1NotifyLiteMgr() = 0;
     virtual ConnectedLinkMgr* GetConnectedLinkMgr() = 0;
     virtual DevId GetDevPhyId() = 0;
-    virtual u64 GetLocAddr(BufferType type) = 0;
+    virtual u64 GetLocAddr(BufferType type) const = 0;
     virtual u32 GetExecTimeOut() = 0;
 
     virtual CollOperator GetCurrentOp() = 0;

@@ -23,7 +23,7 @@ CommMems::CommMems(uint64_t bufferSize) : bufferSize_(bufferSize)
     cclMemInfo_.mem.type = CommMemType::COMM_MEM_TYPE_DEVICE;
 }
 
-HcclResult CommMems::Add([[maybe_unused]] void* addr, [[maybe_unused]] uint64_t len) { return HCCL_SUCCESS; }
+HcclResult CommMems::Add([[maybe_unused]] void* addr, [[maybe_unused]] uint64_t len) const { return HCCL_SUCCESS; }
 
 HcclResult CommMems::GetHcclBuffer(void*& addr, uint64_t& len)
 {
@@ -67,7 +67,8 @@ HcclResult CommMems::CommRegMem(const std::string& memTag, const CommMem& mem, v
         memHandle == nullptr, HCCL_ERROR("[CommRegMem] memHandle is null. tag[%s]", memTag.c_str()), HCCL_E_PARA);
     CHK_PRT_RET(
         mem.addr == nullptr || mem.size == 0,
-        HCCL_ERROR("[CommRegMem] invalid mem. addr[%p] size[%llu]", mem.addr, (unsigned long long)mem.size),
+        HCCL_ERROR(
+            "[CommRegMem] invalid mem. addr[%p] size[%llu]", mem.addr, static_cast<unsigned long long>(mem.size)),
         HCCL_E_PARA);
     if (UNLIKELY(memTag.size() >= HCOMM_RES_TAG_MAX_LEN)) {
         HCCL_ERROR("[CommRegMem] memTag.size()[%zu] exceeds limit[%u]", memTag.size(), HCOMM_RES_TAG_MAX_LEN);

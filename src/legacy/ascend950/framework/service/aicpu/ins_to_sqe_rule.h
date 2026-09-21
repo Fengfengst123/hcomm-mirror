@@ -20,13 +20,13 @@ constexpr u32 RTSQ_TASK_ID = 0;
 constexpr u32 RTSQ_PART_ID = 0;
 
 std::vector<std::unique_ptr<HcclSqe>>
-Interpret(const Instruction& ins, const u32 streamId, ResMgrFetcher* resMgrFetcher);
+Interpret(const Instruction& ins, const u32 streamId, const ResMgrFetcher* resMgrFetcher);
 std::vector<std::unique_ptr<HcclSqe>>
-Interpret(const InsLocalCopy& ins, const u32 streamId, ResMgrFetcher* resMgrFetcher);
+Interpret(const InsLocalCopy& ins, const u32 streamId, const ResMgrFetcher* resMgrFetcher);
 std::vector<std::unique_ptr<HcclSqe>>
-Interpret(const InsWriteReduce& ins, const u32 streamId, ResMgrFetcher* resMgrFetcher);
+Interpret(const InsWriteReduce& ins, const u32 streamId, const ResMgrFetcher* resMgrFetcher);
 std::vector<std::unique_ptr<HcclSqe>>
-Interpret(const InsLocalPostTo& ins, const u32 streamId, ResMgrFetcher* resMgrFetcher);
+Interpret(const InsLocalPostTo& ins, const u32 streamId, const ResMgrFetcher* resMgrFetcher);
 
 void Interpret(const Instruction& ins, const StreamLite& stream, ResMgrFetcher* resMgrFetcher);
 

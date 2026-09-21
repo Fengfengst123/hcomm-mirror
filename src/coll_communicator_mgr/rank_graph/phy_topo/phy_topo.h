@@ -29,7 +29,7 @@ public:
         // 使用地址信息、位置信息、链路类型、链路协议构造接口
         ConnInterface(
             const std::set<std::string> inputPorts, const AddrPosition inputPos, const LinkType inputLinkType,
-            std::set<LinkProtocol> inputLinkProtocols);
+            const std::set<LinkProtocol> inputLinkProtocols);
         std::set<std::string> GetPorts() const;
         AddrPosition GetPos() const;
         LinkType GetLinkType() const;
@@ -88,7 +88,7 @@ public:
         // 使用源节点、目的节点、链路类型、链路协议、topo类型、topoInstId 构造链路
         Link(
             std::shared_ptr<PhyTopo::Node> inputSource, std::shared_ptr<PhyTopo::Node> inputTarget,
-            const LinkAttributes& linkAttrs, const TopoType topoType, const u32 topoInstId);
+            const LinkAttributes& properties, const TopoType inputTopoType, const u32 inputTopoInstId);
         void SetSourceIface(std::shared_ptr<PhyTopo::ConnInterface> inputSourceIface);
         void SetTargetIface(std::shared_ptr<PhyTopo::ConnInterface> inputTargetIface);
         LinkType GetType() const;

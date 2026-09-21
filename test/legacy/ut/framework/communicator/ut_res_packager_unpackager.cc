@@ -75,7 +75,7 @@ public:
 
     DevId GetDevPhyId() { return 0; }
 
-    u64 GetLocAddr(BufferType type) { return 0xffffffff; }
+    u64 GetLocAddr(BufferType type) const { return 0xffffffff; }
 
 private:
     HostDeviceSyncNotifyLiteMgr hostDeviceSyncNotifyLiteMgr;

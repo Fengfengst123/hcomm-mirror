@@ -45,7 +45,7 @@ public:
     explicit CommMems(uint64_t bufferSize);
     ~CommMems() = default;
 
-    HcclResult Add(void* addr, uint64_t len);
+    HcclResult Add(void* addr, uint64_t len) const;
 
     HcclResult GetHcclBuffer(void*& addr, uint64_t& len);
 
@@ -54,8 +54,8 @@ public:
     HcclResult Init(HcclMem cclBuffer);
 
     // 用户注册/反注册内存
-    HcclResult CommRegMem(const std::string& tag, const CommMem& mem, void** rawHandle);
-    HcclResult CommUnregMem(const std::string& tag, const void* rawHandle);
+    HcclResult CommRegMem(const std::string& memTag, const CommMem& mem, void** memHandle);
+    HcclResult CommUnregMem(const std::string& memTag, const void* memHandle);
     // 从 CommMemInfo* 数组提取 tag 列表
     HcclResult GetTagsFromHandles(void** memHandles, uint32_t memHandleNum, std::vector<std::string>& memTags);
     /**

@@ -499,7 +499,7 @@ void RankInfoDetectClient::SelectLocalHostBackupAddr(nlohmann::json& localDevInf
         "[%s] end, devPhyId[%u], rankId[%u], addrConfigNum[%zu].", __func__, devPhyId_, rankId_, addrJsons.size());
 }
 
-void RankInfoDetectClient::SelectAvailableHostAddr(nlohmann::json& addrJson)
+void RankInfoDetectClient::SelectAvailableHostAddr(nlohmann::json& addrJson) const
 {
     std::vector<IpAddress> candidates;
     BuildHostAddrCandidates(addrJson, candidates);

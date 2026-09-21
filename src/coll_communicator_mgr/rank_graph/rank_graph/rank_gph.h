@@ -75,7 +75,7 @@ public:
     HcclResult
     GetEndpointDesc(uint32_t layer, uint32_t topoInstId, uint32_t* descNum, EndpointDesc* endpointDesc) const;
     HcclResult GetEndpointInfo(
-        uint32_t rankId, const EndpointDesc* endPointDesc, EndpointAttr endpointAttr, uint32_t infoLen,
+        uint32_t rankId, const EndpointDesc* endpointDesc, EndpointAttr endpointAttr, uint32_t infoLen,
         void* info) const;
 
     // 创建子虚拟拓扑
@@ -93,7 +93,7 @@ private:
     bool level0PcieFallback_{false}; // 本rank的level0是否为无UB兜底层
 
     void CreateSubNetInstances(
-        const std::vector<RankId> rankIds, Level2Id2NetInst& subNetInsts, RankId2PeerMap& peers,
+        const std::vector<RankId> rankIds, Level2Id2NetInst& subNetInstances, RankId2PeerMap& peers,
         RankGraph* subRankGraph) const;
     void AddSubPeers(const std::vector<RankId>& rankIds, RankGraph* subRankGraph, RankId2PeerMap& peers) const;
     void AddSubLinks(

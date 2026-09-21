@@ -135,12 +135,12 @@ private:
     SharedJettyChannelPool& operator=(const SharedJettyChannelPool&) = delete;
 
     HcclResult ReturnExistingChannels(
-        MyRank* myRank, const std::string& tag, const EndpointDescPair& epPair, uint32_t requestedNum,
+        const MyRank* myRank, const std::string& tag, const EndpointDescPair& epPair, uint32_t requestedNum,
         ChannelHandle* outChannels, uint32_t& returnFromExisting, uint32_t& needCreate);
 
     using EpPairMap = std::unordered_map<EndpointDescPair, EpPairChannels, EndpointDescPairHash, EndpointDescPairEqual>;
     using TagMap = std::unordered_map<std::string, EpPairMap>;
-    using RankPoolIter = std::unordered_map<MyRank*, TagMap>::iterator;
+    using RankPoolIter = std::unordered_map<const MyRank*, TagMap>::iterator;
 
     // 调用者须持有 mtx_。收集 myRank 下全部共享 Jetty channel 句柄。
     // 返回值：rankPools_ 中 myRank 对应的迭代器；未找到返回 rankPools_.end()。
@@ -148,7 +148,7 @@ private:
     RankPoolIter CollectMyRankChannelsLocked(MyRank* myRank, std::vector<ChannelHandle>& allChannels);
 
     std::mutex mtx_;
-    std::unordered_map<MyRank*, TagMap> rankPools_;
+    std::unordered_map<const MyRank*, TagMap> rankPools_;
 };
 
 } // namespace hccl

@@ -31,7 +31,7 @@ constexpr uint32_t NUM_THREE = 3;
 static uint32_t g_KernelLaunchTimeout = UINT16_MAX;
 
 static HcclResult LaunchAicpuKernelPipeline(
-    aclrtStream unfoldStream, aclrtBinHandle binKernelHandle, const std::string& kernelName, void* paramData,
+    aclrtStream unfoldStream, const aclrtBinHandle binKernelHandle, const std::string& kernelName, void* paramData,
     uint64_t paramSize)
 {
     // 1. 获取 function handle
@@ -403,7 +403,7 @@ static HcclResult GetGroupDataType(
     return HCCL_SUCCESS;
 }
 
-static void SetGroupDfxInfos(HcclCommDfx* hcclCommDfx)
+static void SetGroupDfxInfos(const HcclCommDfx* hcclCommDfx)
 {
     if (hcclCommDfx != nullptr) {
         Hccl::MirrorTaskManager* mirrorTaskMgr = hcclCommDfx->GetMirrorTaskManager();

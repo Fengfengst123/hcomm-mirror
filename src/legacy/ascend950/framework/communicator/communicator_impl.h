@@ -80,7 +80,7 @@ public:
 
     HcclResult
     CalcCollOffloadOpRes(const OpType opType, u64 dataSize, HcclDataType dataType, CollOffloadOpResReq& resReq);
-    HcclResult SetCollOffloadSlaveStreams(const std::string& opTag, std::vector<void*> slaveStreams);
+    HcclResult SetCollOffloadSlaveStreams(const std::string& opTag, std::vector<void*> slaveStreams) const;
     HcclResult SetCollOffloadScratchBuf(const std::string& opTag, void* scratchMemPtr, u64 requiredScratchMemSize);
     HcclResult LoadOffloadCollOp(std::string& opTag, const CollOpParams& opParams, void* stream);
 

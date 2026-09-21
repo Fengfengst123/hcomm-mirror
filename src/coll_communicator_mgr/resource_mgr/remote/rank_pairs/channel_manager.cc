@@ -53,7 +53,8 @@ std::vector<HcclMemHandle> ChannelManager::CollectMemHandles(const std::vector<H
     return handles;
 }
 
-HcclResult ChannelManager::CheckChannelParam(CommEngine engine, const HcclChannelDesc* channelDesc, uint32_t descNum)
+HcclResult
+ChannelManager::CheckChannelParam(CommEngine engine, const HcclChannelDesc* channelDesc, uint32_t descNum) const
 {
     std::unordered_set<HcclChannelDesc, std::hash<HcclChannelDesc>, HcclChannelDescEqual> descSet;
 

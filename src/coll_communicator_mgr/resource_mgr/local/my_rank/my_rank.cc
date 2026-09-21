@@ -1079,8 +1079,8 @@ HcclResult MyRank::DestroyChannels(const ChannelHandle* channels, uint32_t chann
     return HCCL_SUCCESS;
 }
 
-HcclResult
-MyRank::BatchConnectChannels(const HcclChannelDesc* channelDescs, ChannelHandle* channelHandles, uint32_t channelNum)
+HcclResult MyRank::BatchConnectChannels(
+    const HcclChannelDesc* channelDescs, ChannelHandle* channelHandles, uint32_t channelNum) const
 {
     auto timeout = std::chrono::seconds(Hccl::EnvConfig::GetInstance().GetSocketConfig().GetLinkTimeOut());
     auto startTime = std::chrono::steady_clock::now();

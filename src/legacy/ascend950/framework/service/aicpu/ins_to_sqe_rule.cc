@@ -14,12 +14,12 @@
 namespace Hccl {
 
 using InsToSqeRule = std::function<std::vector<std::unique_ptr<HcclSqe>>(
-    const Instruction& ins, const u32 streamId, ResMgrFetcher* resMgrFetcher)>;
+    const Instruction& ins, const u32 streamId, const ResMgrFetcher* resMgrFetcher)>;
 
 template <class InsType>
 InsToSqeRule Rules()
 {
-    return [](const Instruction& ins, const u32 streamId, ResMgrFetcher* resMgrFetcher) {
+    return [](const Instruction& ins, const u32 streamId, const ResMgrFetcher* resMgrFetcher) {
         return Interpret(static_cast<const InsType&>(ins), streamId, resMgrFetcher);
     };
 }
@@ -39,7 +39,7 @@ const std::map<InstructionType, InsToSqeRule> ruleMap{
 };
 
 std::vector<std::unique_ptr<HcclSqe>>
-Interpret(const Instruction& ins, const u32 streamId, ResMgrFetcher* resMgrFetcher)
+Interpret(const Instruction& ins, const u32 streamId, const ResMgrFetcher* resMgrFetcher)
 {
     if (ruleMap.find(ins.GetType()) != ruleMap.end()) {
         return ruleMap.at(ins.GetType())(ins, streamId, resMgrFetcher);
@@ -48,7 +48,7 @@ Interpret(const Instruction& ins, const u32 streamId, ResMgrFetcher* resMgrFetch
 }
 
 std::vector<std::unique_ptr<HcclSqe>>
-Interpret(const InsLocalCopy& ins, const u32 streamId, ResMgrFetcher* resMgrFetcher)
+Interpret(const InsLocalCopy& ins, const u32 streamId, const ResMgrFetcher* resMgrFetcher)
 {
     std::vector<std::unique_ptr<HcclSqe>> res(1);
 
@@ -63,7 +63,7 @@ Interpret(const InsLocalCopy& ins, const u32 streamId, ResMgrFetcher* resMgrFetc
 }
 
 std::vector<std::unique_ptr<HcclSqe>>
-Interpret(const InsWriteReduce& ins, const u32 streamId, ResMgrFetcher* resMgrFetcher)
+Interpret(const InsWriteReduce& ins, const u32 streamId, const ResMgrFetcher* resMgrFetcher)
 {
     (void)ins;
     (void)streamId;
@@ -73,7 +73,7 @@ Interpret(const InsWriteReduce& ins, const u32 streamId, ResMgrFetcher* resMgrFe
 }
 
 std::vector<std::unique_ptr<HcclSqe>>
-Interpret(const InsLocalPostTo& ins, const u32 streamId, ResMgrFetcher* resMgrFetcher)
+Interpret(const InsLocalPostTo& ins, const u32 streamId, const ResMgrFetcher* resMgrFetcher)
 {
     (void)ins;
     (void)streamId;

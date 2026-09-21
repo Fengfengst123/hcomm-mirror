@@ -23,7 +23,7 @@ SharedJettyChannelPool& SharedJettyChannelPool::GetInstance()
 }
 
 HcclResult SharedJettyChannelPool::ReturnExistingChannels(
-    MyRank* myRank, const std::string& tag, const EndpointDescPair& epPair, uint32_t requestedNum,
+    const MyRank* myRank, const std::string& tag, const EndpointDescPair& epPair, uint32_t requestedNum,
     ChannelHandle* outChannels, uint32_t& returnFromExisting, uint32_t& needCreate)
 {
     std::lock_guard<std::mutex> lock(mtx_);

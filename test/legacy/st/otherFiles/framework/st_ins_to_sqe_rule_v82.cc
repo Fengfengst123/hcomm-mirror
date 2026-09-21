@@ -106,7 +106,7 @@ public:
 
     u64 GetCounterAddr() override { return opCounterAddr; }
 
-    u64 GetLocAddr(BufferType type) { return 0xffffffff; }
+    u64 GetLocAddr(BufferType type) const { return 0xffffffff; }
 
     CollOperator GetCurrentOp() override
     {

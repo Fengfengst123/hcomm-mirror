@@ -37,7 +37,7 @@ public:
 
 private:
     void UpdateNetInstance(
-        NetInstance* fabricGroup, LocalId localId, LocalId replacedLocalId, const RankTableInfo* rankTable) const;
+        NetInstance* netInstance, LocalId localId, LocalId replacedLocalId, const RankTableInfo* rankTable) const;
     std::string GetPortFromSet(std::set<string>& ports, u32 linkIdx) const;
     std::shared_ptr<PhyTopo::Link> GetPeer2PlaneEdges(
         u32 backupPlaneId, shared_ptr<NetInstance::Peer> peer,

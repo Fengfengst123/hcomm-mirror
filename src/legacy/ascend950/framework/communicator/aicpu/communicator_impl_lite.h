@@ -54,7 +54,7 @@ public:
 
     MemTransportLiteMgr* GetTransportLiteMgr() override { return transportLiteMgr.get(); }
 
-    u64 GetLocAddr(BufferType type) override { return locBuffer[type]; }
+    u64 GetLocAddr(BufferType type) const override { return locBuffer[type]; }
 
     CollOperator GetCurrentOp() override { return currentOp; }
 

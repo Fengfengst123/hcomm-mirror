@@ -206,14 +206,14 @@ HcclResult HcclCheckTaskServiceExist(const std::string& commId, s32 deviceId);
 HcclResult HcclCommWorkingDevNicSetV2(const HcclComm comm, uint32_t* ranks, bool* useBackup, uint32_t nRanks);
 
 HcclResult
-HcclCommSetMemoryRangeV2(const HcclComm comm, void* baseVirPtr, size_t size, size_t alignment, uint64_t flags);
+HcclCommSetMemoryRangeV2(const HcclComm comm, const void* baseVirPtr, size_t size, size_t alignment, uint64_t flags);
 
-HcclResult HcclCommUnsetMemoryRangeV2(const HcclComm comm, void* baseVirPtr);
+HcclResult HcclCommUnsetMemoryRangeV2(const HcclComm comm, const void* baseVirPtr);
 
 HcclResult HcclCommActivateCommMemoryV2(
-    const HcclComm comm, void* virPtr, size_t size, size_t offset, void* handle, uint64_t flags);
+    const HcclComm comm, const void* virPtr, size_t size, size_t offset, const void* handle, uint64_t flags);
 
-HcclResult HcclCommDeactivateCommMemoryV2(const HcclComm comm, void* virPtr);
+HcclResult HcclCommDeactivateCommMemoryV2(const HcclComm comm, const void* virPtr);
 
 uint32_t HcclGetCommConfigCapabilityV2();
 

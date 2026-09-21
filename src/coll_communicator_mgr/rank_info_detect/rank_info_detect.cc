@@ -242,7 +242,7 @@ void RankInfoDetect::SetupAgent(u32 rankSize, u32 rankId, const HcclRootHandleV2
 
 void RankInfoDetect::SetupRankInfoDetectService(
     ErrContextPub errorContext, shared_ptr<Socket> serverSocket, s32 devLogicId, u32 devPhyId, std::string identifier,
-    vector<RaSocketWhitelist> wlistInfo)
+    vector<RaSocketWhitelist> wlistInfo) const
 {
     hrtErrMSetErrorContextPub(errorContext);
     HCCL_INFO(

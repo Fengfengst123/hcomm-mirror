@@ -862,7 +862,7 @@ HcclResult CommunicatorImpl::CalcCollOffloadOpRes(
     return HcclResult::HCCL_SUCCESS;
 }
 
-HcclResult CommunicatorImpl::SetCollOffloadSlaveStreams(const std::string& opTag, std::vector<void*> slaveStreams)
+HcclResult CommunicatorImpl::SetCollOffloadSlaveStreams(const std::string& opTag, std::vector<void*> slaveStreams) const
 {
     try {
         HCCL_INFO("[CommunicatorImpl][%s] start, opTag[%s].", __func__, opTag.c_str());

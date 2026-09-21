@@ -52,7 +52,7 @@ private:
     std::shared_ptr<RankInfoDetectClient> rankInfoDetectClient;
     void SetupRankInfoDetectService(
         ErrContextPub errorContext, shared_ptr<Socket> serverSocket, s32 devLogicId, u32 devPhyId,
-        std::string identifier, vector<RaSocketWhitelist> wlistInfo);
+        std::string identifier, vector<RaSocketWhitelist> wlistInfo) const;
     std::shared_ptr<Socket> ServerInit();
     std::shared_ptr<Socket> ClientInit(const HcclRootHandleV2& rootHandle);
     HcclResult GetHandleAndAddHostSocketWhitelist();
