@@ -67,6 +67,10 @@ HcommResult：接口成功返回0，其他失败。
   - COMM_ENGINE_AIV
     - COMM_PROTOCOL_UB_CTP
     - COMM_PROTOCOL_ROCE
+
+  - AICPU_TS或AIV引擎使用Host RoCE网卡的场景下，需要确保：
+    - 网卡驱动支持NDA（NPU Direct Asynchronous，指NPU直接操作网卡，不需要Host CPU代理实现，减少固定开销），例如基于Hi1825芯片的SP561系列网卡。
+    - 总线体系及引擎支持，例如AIV引擎支持PCIe总线体系下的NDA，但AICPU_TS引擎不支持PCIe总线体系下的NDA。
   <!-- end id6 -->
 
   **注意事项：**
