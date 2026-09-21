@@ -43,7 +43,11 @@ public:
         : remoteRank(link.GetRemoteRankId()),
           link(link),
           tag(tag),
-          role(link.GetLocalAddr() < link.GetRemoteAddr() ? SocketRole::SERVER : SocketRole::CLIENT),
+          role(
+              (link.GetLocalAddr() < link.GetRemoteAddr()
+               || (link.GetLocalAddr() == link.GetRemoteAddr() && link.GetLocalRankId() < link.GetRemoteRankId())) ?
+                  SocketRole::SERVER :
+                  SocketRole::CLIENT),
           hccpTag(
               role == SocketRole::SERVER ?
                   tag + "_" + to_string(link.GetLocalRankId()) + "_" + to_string(link.GetRemoteRankId()) + "_"
@@ -68,7 +72,11 @@ public:
         : remoteRank(link.GetRemoteRankId()),
           link(link),
           tag(tag),
-          role(link.GetLocalAddr() < link.GetRemoteAddr() ? SocketRole::SERVER : SocketRole::CLIENT),
+          role(
+              (link.GetLocalAddr() < link.GetRemoteAddr()
+               || (link.GetLocalAddr() == link.GetRemoteAddr() && link.GetLocalRankId() < link.GetRemoteRankId())) ?
+                  SocketRole::SERVER :
+                  SocketRole::CLIENT),
           hccpTag(
               role == SocketRole::SERVER ?
                   tag + "_" + link.GetLocalAddr().GetIpStr() + "_" + link.GetRemoteAddr().GetIpStr() :
@@ -81,6 +89,13 @@ public:
         const uint32_t myRank, const uint32_t rmtRank)
         : SocketConfig(link, listenPort, tag)
     {
+        // HOST路径下 link 的 rankId 是 devPhyId 而非真实 rank，
+        // IP相等时 devPhyId 可能相同导致双端角色一致，用真实 rank 覆盖
+        // hostNic2DeviceNicMode为1表示A2场景，该处新增为A5场景，故在hostNic2DeviceNicMode == 0判断之前。
+        if (link.GetLocalAddr() == link.GetRemoteAddr()) {
+            remoteRank = rmtRank;
+            role = myRank < rmtRank ? SocketRole::SERVER : SocketRole::CLIENT;
+        }
         if (hostNic2DeviceNicMode == 0) {
             return;
         }
@@ -110,7 +125,10 @@ public:
           listeningPort(listenPort),
           tag(tag)
     {
-        role = link.GetLocalAddr() < link.GetRemoteAddr() ? SocketRole::SERVER : SocketRole::CLIENT;
+        role = (link.GetLocalAddr() < link.GetRemoteAddr()
+                || (link.GetLocalAddr() == link.GetRemoteAddr() && link.GetLocalRankId() < link.GetRemoteRankId())) ?
+                   SocketRole::SERVER :
+                   SocketRole::CLIENT;
 
         if (role == SocketRole::SERVER) { // server: tag_local_remote
             hccpTag = tag + "_" + link.GetLocalAddr().GetIpStr() + "_" + link.GetRemoteAddr().GetIpStr() + "_"

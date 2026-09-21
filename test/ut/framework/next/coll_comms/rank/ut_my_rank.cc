@@ -2477,3 +2477,53 @@ TEST_F(MyRankTest, Ut_FillRoceSrcPortList_HostConfigPriority)
     portConfig.ipPairToPorts.clear();
     udpPortsList.portsByPhyId.clear();
 }
+
+// DPU 同 IP 场景（host 侧 CPU 引擎）：双端复用同一 IP 时，rankId 较小的一方为 SERVER
+TEST_F(MyRankTest, Ut_QueryListenPort_When_SameIpLocalRankSmaller_Expect_Server)
+{
+    // CPU 引擎走 rankGraph rank 级查询，mock GetDevicePort 返回 16666
+    uint32_t devPort = 16666;
+    MOCKER_CPP(&Hccl::IRankGraph::GetDevicePort)
+        .stubs()
+        .with(mockcpp::any(), outBoundP(&devPort))
+        .will(returnValue(HCCL_SUCCESS));
+    MOCKER(hrtGetDeviceType).stubs().with(outBound(DevType::DEV_TYPE_950)).will(returnValue(HCCL_SUCCESS));
+
+    EndpointDesc localEp;
+    CreateEndpointDesc(localEp, COMM_PROTOCOL_ROCE, "2.0.0.0");
+    EndpointDesc rmtEp;
+    CreateEndpointDesc(rmtEp, COMM_PROTOCOL_ROCE, "2.0.0.0");
+
+    uint32_t listenPort = 0;
+    HcommChannelDesc desc;
+    HcclResult ret = myRank->QueryListenPort(0, 1, localEp, rmtEp, listenPort, desc, COMM_ENGINE_CPU);
+    EXPECT_EQ(ret, HCCL_SUCCESS);
+    EXPECT_EQ(desc.role, HCOMM_SOCKET_ROLE_SERVER);
+    EXPECT_EQ(listenPort, 16666);
+    EXPECT_EQ(desc.port, 16666);
+}
+
+// DPU 同 IP 场景（host 侧 CPU 引擎）：双端复用同一 IP 时，rankId 较大的一方为 CLIENT
+TEST_F(MyRankTest, Ut_QueryListenPort_When_SameIpLocalRankLarger_Expect_Client)
+{
+    // CPU 引擎走 rankGraph rank 级查询，mock GetDevicePort 返回 16666
+    uint32_t devPort = 16666;
+    MOCKER_CPP(&Hccl::IRankGraph::GetDevicePort)
+        .stubs()
+        .with(mockcpp::any(), outBoundP(&devPort))
+        .will(returnValue(HCCL_SUCCESS));
+    MOCKER(hrtGetDeviceType).stubs().with(outBound(DevType::DEV_TYPE_950)).will(returnValue(HCCL_SUCCESS));
+
+    EndpointDesc localEp;
+    CreateEndpointDesc(localEp, COMM_PROTOCOL_ROCE, "2.0.0.0");
+    EndpointDesc rmtEp;
+    CreateEndpointDesc(rmtEp, COMM_PROTOCOL_ROCE, "2.0.0.0");
+
+    uint32_t listenPort = 0;
+    HcommChannelDesc desc;
+    HcclResult ret = myRank->QueryListenPort(1, 0, localEp, rmtEp, listenPort, desc, COMM_ENGINE_CPU);
+    EXPECT_EQ(ret, HCCL_SUCCESS);
+    EXPECT_EQ(desc.role, HCOMM_SOCKET_ROLE_CLIENT);
+    EXPECT_EQ(listenPort, 16666);
+    EXPECT_EQ(desc.port, 16666);
+}

@@ -468,7 +468,11 @@ HcclResult MyRank::QueryListenPort(
     Hccl::IpAddress remoteIpAddr{};
     CHK_RET(CommAddrToIpAddress(localEndpointDesc.commAddr, localIpAddr));
     CHK_RET(CommAddrToIpAddress(remoteEndpointDesc.commAddr, remoteIpAddr));
-    // 查询rmtRankId对应的devPort（按 rank + IP 查两级端口表，与监听方使用同一数据源）
+    // 角色判定策略：优先按IP比较，IP较小的一方为server；
+    // 非对称DPU场景下双端可能复用同一IP，此时按rankId比较，rankId较小的一方为server
+    // 与SocketConfig构造函数中角色判定逻辑保持一致，避免双端角色不一致导致建链死锁
+    bool isServer = (localIpAddr < remoteIpAddr) || (localIpAddr == remoteIpAddr && localRank < remoteRank);
+    // 查询双端devPort（按 rank + IP 查两级端口表，与监听方使用同一数据源）
     uint32_t rmtPort = 0;
     CHK_RET(GetListenPortByAddr(remoteRank, remoteIpAddr, remoteEndpointDesc.loc.locType, engine, &rmtPort));
     if (rmtPort > Hccl::MAX_VALUE_TCPPORT) {
@@ -477,21 +481,29 @@ HcclResult MyRank::QueryListenPort(
             Hccl::MAX_VALUE_TCPPORT);
         return HCCL_E_PARA;
     }
-    if (localIpAddr < remoteIpAddr) {
-        // 查询localRankId对应的devPort
-        CHK_RET(GetListenPortByAddr(localRank, localIpAddr, localEndpointDesc.loc.locType, engine, &listenPort));
-        hcommDesc.role = HcommSocketRole::HCOMM_SOCKET_ROLE_SERVER;
-        if (listenPort > Hccl::MAX_VALUE_TCPPORT) {
-            HCCL_ERROR("[%s] Invalid port[%u] of Rank[%u]", __func__, listenPort, localRank);
+    if (isServer) {
+        uint32_t locPort = 0;
+        CHK_RET(GetListenPortByAddr(localRank, localIpAddr, localEndpointDesc.loc.locType, engine, &locPort));
+        if (locPort > Hccl::MAX_VALUE_TCPPORT) {
+            HCCL_ERROR(
+                "[%s] Invalid port[%u] of Rank[%u], max valid port is %u", __func__, locPort, localRank,
+                Hccl::MAX_VALUE_TCPPORT);
             return HCCL_E_PARA;
         }
-        hcommDesc.port = static_cast<uint16_t>(listenPort); // HcommChannelDesc.port中填监听端口号
+        listenPort = locPort;
+        hcommDesc.role = HcommSocketRole::HCOMM_SOCKET_ROLE_SERVER;
+        hcommDesc.port = static_cast<uint16_t>(locPort); // HcommChannelDesc.port中填监听端口号
     } else {
         listenPort = rmtPort;
         hcommDesc.role = HcommSocketRole::HCOMM_SOCKET_ROLE_CLIENT;
-        hcommDesc.port
-            = static_cast<uint16_t>(rmtPort); // HcommChannelDesc.port中填对端端口号(此场景下对端端口号也就是监听端口号)
+        // HcommChannelDesc.port中填对端端口号(此场景下对端端口号也就是监听端口号)
+        hcommDesc.port = static_cast<uint16_t>(rmtPort);
     }
+
+    HCCL_INFO(
+        "[%s] localRank[%u] remoteRank[%u] localIp[%s] remoteIp[%s] role[%s] listenPort[%u]", __func__, localRank,
+        remoteRank, localIpAddr.GetIpStr().c_str(), remoteIpAddr.GetIpStr().c_str(), isServer ? "SERVER" : "CLIENT",
+        listenPort);
 
     return HCCL_SUCCESS;
 }
