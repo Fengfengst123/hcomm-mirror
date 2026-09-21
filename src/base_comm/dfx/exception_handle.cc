@@ -56,7 +56,8 @@ HcclResult ExceptionHandle::CheckRepeatBySqeId(
 dfx::CqeStatus
 ExceptionHandle::ReceiveCqeReport(uint32_t devId, Hccl::StreamLite* streamLite, rtLogicCqReport_t& cqeException)
 {
-    constexpr uint32_t REPORT_SIZE = 1;
+    // halCqReportRecv 按 recvInfo.cqe_num 写入接收缓冲，为兼容驱动最大上报数量，缓冲按 MAX_REPORT_CNT 分配
+    constexpr uint32_t REPORT_SIZE = MAX_REPORT_CNT;
     rtLogicCqReport_t streamReport[REPORT_SIZE] = {};
 
     CqeQueryInput cqeQueryInput{};
