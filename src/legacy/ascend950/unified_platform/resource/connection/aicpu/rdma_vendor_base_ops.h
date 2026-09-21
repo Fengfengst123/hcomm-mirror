@@ -13,13 +13,11 @@
 
 #include "cast_utils.h"
 #include <chrono>
-#include <cstddef>
 #include <cstdint>
 #include <vector>
 #include <securec.h>
 
 #include "exception_util.h"
-#include "internal_exception.h"
 #include "log.h"
 #include "rma_buf_slice_lite.h"     // RmaBufSliceLite
 #include "rmt_rma_buf_slice_lite.h" // RmtRmaBufSliceLite

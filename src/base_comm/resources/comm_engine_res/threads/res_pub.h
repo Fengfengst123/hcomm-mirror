@@ -246,18 +246,25 @@ struct DfxDfxOpInfo {
     }
 };
 
-struct DfxTaskParaNotify { // Notify 任务参数（NOTIFY_RECORD/NOTIFY_WAIT）
-    u64 sqeAddr;           // SQE 中的偏移地址
-    std::string Describe() const { return StringFormat("sqeAddr[0x%llx]", static_cast<unsigned long long>(sqeAddr)); }
+struct DfxTaskParaNotify {     // Notify 任务参数（NOTIFY_RECORD/NOTIFY_WAIT）
+    u32 notifyId{INVALID_U32}; // Notify ID，来源于 NotifyRecord/NotifyWait 的 notifyId 参数
+    std::string Describe() const { return StringFormat("notifyId[%u]", notifyId); }
 };
 
-struct DfxTaskParaDma { // SDMA 任务参数，信息从 SQE 获取
-    u64 sqeAddr;        // SQE 中的偏移地址
-    std::string Describe() const { return StringFormat("sqeAddr[0x%llx]", static_cast<unsigned long long>(sqeAddr)); }
+struct DfxTaskParaDma {        // SDMA 任务参数，信息从 SQE 获取
+    u64 srcAddr{0};            // 源地址，来源于 Rt91095StarsMemcpySqe strideMode0
+    u64 dstAddr{0};            // 目的地址，来源于 Rt91095StarsMemcpySqe strideMode0
+    u64 size{0};               // 数据大小，来源于 Rt91095StarsMemcpySqe strideMode0.lengthMove
+    u32 notifyId{INVALID_U32}; // Notify ID，RDMA 任务使用
+    std::string Describe() const
+    {
+        return StringFormat(
+            "srcAddr[0x%llx], dstAddr[0x%llx], size[0x%llx], notifyId[%u]", static_cast<unsigned long long>(srcAddr),
+            static_cast<unsigned long long>(dstAddr), static_cast<unsigned long long>(size), notifyId);
+    }
 };
 
 struct DfxTaskParaUbDma {      // UB DMA 任务参数
-    u64 sqeAddr;               // SQE 中的偏移地址
     u64 srcAddr;               // 源地址
     u64 dstAddr;               // 目的地址
     u64 size;                  // 数据大小（字节）
@@ -269,7 +276,7 @@ struct DfxTaskParaUbDma {      // UB DMA 任务参数
     std::string Describe() const
     {
         return StringFormat(
-            "srcAddr[0x%llx], dstAddr[0x%llx], size[0x%llx], notifyId[0x%x], "
+            "srcAddr[0x%llx], dstAddr[0x%llx], size[0x%llx], notifyId[%u], "
             "jettyHandle[0x%llx], jettyId[%u], tpn[%u]",
             static_cast<unsigned long long>(srcAddr), static_cast<unsigned long long>(dstAddr),
             static_cast<unsigned long long>(size), notifyId, static_cast<unsigned long long>(jettyHandle), jettyId,
@@ -278,7 +285,6 @@ struct DfxTaskParaUbDma {      // UB DMA 任务参数
 };
 
 struct DfxTaskParaReduce {     // UB Reduce 任务参数
-    u64 sqeAddr;               // SQE 中的偏移地址
     u64 srcAddr;               // 源地址
     u64 dstAddr;               // 目的地址
     u64 size;                  // 数据大小（字节）
@@ -290,7 +296,7 @@ struct DfxTaskParaReduce {     // UB Reduce 任务参数
     std::string Describe() const
     {
         return StringFormat(
-            "srcAddr[0x%llx], dstAddr[0x%llx], size[0x%llx], notifyId[0x%x], reduceOp[%u], "
+            "srcAddr[0x%llx], dstAddr[0x%llx], size[0x%llx], notifyId[%u], reduceOp[%u], "
             "jettyHandle[0x%llx], jettyId[%u], tpn[%u]",
             static_cast<unsigned long long>(srcAddr), static_cast<unsigned long long>(dstAddr),
             static_cast<unsigned long long>(size), notifyId, reduceOp, static_cast<unsigned long long>(jettyHandle),
@@ -299,12 +305,8 @@ struct DfxTaskParaReduce {     // UB Reduce 任务参数
 };
 
 struct DfxTaskParaWriteValue { // P2P WriteValue 任务参数
-    u64 sqeAddr;               // SQE 中的偏移地址
-    u32 notifyId{INVALID_U32}; // Notify ID，来源于 ParaReduce::notifyID，taskException 使用
-    std::string Describe() const
-    {
-        return StringFormat("sqeAddr[0x%llx], notifyId[0x%x]", static_cast<unsigned long long>(sqeAddr), notifyId);
-    }
+    u32 notifyId{INVALID_U32}; // Notify ID
+    std::string Describe() const { return StringFormat("notifyId[%u]", notifyId); }
 };
 
 struct DfxTaskInfo {

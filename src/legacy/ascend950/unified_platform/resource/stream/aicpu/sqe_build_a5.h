@@ -12,6 +12,7 @@
 #define HCCLV2_SQE_BUILD_A5_H
 #include "types.h"
 #include "ub_jetty_lite.h"
+#include "sqe.h"
 #include "sqe_v82.h"
 #include "log.h"
 
@@ -194,7 +195,7 @@ BuildA5SqeUbDbSend(u32 streamId, u32 taskId, const UbJettyLiteId& jettyLiteId, u
 
     sqe->header.type = static_cast<uint8_t>(Rt91095StarsSqeType::RT_91095_SQE_TYPE_UBDMA);
 
-    sqe->mode = Rt91095UbDmaSqeMode::RT_91095_SQE_DOORBELL_MODE;
+    sqe->mode = static_cast<uint8_t>(Rt91095UbDmaSqeMode::RT_91095_SQE_DOORBELL_MODE);
     sqe->kernelCredit = RT_STARS_DEFAULT_KERNEL_CREDIT;
     sqe->doorbellNum = 1U;
     sqe->jettyId1 = jettyLiteId.GetJettyId();

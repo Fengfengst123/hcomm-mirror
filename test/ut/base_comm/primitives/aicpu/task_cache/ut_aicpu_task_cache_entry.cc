@@ -1034,7 +1034,7 @@ TEST_F(AicpuTaskCacheEntryTest, FillSlot_UbDma_JettyPassthrough)
     profAndRefreshInfo.dbSqeProfInfo.jettyHandle = jettyHandle;
     profAndRefreshInfo.dbSqeProfInfo.jettyId = jettyId;
 
-    HcclResult ret = entry.FillSlotUbDma_(&slot, nullptr, profAndRefreshInfo, ubTransport_.get(), &streamLite, 1);
+    HcclResult ret = entry.FillSlotUbDma_(&slot, profAndRefreshInfo, ubTransport_.get(), &streamLite, 1);
     EXPECT_EQ(ret, HCCL_SUCCESS);
     EXPECT_EQ(slot.taskPara.ubDma.jettyHandle, jettyHandle);
     EXPECT_EQ(slot.taskPara.ubDma.jettyId, jettyId);
@@ -1052,7 +1052,7 @@ TEST_F(AicpuTaskCacheEntryTest, FillSlot_Reduce_JettyPassthrough)
     profAndRefreshInfo.dbSqeProfInfo.jettyHandle = jettyHandle;
     profAndRefreshInfo.dbSqeProfInfo.jettyId = jettyId;
 
-    HcclResult ret = entry.FillSlotReduce_(&slot, nullptr, profAndRefreshInfo, ubTransport_.get(), &streamLite, 1);
+    HcclResult ret = entry.FillSlotReduce_(&slot, profAndRefreshInfo, ubTransport_.get(), &streamLite, 1);
     EXPECT_EQ(ret, HCCL_SUCCESS);
     EXPECT_EQ(slot.taskPara.Reduce.jettyHandle, jettyHandle);
     EXPECT_EQ(slot.taskPara.Reduce.jettyId, jettyId);

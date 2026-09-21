@@ -462,8 +462,7 @@ void HcclCommTaskExceptionLite::GenerateTaskErrMsg(
 void HcclCommTaskExceptionLite::FillNotifyErrMsg(
     const Hccl::DfxTaskInfo& taskInfo, Hccl::ErrorMessageReport& errMsgInfo)
 {
-    u32 notifyId = GetNotifyIdFromSqe(taskInfo.taskPara.Notify.sqeAddr);
-    errMsgInfo.notifyId = notifyId;
+    errMsgInfo.notifyId = taskInfo.taskPara.Notify.notifyId;
     errMsgInfo.notifyValue = 1; // 非cnt notify统一赋值为1，cnt notify当前未使用
 }
 
@@ -495,13 +494,9 @@ void HcclCommTaskExceptionLite::FillDmaErrMsg(
 void HcclCommTaskExceptionLite::FillSdmaErrMsg(const Hccl::DfxTaskInfo& taskInfo, Hccl::ErrorMessageReport& errMsgInfo)
 {
     errMsgInfo.linkType = Hccl::DfxLinkType(static_cast<Hccl::DfxLinkType::Value>(taskInfo.linkType));
-    u64 src = 0;
-    u64 dst = 0;
-    u64 size = 0;
-    GetSdmaSqeFields(taskInfo.taskPara.Dma.sqeAddr, src, dst, size);
-    errMsgInfo.taskSrcAddr = src;
-    errMsgInfo.taskDstAddr = dst;
-    errMsgInfo.size = static_cast<std::size_t>(size);
+    errMsgInfo.taskSrcAddr = taskInfo.taskPara.Dma.srcAddr;
+    errMsgInfo.taskDstAddr = taskInfo.taskPara.Dma.dstAddr;
+    errMsgInfo.size = static_cast<std::size_t>(taskInfo.taskPara.Dma.size);
 }
 
 void HcclCommTaskExceptionLite::FillUbErrMsg(
@@ -632,9 +627,6 @@ HcclResult HcclCommTaskExceptionLite::CollectTaskContext(
 
     for (u32 ctxCount = 0; ctxCount < TASK_CONTEXT_SIZE; ++ctxCount) {
         u32 idx = (foundIdx + queue->GetCapacity() - ctxCount) % queue->GetCapacity();
-        CHK_PRT_BREAK(
-            idx == begin,
-            HCCL_ERROR("[%s]reach queue begin, taskNum[%u], stop traversal", __func__, taskContext.size()), );
 
         Hccl::DfxTaskInfo* slot = queue->GetSlot(idx);
         if (slot == nullptr || slot->taskId > targetTaskId) {
@@ -648,6 +640,10 @@ HcclResult HcclCommTaskExceptionLite::CollectTaskContext(
             break;
         }
         taskContext.push_back(slot);
+
+        CHK_PRT_BREAK(
+            idx == begin,
+            HCCL_ERROR("[%s]reach queue begin, taskNum[%u], stop traversal", __func__, taskContext.size()), );
     }
     return HCCL_SUCCESS;
 }
@@ -767,46 +763,6 @@ u32 HcclCommTaskExceptionLite::GetRemoteRankId(const Hccl::DfxTaskInfo& taskInfo
     return static_cast<hccl::HcclCommDfxLite*>(opInfo->hcclCommDfxLite)->GetChannelRemoteRankId(taskInfo.channelHandle);
 }
 
-u32 HcclCommTaskExceptionLite::GetNotifyIdFromSqe(u64 sqeAddr)
-{
-    u32 notifyId = INVALID_U32;
-    void* sqePtr = reinterpret_cast<void*>(sqeAddr);
-    if (sqePtr == nullptr) {
-        HCCL_ERROR("[TaskException][AICPU][%s] sqeAddr is nullptr", __func__);
-        return notifyId;
-    }
-    auto* header = reinterpret_cast<Hccl::Rt91095StarsSqeHeader*>(sqePtr);
-    auto sqeType = static_cast<Hccl::Rt91095StarsSqeType>(header->type);
-    if (sqeType == Hccl::Rt91095StarsSqeType::RT_91095_SQE_TYPE_NOTIFY_RECORD
-        || sqeType == Hccl::Rt91095StarsSqeType::RT_91095_SQE_TYPE_NOTIFY_WAIT
-        || sqeType == Hccl::Rt91095StarsSqeType::RT_91095_SQE_TYPE_PLACE_HOLDER) {
-        auto* notifySqe = reinterpret_cast<Hccl::Rt91095StarsNotifySqe*>(sqePtr);
-        notifyId = notifySqe->notifyId;
-    } else {
-        HCCL_ERROR(
-            "[TaskException][AICPU][%s] sqeType[%u] is not NOTIFY_RECORD or NOTIFY_WAIT", __func__, header->type);
-    }
-    return notifyId;
-}
-
-void HcclCommTaskExceptionLite::GetSdmaSqeFields(u64 sqeAddr, u64& src, u64& dst, u64& size)
-{
-    constexpr u32 ADDR_WORD_SHIFT_BITS = 32;
-    void* sqePtr = reinterpret_cast<void*>(sqeAddr);
-    CHK_PRT_RET(sqePtr == nullptr, HCCL_ERROR("[TaskException][AICPU][%s] sqeAddr is nullptr", __func__), );
-    auto* header = reinterpret_cast<Hccl::Rt91095StarsSqeHeader*>(sqePtr);
-    if (static_cast<Hccl::Rt91095StarsSqeType>(header->type) == Hccl::Rt91095StarsSqeType::RT_91095_SQE_TYPE_SDMA) {
-        auto* dmaSqe = reinterpret_cast<Hccl::Rt91095StarsMemcpySqe*>(sqePtr);
-        src = (static_cast<u64>(dmaSqe->u.strideMode0.srcAddrHigh) << ADDR_WORD_SHIFT_BITS)
-              | dmaSqe->u.strideMode0.srcAddrLow;
-        dst = (static_cast<u64>(dmaSqe->u.strideMode0.dstAddrHigh) << ADDR_WORD_SHIFT_BITS)
-              | dmaSqe->u.strideMode0.dstAddrLow;
-        size = dmaSqe->u.strideMode0.lengthMove;
-    } else {
-        HCCL_ERROR("[TaskException][AICPU][%s] sqeType[%u] is not SDMA", __func__, header->type);
-    }
-}
-
 std::string HcclCommTaskExceptionLite::GetNotifyInfo(const Hccl::DfxTaskInfo& taskInfo)
 {
     auto taskType = static_cast<Hccl::TaskParamTypeVal>(taskInfo.taskType);
@@ -822,11 +778,11 @@ std::string HcclCommTaskExceptionLite::GetNotifyInfo(const Hccl::DfxTaskInfo& ta
         case Hccl::TaskParamTypeVal::TASK_NOTIFY_RECORD:
         case Hccl::TaskParamTypeVal::TASK_NOTIFY_WAIT:
         case Hccl::TaskParamTypeVal::TASK_SEND_NOTIFY: {
-            notifyId = GetNotifyIdFromSqe(taskInfo.taskPara.Notify.sqeAddr);
+            notifyId = taskInfo.taskPara.Notify.notifyId;
             break;
         }
         case Hccl::TaskParamTypeVal::TASK_RDMA: {
-            notifyId = GetNotifyIdFromSqe(taskInfo.taskPara.Dma.sqeAddr);
+            notifyId = taskInfo.taskPara.Dma.notifyId;
             break;
         }
         default:
@@ -907,18 +863,15 @@ std::string HcclCommTaskExceptionLite::GetParaInfo(const Hccl::DfxTaskInfo& task
                 taskInfo.taskPara.Reduce.notifyId, static_cast<u32>(taskInfo.taskPara.Reduce.reduceOp),
                 linkTypeStr.c_str(), remoteRankStr.c_str());
         case Hccl::TaskParamTypeVal::TASK_SDMA: {
-            u64 src = 0;
-            u64 dst = 0;
-            u64 size = 0;
-            GetSdmaSqeFields(taskInfo.taskPara.Dma.sqeAddr, src, dst, size);
             return Hccl::StringFormat(
-                "src:[0x%llx], dst:[0x%llx], size:[0x%llx], link type:[%s], remote rank:[%s]", src, dst, size,
+                "src:[0x%llx], dst:[0x%llx], size:[0x%llx], link type:[%s], remote rank:[%s]",
+                taskInfo.taskPara.Dma.srcAddr, taskInfo.taskPara.Dma.dstAddr, taskInfo.taskPara.Dma.size,
                 linkTypeStr.c_str(), remoteRankStr.c_str());
         }
         case Hccl::TaskParamTypeVal::TASK_NOTIFY_RECORD:
         case Hccl::TaskParamTypeVal::TASK_NOTIFY_WAIT:
             return Hccl::StringFormat(
-                "notify id:[%u], value:[%u], remote rank:[%s]", GetNotifyIdFromSqe(taskInfo.taskPara.Notify.sqeAddr), 1,
+                "notify id:[%u], value:[%u], remote rank:[%s]", taskInfo.taskPara.Notify.notifyId, 1,
                 remoteRankStr.c_str());
         default:
             return Hccl::StringFormat("taskType[%s] not match", Hccl::TaskParamTypeValToStr(taskInfo.taskType).c_str());

@@ -563,7 +563,10 @@ void RoceTransportLiteImpl::ReportDmaTask(
     slot->linkType = DfxLinkTypeVal::LINK_ROCE;
     slot->transportType = static_cast<u8>(DfxTransportType::DFX_TRANSPORT_TYPE_ROCE);
     slot->channelHandle = ReinterpretAs<u64>(this);
-    slot->taskPara.Dma.sqeAddr = stream.GetRtsq()->GetSqeAddr();
+    slot->taskPara.Dma.srcAddr = ReinterpretAs<u64>(src);
+    slot->taskPara.Dma.dstAddr = ReinterpretAs<u64>(dst);
+    slot->taskPara.Dma.size = size;
+    slot->taskPara.Dma.notifyId = static_cast<u32>(notifyId);
     PLF_CONFIG_INFO(Hccl::PLF_TASK, "[%s] %s", __func__, slot->Describe().c_str());
 }
 
@@ -591,7 +594,6 @@ void RoceTransportLiteImpl::ReportReduceTask(
     slot->linkType = DfxLinkTypeVal::LINK_ROCE;
     slot->transportType = static_cast<u8>(DfxTransportType::DFX_TRANSPORT_TYPE_ROCE);
     slot->channelHandle = ReinterpretAs<u64>(this);
-    slot->taskPara.Reduce.sqeAddr = stream.GetRtsq()->GetSqeAddr();
     slot->taskPara.Reduce.srcAddr = ReinterpretAs<u64>(src);
     slot->taskPara.Reduce.dstAddr = ReinterpretAs<u64>(dst);
     slot->taskPara.Reduce.size = size;
@@ -620,7 +622,7 @@ void RoceTransportLiteImpl::ReportNotifyWaitTask(u64 notifyId, const StreamLite&
     slot->linkType = DfxLinkTypeVal::LINK_ROCE;
     slot->transportType = static_cast<u8>(DfxTransportType::DFX_TRANSPORT_TYPE_ROCE);
     slot->channelHandle = ReinterpretAs<u64>(this);
-    slot->taskPara.Notify.sqeAddr = stream.GetRtsq()->GetSqeAddr();
+    slot->taskPara.Notify.notifyId = static_cast<u32>(notifyId);
     PLF_CONFIG_INFO(Hccl::PLF_TASK, "[%s] %s", __func__, slot->Describe().c_str());
 }
 

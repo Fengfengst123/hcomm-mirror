@@ -190,6 +190,9 @@ HcclResult AicpuTsThread::InitStreamLite(HcclStreamInfo& streamParam, uint32_t h
         pImpl_ = std::make_unique<Hccl::IAicpuTsThread>(
             streamParam.streamIds, streamParam.sqIds, hostPhyId, streamParam.logicCqids),
         return HCCL_E_PTR);
+    CHK_PRT_RET(
+        GetStreamLitePtr() == nullptr, HCCL_ERROR("[AicpuTsThread][%s] GetStreamLitePtr return nullptr", __func__),
+        HCCL_E_PTR);
     return HCCL_SUCCESS;
 }
 
@@ -231,8 +234,7 @@ HcclResult AicpuTsThread::LocalNotifyWait([[maybe_unused]] uint32_t notifyId) co
 
 HcclResult AicpuTsThread::LocalNotifyRecord(uint32_t notifyId) const
 {
-    void* streamLitePtr = GetStreamLitePtr();
-    Hccl::StreamLite* streamLite = static_cast<Hccl::StreamLite*>(streamLitePtr);
+    Hccl::StreamLite* streamLite = static_cast<Hccl::StreamLite*>(GetStreamLitePtr());
     Hccl::RtsqBase* rtsq = streamLite->GetRtsq();
     u32 taskId = rtsq->GetTaskId();
 
@@ -247,7 +249,7 @@ HcclResult AicpuTsThread::LocalNotifyRecord(uint32_t notifyId) const
     slot->linkType = Hccl::DfxLinkTypeVal::LINK_ONCHIP;
     slot->transportType = static_cast<u8>(Hccl::DfxTransportType::DFX_TRANSPORT_TYPE_LOCAL);
     slot->channelHandle = DFX_INVALID_U64;
-    slot->taskPara.Notify.sqeAddr = rtsq->GetSqeAddr();
+    slot->taskPara.Notify.notifyId = notifyId;
     PLF_CONFIG_INFO(Hccl::PLF_TASK, "[%s] %s", __func__, slot->Describe().c_str());
 
     return HCCL_SUCCESS;
@@ -262,8 +264,7 @@ AicpuTsThread::LocalNotifyRecord([[maybe_unused]] ThreadHandle dstThread, [[mayb
 
 HcclResult AicpuTsThread::LocalNotifyWait(uint32_t notifyId, uint32_t timeout) const
 {
-    void* streamLitePtr = GetStreamLitePtr();
-    Hccl::StreamLite* streamLite = static_cast<Hccl::StreamLite*>(streamLitePtr);
+    Hccl::StreamLite* streamLite = static_cast<Hccl::StreamLite*>(GetStreamLitePtr());
     Hccl::RtsqBase* rtsq = streamLite->GetRtsq();
     u32 taskId = rtsq->GetTaskId();
 
@@ -278,14 +279,15 @@ HcclResult AicpuTsThread::LocalNotifyWait(uint32_t notifyId, uint32_t timeout) c
     slot->linkType = Hccl::DfxLinkTypeVal::LINK_ONCHIP;
     slot->transportType = static_cast<u8>(Hccl::DfxTransportType::DFX_TRANSPORT_TYPE_LOCAL);
     slot->channelHandle = DFX_INVALID_U64;
-    slot->taskPara.Notify.sqeAddr = rtsq->GetSqeAddr();
+    slot->taskPara.Notify.notifyId = notifyId;
     PLF_CONFIG_INFO(Hccl::PLF_TASK, "[%s] %s", __func__, slot->Describe().c_str());
 
     return HCCL_SUCCESS;
 }
 
-HcclResult AicpuTsThread::LocalCopyReport(uint32_t taskId, Hccl::StreamLite* sl, Hccl::RtsqBase* rtsq) const
+HcclResult AicpuTsThread::LocalCopyReport(u32 taskId, u64 srcAddr, u64 dstAddr, u64 size) const
 {
+    Hccl::StreamLite* sl = static_cast<Hccl::StreamLite*>(GetStreamLitePtr());
     auto* slot = sl->NextTaskSlot();
     slot->taskType = Hccl::TaskParamTypeVal::TASK_SDMA;
     slot->sqId = sl->GetSqId();
@@ -295,15 +297,18 @@ HcclResult AicpuTsThread::LocalCopyReport(uint32_t taskId, Hccl::StreamLite* sl,
     slot->linkType = Hccl::DfxLinkTypeVal::LINK_ONCHIP;
     slot->transportType = static_cast<u8>(Hccl::DfxTransportType::DFX_TRANSPORT_TYPE_LOCAL);
     slot->channelHandle = DFX_INVALID_U64;
-    slot->taskPara.Dma.sqeAddr = rtsq->GetSqeAddr();
+    slot->taskPara.Dma.srcAddr = srcAddr;
+    slot->taskPara.Dma.dstAddr = dstAddr;
+    slot->taskPara.Dma.size = size;
+    slot->taskPara.Dma.notifyId = INVALID_U32;
     PLF_CONFIG_INFO(Hccl::PLF_TASK, "[%s] %s", __func__, slot->Describe().c_str());
     return HCCL_SUCCESS;
 }
 
-HcclResult AicpuTsThread::LocalReduceReport(
-    void* dst, const void* src, uint64_t size, HcommReduceOp reduceOp, uint32_t taskId, Hccl::StreamLite* sl,
-    Hccl::RtsqBase* rtsq) const
+HcclResult
+AicpuTsThread::LocalReduceReport(u32 taskId, void* dst, const void* src, uint64_t size, HcommReduceOp reduceOp) const
 {
+    Hccl::StreamLite* sl = static_cast<Hccl::StreamLite*>(GetStreamLitePtr());
     auto* slot = sl->NextTaskSlot();
     slot->taskType = Hccl::TaskParamTypeVal::TASK_REDUCE_INLINE;
     slot->sqId = sl->GetSqId();
@@ -313,7 +318,6 @@ HcclResult AicpuTsThread::LocalReduceReport(
     slot->linkType = Hccl::DfxLinkTypeVal::LINK_ONCHIP;
     slot->transportType = static_cast<u8>(Hccl::DfxTransportType::DFX_TRANSPORT_TYPE_LOCAL);
     slot->channelHandle = DFX_INVALID_U64;
-    slot->taskPara.Reduce.sqeAddr = rtsq->GetSqeAddr();
     slot->taskPara.Reduce.srcAddr = ReinterpretAs<u64>(src);
     slot->taskPara.Reduce.dstAddr = ReinterpretAs<u64>(dst);
     slot->taskPara.Reduce.size = size;
@@ -325,8 +329,7 @@ HcclResult AicpuTsThread::LocalReduceReport(
 
 HcclResult AicpuTsThread::LocalCopy(void* dst, const void* src, uint64_t size) const
 {
-    void* streamLitePtr = GetStreamLitePtr();
-    Hccl::StreamLite* streamLite = static_cast<Hccl::StreamLite*>(streamLitePtr);
+    Hccl::StreamLite* streamLite = static_cast<Hccl::StreamLite*>(GetStreamLitePtr());
     Hccl::RtsqBase* rtsq = streamLite->GetRtsq();
 
     uint64_t dstAddr = ReinterpretAs<uint64_t>(dst);
@@ -339,7 +342,7 @@ HcclResult AicpuTsThread::LocalCopy(void* dst, const void* src, uint64_t size) c
         u32 taskId = rtsq->GetTaskId();
 
         CHK_RET(pImpl_->SdmaCopy(dstAddr + doneSize, srcAddr + doneSize, realSize));
-        CHK_RET(LocalCopyReport(taskId, streamLite, rtsq));
+        CHK_RET(LocalCopyReport(taskId, srcAddr + doneSize, dstAddr + doneSize, realSize));
 
         doneSize += realSize;
         remainSize -= realSize;
@@ -351,8 +354,7 @@ HcclResult AicpuTsThread::LocalReduce(
     void* dst, const void* src, uint64_t size, HcommDataType dataType, HcommReduceOp reduceOp) const
 {
     uint32_t dataTypeRaw = static_cast<uint32_t>(dataType);
-    void* streamLitePtr = GetStreamLitePtr();
-    Hccl::StreamLite* streamLite = static_cast<Hccl::StreamLite*>(streamLitePtr);
+    Hccl::StreamLite* streamLite = static_cast<Hccl::StreamLite*>(GetStreamLitePtr());
     Hccl::RtsqBase* rtsq = streamLite->GetRtsq();
 
     uint64_t dstAddr = ReinterpretAs<uint64_t>(dst);
@@ -366,8 +368,8 @@ HcclResult AicpuTsThread::LocalReduce(
 
         CHK_RET(pImpl_->SdmaReduce(dstAddr + doneSize, srcAddr + doneSize, realSize, dataTypeRaw, reduceOp));
         CHK_RET(LocalReduceReport(
-            static_cast<uint8_t*>(dst) + doneSize, static_cast<const uint8_t*>(src) + doneSize, realSize, reduceOp,
-            taskId, streamLite, rtsq));
+            taskId, static_cast<uint8_t*>(dst) + doneSize, static_cast<const uint8_t*>(src) + doneSize, realSize,
+            reduceOp));
 
         doneSize += realSize;
         remainSize -= realSize;

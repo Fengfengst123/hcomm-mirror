@@ -16,7 +16,6 @@
 #define protected public
 #include "dfx_profiling_handler_lite.h"
 #include "res_pub.h"
-#include "sqe_a5.h"
 #undef private
 #undef protected
 
@@ -241,8 +240,6 @@ static void FillDfxTaskInfoForType(Hccl::DfxTaskInfo& taskInfo, u8 taskType)
     taskInfo.taskPara.Reduce.dstAddr = 0;
     taskInfo.taskPara.Reduce.size = 0;
     taskInfo.taskPara.Reduce.reduceOp = 0;
-    taskInfo.taskPara.Dma.sqeAddr = 0;
-    taskInfo.taskPara.Notify.sqeAddr = 0;
 }
 
 TEST_F(DfxProfilingHandlerLiteTest, Ut_GetTaskDetailInfosFromDfxTaskInfo_When_Sdma_Expect_NoThrow)
@@ -493,7 +490,6 @@ TEST_F(DfxProfilingHandlerLiteTest, Ut_FillNotifyDetail_When_CalledViaGetDetail_
     Hccl::DfxTaskInfo taskInfo{};
     FillDfxTaskInfoForType(taskInfo, static_cast<u8>(Hccl::TaskParamTypeVal::TASK_NOTIFY_RECORD));
     taskInfo.linkType = 4;
-    taskInfo.taskPara.Notify.sqeAddr = 0;
     MsprofAicpuHcclTaskInfo taskDetailsInfos{};
     EXPECT_NO_THROW(handler_.GetTaskDetailInfosFromDfxTaskInfo(&taskInfo, taskDetailsInfos, MakeDefaultCtx()));
 }

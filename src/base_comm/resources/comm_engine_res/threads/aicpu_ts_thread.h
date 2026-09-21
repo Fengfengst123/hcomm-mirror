@@ -93,10 +93,8 @@ private:
 #ifdef CCL_KERNEL_AICPU
     HcclResult BuildComStreamInfo(const HcclStreamInfo& streamInfo, HcclComStreamInfo& comStreamInfo) const;
 #endif
-    HcclResult LocalCopyReport(uint32_t taskId, Hccl::StreamLite* sl, Hccl::RtsqBase* rtsq) const;
-    HcclResult LocalReduceReport(
-        void* dst, const void* src, uint64_t size, HcommReduceOp reduceOp, uint32_t taskId, Hccl::StreamLite* sl,
-        Hccl::RtsqBase* rtsq) const;
+    HcclResult LocalCopyReport(u32 taskId, u64 srcAddr, u64 dstAddr, u64 size) const;
+    HcclResult LocalReduceReport(u32 taskId, void* dst, const void* src, uint64_t size, HcommReduceOp reduceOp) const;
 
     // 成员变量（适配 AICPU-TS）
     bool isDeviceSide_ = false;

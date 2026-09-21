@@ -454,7 +454,7 @@ void UbTransportLiteImpl::WaitWithTimeout(u32 index, const StreamLite& stream, u
         taskParam.taskPara.Notify.value = 1;
         AddTaskCallback(stream, taskId, taskParam);
     }
-    FillSlotWaitInfo(stream, taskId);
+    FillSlotWaitInfo(stream, taskId, notifyId);
 }
 
 void UbTransportLiteImpl::ProfilingProcess(
@@ -574,7 +574,6 @@ void UbTransportLiteImpl::FillSlotUbDmaInfo(
     slot->linkType = (linkType_ == DfxLinkType::UB) ? DfxLinkTypeVal::LINK_UB : DfxLinkTypeVal::LINK_UBoE;
     slot->transportType = static_cast<u8>(DfxTransportType::DFX_TRANSPORT_TYPE_UB);
     slot->channelHandle = ReinterpretAs<u64>(this);
-    slot->taskPara.ubDma.sqeAddr = stream.GetRtsq()->GetSqeAddr();
     slot->taskPara.ubDma.srcAddr = srcAddr;
     slot->taskPara.ubDma.dstAddr = dstAddr;
     slot->taskPara.ubDma.size = size;
@@ -598,7 +597,6 @@ void UbTransportLiteImpl::FillSlotReduceInfo(
     slot->linkType = (linkType_ == DfxLinkType::UB) ? DfxLinkTypeVal::LINK_UB : DfxLinkTypeVal::LINK_UBoE;
     slot->transportType = static_cast<u8>(DfxTransportType::DFX_TRANSPORT_TYPE_UB);
     slot->channelHandle = ReinterpretAs<u64>(this);
-    slot->taskPara.Reduce.sqeAddr = stream.GetRtsq()->GetSqeAddr();
     slot->taskPara.Reduce.srcAddr = srcAddr;
     slot->taskPara.Reduce.dstAddr = dstAddr;
     slot->taskPara.Reduce.size = size;
@@ -610,7 +608,7 @@ void UbTransportLiteImpl::FillSlotReduceInfo(
     PLF_CONFIG_INFO(Hccl::PLF_TASK, "[%s] %s", __func__, slot->Describe().c_str());
 }
 
-void UbTransportLiteImpl::FillSlotWaitInfo(const StreamLite& stream, u32 taskId) const
+void UbTransportLiteImpl::FillSlotWaitInfo(const StreamLite& stream, u32 taskId, u32 notifyId) const
 {
     DfxTaskInfo* slot = stream.NextTaskSlot();
     slot->taskType = static_cast<u8>(TaskParamTypeVal::TASK_NOTIFY_WAIT);
@@ -621,7 +619,7 @@ void UbTransportLiteImpl::FillSlotWaitInfo(const StreamLite& stream, u32 taskId)
     slot->linkType = (linkType_ == DfxLinkType::UB) ? DfxLinkTypeVal::LINK_UB : DfxLinkTypeVal::LINK_UBoE;
     slot->transportType = static_cast<u8>(DfxTransportType::DFX_TRANSPORT_TYPE_UB);
     slot->channelHandle = ReinterpretAs<u64>(this);
-    slot->taskPara.Notify.sqeAddr = stream.GetRtsq()->GetSqeAddr();
+    slot->taskPara.Notify.notifyId = notifyId;
     PLF_CONFIG_INFO(Hccl::PLF_TASK, "[%s] %s", __func__, slot->Describe().c_str());
 }
 
@@ -1300,7 +1298,7 @@ void UbTransportLiteImpl::Drain(const StreamLite& stream)
             taskParam.taskPara.Notify.value = 1;
             AddTaskCallback(stream, waitTaskId, taskParam);
         }
-        FillSlotWaitInfo(stream, waitTaskId);
+        FillSlotWaitInfo(stream, waitTaskId, drainNotify_.notifyId);
     }
 }
 

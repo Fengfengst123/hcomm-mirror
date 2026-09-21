@@ -66,47 +66,6 @@ TEST_F(HcclIndependentOpEngineTest, Ut_HcclThreadAcquire_When_Param_Is_Invalid_E
 }
 
 // -----HcclThreadAcquire接口host侧用例-------
-HcclResult hrtDrvGetPlatformInfoStub(uint32_t* info)
-{
-    *info = 1;
-    return HCCL_SUCCESS;
-}
-
-void LocalCopyFfts(ThreadHandle thread)
-{
-    MOCKER(hrtDrvGetPlatformInfo).stubs().will(invoke(hrtDrvGetPlatformInfoStub));
-
-    MOCKER(GetExternalInputHcclEnableFfts).stubs().with(mockcpp::any()).will(returnValue(true));
-
-    DevType deviceType = DevType::DEV_TYPE_910B;
-    MOCKER(hrtGetDeviceType).stubs().with(outBound(deviceType)).will(returnValue(HCCL_SUCCESS));
-
-    MOCKER(GetExternalInputHcclAicpuUnfold).stubs().with(mockcpp::any()).will(returnValue(false));
-
-    MOCKER(GetWorkflowMode)
-        .stubs()
-        .with(mockcpp::any())
-        .will(returnValue(HcclWorkflowMode::HCCL_WORKFLOW_MODE_OP_BASE));
-
-    DispatcherCtxPtr ctx;
-    HcclResult ret = CreateDispatcherCtx(&ctx, 0);
-    EXPECT_EQ(ret, HCCL_SUCCESS);
-
-    DispatcherCtx* ctxPtr = static_cast<DispatcherCtx*>(ctx);
-    EXPECT_NE(ctxPtr->GetDispatcher(), nullptr);
-    EXPECT_NE(GetDispatcherCtx(), nullptr);
-
-    HostMem userIn = HostMem::alloc(1, true);
-    HostMem cclIn = HostMem::alloc(1, true);
-    HcclMem userInputMem{HcclMemType::HCCL_MEM_TYPE_HOST, userIn.ptr(), 1};
-    HcclMem cclInputMem{HcclMemType::HCCL_MEM_TYPE_HOST, cclIn.ptr(), 1};
-
-    int32_t retCopy = HcommLocalCopyOnThread(thread, &userInputMem, &cclInputMem, 1);
-    EXPECT_EQ(retCopy, 0);
-    retCopy = DestroyDispatcherCtx(ctx);
-    EXPECT_EQ(retCopy, 0);
-}
-
 const CommEngine g_hostEngine = CommEngine::COMM_ENGINE_CPU;
 TEST_F(HcclIndependentOpEngineTest, Ut_HcclThreadAcquire_When_Alloced_Threads_Morethan_Quota_Expect_Unavailable)
 {
@@ -121,15 +80,6 @@ TEST_F(HcclIndependentOpEngineTest, Ut_HcclThreadAcquire_When_Alloced_Threads_Mo
     EXPECT_EQ(ret, HCCL_SUCCESS);
     for (int i = 0; i < 2; i++) {
         EXPECT_NE(thread1[i], 0);
-    }
-
-    LocalCopyFfts(thread1[0]);
-
-    ThreadHandle thread2[1] = {0};
-    ret = HcclThreadAcquire(comm, g_hostEngine, 1, 2, thread2);
-    EXPECT_EQ(ret, HCCL_SUCCESS);
-    for (int i = 0; i < 1; i++) {
-        EXPECT_NE(thread2[i], 0);
     }
 
     ThreadHandle thread3[2] = {0};

@@ -13,8 +13,6 @@
 #include <chrono>
 #include "stl_util.h"
 #include "exception_util.h"
-#include "null_ptr_exception.h"
-#include "internal_exception.h"
 #include "string_util.h"
 #include "drv_api_exception.h"
 

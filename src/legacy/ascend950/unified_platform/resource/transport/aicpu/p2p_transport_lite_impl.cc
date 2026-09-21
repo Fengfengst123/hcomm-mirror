@@ -278,7 +278,10 @@ void P2PTransportLiteImpl::BuildP2PRead(const StreamLite& stream, const RmaBuffe
         slot->linkType = DfxLinkTypeVal::LINK_PCIE;
         slot->transportType = static_cast<u8>(DfxTransportType::DFX_TRANSPORT_TYPE_SDMA);
         slot->channelHandle = ReinterpretAs<u64>(this);
-        slot->taskPara.Dma.sqeAddr = stream.GetRtsq()->GetSqeAddr();
+        slot->taskPara.Dma.srcAddr = src;
+        slot->taskPara.Dma.dstAddr = dst;
+        slot->taskPara.Dma.size = blockSize;
+        slot->taskPara.Dma.notifyId = INVALID_U32;
         PLF_CONFIG_INFO(Hccl::PLF_TASK, "[%s] %s", __func__, slot->Describe().c_str());
         src += offset;
         dst += offset;
@@ -348,7 +351,6 @@ void P2PTransportLiteImpl::BuildP2PReadReduce(
         slot->linkType = DfxLinkTypeVal::LINK_PCIE;
         slot->transportType = static_cast<u8>(DfxTransportType::DFX_TRANSPORT_TYPE_SDMA);
         slot->channelHandle = ReinterpretAs<u64>(this);
-        slot->taskPara.Reduce.sqeAddr = stream.GetRtsq()->GetSqeAddr();
         slot->taskPara.Reduce.srcAddr = src;
         slot->taskPara.Reduce.dstAddr = dst;
         slot->taskPara.Reduce.size = blockSize;
@@ -397,7 +399,7 @@ void P2PTransportLiteImpl::Post(u32 index, const StreamLite& stream)
     slot->linkType = DfxLinkTypeVal::LINK_PCIE;
     slot->transportType = static_cast<u8>(DfxTransportType::DFX_TRANSPORT_TYPE_SDMA);
     slot->channelHandle = ReinterpretAs<u64>(this);
-    slot->taskPara.Notify.sqeAddr = stream.GetRtsq()->GetSqeAddr();
+    slot->taskPara.Notify.notifyId = rmtNotifyVec[index].id;
     PLF_CONFIG_INFO(Hccl::PLF_TASK, "[%s] %s", __func__, slot->Describe().c_str());
     return;
 }
@@ -432,7 +434,7 @@ void P2PTransportLiteImpl::WaitWithTimeout(u32 index, const StreamLite& stream, 
     slot->linkType = DfxLinkTypeVal::LINK_PCIE;
     slot->transportType = static_cast<u8>(DfxTransportType::DFX_TRANSPORT_TYPE_SDMA);
     slot->channelHandle = ReinterpretAs<u64>(this);
-    slot->taskPara.Notify.sqeAddr = stream.GetRtsq()->GetSqeAddr();
+    slot->taskPara.Notify.notifyId = locNotifyVec[index]->GetId();
     PLF_CONFIG_INFO(Hccl::PLF_TASK, "[%s] %s", __func__, slot->Describe().c_str());
     return;
 }

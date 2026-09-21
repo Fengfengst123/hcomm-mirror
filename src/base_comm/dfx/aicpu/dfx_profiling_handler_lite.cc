@@ -11,7 +11,6 @@
 #include "dfx_profiling_handler_lite.h"
 #include "res_pub.h"
 #include "log.h"
-#include "sqe_a5.h"
 #include "prof_sal_lite.h"
 #include <limits>
 #include <map>
@@ -26,7 +25,6 @@ namespace Hccl {
 static constexpr u32 aging = 1;
 constexpr std::uint32_t HCCLINFO_REPORT_BATCH_NUM = 2;
 constexpr u32 TASK_ID_HIGH_WORD_SHIFT_BITS = 16;
-constexpr u32 ADDR_WORD_SHIFT_BITS = 32;
 DfxProfilingHandlerLite DfxProfilingHandlerLite::instance_;
 
 static const std::map<OpTypeVal, std::string> OP_TYPE_NAME_MAP = {
@@ -475,18 +473,9 @@ void DfxProfilingHandlerLite::FillSdmaRdmaDetail(const DfxTaskInfo* it, MsprofAi
     taskDetailsInfos.linkType = it->linkType;
     taskDetailsInfos.opType = 0;
     taskDetailsInfos.notifyID = DFX_INVALID_U64;
-    void* sqePtr = reinterpret_cast<void*>(it->taskPara.Dma.sqeAddr);
-    if (sqePtr != nullptr) {
-        auto* header = reinterpret_cast<Hccl::Rt91095StarsSqeHeader*>(sqePtr);
-        if (static_cast<Hccl::Rt91095StarsSqeType>(header->type) == Hccl::Rt91095StarsSqeType::RT_91095_SQE_TYPE_SDMA) {
-            auto* dmaSqe = reinterpret_cast<Hccl::Rt91095StarsMemcpySqe*>(sqePtr);
-            taskDetailsInfos.srcAddr = (static_cast<u64>(dmaSqe->u.strideMode0.srcAddrHigh) << ADDR_WORD_SHIFT_BITS)
-                                       | dmaSqe->u.strideMode0.srcAddrLow;
-            taskDetailsInfos.dstAddr = (static_cast<u64>(dmaSqe->u.strideMode0.dstAddrHigh) << ADDR_WORD_SHIFT_BITS)
-                                       | dmaSqe->u.strideMode0.dstAddrLow;
-            taskDetailsInfos.dataSize = dmaSqe->u.strideMode0.lengthMove;
-        }
-    }
+    taskDetailsInfos.srcAddr = it->taskPara.Dma.srcAddr;
+    taskDetailsInfos.dstAddr = it->taskPara.Dma.dstAddr;
+    taskDetailsInfos.dataSize = it->taskPara.Dma.size;
 }
 
 void DfxProfilingHandlerLite::FillUbDmaDetail(const DfxTaskInfo* it, MsprofAicpuHcclTaskInfo& taskDetailsInfos) const
@@ -507,18 +496,7 @@ void DfxProfilingHandlerLite::FillUbDmaDetail(const DfxTaskInfo* it, MsprofAicpu
 void DfxProfilingHandlerLite::FillNotifyDetail(const DfxTaskInfo* it, MsprofAicpuHcclTaskInfo& taskDetailsInfos) const
 {
     taskDetailsInfos.linkType = it->linkType;
-    taskDetailsInfos.notifyID = DFX_INVALID_U64;
-    void* sqePtr = reinterpret_cast<void*>(it->taskPara.Notify.sqeAddr);
-    if (sqePtr != nullptr) {
-        auto* header = reinterpret_cast<Hccl::Rt91095StarsSqeHeader*>(sqePtr);
-        if (static_cast<Hccl::Rt91095StarsSqeType>(header->type)
-                == Hccl::Rt91095StarsSqeType::RT_91095_SQE_TYPE_NOTIFY_RECORD
-            || static_cast<Hccl::Rt91095StarsSqeType>(header->type)
-                   == Hccl::Rt91095StarsSqeType::RT_91095_SQE_TYPE_NOTIFY_WAIT) {
-            auto* notifySqe = reinterpret_cast<Hccl::Rt91095StarsNotifySqe*>(sqePtr);
-            taskDetailsInfos.notifyID = notifySqe->notifyId;
-        }
-    }
+    taskDetailsInfos.notifyID = it->taskPara.Notify.notifyId;
 }
 
 void DfxProfilingHandlerLite::FillDefaultDetail(const DfxTaskInfo* it, MsprofAicpuHcclTaskInfo& taskDetailsInfos) const

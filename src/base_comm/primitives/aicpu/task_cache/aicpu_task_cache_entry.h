@@ -282,10 +282,10 @@ private:
 
     // ReportDbSqeProfiling_子方法
     inline HcclResult FillSlotUbDma_(
-        Hccl::DfxTaskInfo* slot, const uint8_t* sqePtr, const DbSqeProfAndRefreshInfo& profAndRefreshInfo,
+        Hccl::DfxTaskInfo* slot, const DbSqeProfAndRefreshInfo& profAndRefreshInfo,
         Hccl::UbTransportLiteImpl* ubTransportLiteImplPtr, Hccl::StreamLite* streamLite, u32 taskId) const;
     inline HcclResult FillSlotReduce_(
-        Hccl::DfxTaskInfo* slot, const uint8_t* sqePtr, const DbSqeProfAndRefreshInfo& profAndRefreshInfo,
+        Hccl::DfxTaskInfo* slot, const DbSqeProfAndRefreshInfo& profAndRefreshInfo,
         Hccl::UbTransportLiteImpl* ubTransportLiteImplPtr, Hccl::StreamLite* streamLite, u32 taskId) const;
     inline HcclResult RefreshDbSqeProfAddrs_(
         DbSqeProfAndRefreshInfo& profAndRefreshInfo, const uint64_t* baseAddrs, const uint64_t* memSizes,

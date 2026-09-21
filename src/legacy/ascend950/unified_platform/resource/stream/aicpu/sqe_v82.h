@@ -13,13 +13,12 @@
 
 #include <cstdint>
 
-#include "sqe.h"
 namespace Hccl {
 
 #define UB_DOORBELL_NUM_MIN (1)
 #define UB_DOORBELL_NUM_MAX (2)
 
-enum class Rt91095StarsSqeType {
+enum class Rt91095StarsSqeType : uint8_t {
     RT_91095_SQE_TYPE_AIC = 0,           // AIC
     RT_91095_SQE_TYPE_AIV = 1,           // AIV
     RT_91095_SQE_TYPE_FUSION = 2,        // FUSION
@@ -41,19 +40,19 @@ enum class Rt91095StarsSqeType {
 };
 
 /* stars send interrupt direction */
-MAKE_ENUM(
-    RtStarsSqeIntDirType,
-    RT_STARS_SQE_INT_DIR_NO,         // send no interrupt
-    RT_STARS_SQE_INT_DIR_TO_TSCPU,   // to tscpu
-    RT_STARS_SQE_INT_DIR_TO_CTRLCPU, // to ctrlcpu
-    RT_STARS_SQE_INT_DIR_TO_HOST,    // to host
-    RT_STARS_SQE_INT_DIR_END)
+enum class RtStarsSqeIntDirType : uint8_t {
+    RT_STARS_SQE_INT_DIR_NO = 0U,         // send no interrupt
+    RT_STARS_SQE_INT_DIR_TO_TSCPU = 1U,   // to tscpu
+    RT_STARS_SQE_INT_DIR_TO_CTRLCPU = 2U, // to ctrlcpu
+    RT_STARS_SQE_INT_DIR_TO_HOST = 3U,    // to host
+    RT_STARS_SQE_INT_DIR_END = 4U
+};
 
-MAKE_ENUM(
-    Rt91095UbDmaSqeMode,
-    RT_91095_SQE_DIRECTWQE_MODE, // direct wqe
-    RT_91095_SQE_DOORBELL_MODE,  // doorbell
-    RT_STARS_SQE_MODE_END)
+enum class Rt91095UbDmaSqeMode : uint8_t {
+    RT_91095_SQE_DIRECTWQE_MODE = 0U, // direct wqe
+    RT_91095_SQE_DOORBELL_MODE = 1U,  // doorbell
+    RT_STARS_SQE_MODE_END = 2U
+};
 
 enum class Rt91095NotifySubType {
     NOTIFY_SUB_TYPE_SINGLE_NOTIFY_RECORD = 0U,

@@ -556,7 +556,7 @@ private:
     void FillSlotReduceInfo(
         const StreamLite& stream, u32 taskId, TaskParamTypeVal taskType, u64 srcAddr, u64 dstAddr, u64 size,
         u32 notifyId, u8 reduceOp) const;
-    void FillSlotWaitInfo(const StreamLite& stream, u32 taskId) const;
+    void FillSlotWaitInfo(const StreamLite& stream, u32 taskId, u32 notifyId) const;
     inline HcclResult CheckOverflow(u64 totalSize, bool isRead, bool isNotify = false) override
     {
         if (UNLIKELY(!ciTrackerEnabled_)) {

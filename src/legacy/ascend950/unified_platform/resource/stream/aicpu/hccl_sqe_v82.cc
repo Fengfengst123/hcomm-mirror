@@ -23,10 +23,10 @@ HcclUBDmaDBSqe::HcclUBDmaDBSqe()
     sqe->header.type = static_cast<uint8_t>(Rt91095StarsSqeType::RT_91095_SQE_TYPE_UBDMA);
     sqe->header.lock = 0U;
     sqe->header.unlock = 0U;
-    sqe->header.ie = RtStarsSqeIntDirType::RT_STARS_SQE_INT_DIR_NO;
-    sqe->header.preP = RtStarsSqeIntDirType::RT_STARS_SQE_INT_DIR_NO;
-    sqe->header.postP = RtStarsSqeIntDirType::RT_STARS_SQE_INT_DIR_NO;
-    sqe->mode = Rt91095UbDmaSqeMode::RT_91095_SQE_DOORBELL_MODE;
+    sqe->header.ie = static_cast<uint8_t>(RtStarsSqeIntDirType::RT_STARS_SQE_INT_DIR_NO);
+    sqe->header.preP = static_cast<uint8_t>(RtStarsSqeIntDirType::RT_STARS_SQE_INT_DIR_NO);
+    sqe->header.postP = static_cast<uint8_t>(RtStarsSqeIntDirType::RT_STARS_SQE_INT_DIR_NO);
+    sqe->mode = static_cast<uint8_t>(Rt91095UbDmaSqeMode::RT_91095_SQE_DOORBELL_MODE);
     sqe->kernelCredit = RT_STARS_DEFAULT_KERNEL_CREDIT;
     sqe->sqeLength = 0U;
 }
@@ -52,11 +52,11 @@ HcclUBNotifyWaitSqe::HcclUBNotifyWaitSqe()
 {
     sqe = std::make_unique<Rt91095StarsNotifySqe>();
     (void)memset_s(sqe.get(), sizeof(Rt91095StarsNotifySqe), 0, sizeof(Rt91095StarsNotifySqe));
-    sqe->header.ie = RtStarsSqeIntDirType::RT_STARS_SQE_INT_DIR_NO;
-    sqe->header.preP = RtStarsSqeIntDirType::RT_STARS_SQE_INT_DIR_NO;
-    sqe->header.postP = RtStarsSqeIntDirType::RT_STARS_SQE_INT_DIR_NO;
+    sqe->header.ie = static_cast<uint8_t>(RtStarsSqeIntDirType::RT_STARS_SQE_INT_DIR_NO);
+    sqe->header.preP = static_cast<uint8_t>(RtStarsSqeIntDirType::RT_STARS_SQE_INT_DIR_NO);
+    sqe->header.postP = static_cast<uint8_t>(RtStarsSqeIntDirType::RT_STARS_SQE_INT_DIR_NO);
     sqe->header.wrCqe = 0U;
-    sqe->header.headUpdate = RtStarsSqeIntDirType::RT_STARS_SQE_INT_DIR_NO;
+    sqe->header.headUpdate = static_cast<uint8_t>(RtStarsSqeIntDirType::RT_STARS_SQE_INT_DIR_NO);
 
     sqe->kernelCredit = RT_STARS_NEVER_TIMEOUT_KERNEL_CREDIT;
     sqe->header.type = static_cast<uint8_t>(Rt91095StarsSqeType::RT_91095_SQE_TYPE_NOTIFY_WAIT);
@@ -83,11 +83,11 @@ HcclUBNotifyRecordSqe::HcclUBNotifyRecordSqe()
 {
     sqe = std::make_unique<Rt91095StarsNotifySqe>();
     (void)memset_s(sqe.get(), sizeof(Rt91095StarsNotifySqe), 0, sizeof(Rt91095StarsNotifySqe));
-    sqe->header.ie = RtStarsSqeIntDirType::RT_STARS_SQE_INT_DIR_NO;
-    sqe->header.preP = RtStarsSqeIntDirType::RT_STARS_SQE_INT_DIR_NO;
-    sqe->header.postP = RtStarsSqeIntDirType::RT_STARS_SQE_INT_DIR_NO;
+    sqe->header.ie = static_cast<uint8_t>(RtStarsSqeIntDirType::RT_STARS_SQE_INT_DIR_NO);
+    sqe->header.preP = static_cast<uint8_t>(RtStarsSqeIntDirType::RT_STARS_SQE_INT_DIR_NO);
+    sqe->header.postP = static_cast<uint8_t>(RtStarsSqeIntDirType::RT_STARS_SQE_INT_DIR_NO);
     sqe->header.wrCqe = 0U;
-    sqe->header.headUpdate = RtStarsSqeIntDirType::RT_STARS_SQE_INT_DIR_NO;
+    sqe->header.headUpdate = static_cast<uint8_t>(RtStarsSqeIntDirType::RT_STARS_SQE_INT_DIR_NO);
     sqe->header.type = static_cast<uint8_t>(Rt91095StarsSqeType::RT_91095_SQE_TYPE_NOTIFY_RECORD);
     sqe->kernelCredit = RT_STARS_DEFAULT_KERNEL_CREDIT;
     sqe->clrFlag = 0U;

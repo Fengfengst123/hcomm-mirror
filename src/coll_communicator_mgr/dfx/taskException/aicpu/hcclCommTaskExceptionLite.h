@@ -84,8 +84,6 @@ private:
     u32 GetRemoteRankId(const Hccl::DfxTaskInfo& taskInfo);
     std::string GetConciseTaskName(const Hccl::DfxTaskInfo& taskInfo);
     std::string GetNotifyInfo(const Hccl::DfxTaskInfo& taskInfo);
-    u32 GetNotifyIdFromSqe(u64 sqeAddr);
-    void GetSdmaSqeFields(u64 sqeAddr, u64& src, u64& dst, u64& size);
     u32 GetOpIndex(const Hccl::DfxTaskInfo* taskInfo);
     void PrintOpDataInfo(const Hccl::DfxTaskInfo* taskInfo);
     // dpu相关

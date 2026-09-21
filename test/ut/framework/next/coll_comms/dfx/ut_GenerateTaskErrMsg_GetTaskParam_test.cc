@@ -29,7 +29,6 @@
 #include "rtsq_base.h"
 #include "task_param.h"
 #include "error_message_v2.h"
-#include "sqe_a5.h"
 
 using namespace hccl;
 using namespace hcomm;
@@ -60,16 +59,6 @@ static Hccl::DfxTaskInfo MakeDfxTaskInfo(u8 taskType)
     return taskInfo;
 }
 
-static Hccl::Rt91095StarsNotifySqe
-MakeNotifySqe(uint32_t notifyId, uint32_t cntValue, Hccl::Rt91095StarsSqeType sqeType)
-{
-    Hccl::Rt91095StarsNotifySqe sqe = {};
-    sqe.header.type = static_cast<uint8_t>(sqeType);
-    sqe.notifyId = notifyId;
-    sqe.cntValue = cntValue;
-    return sqe;
-}
-
 static rtLogicCqReport_t MakeExceptionInfo(uint32_t errorCode = 0xAB, uint8_t errorType = 1)
 {
     rtLogicCqReport_t info{};
@@ -80,9 +69,8 @@ static rtLogicCqReport_t MakeExceptionInfo(uint32_t errorCode = 0xAB, uint8_t er
 
 TEST_F(TaskErrMsgTest, Ut_GenerateTaskErrMsg_When_NotifyWait_Expect_NotifyFieldsSet)
 {
-    auto sqe = MakeNotifySqe(100, 200, Hccl::Rt91095StarsSqeType::RT_91095_SQE_TYPE_NOTIFY_WAIT);
     auto taskInfo = MakeDfxTaskInfo(static_cast<u8>(Hccl::TaskParamTypeVal::TASK_NOTIFY_WAIT));
-    taskInfo.taskPara.Notify.sqeAddr = reinterpret_cast<u64>(&sqe);
+    taskInfo.taskPara.Notify.notifyId = 100;
     auto exceptionInfo = MakeExceptionInfo();
     Hccl::ErrorMessageReport errMsgInfo{};
 
@@ -94,9 +82,8 @@ TEST_F(TaskErrMsgTest, Ut_GenerateTaskErrMsg_When_NotifyWait_Expect_NotifyFields
 
 TEST_F(TaskErrMsgTest, Ut_GenerateTaskErrMsg_When_NotifyRecord_Expect_NotifyFieldsSet)
 {
-    auto sqe = MakeNotifySqe(300, 400, Hccl::Rt91095StarsSqeType::RT_91095_SQE_TYPE_NOTIFY_RECORD);
     auto taskInfo = MakeDfxTaskInfo(static_cast<u8>(Hccl::TaskParamTypeVal::TASK_NOTIFY_RECORD));
-    taskInfo.taskPara.Notify.sqeAddr = reinterpret_cast<u64>(&sqe);
+    taskInfo.taskPara.Notify.notifyId = 300;
     auto exceptionInfo = MakeExceptionInfo();
     Hccl::ErrorMessageReport errMsgInfo{};
 
