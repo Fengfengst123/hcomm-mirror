@@ -18,7 +18,8 @@
 #include "acl/acl.h"
 
 constexpr int32_t ONEPATH_FEATURE_SUPPORT_VERSION = 90200000;
-constexpr int32_t ALPHA = 200; // alpha/内部版本号比正式版本低 200
+constexpr int32_t ALPHA = 200;                      // alpha/内部版本号比正式版本低 200
+constexpr uint8_t UB_PATH_MODE_DEFAULT_VAL = 0xFFU; // UB_MEM pathMode 未配置哨兵值，归一化前为 0XFFU
 namespace Hccl {
 RemoteIpcRmaBuffer::RemoteIpcRmaBuffer() : RemoteRmaBuffer(RmaType::IPC), isOpened(false) {}
 
@@ -83,7 +84,8 @@ bool RemoteIpcRmaBuffer::OpenIpcMemory()
     HCCL_RUN_INFO("[GetRuntimeVersion] rts version is %d pathMode is %u.", rtsVersion, pathMode_);
 
     const int32_t rtsVersionThreshold = ONEPATH_FEATURE_SUPPORT_VERSION - ALPHA;
-    if (rtsVersion < rtsVersionThreshold) {
+    // rts 版本不支持 onepath, 或pathMode 为配置哨兵值(非 UB_MEM 协议透传 0XFF)时，走 legacy 流程
+    if (rtsVersion < rtsVersionThreshold || pathMode_ == UB_PATH_MODE_DEFAULT_VAL) {
         return OpenIpcMemoryLegacy();
     }
 

@@ -274,6 +274,31 @@ TEST_F(RemoteRmaBufferTest, remoteipcrmabuffer_open_new_path_with_pathmode_two_m
     EXPECT_EQ(g_capturedSetAttrValue, static_cast<uint64_t>(ACL_RT_IPC_MEM_ATTR_ACCESS_LINK_UB_MULTI_PORT_PATH));
 };
 
+TEST_F(RemoteRmaBufferTest, remoteipcrmabuffer_open_with_pathmode_default_goes_legacy)
+{
+    ExchangeIpcBufferDto dto;
+    dto.addr = 0x1000;
+    dto.offset = 0x100;
+    dto.size = 0x200;
+    dto.pid = 0;
+    dto.memInfo = "test";
+    (void)memcpy_s(dto.name, RTS_IPC_MEM_NAME_LEN, "fakeName", sizeof("fakeName"));
+
+    g_capturedSetAttrValue = 0;
+    g_capturedSetAttrCallCount = 0;
+    void* fakePtr = reinterpret_cast<void*>(0x2000);
+    MOCKER(HrtDeviceGetBareTgid).stubs().will(returnValue(100));
+    MOCKER(aclsysGetVersionNum).stubs().will(invoke(AclsysGetVersionNumHigh));
+    MOCKER(aclrtIpcMemSetAttr).stubs().will(invoke(AclrtIpcMemSetAttrSuccess));
+    MOCKER(aclrtIpcMemImportByKey).stubs().with(outBoundP(&fakePtr, sizeof(fakePtr))).will(returnValue(ACL_SUCCESS));
+
+    RemoteIpcRmaBuffer buffer(dto, 0xFF);
+
+    EXPECT_TRUE(buffer.isOpened);
+    EXPECT_EQ(g_capturedSetAttrCallCount, 0u);
+    EXPECT_EQ(buffer.GetAddr(), reinterpret_cast<uintptr_t>(fakePtr) + dto.offset);
+};
+
 TEST_F(RemoteRmaBufferTest, remoteipcrmabuffer_open_new_path_with_pathmode_one_link_type_not_supported_no_fallback)
 {
     ExchangeIpcBufferDto dto;
