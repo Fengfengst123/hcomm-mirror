@@ -71,14 +71,14 @@ HcclResult RankInfoDetect::SetupServer(HcclRootHandleV2& rootHandle)
     HCCL_DEBUG("[RankInfoDetect::%s] setup server start.", __func__);
 
     // host网卡使能
-    HccpPeerManager::GetInstance().Init(devLogicId_);
+    TRY_CATCH_RETURN(HccpPeerManager::GetInstance().Init(devLogicId_));
 
     // 获取LocalHostIP
-    hostIp_ = GetBootstrapIp(devPhyId_);
+    TRY_CATCH_RETURN(hostIp_ = GetBootstrapIp(devPhyId_));
     CHK_PRT_RET(hostIp_.IsInvalid(), HCCL_ERROR("[RankInfoDetect::%s] get hostIp fail.", __func__), HCCL_E_INTERNAL);
 
     // 获取端口号port
-    hostPort_ = GetHostListenPort();
+    TRY_CATCH_RETURN(hostPort_ = GetHostListenPort());
 
     // 1. 创建serverSocket，启动监听并获取实际端口
     shared_ptr<Socket> serverSocket = nullptr;
@@ -378,7 +378,8 @@ HcclResult RankInfoDetect::WaitComplete(u32 listenPort, u32 listenStatus) const
         HcclResult::HCCL_SUCCESS);
 
     const auto start = chrono::steady_clock::now();
-    const auto timeout = std::chrono::seconds(EnvConfig::GetInstance().GetSocketConfig().GetLinkTimeOut());
+    std::chrono::seconds timeout(0);
+    TRY_CATCH_RETURN(timeout = std::chrono::seconds(EnvConfig::GetInstance().GetSocketConfig().GetLinkTimeOut()));
 
     u32 status = RANKINFO_DETECT_SERVER_STATUS_RUNING;
     while (true) {
