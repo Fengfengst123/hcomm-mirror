@@ -240,7 +240,7 @@ HcclResult HostCpuUrmaChannel::GetUserRemoteMem(CommMem** remoteMem, char*** mem
 ChannelStatus HostCpuUrmaChannel::GetStatus()
 {
     memTransport_->SetIsHost();
-    ChannelStatus out = Channel::TransportStatusToChannelStatus(memTransport_->GetStatus(), localEp_, channelDesc_);
+    ChannelStatus out = TransportStatusToChannelStatus(memTransport_->GetStatus(), localEp_, channelDesc_);
     if (out == ChannelStatus::READY && socket_ != nullptr) {
         hcomm::SocketMgr::GetInstance(devicePhyId_).PutSocket(socketConfig_, socket_);
     }

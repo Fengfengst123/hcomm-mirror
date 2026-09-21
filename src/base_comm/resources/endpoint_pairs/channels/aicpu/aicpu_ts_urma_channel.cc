@@ -285,7 +285,7 @@ HcclResult AicpuTsUrmaChannel::GetRemoteMems(uint32_t* memNum, CommMem** remoteM
 
 ChannelStatus AicpuTsUrmaChannel::GetStatus()
 {
-    ChannelStatus out = Channel::TransportStatusToChannelStatus(memTransport_->GetStatus(), localEp_, GetChannelDesc());
+    ChannelStatus out = TransportStatusToChannelStatus(memTransport_->GetStatus(), localEp_, GetChannelDesc());
 
     if (isFirstPrintChannelInfo_ && out == ChannelStatus::READY) {
         std::string channelInfo = "create channel info:channel handle[";

@@ -212,7 +212,7 @@ HcclResult HostCpuUrmaChannel::GetRemoteMems(uint32_t* memNum, CommMem** remoteM
 ChannelStatus HostCpuUrmaChannel::GetStatus()
 {
     memTransport_->SetIsHost();
-    ChannelStatus out = Channel::TransportStatusToChannelStatus(memTransport_->GetStatus(), localEp_, GetChannelDesc());
+    ChannelStatus out = TransportStatusToChannelStatus(memTransport_->GetStatus(), localEp_, GetChannelDesc());
     return out;
 }
 

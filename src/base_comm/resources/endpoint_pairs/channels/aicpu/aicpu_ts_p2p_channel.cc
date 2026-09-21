@@ -188,7 +188,7 @@ HcclResult AicpuTsP2pChannel::GetRemoteMems(uint32_t* memNum, CommMem** remoteMe
 
 ChannelStatus AicpuTsP2pChannel::GetStatus()
 {
-    ChannelStatus out = Channel::TransportStatusToChannelStatus(memTransport_->GetStatus(), localEp_, GetChannelDesc());
+    ChannelStatus out = TransportStatusToChannelStatus(memTransport_->GetStatus(), localEp_, GetChannelDesc());
     return out;
 }
 

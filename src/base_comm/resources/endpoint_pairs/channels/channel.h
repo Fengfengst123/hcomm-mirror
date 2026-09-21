@@ -99,7 +99,7 @@ public:
     Channel(const Channel&) = delete;
     Channel& operator=(const Channel&) = delete;
 
-    // 视需要决定是否允许移动；很多资源类也会禁移动
+    // 允许移动；Channel 不支持多线程并发访问，日志去重状态以普通成员维护即可
     Channel(Channel&&) = default;
     Channel& operator=(Channel&&) = default;
 
@@ -137,7 +137,7 @@ public:
     void* GetNicCtx() const { return nicCtx_; }
 
     // ------------------ 工具方法 ------------------
-    static ChannelStatus TransportStatusToChannelStatus(
+    ChannelStatus TransportStatusToChannelStatus(
         Hccl::TransportStatus ts, const EndpointDesc& localEp, const HcommChannelDesc& channelDesc);
 
     // ------------------ 共享 Jetty 模式 ------------------
@@ -158,6 +158,8 @@ public:
 
 protected:
     void ReleasePtrArrayDevMems();
+
+    Hccl::TransportStatus lastTransportStatus_{Hccl::TransportStatus::__COUNT__};
 
     HcommChannelKind channelKind_{HcommChannelKind::INVALID};
     CommEngine engine_{COMM_ENGINE_RESERVED};

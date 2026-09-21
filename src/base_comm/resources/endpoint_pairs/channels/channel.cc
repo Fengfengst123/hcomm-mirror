@@ -138,25 +138,28 @@ ChannelStatus Channel::TransportStatusToChannelStatus(
 {
     const EndpointDesc& remoteEp = channelDesc.remoteEndpoint;
 
-    if (Hccl::GetPlfDebugConfigValue() & PLF_CHANNEL) {
-        Hccl::IpAddress localAddr{};
-        std::string localEid = "invalid";
-        if (CommAddrToIpAddress(localEp.commAddr, localAddr) == HCCL_SUCCESS) {
-            localEid = localAddr.Describe();
+    if (ts != lastTransportStatus_) {
+        lastTransportStatus_ = ts;
+        if (Hccl::GetPlfDebugConfigValue() & PLF_CHANNEL) {
+            Hccl::IpAddress localAddr{};
+            std::string localEid = "invalid";
+            if (CommAddrToIpAddress(localEp.commAddr, localAddr) == HCCL_SUCCESS) {
+                localEid = localAddr.Describe();
+            }
+
+            Hccl::IpAddress remoteAddr{};
+            std::string remoteEid = "invalid";
+            if (CommAddrToIpAddress(remoteEp.commAddr, remoteAddr) == HCCL_SUCCESS) {
+                remoteEid = remoteAddr.Describe();
+            }
+
+            const char* socketTag = channelDesc.channelName != nullptr ? channelDesc.channelName : "anonymous";
+
+            PLF_CONFIG_INFO(
+                PLF_CHANNEL, "status[%d], protocol[%s], localEid[%s], remoteEid[%s], socketTag[%s].",
+                static_cast<int>(ts), GetEnumToString(GetCommProtocolStrMap(), remoteEp.protocol).c_str(),
+                localEid.c_str(), remoteEid.c_str(), socketTag);
         }
-
-        Hccl::IpAddress remoteAddr{};
-        std::string remoteEid = "invalid";
-        if (CommAddrToIpAddress(remoteEp.commAddr, remoteAddr) == HCCL_SUCCESS) {
-            remoteEid = remoteAddr.Describe();
-        }
-
-        const char* socketTag = channelDesc.channelName != nullptr ? channelDesc.channelName : "anonymous";
-
-        PLF_CONFIG_INFO(
-            PLF_CHANNEL, "status[%d], protocol[%s], localEid[%s], remoteEid[%s], socketTag[%s].", static_cast<int>(ts),
-            GetEnumToString(GetCommProtocolStrMap(), remoteEp.protocol).c_str(), localEid.c_str(), remoteEid.c_str(),
-            socketTag);
     }
     switch (ts) {
         case Hccl::TransportStatus::INIT:

@@ -72,7 +72,7 @@ public:
     Channel(const Channel&) = delete;
     Channel& operator=(const Channel&) = delete;
 
-    // 视需要决定是否允许移动；很多资源类也会禁移动
+    // 允许移动；Channel 不支持多线程并发访问，日志去重状态以普通成员维护即可
     Channel(Channel&&) = default;
     Channel& operator=(Channel&&) = default;
 
@@ -99,7 +99,7 @@ public:
     virtual HcclResult ChannelFence() = 0;
 
     // ------------------ 工具方法 ------------------
-    static ChannelStatus TransportStatusToChannelStatus(
+    ChannelStatus TransportStatusToChannelStatus(
         Hccl::TransportStatus ts, const EndpointDesc& localEp, const HcommChannelDesc& channelDesc);
 
     // ------------------ 工厂 ------------------
@@ -108,6 +108,8 @@ public:
 
 protected:
     void ReleasePtrArrayDevMems();
+
+    Hccl::TransportStatus lastTransportStatus_{Hccl::TransportStatus::__COUNT__};
 
     HcommChannelKind channelKind_{HcommChannelKind::INVALID};
     std::vector<std::shared_ptr<hccl::DeviceMem>> ptrArrayDevMems_{};

@@ -45,7 +45,7 @@ HcclResult AivUbMemChannel::Init()
 
 ChannelStatus AivUbMemChannel::GetStatus()
 {
-    return Channel::TransportStatusToChannelStatus(transport_->GetStatus(), localEp_, GetChannelDesc());
+    return TransportStatusToChannelStatus(transport_->GetStatus(), localEp_, GetChannelDesc());
 }
 
 HcclResult AivUbMemChannel::GetNotifyNum([[maybe_unused]] uint32_t* notifyNum) const
