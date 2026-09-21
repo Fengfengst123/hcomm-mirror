@@ -12,7 +12,6 @@
 #define CCU_MICROCODE_H
 
 #include <cstdint>
-#include <cstdlib>
 #include <string>
 #include <unordered_map>
 namespace hcomm {
@@ -1048,14 +1047,14 @@ namespace CcuRep {
             CcuInstr* instr, uint16_t dstAddr, uint16_t dstToken, uint16_t srcId, uint16_t channelId, uint16_t setCKEId,
             uint16_t setCKEMask);
         void ReduceAdd(
-            CcuInstr* instr, const uint16_t* ms, uint16_t count, uint16_t castEn, uint16_t dataType, uint16_t setCKEId,
-            uint16_t setCKEMask, uint16_t XnIdLength);
+            CcuInstr* instr, const uint16_t (&ms)[CCU_REDUCE_MAX_MS], uint16_t count, uint16_t castEn,
+            uint16_t dataType, uint16_t setCKEId, uint16_t setCKEMask, uint16_t XnIdLength);
         void ReduceMax(
-            CcuInstr* instr, const uint16_t* ms, uint16_t count, uint16_t dataType, uint16_t setCKEId,
-            uint16_t setCKEMask, uint16_t XnIdLength);
+            CcuInstr* instr, const uint16_t (&ms)[CCU_REDUCE_MAX_MS], uint16_t count, uint16_t dataType,
+            uint16_t setCKEId, uint16_t setCKEMask, uint16_t XnIdLength);
         void ReduceMin(
-            CcuInstr* instr, const uint16_t* ms, uint16_t count, uint16_t dataType, uint16_t setCKEId,
-            uint16_t setCKEMask, uint16_t XnIdLength);
+            CcuInstr* instr, const uint16_t (&ms)[CCU_REDUCE_MAX_MS], uint16_t count, uint16_t dataType,
+            uint16_t setCKEId, uint16_t setCKEMask, uint16_t XnIdLength);
         void RelJmp(CcuInstr* instr, uint16_t targetXnId, uint32_t jmpInstrId, uint16_t xn0, uint16_t xn1);
         std::string ParseInstrV2(const CcuInstr* instr);
     }; // namespace CcuV2

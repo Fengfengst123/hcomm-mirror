@@ -12,6 +12,7 @@
 #define TP_MGR_H
 
 #include <cstdint>
+#include <atomic>
 #include <functional>
 #include <mutex>
 #include <vector>
@@ -228,7 +229,7 @@ private:
 
 private:
     bool initFlag_{false};
-    uint32_t devPhyId_{0};
+    std::atomic<uint32_t> devPhyId_{0};
 
     InfoCtxMap ctpInfoMap_;
     ReqCtxMap ctpReqMap_;

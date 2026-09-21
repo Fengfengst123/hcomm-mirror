@@ -143,7 +143,7 @@ HcclResult RtsqBase::GetStreamIdAndTaskIdBySqIdx(u32 sqIdx, uint16_t& streamId, 
         return HCCL_E_PARA;
     }
 
-    Rt91095StarsNotifySqe* sqe = (Rt91095StarsNotifySqe*)(sqBaseAddr_ + sqIdx * RTSQ_SQE_SIZE);
+    Rt91095StarsNotifySqe* sqe = reinterpret_cast<Rt91095StarsNotifySqe*>(sqBaseAddr_ + sqIdx * RTSQ_SQE_SIZE);
     streamId = sqe->header.rtStreamId;
     taskId = sqe->header.taskId;
     HCCL_INFO("[%s]sqId:%u, streamId:%u, taskId:%u", __func__, sqId_, streamId, taskId);

@@ -33,8 +33,8 @@ struct CcuLoopInfo;
 struct CcuVersionOps {
     const char* name;
     void (*printCcumDfxInfo)(const void* rawData, std::ostringstream& oss);
-    HcclResult (*getMissionInfo)(const void* rawData, CcuMissionInfo* out);
-    HcclResult (*getLoopInfo)(const void* rawData, CcuLoopInfo* out);
+    HcclResult (*getMissionInfo)(const void* rawData, size_t rawLen, CcuMissionInfo* out);
+    HcclResult (*getLoopInfo)(const void* rawData, size_t rawLen, CcuLoopInfo* out);
 };
 
 HcclResult GetCcuOps(const CcuVersionOps*& ops);
@@ -318,7 +318,7 @@ TEST_F(CcuTaskExceptionDecodeTest, Ut_GetCcuMissionAndLoopInfoV1_WhenRawIsValid_
     missionCtx.part7.startIns = 0x3;
 
     CcuMissionInfo missionInfo{};
-    ASSERT_EQ(ops->getMissionInfo(&missionCtx, &missionInfo), HCCL_SUCCESS);
+    ASSERT_EQ(ops->getMissionInfo(&missionCtx, sizeof(missionCtx), &missionInfo), HCCL_SUCCESS);
     EXPECT_EQ(missionInfo.currentIns, static_cast<uint16_t>(0x2923));
     EXPECT_EQ(missionInfo.endIns, static_cast<uint16_t>(0x2155));
     EXPECT_EQ(missionInfo.startIns, static_cast<uint16_t>(0x1811));
@@ -331,7 +331,7 @@ TEST_F(CcuTaskExceptionDecodeTest, Ut_GetCcuMissionAndLoopInfoV1_WhenRawIsValid_
     loopCtx.part12.addrStride = 0x12A;
 
     CcuLoopInfo loopInfo{};
-    ASSERT_EQ(ops->getLoopInfo(&loopCtx, &loopInfo), HCCL_SUCCESS);
+    ASSERT_EQ(ops->getLoopInfo(&loopCtx, sizeof(loopCtx), &loopInfo), HCCL_SUCCESS);
     EXPECT_EQ(loopInfo.currentCnt, static_cast<uint16_t>(0x1234));
     const uint32_t expectedAddrStride
         = static_cast<uint32_t>(0x15) | (static_cast<uint32_t>(0x2345) << 6) | (static_cast<uint32_t>(0x12A) << 22);
@@ -358,7 +358,7 @@ TEST_F(CcuTaskExceptionDecodeTest, Ut_GetCcuMissionAndLoopInfoV2_WhenRawIsValid_
     missionCtx.part7.startIns = 0x3;
 
     CcuMissionInfo missionInfo{};
-    ASSERT_EQ(ops->getMissionInfo(&missionCtx, &missionInfo), HCCL_SUCCESS);
+    ASSERT_EQ(ops->getMissionInfo(&missionCtx, sizeof(missionCtx), &missionInfo), HCCL_SUCCESS);
     EXPECT_EQ(missionInfo.currentIns, static_cast<uint16_t>(0x6B2A));
     EXPECT_EQ(missionInfo.endIns, static_cast<uint16_t>(0xB1A));
     EXPECT_EQ(missionInfo.startIns, static_cast<uint16_t>(0x711));
@@ -370,7 +370,7 @@ TEST_F(CcuTaskExceptionDecodeTest, Ut_GetCcuMissionAndLoopInfoV2_WhenRawIsValid_
     loopCtx.part7.addrStride = 0x3F;
 
     CcuLoopInfo loopInfo{};
-    ASSERT_EQ(ops->getLoopInfo(&loopCtx, &loopInfo), HCCL_SUCCESS);
+    ASSERT_EQ(ops->getLoopInfo(&loopCtx, sizeof(loopCtx), &loopInfo), HCCL_SUCCESS);
     EXPECT_EQ(loopInfo.currentCnt, static_cast<uint16_t>(0x456));
     const uint32_t expectedAddrStride
         = static_cast<uint32_t>(0x1AA) | (static_cast<uint32_t>(0x155) << 9) | (static_cast<uint32_t>(0x3F) << 25);
@@ -753,7 +753,7 @@ TEST_F(CcuTaskExceptionDecodeTest, Ut_GetCcuMissionInfoV1_WhenRawDataIsNull_Expe
     ASSERT_NE(ops->getMissionInfo, nullptr);
 
     CcuMissionInfo missionInfo{};
-    EXPECT_NE(ops->getMissionInfo(nullptr, &missionInfo), HCCL_SUCCESS);
+    EXPECT_NE(ops->getMissionInfo(nullptr, 0, &missionInfo), HCCL_SUCCESS);
 }
 
 TEST_F(CcuTaskExceptionDecodeTest, Ut_GetCcuMissionInfoV1_WhenOutIsNull_ExpectErrorReturned)
@@ -766,7 +766,7 @@ TEST_F(CcuTaskExceptionDecodeTest, Ut_GetCcuMissionInfoV1_WhenOutIsNull_ExpectEr
     ASSERT_NE(ops->getMissionInfo, nullptr);
 
     CcuMissionContext ctx{};
-    EXPECT_NE(ops->getMissionInfo(&ctx, nullptr), HCCL_SUCCESS);
+    EXPECT_NE(ops->getMissionInfo(&ctx, sizeof(ctx), nullptr), HCCL_SUCCESS);
 }
 
 TEST_F(CcuTaskExceptionDecodeTest, Ut_GetCcuLoopInfoV1_WhenRawDataIsNull_ExpectErrorReturned)
@@ -779,7 +779,7 @@ TEST_F(CcuTaskExceptionDecodeTest, Ut_GetCcuLoopInfoV1_WhenRawDataIsNull_ExpectE
     ASSERT_NE(ops->getLoopInfo, nullptr);
 
     CcuLoopInfo loopInfo{};
-    EXPECT_NE(ops->getLoopInfo(nullptr, &loopInfo), HCCL_SUCCESS);
+    EXPECT_NE(ops->getLoopInfo(nullptr, 0, &loopInfo), HCCL_SUCCESS);
 }
 
 TEST_F(CcuTaskExceptionDecodeTest, Ut_GetCcuLoopInfoV1_WhenOutIsNull_ExpectErrorReturned)
@@ -792,7 +792,7 @@ TEST_F(CcuTaskExceptionDecodeTest, Ut_GetCcuLoopInfoV1_WhenOutIsNull_ExpectError
     ASSERT_NE(ops->getLoopInfo, nullptr);
 
     CcuLoopContext ctx{};
-    EXPECT_NE(ops->getLoopInfo(&ctx, nullptr), HCCL_SUCCESS);
+    EXPECT_NE(ops->getLoopInfo(&ctx, sizeof(ctx), nullptr), HCCL_SUCCESS);
 }
 
 TEST_F(CcuTaskExceptionDecodeTest, Ut_GetCcuMissionInfoV2_WhenRawDataIsNull_ExpectErrorReturned)
@@ -805,7 +805,7 @@ TEST_F(CcuTaskExceptionDecodeTest, Ut_GetCcuMissionInfoV2_WhenRawDataIsNull_Expe
     ASSERT_NE(ops->getMissionInfo, nullptr);
 
     CcuMissionInfo missionInfo{};
-    EXPECT_NE(ops->getMissionInfo(nullptr, &missionInfo), HCCL_SUCCESS);
+    EXPECT_NE(ops->getMissionInfo(nullptr, 0, &missionInfo), HCCL_SUCCESS);
 }
 
 TEST_F(CcuTaskExceptionDecodeTest, Ut_GetCcuMissionInfoV2_WhenOutIsNull_ExpectErrorReturned)
@@ -818,7 +818,7 @@ TEST_F(CcuTaskExceptionDecodeTest, Ut_GetCcuMissionInfoV2_WhenOutIsNull_ExpectEr
     ASSERT_NE(ops->getMissionInfo, nullptr);
 
     CcuMissionContextV2 ctx{};
-    EXPECT_NE(ops->getMissionInfo(&ctx, nullptr), HCCL_SUCCESS);
+    EXPECT_NE(ops->getMissionInfo(&ctx, sizeof(ctx), nullptr), HCCL_SUCCESS);
 }
 
 TEST_F(CcuTaskExceptionDecodeTest, Ut_GetCcuLoopInfoV2_WhenRawDataIsNull_ExpectErrorReturned)
@@ -831,7 +831,7 @@ TEST_F(CcuTaskExceptionDecodeTest, Ut_GetCcuLoopInfoV2_WhenRawDataIsNull_ExpectE
     ASSERT_NE(ops->getLoopInfo, nullptr);
 
     CcuLoopInfo loopInfo{};
-    EXPECT_NE(ops->getLoopInfo(nullptr, &loopInfo), HCCL_SUCCESS);
+    EXPECT_NE(ops->getLoopInfo(nullptr, 0, &loopInfo), HCCL_SUCCESS);
 }
 
 TEST_F(CcuTaskExceptionDecodeTest, Ut_GetCcuLoopInfoV2_WhenOutIsNull_ExpectErrorReturned)
@@ -844,7 +844,7 @@ TEST_F(CcuTaskExceptionDecodeTest, Ut_GetCcuLoopInfoV2_WhenOutIsNull_ExpectError
     ASSERT_NE(ops->getLoopInfo, nullptr);
 
     CcuLoopContextV2 ctx{};
-    EXPECT_NE(ops->getLoopInfo(&ctx, nullptr), HCCL_SUCCESS);
+    EXPECT_NE(ops->getLoopInfo(&ctx, sizeof(ctx), nullptr), HCCL_SUCCESS);
 }
 
 } // namespace hcomm

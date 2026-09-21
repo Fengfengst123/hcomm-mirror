@@ -65,7 +65,7 @@ public:
     RdmaHandle GetRdmaHandle() const { return rdmaHandle_; }
 
 private:
-    HcclResult GetMemAllocAddrRange(const HcommMem& mem, MemKey& allocKey);
+    HcclResult GetMemAllocAddrRange(const HcommMem& mem, MemKey& allocKey) const;
 
     HcclResult
     RegisterByMemAllocAddrRange(const HcommMem& mem, const char* memTag, void** memHandle, const MemKey& allocKey);

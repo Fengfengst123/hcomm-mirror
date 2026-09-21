@@ -16,7 +16,7 @@
 
 namespace Hccl {
 HcclResult HrtHalDrvQueryProcessHostPid(
-    int pid, unsigned int* chipId, unsigned int* vfid, unsigned int* hostPid, unsigned int* cpType)
+    const int pid, unsigned int* chipId, unsigned int* vfid, unsigned int* hostPid, unsigned int* cpType)
 {
     CHK_PTR_NULL(hostPid);
     // 和底软确认，chipId、vfid、hostPid、cpType不需要校验空指针，如果传入空指针表示当前不获取该值

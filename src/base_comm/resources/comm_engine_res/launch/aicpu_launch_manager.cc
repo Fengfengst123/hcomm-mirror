@@ -26,7 +26,7 @@ HcclResult AicpuLaunchMgr::KernelLaunch(OpParam& opParam, ApiParam& apiParam, rt
 }
 
 HcclResult AicpuLaunchMgr::KernelLaunchAicpuCustom(
-    uint64_t context, std::string kernelName, rtStream_t aicpuInitStream, aclrtBinHandle binCustomHandle)
+    uint64_t context, const std::string& kernelName, rtStream_t aicpuInitStream, aclrtBinHandle binCustomHandle)
 {
     uint32_t envTimeout = 0;
     DevType devType;

@@ -22,12 +22,12 @@ CcuResPack::~CcuResPack() { CcuReleaseRes(); }
 
 void CcuResPack::CcuReleaseRes()
 {
-    if (resHandle_ != 0) {
+    if (resHandle_ != nullptr) {
         auto ret = CcuReleaseResHandle(userDevId_, resHandle_);
         if (ret != HcclResult::HCCL_SUCCESS) {
             HCCL_ERROR("[CcuResPack][%s] failed, resHandle[%p] userDevId[%d].", __func__, resHandle_, userDevId_);
         }
-        resHandle_ = 0;
+        resHandle_ = nullptr;
     }
 
     // 释放countXn block

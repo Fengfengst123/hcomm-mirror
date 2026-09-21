@@ -10,9 +10,9 @@
 
 #ifndef DFX_CIRCULAR_QUEUE_H
 #define DFX_CIRCULAR_QUEUE_H
-#include "cast_utils.h"
 #include <cstring>
 #include "securec.h"
+#include "cast_utils.h"
 #include "hccl/base.h"
 #include "log.h"
 #include "res_pub.h"

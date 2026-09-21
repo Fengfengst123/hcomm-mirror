@@ -36,7 +36,7 @@ namespace CcuRep {
         const RemoteAddr& GetVarAddr() const { return varAddr; }
         const Variable& GetTarget() const { return targetValue; }
         CompletedEvent GetSem() { return sem; }
-        uint16_t GetMask() { return mask; }
+        uint16_t GetMask() const { return mask; }
 
     private:
         CcuInsGeneratorBase* insGenPtr{nullptr};

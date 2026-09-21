@@ -20,6 +20,7 @@
 #include "hccp_peer_manager.h"
 #include "mgr/endpoint_ctx_mgr.h"
 #include "hcomm_res_mgr.h"
+#include "../../common/orion_adpt_utils.h"
 
 namespace hcomm {
 CpuUrmaEndpoint::CpuUrmaEndpoint(const EndpointDesc& endpointDesc) : Endpoint(endpointDesc) {}

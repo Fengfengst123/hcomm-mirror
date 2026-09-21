@@ -46,12 +46,12 @@ HcclResult TransportUrmaMem::FillRmaBufferSlice(
     auto remoteBuffer = static_cast<RemoteUbRmaBuffer*>(remoteHcclBuf.second->handle);
 
     u64 localDataOffSet
-        = static_cast<u8*>(localAddr) - static_cast<u8*>((void*)(localBuffer.second->GetBuf()->GetAddr()));
+        = static_cast<u8*>(localAddr) - static_cast<u8*>(ReinterpretAs<void*>(localBuffer.second->GetBuf()->GetAddr()));
     u64 remoteDataOffSet
         = static_cast<u8*>(remoteAddr) - static_cast<u8*>(ReinterpretAs<void*>(remoteBuffer->GetAddr()));
 
-    localRmaBufferSlice.addr
-        = ReinterpretAs<u64>(static_cast<u8*>((void*)(localBuffer.second->GetBuf()->GetAddr())) + localDataOffSet);
+    localRmaBufferSlice.addr = ReinterpretAs<u64>(
+        static_cast<u8*>(ReinterpretAs<void*>(localBuffer.second->GetBuf()->GetAddr())) + localDataOffSet);
     localRmaBufferSlice.size = byteSize;
     localRmaBufferSlice.buf = localBuffer.second.get();
 

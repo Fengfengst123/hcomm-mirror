@@ -94,6 +94,9 @@ public:
 private:
     ProcRegedMemMgrCache() = default;
 
+    struct MakeSharedEnabler;
+    friend struct MakeSharedEnabler;
+
     std::mutex mtx_;
     std::unordered_map<MemMgrCacheKey, MemMgrEntry, MemMgrCacheKeyHash> cacheMap_;
 };

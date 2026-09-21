@@ -130,7 +130,7 @@ void ProfilingHandlerLite::ReportHcclOpInfo(const DfxOpInfo& opInfo) const
     hcclOpInfo->groupName = cachedGroupName_;
     hcclOpInfo->ranksize = cachedRankSize_;
     HCCL_INFO(
-        "[ProfilingHandlerLite][ReportHcclOpInfo] relay:%d, retry:%d, dataType:%s, algType:%llu, count:%llu, "
+        "[ProfilingHandlerLite][ReportHcclOpInfo] relay:%u, retry:%u, dataType:%s, algType:%llu, count:%llu, "
         "groupName:%llu, ranksize:%u, taskId:%u, streamId:%u",
         hcclOpInfo->relay, hcclOpInfo->retry, DataTypeToSerialString(hcclOpInfo->dataType).c_str(),
         static_cast<unsigned long long>(hcclOpInfo->algType), static_cast<unsigned long long>(hcclOpInfo->count),

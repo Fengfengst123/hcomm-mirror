@@ -18,6 +18,7 @@
 #include "hccl_types.h"
 #include "log.h"
 #include "rdma_handle_manager.h"
+#include "../../../../common/orion_adpt_utils.h"
 
 #include "eid_info_mgr.h"
 #include "ccu_res_specs.h"

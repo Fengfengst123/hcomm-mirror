@@ -198,7 +198,7 @@ private:
         const uint8_t* sqePtr, AddrRefreshInfo& srcAddrRefreshInfo, AddrRefreshInfo& dstAddrRefreshInfo) const;
     HcclResult UpdateWqeAddrRefreshInfoAndTokenInfo_(
         const Hccl::WqeTask& wqeTask, AddrRefreshInfo& locAddrRefreshInfo, AddrRefreshInfo& rmtAddrRefreshInfo,
-        std::vector<TokenInfo>& tokenInfos);
+        std::vector<TokenInfo>& tokenInfos) const;
     inline HcclResult UpdateTokenFlagsByAddrRefreshInfo_(
         const AddrRefreshInfo& addrRefreshInfo, std::vector<TokenInfo>& tokenInfos, bool isLoc) const;
     inline HcclResult UpdateAddrRefreshInfo_(

@@ -16,6 +16,7 @@
 #include "ub_mem_reged_mem_mgr.h"
 #include "proc_reged_mem_mgr_cache.h"
 #include "hccl_mem_defs.h"
+#include "../../common/orion_adpt_utils.h"
 
 namespace hcomm {
 UbMemEndpoint::UbMemEndpoint(const EndpointDesc& endpointDesc) : Endpoint(endpointDesc) {}

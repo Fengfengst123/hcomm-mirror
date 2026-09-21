@@ -285,7 +285,7 @@ HcclResult AicpuTsThread::LocalNotifyWait(uint32_t notifyId, uint32_t timeout) c
     return HCCL_SUCCESS;
 }
 
-HcclResult AicpuTsThread::LocalCopyReport(u32 taskId, u64 srcAddr, u64 dstAddr, u64 size) const
+HcclResult AicpuTsThread::LocalCopyReport(uint32_t taskId, uint64_t srcAddr, uint64_t dstAddr, uint64_t size) const
 {
     Hccl::StreamLite* sl = static_cast<Hccl::StreamLite*>(GetStreamLitePtr());
     auto* slot = sl->NextTaskSlot();
@@ -305,8 +305,8 @@ HcclResult AicpuTsThread::LocalCopyReport(u32 taskId, u64 srcAddr, u64 dstAddr, 
     return HCCL_SUCCESS;
 }
 
-HcclResult
-AicpuTsThread::LocalReduceReport(u32 taskId, void* dst, const void* src, uint64_t size, HcommReduceOp reduceOp) const
+HcclResult AicpuTsThread::LocalReduceReport(
+    uint32_t taskId, void* dst, const void* src, uint64_t size, HcommReduceOp reduceOp) const
 {
     Hccl::StreamLite* sl = static_cast<Hccl::StreamLite*>(GetStreamLitePtr());
     auto* slot = sl->NextTaskSlot();
@@ -459,7 +459,7 @@ HcclResult AicpuTsThread::DeviceInit()
     return HCCL_SUCCESS;
 }
 
-HcclResult AicpuTsThread::GetSqHeadAndTail([[maybe_unused]] uint32_t& sqHead, [[maybe_unused]] uint32_t& sqTail)
+HcclResult AicpuTsThread::GetSqHeadAndTail([[maybe_unused]] uint32_t& sqHead, [[maybe_unused]] uint32_t& sqTail) const
 {
 #ifdef CCL_KERNEL_AICPU
 

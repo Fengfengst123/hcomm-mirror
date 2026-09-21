@@ -15,7 +15,7 @@ constexpr u32 THREAD_VECTOR_DEFAULT_SIZE = 128; // 设置vector初始长度，�
 constexpr u32 NOTIFY_WAIT_TIMEOUT_OFFSET = 27;  // AICPU device侧notify等待超时偏移量
 
 extern HcclResult CommTaskLaunch(ThreadHandle* threads, uint32_t threadNum); // host ffts+或aicpu stars使用"
-extern HcclResult CommTaskPrepare(char* key, uint32_t keyLen);               // host ffts+使用
+extern HcclResult CommTaskPrepare(const char* key, uint32_t keyLen);         // host ffts+使用
 extern HcclResult DispatchAllStreams(const ThreadHandle* threads, uint32_t threadNum);
 
 LaunchContext::LaunchContext() { threadVec_.reserve(THREAD_VECTOR_DEFAULT_SIZE); }
@@ -155,7 +155,7 @@ HcclResult LaunchContext::SetLaunchMode(const char* launchTag, HcommLaunchMode m
             HCCL_INFO("[%s] host mode, need CommTaskPrepare", __func__);
             if (!defaultTag) {
                 // 仅非缺省 tag 需要准备任务缓存
-                return CommTaskPrepare(const_cast<char*>(launchTag_.c_str()), launchTag_.length());
+                return CommTaskPrepare(launchTag_.c_str(), launchTag_.length());
             }
 #endif
             return HCCL_SUCCESS;

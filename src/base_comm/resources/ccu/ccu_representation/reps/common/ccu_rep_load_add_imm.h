@@ -29,7 +29,7 @@ namespace CcuRep {
         uint16_t GetSrcId() { return src.Id(); }
         uint16_t GetSrcOffsetId() { return srcOffset.Id(); }
         uint16_t GetDstId() { return dst.Id(); }
-        uint16_t GetImmAddValue() { return immAddValue; }
+        uint16_t GetImmAddValue() const { return immAddValue; }
 
         const Variable& GetSrc() const { return src; }
         const Variable& GetSrcOffset() const { return srcOffset; }

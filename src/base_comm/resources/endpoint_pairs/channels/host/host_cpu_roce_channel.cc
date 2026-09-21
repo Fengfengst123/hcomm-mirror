@@ -1054,8 +1054,8 @@ HostCpuRoceChannel::WriteWithNotify(void* dst, const void* src, const uint64_t l
     uint64_t offset = 0;
     while (len - offset > maxMsgSize_) {
         CHK_RET(PostRdmaOp(
-            __func__, IBV_WR_RDMA_WRITE, static_cast<char*>(const_cast<void*>(src)) + offset,
-            static_cast<const char*>(dst) + offset, maxMsgSize_));
+            __func__, IBV_WR_RDMA_WRITE, static_cast<const char*>(src) + offset, static_cast<const char*>(dst) + offset,
+            maxMsgSize_));
         offset += maxMsgSize_;
     }
 
@@ -1118,8 +1118,8 @@ HostCpuRoceChannel::WriteWithNotify(void* dst, const void* src, const uint64_t l
 }
 
 void HostCpuRoceChannel::BuildRdmaWr(
-    [[maybe_unused]] const char* caller, ibv_wr_opcode opcode, void* localAddr, const void* remoteAddr, uint64_t len,
-    size_t localIdx, size_t rmtIdx, struct ibv_send_wr& wr, struct ibv_sge& sg) const
+    [[maybe_unused]] const char* caller, ibv_wr_opcode opcode, const void* localAddr, const void* remoteAddr,
+    uint64_t len, size_t localIdx, size_t rmtIdx, struct ibv_send_wr& wr, struct ibv_sge& sg) const
 {
     wr.sg_list = &sg;
     wr.sg_list->addr = ReinterpretAs<uint64_t>(localAddr);
@@ -1127,7 +1127,7 @@ void HostCpuRoceChannel::BuildRdmaWr(
     wr.sg_list->lkey = localRmaBuffers_[localIdx]->GetLkey();
 
     wr.opcode = opcode;
-    wr.send_flags = (fenceFlag_ ? (IBV_SEND_SIGNALED | IBV_SEND_FENCE) : IBV_SEND_SIGNALED);
+    wr.send_flags = fenceFlag_ ? static_cast<int>(IBV_SEND_SIGNALED | IBV_SEND_FENCE) : IBV_SEND_SIGNALED;
     wr.next = nullptr;
     wr.num_sge = 1;
     wr.wr_id = 0;
@@ -1135,8 +1135,8 @@ void HostCpuRoceChannel::BuildRdmaWr(
     wr.wr.rdma.remote_addr = ReinterpretAs<uint64_t>(remoteAddr);
 }
 
-HcclResult
-HostCpuRoceChannel::PostAndCheckSend(struct ibv_qp* qp, uint32_t qpIdx, const char* caller, struct ibv_send_wr& wr)
+HcclResult HostCpuRoceChannel::PostAndCheckSend(
+    struct ibv_qp* qp, const uint32_t qpIdx, const char* caller, struct ibv_send_wr& wr)
 {
     struct ibv_send_wr* badWr = nullptr;
     s32 ret = ibv_post_send(qp, &wr, &badWr);
@@ -1169,7 +1169,7 @@ HostCpuRoceChannel::PostAndCheckSend(struct ibv_qp* qp, uint32_t qpIdx, const ch
 }
 
 HcclResult HostCpuRoceChannel::PostRdmaOp(
-    const char* caller, ibv_wr_opcode opcode, void* localAddr, const void* remoteAddr, const uint64_t len)
+    const char* caller, ibv_wr_opcode opcode, const void* localAddr, const void* remoteAddr, const uint64_t len)
 {
     HCCL_INFO(
         "[HostCpuRoceChannel::%s] Slice START. localAddr[%p], remoteAddr[%p], len[0x%llx].", caller, localAddr,
@@ -1234,7 +1234,7 @@ HcclResult HostCpuRoceChannel::PostRdmaOp(
         struct ibv_send_wr wr {};
         struct ibv_sge sg;
         BuildRdmaWr(
-            caller, opcode, static_cast<char*>(localAddr) + offset, static_cast<const char*>(remoteAddr) + offset,
+            caller, opcode, static_cast<const char*>(localAddr) + offset, static_cast<const char*>(remoteAddr) + offset,
             wrLen, localIdx, rmtIdx, wr, sg);
         CHK_RET(PostAndCheckSend(qpInfo[i].qp, i, caller, wr));
         HCCL_INFO(
@@ -1256,8 +1256,8 @@ HcclResult HostCpuRoceChannel::Write(void* dst, const void* src, const uint64_t 
     while (offset < len) {
         uint64_t chunkLen = std::min(len - offset, maxMsgSize_);
         CHK_RET(PostRdmaOp(
-            __func__, IBV_WR_RDMA_WRITE, static_cast<char*>(const_cast<void*>(src)) + offset,
-            static_cast<const char*>(dst) + offset, chunkLen));
+            __func__, IBV_WR_RDMA_WRITE, static_cast<const char*>(src) + offset, static_cast<const char*>(dst) + offset,
+            chunkLen));
         offset += chunkLen;
     }
     HCCL_INFO(
@@ -1727,7 +1727,7 @@ HcclResult HostCpuRoceChannel::ParseRecvExchangeDataHybird()
     }
 
     Hccl::ExchangeRdmaBufferDto dto(
-        (u64)(remoteMemMsg_[static_cast<u32>(hccl::USER_OUTPUT_MEM)].addr),
+        ReinterpretAs<u64>(remoteMemMsg_[static_cast<u32>(hccl::USER_OUTPUT_MEM)].addr),
         remoteMemMsg_[static_cast<u32>(hccl::USER_OUTPUT_MEM)].len,
         remoteMemMsg_[static_cast<u32>(hccl::USER_OUTPUT_MEM)].lkey, "HcclBuffer");
     rmtRmaBuffers_.push_back(std::make_unique<Hccl::RemoteRdmaRmaBuffer>(rdmaHandle_, dto));

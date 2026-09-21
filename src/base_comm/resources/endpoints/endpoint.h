@@ -24,7 +24,6 @@
 #include "dfx/endpoint_monitor.h"
 #include "server_socket_context/server_socket_context.h"
 #include "mgr/endpoint_ctx_mgr.h"
-#include "../../common/orion_adpt_utils.h"
 
 namespace hcomm {
 

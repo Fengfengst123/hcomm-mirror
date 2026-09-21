@@ -71,7 +71,7 @@ namespace CcuRep {
         return mainBlock->GetReps();
     }
 
-    std::shared_ptr<CcuRep::CcuRepBase> CcuRepContext::GetRepByInstrId(uint16_t instrId)
+    std::shared_ptr<CcuRep::CcuRepBase> CcuRepContext::GetRepByInstrId(uint16_t instrId) const
     {
         for (const auto& rep : GetRepSequence()) {
             CHK_PRT_RET(rep == nullptr, HCCL_ERROR("[%s]fail, rep is nullptr", __func__), nullptr);
@@ -89,7 +89,7 @@ namespace CcuRep {
         return nullptr;
     }
 
-    void CcuRepContext::DumpReprestation()
+    void CcuRepContext::DumpReprestation() const
     {
         HCCL_INFO("Rep Count: %lu", GetRepSequence().size());
         for (uint32_t index = 0; index < GetRepSequence().size(); index++) {

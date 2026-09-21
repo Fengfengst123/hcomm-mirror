@@ -735,7 +735,7 @@ HcclResult AicpuTaskCacheEntry::UpdateSqeAddrRefreshInfo_(
 
 HcclResult AicpuTaskCacheEntry::UpdateWqeAddrRefreshInfoAndTokenInfo_(
     const WqeTask& wqeTask, AddrRefreshInfo& locAddrRefreshInfo, AddrRefreshInfo& rmtAddrRefreshInfo,
-    vector<TokenInfo>& tokenInfos)
+    vector<TokenInfo>& tokenInfos) const
 {
     // 参考ub_conn_lite.cc, 提取给定WQE的AddrRefreshInfo
 

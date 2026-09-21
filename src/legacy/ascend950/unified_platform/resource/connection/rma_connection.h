@@ -16,9 +16,10 @@
 #include "remote_rma_buffer.h"
 #include "stream.h"
 #include "serializable.h"
-#include "socket.h"
 
 namespace Hccl {
+
+class Socket;
 
 struct MemoryBuffer {
     u64 addr{0};

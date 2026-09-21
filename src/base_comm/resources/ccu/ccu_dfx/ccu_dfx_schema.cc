@@ -134,10 +134,16 @@ namespace {
         dump("MCM_DFX", info.dfxInfo.ccumMcmDfx, info.bs.mcmDfx != 0U);
     }
 
-    HcclResult GetCcuMissionInfoV1(const void* rawData, CcuMissionInfo* out)
+    HcclResult GetCcuMissionInfoV1(const void* rawData, size_t rawLen, CcuMissionInfo* out)
     {
         if (rawData == nullptr || out == nullptr) {
             HCCL_ERROR("[GetCcuMissionInfoV1] invalid input: rawData=%p, out=%p", rawData, out);
+            return HCCL_E_PARA;
+        }
+        if (rawLen < sizeof(CcuMissionContext)) {
+            HCCL_ERROR(
+                "[GetCcuMissionInfoV1] rawLen[%zu] < sizeof(CcuMissionContext)[%zu]", rawLen,
+                sizeof(CcuMissionContext));
             return HCCL_E_PARA;
         }
         CcuMissionContext ctx{};
@@ -152,10 +158,14 @@ namespace {
         return HCCL_SUCCESS;
     }
 
-    HcclResult GetCcuLoopInfoV1(const void* rawData, CcuLoopInfo* out)
+    HcclResult GetCcuLoopInfoV1(const void* rawData, size_t rawLen, CcuLoopInfo* out)
     {
         if (rawData == nullptr || out == nullptr) {
             HCCL_ERROR("[GetCcuLoopInfoV1] invalid input: rawData=%p, out=%p", rawData, out);
+            return HCCL_E_PARA;
+        }
+        if (rawLen < sizeof(CcuLoopContext)) {
+            HCCL_ERROR("[GetCcuLoopInfoV1] rawLen[%zu] < sizeof(CcuLoopContext)[%zu]", rawLen, sizeof(CcuLoopContext));
             return HCCL_E_PARA;
         }
         CcuLoopContext ctx{};
@@ -169,10 +179,16 @@ namespace {
         return HCCL_SUCCESS;
     }
 
-    HcclResult GetCcuMissionInfoV2(const void* rawData, CcuMissionInfo* out)
+    HcclResult GetCcuMissionInfoV2(const void* rawData, size_t rawLen, CcuMissionInfo* out)
     {
         if (rawData == nullptr || out == nullptr) {
             HCCL_ERROR("[GetCcuMissionInfoV2] invalid input: rawData=%p, out=%p", rawData, out);
+            return HCCL_E_PARA;
+        }
+        if (rawLen < sizeof(CcuMissionContextV2)) {
+            HCCL_ERROR(
+                "[GetCcuMissionInfoV2] rawLen[%zu] < sizeof(CcuMissionContextV2)[%zu]", rawLen,
+                sizeof(CcuMissionContextV2));
             return HCCL_E_PARA;
         }
 
@@ -188,10 +204,15 @@ namespace {
         return HCCL_SUCCESS;
     }
 
-    HcclResult GetCcuLoopInfoV2(const void* rawData, CcuLoopInfo* out)
+    HcclResult GetCcuLoopInfoV2(const void* rawData, size_t rawLen, CcuLoopInfo* out)
     {
         if (rawData == nullptr || out == nullptr) {
             HCCL_ERROR("[GetCcuLoopInfoV2] invalid input: rawData=%p, out=%p", rawData, out);
+            return HCCL_E_PARA;
+        }
+        if (rawLen < sizeof(CcuLoopContextV2)) {
+            HCCL_ERROR(
+                "[GetCcuLoopInfoV2] rawLen[%zu] < sizeof(CcuLoopContextV2)[%zu]", rawLen, sizeof(CcuLoopContextV2));
             return HCCL_E_PARA;
         }
 

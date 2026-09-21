@@ -1031,7 +1031,7 @@ namespace CcuRep {
     }
 
     HcclResult CcuInsGeneratorV2::CcuRepJumpTranslateV2Base(
-        CcuInstr* const& curInstr, uint16_t& curInstrId, CcuRepJumpBase* jumpBasePtr, uint64_t expected,
+        const CcuInstr* const& curInstr, const uint16_t& curInstrId, CcuRepJumpBase* jumpBasePtr, uint64_t expected,
         const Variable& condition, const Variable& expectedVar, ConditionType condType) const
     {
         (void)curInstr;

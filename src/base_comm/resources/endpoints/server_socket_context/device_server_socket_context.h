@@ -26,12 +26,12 @@ public:
     DeviceServerSocketContext(
         Hccl::ConnectProtoType protoType, uint32_t devPhyId, EndpointLocType locType, const CommAddr& commAddr);
     ~DeviceServerSocketContext() override; // 析构期内虚表仍指向本类，显式调非虚停止监听实现
-    HcclResult ServerSocketListen(uint32_t port) override;
-    HcclResult ServerSocketStopListen(uint32_t port) override;
+    HcclResult ServerSocketListen(const uint32_t port) override;
+    HcclResult ServerSocketStopListen(const uint32_t port) override;
     HcclResult ServerSocketGetListenPort(uint32_t* port) override;
 
 private:
-    HcclResult ServerSocketStopListenImpl(uint32_t port);
+    HcclResult ServerSocketStopListenImpl(const uint32_t port);
     Hccl::ConnectProtoType protoType_;
     uint32_t devPhyId_;       // 构造时从 endpointDesc_.loc.device.devPhyId 传入
     EndpointLocType locType_; // 构造时传入，用于前置检查

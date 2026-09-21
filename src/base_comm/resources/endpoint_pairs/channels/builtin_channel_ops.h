@@ -18,14 +18,14 @@
 #include "channel_process.h"
 #include "dtype_common.h"
 // CreateBuiltinChannel 已调用 channelPtr->Init()，此处 no-op，此接口内置流程暂未调用。
-inline int32_t BuiltinChannelInit(void* ctx)
+inline int32_t BuiltinChannelInit(void* const ctx)
 {
     (void)ctx;
     return HCCL_SUCCESS;
 }
 
 // channel 生命周期由 g_ChannelMap 的 unique_ptr 管理，此处 no-op，此接口内置流程暂未调用。
-inline int32_t BuiltinChannelDestroy(void* ctx)
+inline int32_t BuiltinChannelDestroy(void* const ctx)
 {
     (void)ctx;
     return HCCL_SUCCESS;

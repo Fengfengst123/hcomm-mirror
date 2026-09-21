@@ -54,7 +54,7 @@ public:
 private:
     static HcclResult Init(u32 devicePhyId, u32 deviceLogicId);
     void UnInit();
-    HcclResult ServerDeInit(const HcclIpAddress& localIp, u32 port);
+    HcclResult ServerDeInit(const HcclIpAddress& localIp, u32 port) const;
     HcclResult
     GetListenSocket(const HcclIpAddress& localIp, uint32_t port, std::shared_ptr<hccl::HcclSocket>& listenSocket) const;
     HcclResult AddListenSocketWhiteList(

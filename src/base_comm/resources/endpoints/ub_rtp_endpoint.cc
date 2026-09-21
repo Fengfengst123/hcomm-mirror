@@ -17,6 +17,7 @@
 #include "rdma_handle_manager.h"
 #include "mgr/endpoint_ctx_mgr.h"
 #include "hcomm_res_mgr.h"
+#include "../../common/orion_adpt_utils.h"
 
 namespace hcomm {
 

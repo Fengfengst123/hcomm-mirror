@@ -33,7 +33,7 @@
 
 using namespace hccl;
 
-extern HcclResult CommTaskPrepare(char* key, uint32_t keyLen);
+extern HcclResult CommTaskPrepare(const char* key, uint32_t keyLen);
 extern HcclResult CommTaskLaunch(ThreadHandle* threads, uint32_t threadNum);
 
 class DispatcherAiCpu_UT : public testing::Test {

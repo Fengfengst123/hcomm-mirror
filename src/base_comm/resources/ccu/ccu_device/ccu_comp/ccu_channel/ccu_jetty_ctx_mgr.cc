@@ -174,7 +174,7 @@ static HcclResult GetSqeBuffVa(const uint64_t ccuResBaseVa, const uint32_t jetty
 }
 
 HcclResult CcuJettyCtxMgr::TryAllocWqeBBResource(
-    const uint32_t sqSize, uint32_t jettyCtxStartId, uint32_t taJettyStartId, CcuJettyType jettyType,
+    const uint32_t sqSize, const uint32_t jettyCtxStartId, const uint32_t taJettyStartId, const CcuJettyType jettyType,
     std::vector<JettyInfo>& jettyInfos)
 {
     const uint32_t jettyNum = jettyInfos.size();

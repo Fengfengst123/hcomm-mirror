@@ -417,7 +417,7 @@ aclrtStream HrtStreamCreateWithFlags(uint32_t priority, uint32_t flag)
 void HrtStreamDestroy(aclrtStream ptr)
 {
     HcclUs startut = TIME_NOW();
-    if (GetPlfDebugConfigValue() & PLF_RES) {
+    if ((GetPlfDebugConfigValue() & PLF_RES) != 0) {
         s32 deviceId = HrtGetDevice();
         s32 streamId = HrtGetStreamId(ptr);
         PLF_CONFIG_INFO(PLF_RES, "Destroy Stream para: deviceId[%d] streamId[%d]", deviceId, streamId);
@@ -490,7 +490,7 @@ void* HrtMalloc(u64 size, aclrtMemType_t memType)
     aclrtMallocAttribute attrs{.attr = ACL_RT_MEM_ATTR_MODULE_ID, .value = moduleIdValue};
     aclrtMallocConfig cfg{.attrs = &attrs, .numAttrs = 1};
     ret = aclrtMallocWithCfg(&devPtr, size, static_cast<aclrtMemMallocPolicy>(memType), &cfg);
-    if (GetPlfDebugConfigValue() & PLF_RES) {
+    if ((GetPlfDebugConfigValue() & PLF_RES) != 0) {
         PLF_CONFIG_INFO(
             PLF_RES, "ret[%d] size[%llu] memType[%d] devPtr[%p] deviceId[%d]", ret, size, memType, devPtr,
             HrtGetDevice());
@@ -524,7 +524,7 @@ void* HrtMalloc(u64 size, aclrtMemType_t memType)
 
 void HrtFree(void* devPtr)
 {
-    if (GetPlfDebugConfigValue() & PLF_RES) {
+    if ((GetPlfDebugConfigValue() & PLF_RES) != 0) {
         PLF_CONFIG_INFO(PLF_RES, "Free DevMem para: deviceId[%d] devPtr[%p]", HrtGetDevice(), devPtr);
     }
     aclError ret = aclrtFree(devPtr);
@@ -772,7 +772,7 @@ aclrtNotify HrtNotifyCreate(s32 deviceLogicId)
             HCCL_ERROR_CODE(HcclResult::HCCL_E_RUNTIME), ret, deviceLogicId, ptr);
         MACRO_THROW(RuntimeApiException, msg);
     }
-    if (GetPlfDebugConfigValue() & PLF_RES) {
+    if ((GetPlfDebugConfigValue() & PLF_RES) != 0) {
         PLF_CONFIG_INFO(PLF_RES, "Create Notify para: deviceId[%d] notifyId[%u]", HrtGetDevice(), HrtGetNotifyID(ptr));
     }
     return ptr;
@@ -781,7 +781,7 @@ aclrtNotify HrtNotifyCreate(s32 deviceLogicId)
 void HrtNotifyDestroy(RtNotify_t ptr)
 {
     HcclUs startut = TIME_NOW();
-    if (GetPlfDebugConfigValue() & PLF_RES) {
+    if ((GetPlfDebugConfigValue() & PLF_RES) != 0) {
         s32 deviceId = HrtGetDevice();
         u32 notifyId = HrtGetNotifyID(ptr);
         PLF_CONFIG_INFO(PLF_RES, "Destroy Notify para: deviceId[%d] notifyId[%u]", deviceId, notifyId);
@@ -1008,7 +1008,7 @@ aclrtCntNotify HrtCntNotifyCreate(u32 deviceId)
         string msg = StringFormat("Call aclrtCntNotifyCreate failed");
         THROW<RuntimeApiException>(msg);
     }
-    if (GetPlfDebugConfigValue() & PLF_RES) {
+    if ((GetPlfDebugConfigValue() & PLF_RES) != 0) {
         PLF_CONFIG_INFO(
             PLF_RES, "Create Notify para: deviceId[%d] notifyId[%u]", HrtGetDevice(), HrtGetCntNotifyId(handle));
     }
@@ -1030,7 +1030,7 @@ u32 HrtGetCntNotifyId(const aclrtCntNotify inCntNotify)
 
 void HrtCntNotifyDestroy(const aclrtCntNotify inCntNotify)
 {
-    if (GetPlfDebugConfigValue() & PLF_RES) {
+    if ((GetPlfDebugConfigValue() & PLF_RES) != 0) {
         s32 deviceId = HrtGetDevice();
         u32 notifyId = HrtGetCntNotifyId(inCntNotify);
         PLF_CONFIG_INFO(PLF_RES, "Destroy Notify para: deviceId[%d] notifyId[%u]", deviceId, notifyId);
@@ -1098,7 +1098,7 @@ aclrtNotify HrtNotifyCreateWithFlag(u32 devId, u32 flag)
             = StringFormat("Call rtNotifyCreateWithFlag failed. return[%d], devId[%u], flag[%u].", ret, devId, flag);
         THROW<RuntimeApiException>(msg);
     }
-    if (GetPlfDebugConfigValue() & PLF_RES) {
+    if ((GetPlfDebugConfigValue() & PLF_RES) != 0) {
         PLF_CONFIG_INFO(PLF_RES, "Create Notify para: deviceId[%d] notifyId[%u]", HrtGetDevice(), HrtGetNotifyID(ptr));
     }
     return ptr;
@@ -1297,7 +1297,7 @@ aclrtEvent HrtEventCreateWithFlag(u32 flag)
     HCCL_INFO("[HrtEventCreateWithFlag] flag[%u].", flag);
     aclrtEvent ptr = nullptr;
     aclError ret = aclrtCreateEventWithFlag(&ptr, flag);
-    if (GetPlfDebugConfigValue() & PLF_RES) {
+    if ((GetPlfDebugConfigValue() & PLF_RES) != 0) {
         PLF_CONFIG_INFO(PLF_RES, "Create Event para: deviceId[%d] event[%p]", HrtGetDevice(), ptr);
     }
     if (ret != ACL_SUCCESS) {
@@ -1309,7 +1309,7 @@ aclrtEvent HrtEventCreateWithFlag(u32 flag)
 
 void HrtEventDestroy(RtEvent_t eventPtr)
 {
-    if (GetPlfDebugConfigValue() & PLF_RES) {
+    if ((GetPlfDebugConfigValue() & PLF_RES) != 0) {
         PLF_CONFIG_INFO(PLF_RES, "Destroy Event para: deviceId[%d] event[%p]", HrtGetDevice(), eventPtr);
     }
     aclError ret = aclrtDestroyEvent(eventPtr);

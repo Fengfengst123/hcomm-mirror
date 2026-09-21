@@ -657,13 +657,13 @@ CcuResult CcuWriteVarAtomicAdd(
 }
 
 CcuResult CcuWriteWithCascCntInc(
-    CcuVariableHandle channelId, CcuRemoteAddrHandle remote, CcuLocalAddrHandle local, CcuVariableHandle len,
-    CcuRemoteAddrHandle inCntAddr)
+    CcuVariableHandle channelId, CcuRemoteAddrHandle remoteHandle, CcuLocalAddrHandle localHandle,
+    CcuVariableHandle len, CcuRemoteAddrHandle inCntAddr)
 {
     const uint32_t devLogicId = HcclGetThreadDeviceId();
     auto kernel = hcomm::CcuKernelMgr::GetInstance(devLogicId).GetCurrentKernel();
     CCU_CHK_PTR_NULL(kernel);
-    CCU_CHK_RET(kernel->WriteWithCascCntInc(channelId, remote, local, len, inCntAddr));
+    CCU_CHK_RET(kernel->WriteWithCascCntInc(channelId, remoteHandle, localHandle, len, inCntAddr));
     return CcuResult::CCU_SUCCESS;
 }
 

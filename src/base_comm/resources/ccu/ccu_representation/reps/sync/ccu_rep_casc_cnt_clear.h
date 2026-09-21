@@ -13,6 +13,8 @@
 
 #include "ccu_rep_base_v1.h"
 #include "ccu_datatype_v1.h"
+#include "ccu_types.h"
+#include "ccu_res_repo.h"
 
 namespace hcomm {
 namespace CcuRep {
@@ -25,12 +27,12 @@ namespace CcuRep {
         bool Translate(CcuKernel* ccuKernel, CcuInstr*& instr, uint16_t& instrId, const TransDep& dep) override;
         std::string Describe() override;
 
-        HcommCcuCascCntHandle GetCntHandle() { return cntHandle; }
+        HcommCcuCascCntHandle GetCntHandle() const { return cntHandle; }
         void SetCascCntBlock(CntXnBlock cascCntBlock) { cascCntBlock_ = cascCntBlock; }
         CntXnBlock& GetCascCntBlock() { return cascCntBlock_; }
-        CompletedEvent GetSem() { return sem; }
-        uint16_t GetSemId() { return sem.Id(); }
-        uint16_t GetMask() { return mask; }
+        CompletedEvent GetSem() const { return sem; }
+        uint16_t GetSemId() const { return sem.Id(); }
+        uint16_t GetMask() const { return mask; }
 
     private:
         CcuInsGeneratorBase* insGenPtr{nullptr};

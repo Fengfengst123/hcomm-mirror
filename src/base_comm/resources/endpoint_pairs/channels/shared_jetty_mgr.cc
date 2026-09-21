@@ -19,8 +19,8 @@ SharedJettyMgr& SharedJettyMgr::GetInstance()
     return instance;
 }
 
-HcclResult
-SharedJettyMgr::RegisterChannels(EndpointHandle endpointHandle, const ChannelHandle* channels, uint32_t channelNum)
+HcclResult SharedJettyMgr::RegisterChannels(
+    const EndpointHandle endpointHandle, const ChannelHandle* channels, uint32_t channelNum)
 {
     if (endpointHandle == nullptr || channels == nullptr || channelNum == 0) {
         HCCL_ERROR(

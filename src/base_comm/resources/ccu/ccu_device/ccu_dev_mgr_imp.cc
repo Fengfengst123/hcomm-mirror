@@ -552,12 +552,12 @@ HcclResult CcuDevMgrImp::AllocResHandle(const int32_t userDevId, const CcuResReq
     return ret;
 }
 
-HcclResult CcuDevMgrImp::ReleaseResHandle(const int32_t userDevId, const CcuResHandle handle)
+HcclResult CcuDevMgrImp::ReleaseResHandle(const int32_t userDevId, const CcuResHandle resHandle)
 {
     HcclResult ret;
     EXCEPTION_HANDLE_BEGIN
-    ret = CheckCcuOpenSourceEnable() ? CcuResBatchAllocator::GetInstance(userDevId).ReleaseResHandle(handle) :
-                                       Hccl::CcuResBatchAllocator::GetInstance(userDevId).ReleaseResHandle(handle);
+    ret = CheckCcuOpenSourceEnable() ? CcuResBatchAllocator::GetInstance(userDevId).ReleaseResHandle(resHandle) :
+                                       Hccl::CcuResBatchAllocator::GetInstance(userDevId).ReleaseResHandle(resHandle);
     EXCEPTION_HANDLE_END
     return ret;
 }

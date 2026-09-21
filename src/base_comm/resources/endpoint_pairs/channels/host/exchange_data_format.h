@@ -13,8 +13,8 @@
 
 #include <cstdint>
 #include <cstring>
-#include "hccl_common.h"
 #include "hccp_common.h"
+#include "hccl_common.h"
 
 namespace hcomm {
 

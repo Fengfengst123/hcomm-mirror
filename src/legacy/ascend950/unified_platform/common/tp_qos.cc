@@ -50,7 +50,7 @@ namespace {
         }
         uint32_t val = 0U;
         while (pos < cfg.size() && std::isdigit(static_cast<unsigned char>(cfg[pos])) != 0) {
-            val = val * kDecimalBase + static_cast<uint32_t>(cfg[pos] - '0');
+            val = val * kDecimalBase + static_cast<uint32_t>(static_cast<unsigned char>(cfg[pos]) - '0');
             ++pos;
         }
         out = val;

@@ -130,7 +130,7 @@ public:
         std::vector<NotifyHandle>& aicpuNotifys, uint32_t notifyNum, const std::string& commId,
         aclrtBinHandle binCustomHandle);
     static HcclResult KernelLaunchAicpuCustom(
-        uint64_t context, std::string kernelName, rtStream_t aicpuInitStream, aclrtBinHandle binCustomHandle);
+        uint64_t context, const std::string& kernelName, rtStream_t aicpuInitStream, aclrtBinHandle binCustomHandle);
 #ifndef CCL_KERNEL_AICPU
     static std::string
     GetBinNotifys(std::vector<std::unique_ptr<LocalNotify>>& newNotifys, const NotifyLoadType notifyType);

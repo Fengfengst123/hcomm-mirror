@@ -26,14 +26,14 @@ public:
 
     HcclResult Init(const struct HDCommunicateParams& params);
 
-    HcclResult Put(u32 offset, u32 length, u8* value);
+    HcclResult Put(u32 offset, u32 length, u8* value) const;
 
-    HcclResult Get(u32 offset, u32 length, u8* value);
+    HcclResult Get(u32 offset, u32 length, u8* value) const;
 
 private:
-    HcclResult Write(u32 offset, u32 length, u8* value);
-    HcclResult Read(u32 offset, u32 length, u8* value);
-    HcclResult UpdateCache(u32 timeoutSec);
+    HcclResult Write(u32 offset, u32 length, u8* value) const;
+    HcclResult Read(u32 offset, u32 length, u8* value) const;
+    HcclResult UpdateCache(u32 timeoutSec) const;
 
     std::unique_ptr<Buffer> devMem;
     u32 deviceLogicId{0xFFFFFFFF};
@@ -45,7 +45,7 @@ private:
     u32* tailCntAddr{nullptr};
     u32* devHeadCntAddr{nullptr};
     u32* devTailCntAddr{nullptr};
-    std::mutex shmLock;
+    mutable std::mutex shmLock;
 };
 } // namespace Hccl
 #endif // HCCLV2_HDC_LITE_H

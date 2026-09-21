@@ -15,7 +15,6 @@
 #include <mutex>
 #include "port.h"
 #include "hcomm_res_defs.h"
-#include "socket/socket.h"
 #include "externalinput_pub.h"
 #include "server_socket_context.h"
 
@@ -28,12 +27,12 @@ class HostServerSocketContext : public ServerSocketContext {
 public:
     HostServerSocketContext(Hccl::ConnectProtoType protoType, const CommAddr& commAddr);
     ~HostServerSocketContext() override; // 析构期内虚表仍指向本类，显式调非虚停止监听实现
-    HcclResult ServerSocketListen(uint32_t port) override;
-    HcclResult ServerSocketStopListen(uint32_t port) override;
+    HcclResult ServerSocketListen(const uint32_t port) override;
+    HcclResult ServerSocketStopListen(const uint32_t port) override;
     HcclResult ServerSocketGetListenPort(uint32_t* port) override;
 
 private:
-    HcclResult ServerSocketStopListenImpl(uint32_t port);
+    HcclResult ServerSocketStopListenImpl(const uint32_t port);
     // devPhyId 在每个方法内部调 hrtGetDevice + hrtGetDevicePhyIdByIndex 获取
     Hccl::ConnectProtoType protoType_;
     std::mutex portMutex_;

@@ -41,7 +41,7 @@ extern HcclResult HcclNetDevClose(HcclNetDev netDev);
  * @param[out] addr 返回的地址信息结构
  * @return 执行状态码 HcclResult
  */
-extern HcclResult HcclNetDevGetAddr(HcclNetDev netDev, HcclAddress* addr);
+extern HcclResult HcclNetDevGetAddr(const HcclNetDev netDev, HcclAddress* addr);
 
 /**
  * @brief 通过设备物理ID获取总线地址

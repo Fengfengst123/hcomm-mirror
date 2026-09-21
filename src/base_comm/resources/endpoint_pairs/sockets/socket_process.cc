@@ -15,6 +15,7 @@
 #include "exception_handler.h"
 #include "adapter_rts_common.h"
 #include "endpoint.h"
+#include "../../common/orion_adpt_utils.h"
 
 using namespace std;
 

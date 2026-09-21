@@ -46,7 +46,7 @@ HcclResult HDCommunicateLite::Init(const struct HDCommunicateParams& params)
     return HCCL_SUCCESS;
 }
 
-HcclResult HDCommunicateLite::Put(u32 offset, u32 length, u8* value)
+HcclResult HDCommunicateLite::Put(u32 offset, u32 length, u8* value) const
 {
     if (length == 0) {
         return HCCL_SUCCESS;
@@ -63,7 +63,7 @@ HcclResult HDCommunicateLite::Put(u32 offset, u32 length, u8* value)
     return Write(offset, length, value);
 }
 
-HcclResult HDCommunicateLite::Get(u32 offset, u32 length, u8* value)
+HcclResult HDCommunicateLite::Get(u32 offset, u32 length, u8* value) const
 {
     if (length == 0) {
         return HCCL_SUCCESS;
@@ -79,7 +79,7 @@ HcclResult HDCommunicateLite::Get(u32 offset, u32 length, u8* value)
 
 #pragma GCC push_options
 #pragma GCC optimize("O0")
-HcclResult HDCommunicateLite::Write(u32 offset, u32 length, u8* value)
+HcclResult HDCommunicateLite::Write(u32 offset, u32 length, u8* value) const
 {
     if (length == 0) {
         return HCCL_SUCCESS;
@@ -101,7 +101,7 @@ HcclResult HDCommunicateLite::Write(u32 offset, u32 length, u8* value)
     return HCCL_SUCCESS;
 }
 
-HcclResult HDCommunicateLite::Read(u32 offset, u32 length, u8* value)
+HcclResult HDCommunicateLite::Read(u32 offset, u32 length, u8* value) const
 {
     if (length == 0) {
         return HCCL_SUCCESS;
@@ -121,7 +121,7 @@ HcclResult HDCommunicateLite::Read(u32 offset, u32 length, u8* value)
     return HCCL_SUCCESS;
 }
 
-HcclResult HDCommunicateLite::UpdateCache(u32 timeoutSec)
+HcclResult HDCommunicateLite::UpdateCache(u32 timeoutSec) const
 {
     void* srcBaseAddr = reinterpret_cast<void*>(devMem->GetAddr());
     u32* srcHeadCntAddr = HcclHdcGetControlWordAddr(srcBaseAddr, devMem->GetSize(), HCCL_HDC_HEAD_POS);

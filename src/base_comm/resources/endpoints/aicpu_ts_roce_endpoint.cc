@@ -16,6 +16,7 @@
 #include "hccl_network.h"
 #include "network_manager_pub.h"
 #include <exception>
+#include "../../common/orion_adpt_utils.h"
 
 namespace hcomm {
 

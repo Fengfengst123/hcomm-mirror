@@ -38,6 +38,7 @@
 #include <unordered_set>
 #include "shared_jetty_channel_pool.h"
 #include "hccl_log_keywords.h"
+#include "../../../base_comm/common/orion_adpt_utils.h"
 
 using namespace hcomm;
 

@@ -19,7 +19,9 @@
 #include "aicpu_launch_manager.h"
 #include "dfx_profiling_handler_lite.h"
 #include "dfx_dlprof_function.h"
+#ifdef CCL_KERNEL_AICPU
 #include "aicpu_indop_env.h"
+#endif
 #include "adapter_rts_common.h"
 
 using namespace std;

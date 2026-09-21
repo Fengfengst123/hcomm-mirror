@@ -50,8 +50,8 @@ namespace CcuRep {
         void SetCurrentBlock(std::shared_ptr<CcuRep::CcuRepBlock> repBlock);
         virtual void Append(std::shared_ptr<CcuRep::CcuRepBase> rep);
         const std::vector<std::shared_ptr<CcuRep::CcuRepBase>>& GetRepSequence() const;
-        std::shared_ptr<CcuRep::CcuRepBase> GetRepByInstrId(uint16_t instrId);
-        void DumpReprestation();
+        std::shared_ptr<CcuRep::CcuRepBase> GetRepByInstrId(uint16_t instrId) const;
+        void DumpReprestation() const;
 
         void SetDieId(uint32_t dieId);
         uint32_t GetDieId() const;

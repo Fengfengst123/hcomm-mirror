@@ -50,7 +50,8 @@ public:
      * @param[in] channelNum Channel 数量
      * @return HcclResult 执行结果
      */
-    HcclResult RegisterChannels(EndpointHandle endpointHandle, const ChannelHandle* channels, uint32_t channelNum);
+    HcclResult
+    RegisterChannels(const EndpointHandle endpointHandle, const ChannelHandle* channels, uint32_t channelNum);
 
     /**
      * @brief 注销 Channel

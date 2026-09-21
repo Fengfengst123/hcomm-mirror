@@ -252,7 +252,7 @@ int32_t HcommAclrtNotifyWaitOnThread(ThreadHandle thread, uint64_t notifyId, uin
     return HCCL_SUCCESS;
 }
 
-HcclResult CommTaskPrepare(char* key, uint32_t keyLen) // host ffts+使用
+HcclResult CommTaskPrepare(const char* key, uint32_t keyLen) // host ffts+使用
 {
     std::string keyStr = "temp_key";
     if (key != nullptr && keyLen != 0) {

@@ -10,6 +10,7 @@
 
 #include "ccuTaskException.h"
 #include "ccu_dfx_schema.h"
+#include "cast_utils.h"
 #include <algorithm>
 #include <memory>
 #include "log.h"
@@ -349,7 +350,7 @@ using GenErrorInfoLoopGroupFunc = HcclResult (*)(
 using GenErrorInfoByRepTypeFunc = void (*)(
     const ErrorInfoBase& baseInfo, std::shared_ptr<CcuRep::CcuRepBase> repBase, std::vector<CcuErrorInfo>& errorInfo);
 
-static HcclResult DecodeRawMissionInfo(const uint8_t* raw, CcuMissionInfo& out)
+static HcclResult DecodeRawMissionInfo(const uint8_t* raw, size_t rawLen, CcuMissionInfo& out)
 {
     const CcuVersionOps* ops = nullptr;
     if (GetCcuOps(ops) != HCCL_SUCCESS) {
@@ -360,7 +361,7 @@ static HcclResult DecodeRawMissionInfo(const uint8_t* raw, CcuMissionInfo& out)
         HCCL_ERROR("[DecodeRawMissionInfo] getMissionInfo is nullptr, ops[%s]", ops->name);
         return HCCL_E_INTERNAL;
     }
-    return ops->getMissionInfo(raw, &out);
+    return ops->getMissionInfo(raw, rawLen, &out);
 }
 
 static HcclResult FetchAndDecodeLoopInfo(int32_t deviceId, uint32_t dieId, uint32_t loopCtxId, CcuLoopInfo& out)
@@ -383,7 +384,7 @@ static HcclResult FetchAndDecodeLoopInfo(int32_t deviceId, uint32_t dieId, uint3
         HCCL_ERROR("[FetchAndDecodeLoopInfo] getLoopInfo is nullptr, ops[%s]", ops->name);
         return HCCL_E_INTERNAL;
     }
-    return ops->getLoopInfo(loopRaw, &out);
+    return ops->getLoopInfo(loopRaw, loopRawLen, &out);
 }
 
 // 计算报错指令附近可用 Rep 的起始指令，提取自 GetCcuErrorMsg 以降低其圈复杂度
@@ -426,7 +427,7 @@ static HcclResult ValidateAndDecodeMissionContext(
         HCCL_ERROR("[CcuErrorHandler][%s] Failed to fetch mission raw context, deviceId[%d]", __func__, deviceId);
         return HCCL_E_INTERNAL;
     }
-    if (DecodeRawMissionInfo(missionRaw, missionInfo) != HCCL_SUCCESS) {
+    if (DecodeRawMissionInfo(missionRaw, missionRawLen, missionInfo) != HCCL_SUCCESS) {
         HCCL_ERROR("[CcuErrorHandler][%s] Failed to decode mission info, deviceId[%d]", __func__, deviceId);
         return HCCL_E_INTERNAL;
     }
@@ -446,7 +447,7 @@ static HcclResult ResolveRepContextAndCurrentRep(
             ccuTaskParam.ccuKernelHandle),
         HCCL_E_PARA);
 
-    ctx = reinterpret_cast<CcuRep::CcuRepContext*>(kernel);
+    ctx = ReinterpretAs<CcuRep::CcuRepContext*>(kernel);
     CHK_PRT_RET(
         ctx == nullptr,
         HCCL_ERROR(

@@ -11,8 +11,6 @@
 #ifndef HCCLV2_EXCHANGE_RDMA_CONN_DTO_H
 #define HCCLV2_EXCHANGE_RDMA_CONN_DTO_H
 
-#include <string>
-#include "binary_stream.h"
 #include "serializable.h"
 
 constexpr uint32_t HYPER_FEATURE_LEN = 64U;

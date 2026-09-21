@@ -26,6 +26,8 @@ constexpr u32 FENCE_TIMEOUT_MS = 30 * 1000; // 定义最大等待30秒
 constexpr u32 MEMORY_BLOCK_SIZE = 128;
 constexpr uint16_t DEFAULT_LISTENING_PORT = 60001;
 constexpr uint32_t kHostResourceId = 0U;
+constexpr uint8_t URMA_PLACE_ORDER_NORMAL = 1;
+constexpr uint8_t URMA_PLACE_ORDER_STRONG = 2;
 
 HostCpuUrmaChannel::HostCpuUrmaChannel(EndpointHandle endpointHandle, const HcommChannelDesc& channelDesc)
     : endpointHandle_(endpointHandle),
@@ -329,7 +331,7 @@ HcclResult HostCpuUrmaChannel::UrmaPostJettySendWr(urma_opcode_t opcode, void* d
     // 构造urma的wr
     urma_jfs_wr_t urmaWriteWr{};
     urmaWriteWr.opcode = opcode;
-    urmaWriteWr.flag.bs.place_order = (fenceFlag_ == true ? 2 : 1);
+    urmaWriteWr.flag.bs.place_order = (fenceFlag_ == true ? URMA_PLACE_ORDER_STRONG : URMA_PLACE_ORDER_NORMAL);
     urmaWriteWr.flag.bs.comp_order = 1; // comp_order要一直保持为1,
     urmaWriteWr.flag.bs.fence = (fenceFlag_ == true ? 1 : 0);
     urmaWriteWr.flag.bs.complete_enable = 0;
@@ -372,7 +374,7 @@ HcclResult HostCpuUrmaChannel::UrmaPostJettySendWr(urma_opcode_t opcode, void* d
         // 只有最后一个wr上报cqe
         if (i == splitNum - 1) {
             urmaWriteWr.flag.bs.complete_enable = 1;
-            urmaWriteWr.flag.bs.place_order = 2; // 最后一个wr设置为strong order
+            urmaWriteWr.flag.bs.place_order = URMA_PLACE_ORDER_STRONG; // 最后一个wr设置为strong order
         }
         CHK_RET(hcomm::HrtUrmaPostJettySendWr(
             reinterpret_cast<urma_jetty_t*>(connections_[0]->GetJettyVa()), &urmaWriteWr, &badWr));

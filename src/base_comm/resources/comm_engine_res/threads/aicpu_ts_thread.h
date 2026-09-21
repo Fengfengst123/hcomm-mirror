@@ -59,7 +59,7 @@ public:
         void* dst, const void* src, uint64_t size, HcommDataType dataType, HcommReduceOp reduceOp) const override;
 
     // Non-override functions
-    HcclResult GetSqHeadAndTail(uint32_t& sqHead, uint32_t& sqTail);
+    HcclResult GetSqHeadAndTail(uint32_t& sqHead, uint32_t& sqTail) const;
     bool GetMaster() const override;
     void SetIsMaster(bool isMaster) override;
 
@@ -93,8 +93,9 @@ private:
 #ifdef CCL_KERNEL_AICPU
     HcclResult BuildComStreamInfo(const HcclStreamInfo& streamInfo, HcclComStreamInfo& comStreamInfo) const;
 #endif
-    HcclResult LocalCopyReport(u32 taskId, u64 srcAddr, u64 dstAddr, u64 size) const;
-    HcclResult LocalReduceReport(u32 taskId, void* dst, const void* src, uint64_t size, HcommReduceOp reduceOp) const;
+    HcclResult LocalCopyReport(uint32_t taskId, uint64_t srcAddr, uint64_t dstAddr, uint64_t size) const;
+    HcclResult
+    LocalReduceReport(uint32_t taskId, void* dst, const void* src, uint64_t size, HcommReduceOp reduceOp) const;
 
     // 成员变量（适配 AICPU-TS）
     bool isDeviceSide_ = false;

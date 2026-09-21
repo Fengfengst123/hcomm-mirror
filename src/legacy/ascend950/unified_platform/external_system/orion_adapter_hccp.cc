@@ -1300,7 +1300,7 @@ static u32 HrtGetJettyQpNum(void* ctxQpHandle)
     if (ctxQpHandle == nullptr) {
         return HRT_INVALID_QPN;
     }
-    return *reinterpret_cast<const u32*>(ctxQpHandle);
+    return *static_cast<const u32*>(ctxQpHandle);
 }
 
 void HrtRaQpDestroy(QpHandle qpHandle)

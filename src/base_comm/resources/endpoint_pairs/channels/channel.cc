@@ -140,7 +140,7 @@ ChannelStatus Channel::TransportStatusToChannelStatus(
 
     if (ts != lastTransportStatus_) {
         lastTransportStatus_ = ts;
-        if (Hccl::GetPlfDebugConfigValue() & PLF_CHANNEL) {
+        if ((Hccl::GetPlfDebugConfigValue() & PLF_CHANNEL) != 0) {
             Hccl::IpAddress localAddr{};
             std::string localEid = "invalid";
             if (CommAddrToIpAddress(localEp.commAddr, localAddr) == HCCL_SUCCESS) {

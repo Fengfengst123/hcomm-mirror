@@ -11,7 +11,7 @@
 #include "server_socket_mgr.h"
 #include "hccl_common.h"
 #include "exception_handler.h"
-#include "orion_adpt_utils.h"
+#include "../../../common/orion_adpt_utils.h"
 #include "socket_handle_manager.h"
 
 namespace hcomm {

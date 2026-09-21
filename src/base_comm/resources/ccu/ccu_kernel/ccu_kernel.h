@@ -268,7 +268,7 @@ public:
         CcuEventHandle eventHandle, uint32_t mask);
     CcuResult WriteWithCascCntInc(
         CcuVariableHandle channelIdHandle, CcuRemoteAddrHandle remoteHandle, CcuLocalAddrHandle localHandle,
-        CcuVariableHandle lenHandle, CcuRemoteAddrHandle inCntAddr);
+        CcuVariableHandle lenHandle, CcuRemoteAddrHandle inCntAddrHandle);
 
     CcuResult IfBegin(CcuVariableHandle varHandle, uint64_t immediate, CcuConditionType condType, const char* label);
     CcuResult

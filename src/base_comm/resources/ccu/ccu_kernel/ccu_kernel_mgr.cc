@@ -167,8 +167,8 @@ CcuResult CcuKernelMgr::Register(
 }
 
 CcuResult CcuKernelMgr::BuildKernel(
-    uint32_t dieId, const char* kernelFuncName, const void* kernelFunc, const void** kernelArgs, uint32_t argNum,
-    CcuInstance* ccuIns)
+    const uint32_t dieId, const char* kernelFuncName, const void* kernelFunc, const void** kernelArgs,
+    const uint32_t argNum, CcuInstance* ccuIns)
 {
     currKernel_ = std::make_unique<CcuKernel>(); // 重置待构建kernel
     // 执行算法流程时将资源占用临时记录在 die 0，后续确定实际 die 并迁移资源
@@ -186,9 +186,8 @@ CcuResult CcuKernelMgr::BuildKernel(
         CCU_CHK_PTR_NULL(kernelArgs);
         const void* kernelArg = kernelArgs[0];
         CCU_CHK_PTR_NULL(kernelArg);
-        const auto ccuKernelArg = const_cast<CcuKernelArg>(kernelArg);
         auto ccuKernelFunc = reinterpret_cast<CcuKernelFuncOneArg>(kernelFunc);
-        CCU_CHK_RET(ccuKernelFunc(ccuKernelArg)); // 执行算法流程，生成rep和计算资源占用
+        CCU_CHK_RET(ccuKernelFunc(const_cast<void*>(kernelArg))); // 执行算法流程，生成rep和计算资源占用
     }
 
     currKernel_->FlushClosablePendingIfs(); // 处理未闭合的if

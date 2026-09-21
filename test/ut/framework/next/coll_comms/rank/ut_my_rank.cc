@@ -32,6 +32,7 @@
 #include "hccl_comm_pub.h"
 #include "llt_hccl_stub_rank_graph.h"
 #include "ccu_res.h"
+#include "orion_adpt_utils.h"
 
 using namespace hccl;
 

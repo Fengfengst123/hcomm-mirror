@@ -21,8 +21,8 @@
 #include "enum_factory.h"
 #include "hccl_common.h"
 #include "mem_device_pub.h"
-#include <mutex>
 #include "hcomm/hcomm_res_entity_defs.h"
+#include "../host/exchange_rdma_conn_dto.h"
 
 // Orion
 #include "../../../../../../legacy/ascend950/unified_platform/resource/socket/socket.h"

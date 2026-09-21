@@ -274,7 +274,6 @@ static bool CheckReqValid(const CcuResReq& req, int32_t userDevId, std::array<bo
         const bool ifReqEmpty = std::all_of(std::begin(reqs), std::end(reqs), [](uint32_t x) {
             return x == 0;
         });
-
         if (!dieEnableFlags[i] && !ifReqEmpty) { // 当前die未使能，但请求资源
             HCCL_ERROR(
                 "[CcuResBatchAllocator][%s] failed, dieId[%u] is not enable, "

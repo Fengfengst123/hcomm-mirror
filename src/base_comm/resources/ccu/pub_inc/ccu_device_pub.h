@@ -184,7 +184,7 @@ CcuResult CcuCheckResource(const int32_t userDevId, const CcuResHandle resHandle
  * @note 资源句柄无法查找到时返回HCCL_E_NOT_FOUND，其余非HCCL_SUCCESS结果属于错误
  * @note 返回批量的channel资源总数可能超过申请数量，jettyNum为0时由平台层决定分配数量
  */
-HcclResult CcuReleaseResHandle(const int32_t userDevId, const CcuResHandle handle);
+HcclResult CcuReleaseResHandle(const int32_t userDevId, const CcuResHandle resHandle);
 
 /**
  * @brief 申请批量ccu channel资源

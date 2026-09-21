@@ -21,6 +21,7 @@
 #include "hccl_comm_socket_c_adpt.h"
 #include "sal_pub.h"
 #include "hccl_types.h"
+#include "orion_adpt_utils.h"
 
 using namespace hcomm;
 

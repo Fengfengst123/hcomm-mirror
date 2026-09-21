@@ -325,7 +325,7 @@ namespace CcuOpt {
             const int64_t xnLatency = static_cast<int64_t>(CcuRep::CCU_XN_RAW_LATENCY);
             int64_t earliest = state.cycle;
 
-            auto probe = [&](uint32_t key) {
+            auto probe = [&state, &xnLatency, &earliest](uint32_t key) {
                 auto it = state.lastXnWriterCycle.find(key);
                 if (it == state.lastXnWriterCycle.end()) {
                     return;
@@ -366,7 +366,7 @@ namespace CcuOpt {
             const int64_t xnLatency = static_cast<int64_t>(CcuRep::CCU_XN_RAW_LATENCY);
             int64_t earliest = state.cycle;
 
-            auto probe = [&](uint32_t key) {
+            auto probe = [&state, &xnLatency, &earliest](uint32_t key) {
                 auto it = state.lastAnyXnWriterCycle.find(key);
                 if (it == state.lastAnyXnWriterCycle.end()) {
                     return;

@@ -295,7 +295,7 @@ public:
     static HcclResult AllocIns(const int32_t userDevId, const uint8_t dieId, const uint32_t num, ResInfo& insInfo);
     static HcclResult ReleaseIns(const int32_t userDevId, const uint8_t dieId, const ResInfo& insInfo);
     static uint32_t GetInsConsecutiveRemainSize(const int32_t userDevId, const uint8_t dieId);
-    static uint32_t GetCascCntBlockRemainSize(const int32_t deviceuserDevIdLogicId, const uint8_t dieId);
+    static uint32_t GetCascCntBlockRemainSize(const int32_t userDevId, const uint8_t dieId);
     static HcclResult
     AllocCke(const int32_t userDevId, const uint8_t dieId, const uint32_t num, std::vector<ResInfo>& ckeInfos);
     static HcclResult ReleaseCke(const int32_t userDevId, const uint8_t dieId, const std::vector<ResInfo>& ckeInfos);
@@ -311,7 +311,7 @@ public:
     static HcclResult GetAllocatableMaxXnNum(const int32_t userDevId, const uint8_t dieId, uint32_t& xnNum);
     static HcclResult GetAllocatableMaxGsaNum(const int32_t userDevId, const uint8_t dieId, uint32_t& gsaNum);
     static HcclResult GetResSpecsMissionNum(const int32_t userDevId, const uint8_t dieId, uint32_t& missionNum);
-    static HcclResult GetResSpecsCascCntNum(const int32_t deviceLogicId, const uint8_t dieId, uint32_t& cascCntNum);
+    static HcclResult GetResSpecsCascCntNum(const int32_t userDevId, const uint8_t dieId, uint32_t& cascCntNum);
     static HcclResult GetXnBaseAddr(const int32_t userDevId, const uint8_t dieId, uint64_t& xnBaseAddr);
     static HcclResult GetCkeBaseAddr(const int32_t userDevId, const uint8_t dieId, uint64_t& ckeBaseAddr);
     static HcclResult

@@ -924,7 +924,7 @@ HcclResult ChannelProcess::LaunchChannelKernel(
     // 防御性校验：同一批 channel 必须走同一路径（950 或 910），不允许混用
     bool is950PlusChannelKind = Is950PlusChannelKind(channelKind);
     for (uint32_t i = 1; i < listNum; ++i) {
-        auto* curCh = reinterpret_cast<Channel*>(hostChannelHandles[i]);
+        auto* curCh = ReinterpretAs<Channel*>(hostChannelHandles[i]);
         CHK_PTR_NULL(curCh);
         HcommChannelKind curKind = curCh->GetChannelKind();
         if (Is950PlusChannelKind(curKind) != is950PlusChannelKind) {

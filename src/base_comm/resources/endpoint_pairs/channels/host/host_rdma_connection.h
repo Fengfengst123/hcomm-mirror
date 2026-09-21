@@ -13,7 +13,6 @@
 
 #include <cstdint>
 #include <memory>
-#include <string>
 
 #include "hccp_common.h"
 #include "enum_factory.h"

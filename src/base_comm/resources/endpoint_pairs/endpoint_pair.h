@@ -14,6 +14,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <unordered_map>
@@ -21,7 +22,6 @@
 #include <vector>
 #include "channels/channel.h"
 #include "socket_mgr.h"
-#include "../../../../legacy/ascend950/unified_platform/resource/socket/socket.h"
 #include "../../../../legacy/ascend950/framework/resource_manager/socket/socket_manager.h"
 
 using EndpointDescPair = std::pair<EndpointDesc, EndpointDesc>;

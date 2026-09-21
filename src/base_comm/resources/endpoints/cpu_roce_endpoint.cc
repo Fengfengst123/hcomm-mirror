@@ -13,6 +13,7 @@
 #include "hccl/hccl_res.h"
 #include "log.h"
 #include "roce_reged_mem_mgr.h"
+#include "../common/orion_adpt_utils.h"
 #include "endpoint_remote_reged_mem_mgr.h"
 #include "proc_reged_mem_mgr_cache.h"
 #include "host_socket_handle_manager.h"

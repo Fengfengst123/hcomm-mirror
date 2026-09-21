@@ -285,7 +285,7 @@ HcclResult GlobalNetDevMgr::ServerDeInit(u32 port)
     return HCCL_SUCCESS;
 }
 
-HcclResult GlobalNetDevMgr::ServerDeInit(const HcclIpAddress& localIp, u32 port)
+HcclResult GlobalNetDevMgr::ServerDeInit(const HcclIpAddress& localIp, u32 port) const
 {
     PortInfo portInfo(localIp, port);
 

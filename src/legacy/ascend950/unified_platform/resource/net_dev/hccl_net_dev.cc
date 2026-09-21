@@ -17,7 +17,7 @@ HcclResult HcclNetDevOpen(const HcclNetDevInfos* info, HcclNetDev* netDev) { ret
 
 HcclResult HcclNetDevClose(HcclNetDev netDev) { return HcclNetDevCloseV2(netDev); }
 
-HcclResult HcclNetDevGetAddr(HcclNetDev netDev, HcclAddress* addr) { return HcclNetDevGetAddrV2(netDev, addr); }
+HcclResult HcclNetDevGetAddr(const HcclNetDev netDev, HcclAddress* addr) { return HcclNetDevGetAddrV2(netDev, addr); }
 
 HcclResult HcclNetDevGetBusAddr(HcclDeviceId dstDevId, HcclAddress* busAddr)
 {

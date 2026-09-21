@@ -10,6 +10,7 @@
 
 #include "cast_utils.h"
 #include "./dev_rdma_connection_v2.h"
+#include "../host/exchange_rdma_conn_dto.h"
 #include "log.h"
 #include "acl/acl_rt.h"
 #include "hccp.h"
@@ -84,52 +85,54 @@ static void NdaFree(void* ptr)
     }
 }
 
-static void NdaMemset(void* dst, int value, size_t count)
-{
-    aclError ret = aclrtMemset(dst, count, value, count);
-    if (ret != ACL_SUCCESS) {
-        HCCL_ERROR("[NdaMemset] aclrtMemset failed, ret[%d], dst[%p], value[%d], count[%zu]", ret, dst, value, count);
-    }
-}
-
-static int NdaMemcpy(void* dst, size_t dstSize, void* src, size_t srcSize, uint32_t direct)
-{
-    aclrtMemcpyKind kind = ACL_MEMCPY_DEFAULT;
-    switch (direct) {
-        case MEMCPY_DIRECT_HOST_TO_HOST: {
-            kind = ACL_MEMCPY_HOST_TO_HOST;
-            break;
-        }
-        case MEMCPY_DIRECT_HOST_TO_DEVICE: {
-            kind = ACL_MEMCPY_HOST_TO_DEVICE;
-            break;
-        }
-        case MEMCPY_DIRECT_DEVICE_TO_HOST: {
-            kind = ACL_MEMCPY_DEVICE_TO_HOST;
-            break;
-        }
-        case MEMCPY_DIRECT_DEVICE_TO_DEVICE: {
-            kind = ACL_MEMCPY_DEVICE_TO_DEVICE;
-            break;
-        }
-        default: {
-            HCCL_ERROR("[MemcpyKindTranslate]Not support the memory copy type[%d].", direct);
-            return -1;
-        }
-    }
-    aclError ret = aclrtMemcpy(dst, dstSize, src, srcSize, kind);
-    if (ret != ACL_SUCCESS) {
-        HCCL_ERROR(
-            "[NdaMemcpy] aclrtMemcpy failed, ret[%d], dst[%p], src[%p], dstSize[%zu], srcSize[%zu]", ret, dst, src,
-            dstSize, srcSize);
-        return -1;
-    }
-    return 0;
-}
-
 void DevRdmaConnectionV2::GetNdaOps()
 {
-    ndaOps_ = {.alloc = NdaAlloc, .free = NdaFree, .memset_s = NdaMemset, .memcpy_s = NdaMemcpy};
+    ndaOps_ = {
+        .alloc = NdaAlloc,
+        .free = NdaFree,
+        .memset_s =
+            [](void* dst, int value, size_t count) {
+                aclError ret = aclrtMemset(dst, count, value, count);
+                if (ret != ACL_SUCCESS) {
+                    HCCL_ERROR(
+                        "[NdaMemset] aclrtMemset failed, ret[%d], dst[%p], value[%d], count[%zu]", ret, dst, value,
+                        count);
+                }
+            },
+        .memcpy_s = [](void* dst, size_t dstSize, void* src, size_t srcSize, uint32_t direct) -> int {
+            aclrtMemcpyKind kind = ACL_MEMCPY_DEFAULT;
+            switch (direct) {
+                case MEMCPY_DIRECT_HOST_TO_HOST: {
+                    kind = ACL_MEMCPY_HOST_TO_HOST;
+                    break;
+                }
+                case MEMCPY_DIRECT_HOST_TO_DEVICE: {
+                    kind = ACL_MEMCPY_HOST_TO_DEVICE;
+                    break;
+                }
+                case MEMCPY_DIRECT_DEVICE_TO_HOST: {
+                    kind = ACL_MEMCPY_DEVICE_TO_HOST;
+                    break;
+                }
+                case MEMCPY_DIRECT_DEVICE_TO_DEVICE: {
+                    kind = ACL_MEMCPY_DEVICE_TO_DEVICE;
+                    break;
+                }
+                default: {
+                    HCCL_ERROR("[MemcpyKindTranslate]Not support the memory copy type[%d].", direct);
+                    return -1;
+                }
+            }
+            aclError ret = aclrtMemcpy(dst, dstSize, src, srcSize, kind);
+            if (ret != ACL_SUCCESS) {
+                HCCL_ERROR(
+                    "[NdaMemcpy] aclrtMemcpy failed, ret[%d], dst[%p], src[%p], dstSize[%zu], srcSize[%zu]", ret, dst,
+                    src, dstSize, srcSize);
+                return -1;
+            }
+            return 0;
+        },
+    };
 }
 
 HcclResult DevRdmaConnectionV2::GetDirectFlag()
@@ -428,10 +431,10 @@ std::vector<char> DevRdmaConnectionV2::GetSqUniqueId() const
     binaryStream << ndaQpInfo_.sqInfo.qBuf.base;
     binaryStream << ndaQpInfo_.sqInfo.qBuf.entrySize;
     binaryStream << ndaQpInfo_.sqInfo.qBuf.entryCnt;
-    binaryStream << ReinterpretAs<uint64_t>(SqPiMem_.ptr());
-    binaryStream << ReinterpretAs<uint64_t>(SqCiMem_.ptr());
-    binaryStream << ReinterpretAs<uint64_t>(ndaQpInfo_.sqInfo.dbHwVa.iovBase);
-    binaryStream << ReinterpretAs<uint64_t>(ndaQpInfo_.sqInfo.dbrPiVa.iovBase);
+    binaryStream << (ReinterpretAs<uint64_t>(SqPiMem_.ptr()));
+    binaryStream << (ReinterpretAs<uint64_t>(SqCiMem_.ptr()));
+    binaryStream << (ReinterpretAs<uint64_t>(ndaQpInfo_.sqInfo.dbHwVa.iovBase));
+    binaryStream << (ReinterpretAs<uint64_t>(ndaQpInfo_.sqInfo.dbrPiVa.iovBase));
     binaryStream << static_cast<uint8_t>(qpInfo_.serviceLevel);
     binaryStream << dbVendorSpecified;
 
@@ -453,9 +456,9 @@ std::vector<char> DevRdmaConnectionV2::GetCqUniqueId() const
     binaryStream << ndaCqInfo_.cqInfo.qBuf.base;
     binaryStream << ndaCqInfo_.cqInfo.qBuf.entrySize;
     binaryStream << ndaCqInfo_.cqInfo.qBuf.entryCnt;
-    binaryStream << ReinterpretAs<uint64_t>(CqPiMem_.ptr());
-    binaryStream << ReinterpretAs<uint64_t>(CqCiMem_.ptr());
-    binaryStream << ReinterpretAs<uint64_t>(ndaCqInfo_.cqInfo.dbrCiVa.iovBase);
+    binaryStream << (ReinterpretAs<uint64_t>(CqPiMem_.ptr()));
+    binaryStream << (ReinterpretAs<uint64_t>(CqCiMem_.ptr()));
+    binaryStream << (ReinterpretAs<uint64_t>(ndaCqInfo_.cqInfo.dbrCiVa.iovBase));
     binaryStream << static_cast<uint64_t>(0); // CQ DbVendorSpecified placeholder
 
     std::vector<char> result;

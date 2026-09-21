@@ -3017,7 +3017,7 @@ uint32_t CcuKernel::GetLsxRepReserveCount() const
         return 0;
     }
     uint32_t count = 0;
-    for (const auto& rep : const_cast<CcuKernel*>(this)->GetRepSequence()) {
+    for (const auto& rep : GetRepSequence()) {
         if (rep == nullptr) {
             continue;
         }

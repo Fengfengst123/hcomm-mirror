@@ -19,6 +19,7 @@
 #include "coll_comm_mgr.h"
 #include "heartbeat.h"
 #include "comm_addr_logger.h"
+#include "../../../base_comm/common/orion_adpt_utils.h"
 
 constexpr u32 ONE_SECOND_OF_SLEEP = 1; // 1s
 namespace hcomm {

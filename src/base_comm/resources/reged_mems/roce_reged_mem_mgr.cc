@@ -39,7 +39,7 @@ RoceRegedMemMgr::~RoceRegedMemMgr()
         allRegisteredBuffers_.size(), handlesRecords_.size());
 }
 
-HcclResult RoceRegedMemMgr::GetMemAllocAddrRange(const HcommMem& mem, MemKey& allocKey)
+HcclResult RoceRegedMemMgr::GetMemAllocAddrRange(const HcommMem& mem, MemKey& allocKey) const
 {
     void* basePtr = nullptr;
     size_t rangeSize = 0;
@@ -88,11 +88,11 @@ HcclResult RoceRegedMemMgr::RegisterMemory(const HcommMem* mem, const char* memT
     CHK_PTR_NULL(localRdmaRmaBufferMgr_);
     const HcclResult ret = RegisterMemoryImpl(
         *mem, memTag, memHandle, localRdmaRmaBufferMgr_, allRegisteredBuffers_, &handlesRecords_, "RoceRegedMemMgr",
-        [&](auto& bufPtr, auto& parent) {
+        [this](auto& bufPtr, auto& parent) {
             return std::make_shared<Hccl::LocalRdmaRmaBuffer>(
                 bufPtr, rdmaHandle_, parent->GetLkey(), parent->GetRkey(), parent->GetMrHandle());
         },
-        [&](auto& bufPtr) {
+        [this](auto& bufPtr) {
             return std::make_shared<Hccl::LocalRdmaRmaBuffer>(bufPtr, rdmaHandle_);
         });
     if (ret == HCCL_SUCCESS) {

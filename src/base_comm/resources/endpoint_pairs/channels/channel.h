@@ -23,7 +23,6 @@
 #include <vector>
 #include "enum_factory.h"
 #include "hcomm_nic_plugin.h"
-#include "hcomm_channel.h"
 #include "mem_device_pub.h"
 
 // Orion
