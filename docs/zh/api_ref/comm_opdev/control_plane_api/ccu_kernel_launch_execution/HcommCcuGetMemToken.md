@@ -20,7 +20,7 @@
 
 ## 功能说明
 
-将主机进程的虚拟地址（VA）转换为CCU硬件可访问的内存Token。CCU硬件不直接使用进程虚拟地址访问HBM，须先通过本接口将`(srcVa, size)`对应的内存区域转换为驱动颁发的64位Token，再将Token通过`kernelArg`或`taskArgs`传入Kernel函数，由Kernel内部赋值给`LocalAddr.token`或`RemoteAddr.token`。
+将主机进程的虚拟地址（VA）转换为CCU硬件可访问的内存Token。CCU硬件不直接使用进程虚拟地址访问片上内存，须先通过本接口将`(srcVa, size)`对应的内存区域转换为驱动颁发的64位Token，再将Token通过`kernelArg`或`taskArgs`传入Kernel函数，由Kernel内部赋值给`LocalAddr.token`或`RemoteAddr.token`。
 
 本接口与CCU实例生命周期主流程无依赖关系，可在创建实例后的任意时机调用，通常在调用[HcommCcuKernelRegister](HcommCcuKernelRegister.md)之前获取Token并填充到`kernelArg`中。
 
@@ -61,7 +61,7 @@ CcuResult HcommCcuGetMemToken(uint64_t srcVa, uint64_t size, uint64_t *tokenInfo
 ## 调用示例
 
 ```c
-// srcVa为已注册的HBM内存起始地址，size为该内存区域的字节大小
+// srcVa为已注册的片上内存起始地址，size为该内存区域的字节大小
 uint64_t srcVa = /* 已注册内存的虚拟地址 */;
 uint64_t size  = /* 内存区域字节大小 */;
 

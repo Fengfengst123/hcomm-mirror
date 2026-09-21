@@ -24,9 +24,9 @@
 
 | 重载 | 源 | 目标 |
 | --- | --- | --- |
-| 重载1 | 本端HBM（`LocalAddr`） | 本端HBM（`LocalAddr`） |
-| 重载2 | 本端HBM（`LocalAddr`） | 本端MS Buffer（`CcuBuffer`） |
-| 重载3 | 本端MS Buffer（`CcuBuffer`） | 本端HBM（`LocalAddr`） |
+| 重载1 | 本端片上内存（`LocalAddr`） | 本端片上内存（`LocalAddr`） |
+| 重载2 | 本端片上内存（`LocalAddr`） | 本端CcuBuffer（`CcuBuffer`） |
+| 重载3 | 本端CcuBuffer（`CcuBuffer`） | 本端片上内存（`LocalAddr`） |
 
 > [!NOTE]说明
 > 本接口为异步接口，调用后须通过`EventWait(event, mask)`等待搬运完成，否则目标内存数据不确定。与`EventRecord`不同，硬件搬运完成时自动置位`event[mask]`，无需显式调用`EventRecord`。
@@ -36,11 +36,11 @@
 ```cpp
 namespace AscendC {
 namespace ccu {
-// 重载1：本端HBM→本端HBM
+// 重载1：本端片上内存→本端片上内存
 CcuResult LocalCopy(LocalAddr dst, LocalAddr src, Variable len, Event event, uint16_t mask = 1);
-// 重载2：本端HBM→本端MS Buffer
+// 重载2：本端片上内存→本端CcuBuffer
 CcuResult LocalCopy(CcuBuffer dst, LocalAddr src, Variable len, Event event, uint16_t mask = 1);
-// 重载3：本端MS Buffer→本端HBM
+// 重载3：本端CcuBuffer→本端片上内存
 CcuResult LocalCopy(LocalAddr dst, CcuBuffer src, Variable len, Event event, uint16_t mask = 1);
 } // namespace ccu
 } // namespace AscendC
@@ -50,7 +50,7 @@ CcuResult LocalCopy(LocalAddr dst, CcuBuffer src, Variable len, Event event, uin
 
 | 参数名 | 输入/输出 | 描述 |
 | --- | --- | --- |
-| dst | 输入/输出 | 目标地址（硬件搬运结果写入此处）。重载1/3为`LocalAddr`（本端HBM地址与token的复合对象）；重载2为`CcuBuffer`（本端MS Buffer切片对象，单片最大4096字节）。 |
+| dst | 输入/输出 | 目标地址（硬件搬运结果写入此处）。重载1/3为`LocalAddr`（本端片上内存地址与token的复合对象）；重载2为`CcuBuffer`（本端CcuBuffer切片对象，单片最大4096字节）。 |
 | src | 输入 | 源地址。重载1/2为`LocalAddr`；重载3为`CcuBuffer`。 |
 | len | 输入 | 拷贝字节数，类型为`Variable`（运行期可变长度）。涉及`CcuBuffer`时不可超过4096字节。 |
 | event | 输入 | 完成事件对象。硬件搬运完成时自动置位`event[mask]`，下游调用`EventWait(event, mask)`等待。 |
@@ -80,7 +80,7 @@ CcuResult LocalCopy(LocalAddr dst, CcuBuffer src, Variable len, Event event, uin
 ```cpp
 using namespace AscendC::ccu;
 
-// 场景1：本端HBM→本端HBM拷贝
+// 场景1：本端片上内存→本端片上内存拷贝
 CcuResult MyKernel(CcuKernelArg arg) {
     LocalAddr src, dst;
     Variable len;
@@ -91,7 +91,7 @@ CcuResult MyKernel(CcuKernelArg arg) {
     return CCU_SUCCESS;
 }
 
-// 场景2：本端HBM→本端MS Buffer拷贝
+// 场景2：本端片上内存→本端CcuBuffer拷贝
 CcuResult MyKernel2(CcuKernelArg arg) {
     CcuBuffer buf;
     LocalAddr src;
@@ -103,7 +103,7 @@ CcuResult MyKernel2(CcuKernelArg arg) {
     return CCU_SUCCESS;
 }
 
-// 场景3：本端MS Buffer→本端HBM拷贝
+// 场景3：本端CcuBuffer→本端片上内存拷贝
 CcuResult MyKernel3(CcuKernelArg arg) {
     LocalAddr dst;
     CcuBuffer buf;

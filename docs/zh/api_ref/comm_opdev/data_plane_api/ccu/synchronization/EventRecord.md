@@ -39,7 +39,7 @@ CcuResult EventRecord(Event e, uint16_t mask = 1);
 
 | 参数名 | 输入/输出 | 描述 |
 | --- | --- | --- |
-| e | 输入 | 本地Event对象。`Event`类构造时申请CKE虚拟句柄（物理资源在`HcommCcuKernelRegister`阶段分配），无需手动分配。 |
+| e | 输入 | 本地Event对象。`Event`类构造时申请Event虚拟句柄（物理资源在`HcommCcuKernelRegister`阶段分配），无需手动分配。 |
 | mask | 输入 | 16位事件掩码，指定要置位的bit。默认值为`1`（即bit0）。同一个`Event`对象的不同bit相互独立，可承载多组配对。 |
 
 ## 返回值

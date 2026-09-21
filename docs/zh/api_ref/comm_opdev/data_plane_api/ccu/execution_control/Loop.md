@@ -98,7 +98,7 @@ config-based构造使用的参数结构，字段如下：
 ```cpp
 using namespace AscendC::ccu;
 
-// 场景：将4个连续4KB数据块依次从HBM搬到MS Buffer
+// 场景：将4个连续4KB数据块依次从片上内存搬到CcuBuffer
 // 硬件Loop自动按addrOffset递进地址，无需手写地址自增
 CcuResult MyKernel(CcuKernelArg arg) {
     Variable r1, numA, numB;

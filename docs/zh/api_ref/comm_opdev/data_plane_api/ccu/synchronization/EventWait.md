@@ -64,7 +64,7 @@ CcuResult EventWait(Event e, uint16_t mask = 1);
 ```cpp
 using namespace AscendC::ccu;
 
-// 场景：等待本端HBM→HBM拷贝完成后再继续
+// 场景：等待本端片上内存→片上内存拷贝完成后再继续
 // CCU kernel函数体内
 CcuResult MyKernel(CcuKernelArg arg) {
     LocalAddr src, dst;

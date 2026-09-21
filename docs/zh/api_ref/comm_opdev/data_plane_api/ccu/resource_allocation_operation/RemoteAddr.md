@@ -20,9 +20,9 @@
 
 ## 功能说明
 
-`ccu::RemoteAddr`是CCU kernel内对端HBM地址的C++包装类，是"地址（`Address`）+ token（`Variable`）"的复合对象，结构与[LocalAddr](LocalAddr.md)镜像。
+`ccu::RemoteAddr`是CCU kernel内对端片上内存地址的C++包装类，是"地址（`Address`）+ token（`Variable`）"的复合对象，结构与[LocalAddr](LocalAddr.md)镜像。
 
-- 构造即分配：默认构造函数一次性申请1个GSA（用于`addr`）和1个XN（用于`token`）。
+- 构造即分配：默认构造函数一次性申请1个Address（用于`addr`）和1个Variable（用于`token`）。
 - 析构不释放：析构函数不释放硬件资源；虚拟句柄在翻译完成后失效，物理资源随CCU 实例生命周期统一管理、回收。
 
 `RemoteAddr`专供跨rank读写（`Read`/`Write`/`ReadReduce`/`WriteReduce`）使用，承载对端rank目标内存的物理地址与安全token。`addr`和`token`必须来自对端rank，不可与本端的`LocalAddr`字段混用。
@@ -34,9 +34,9 @@ namespace AscendC {
 namespace ccu {
 class RemoteAddr final {
 public:
-    RemoteAddr();                        // 构造即Alloc（同时申请GSA + XN）
-    Address addr;                        // 对端HBM地址字段（GSA寄存器）
-    Variable token;                      // 对端安全token字段（XN寄存器）
+    RemoteAddr();                        // 构造即Alloc（同时申请Address与Variable）
+    Address addr;                        // 对端片上内存地址字段
+    Variable token;                      // 对端安全token字段
     CcuRemoteAddrHandle handle{0};      // 复合句柄
 };
 } // namespace ccu
@@ -47,18 +47,18 @@ public:
 
 | 构造形式 | 说明 |
 | --- | --- |
-| `RemoteAddr ra;` | 一次性申请1个GSA和1个XN虚拟句柄，回填`ra.handle`/`ra.addr.handle`/`ra.token.handle`三个句柄。 |
+| `RemoteAddr ra;` | 一次性申请1个Address和1个Variable虚拟句柄，回填`ra.handle`/`ra.addr.handle`/`ra.token.handle`三个句柄。 |
 
-C++构造只申请虚拟句柄：在kernel注册阶段内调用时恒成功；若不在kernel注册阶段调用，则构造时抛出异常（携带错误码`CCU_E_PTR`）。GSA/XN物理资源不足时，在`HcommCcuKernelRegister`阶段返回`CCU_E_UNAVAIL`，不是在构造时抛出。
+C++构造只申请虚拟句柄：在kernel注册阶段内调用时恒成功；若不在kernel注册阶段调用，则构造时抛出异常（携带错误码`CCU_E_PTR`）。Address/Variable物理资源不足时，在`HcommCcuKernelRegister`阶段返回`CCU_E_UNAVAIL`，不是在构造时抛出。
 
 > [!CAUTION]注意
-> `RemoteAddr` 类有copy/move构造函数，它们只拷贝`handle`/`addr.handle`/`token.handle`三个字段、不申请新GSA/XN——`RemoteAddr r2 = r1;` 后`r1`和`r2`指向同一组寄存器。`operator=(const RemoteAddr&)` 则会执行device 端寄存器赋值指令（语义与`LocalAddr`相同），两者不对称，使用时需特别留意。
+> `RemoteAddr` 类有copy/move构造函数，它们只拷贝`handle`/`addr.handle`/`token.handle`三个字段、不申请新的Address/Variable——`RemoteAddr r2 = r1;` 后`r1`和`r2`指向同一组寄存器。`operator=(const RemoteAddr&)` 则会执行device 端寄存器赋值指令（语义与`LocalAddr`相同），两者不对称，使用时需特别留意。
 
 ## 字段说明
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `addr` | `Address` | 对端HBM目标地址。须由对端rank的VA与token（对端`HcommCcuGetMemToken`结果）来填充。运算符语义见[Address](Address.md)。 |
+| `addr` | `Address` | 对端片上内存目标地址。须由对端rank的VA与token（对端`HcommCcuGetMemToken`结果）来填充。运算符语义见[Address](Address.md)。 |
 | `token` | `Variable` | 对端安全token值。须与`addr`配对，来自对端rank，不可与本端token混用。运算符语义见[Variable](Variable.md)。 |
 
 ## 约束说明
@@ -96,7 +96,7 @@ CcuResult MyKernel(CcuKernelArg arg) {
     Event evt;
     len = 1024;
 
-    Read(ch, local, remote, len, evt);   // 从对端HBM读取到本端HBM
+    Read(ch, local, remote, len, evt);   // 从对端片上内存读取到本端片上内存
     EventWait(evt);
 
     return CCU_SUCCESS;

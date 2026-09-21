@@ -71,7 +71,7 @@ public:
 | --- | --- |
 | `Array<Variable> vars(n);` | 申请`n`个物理连续标量寄存器句柄。 |
 | `Array<Event> evts(n);` | 申请`n`个物理连续完成事件单元句柄。 |
-| `Array<CcuBuffer> bufs(n);` | 申请`n`个物理连续MS句柄。 |
+| `Array<CcuBuffer> bufs(n);` | 申请`n`个物理连续CcuBuffer句柄。 |
 | `Array<Variable> vars(acqHandle, n);` | 绑定Host侧预约的前`n`个标量寄存器，不申请新的标量寄存器。 |
 | `Array<Event> evts(acqHandle, n);` | 绑定Host侧预约的前`n`个完成事件单元，不申请新的完成事件单元。 |
 
@@ -101,10 +101,10 @@ public:
 - `Array(count)`以及`count > 0`的`Array(acqHandle, count)`只能在kernel注册阶段构造。
 - 析构不释放硬件资源，不应在kernel之外保存元素的`handle`值，翻译完成后句柄即失效。
 - `Array<T>`仅特化`Variable/Event/CcuBuffer`三种类型，对其他类型实例化将在编译期失败。
-- 多个单独声明的`Variable`/`Event`/`CcuBuffer`对象不保证物理连续，不可用于需要物理连续资源的接口（如批量`Load`/`Store`、多Buffer`LocalReduce`）。
+- 多个单独声明的`Variable`/`Event`/`CcuBuffer`对象不保证物理连续，不可用于需要物理连续资源的接口（如批量`Load`/`Store`、多CcuBuffer`LocalReduce`）。
 
 > [!NOTE]说明
-> `Load`/`Store`会对Variable数组做连续性校验（不连续返回`CCU_E_PARA`）；而`LocalReduce`的多Buffer重载不校验CcuBuffer是否物理连续，须由调用方自行保证。用非`Array`申请的多个Buffer时不会立即报错，但运行期行为未定义。
+> `Load`/`Store`会对Variable数组做连续性校验（不连续返回`CCU_E_PARA`）；而`LocalReduce`的多CcuBuffer重载不校验CcuBuffer是否物理连续，须由调用方自行保证。用非`Array`申请的多个CcuBuffer时不会立即报错，但运行期行为未定义。
 
 - `Array(count)`只申请虚拟句柄，恒成功；资源池无法凑出N个连续物理资源时，在`HcommCcuKernelRegister`阶段返回`CCU_E_UNAVAIL`，不是在构造时抛出。
 - `Array(acqHandle, count)`在`count > 0`时会校验预约句柄与`count`，参数不合法时在构造时抛出异常，不再保证恒成功。
@@ -119,7 +119,7 @@ CcuResult MyKernel(CcuKernelArg arg) {
     Array<Variable> vArr(4);
     Load(0x80000000ULL, vArr, 4);    // 一次加载4个uint64_t
 
-    // 批量申请4个物理连续CcuBuffer，用于多Buffer归约
+    // 批量申请4个物理连续CcuBuffer，用于多CcuBuffer归约
     Array<CcuBuffer> bufs(4);
     Variable len;
     Event evt;

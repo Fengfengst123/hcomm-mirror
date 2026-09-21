@@ -20,12 +20,12 @@
 
 ## 功能说明
 
-在CCU kernel内发起跨rank读操作（异步），通过已建链的`ChannelHandle`从对端HBM读取数据到本端，硬件完成时自动将`event`的第`mask`位置1。支持以下两种目标类型：
+在CCU kernel内发起跨rank读操作（异步），通过已建链的`ChannelHandle`从对端片上内存读取数据到本端，硬件完成时自动将`event`的第`mask`位置1。支持以下两种目标类型：
 
 | 重载 | 目标 | 源 |
 | --- | --- | --- |
-| 重载1 | 本端HBM（`LocalAddr`） | 对端HBM（`RemoteAddr`） |
-| 重载2 | 本端MS Buffer（`CcuBuffer`） | 对端HBM（`RemoteAddr`） |
+| 重载1 | 本端片上内存（`LocalAddr`） | 对端片上内存（`RemoteAddr`） |
+| 重载2 | 本端CcuBuffer（`CcuBuffer`） | 对端片上内存（`RemoteAddr`） |
 
 注意：
 
@@ -37,10 +37,10 @@
 ```cpp
 namespace AscendC {
 namespace ccu {
-// 重载1：对端HBM→本端HBM
+// 重载1：对端片上内存→本端片上内存
 CcuResult Read(ChannelHandle ch, LocalAddr local, RemoteAddr remote,
                Variable len, Event event, uint16_t mask = 1);
-// 重载2：对端HBM→本端MS Buffer
+// 重载2：对端片上内存→本端CcuBuffer
 CcuResult Read(ChannelHandle ch, CcuBuffer local, RemoteAddr remote,
                Variable len, Event event, uint16_t mask = 1);
 } // namespace ccu
@@ -52,8 +52,8 @@ CcuResult Read(ChannelHandle ch, CcuBuffer local, RemoteAddr remote,
 | 参数名 | 输入/输出 | 描述 |
 | --- | --- | --- |
 | ch | 输入 | 跨rank通道句柄（`ChannelHandle`）。channel绑定的die须与本kernel内所有channel属于同一die（在`HcommCcuKernelRegister`内统一校验，详见[功能说明](#功能说明)）。 |
-| local | 输入/输出 | 本端目标地址。重载1为`LocalAddr`（本端HBM地址与token的复合对象）；重载2为`CcuBuffer`（本端MS Buffer切片对象，单片最大4096字节）。 |
-| remote | 输入 | 对端源地址（`RemoteAddr`，对端HBM地址与token的复合对象）。 |
+| local | 输入/输出 | 本端目标地址。重载1为`LocalAddr`（本端片上内存地址与token的复合对象）；重载2为`CcuBuffer`（本端CcuBuffer切片对象，单片最大4096字节）。 |
+| remote | 输入 | 对端源地址（`RemoteAddr`，对端片上内存地址与token的复合对象）。 |
 | len | 输入 | 读取字节数，类型为`Variable`（运行期可变长度）。重载2时不可超过4096字节。 |
 | event | 输入 | 完成事件对象。硬件读取完成时自动置位`event[mask]`，下游调用`EventWait(event, mask)`等待。 |
 | mask | 输入 | 16位事件掩码。默认值为`1`（即bit0）。 |
@@ -83,7 +83,7 @@ CcuResult Read(ChannelHandle ch, CcuBuffer local, RemoteAddr remote,
 ```cpp
 using namespace AscendC::ccu;
 
-// 场景1：从对端HBM读取到本端HBM
+// 场景1：从对端片上内存读取到本端片上内存
 CcuResult MyKernel(CcuKernelArg arg) {
     auto *params = static_cast<MyKernelArg *>(arg);  // CcuKernelArg 为void*，先转型为用户入参结构体
     ChannelHandle ch = params->channelHandle;
@@ -97,7 +97,7 @@ CcuResult MyKernel(CcuKernelArg arg) {
     return CCU_SUCCESS;
 }
 
-// 场景2：从对端HBM读取到本端MS Buffer
+// 场景2：从对端片上内存读取到本端CcuBuffer
 CcuResult MyKernel2(CcuKernelArg arg) {
     auto *params = static_cast<MyKernelArg *>(arg);  // CcuKernelArg 为void*，先转型为用户入参结构体
     ChannelHandle ch = params->channelHandle;

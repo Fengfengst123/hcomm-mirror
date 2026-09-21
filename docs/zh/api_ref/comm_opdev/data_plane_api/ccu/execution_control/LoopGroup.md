@@ -59,7 +59,7 @@ public:
 
 | 参数名 | 输入/输出 | 描述 |
 | --- | --- | --- |
-| parallelCfg | 输入 | 并行配置Variable，运行期决定并行参数。该参数包含64bit，其中[47:41]表示loopgroup内包含的Loop指令个数，其中[54:48]表示Loopgroup中包含的Loop指令需要完成Loop自动展开的Loop偏移，其中[61:55]表示Loop需要展开的次数。举例：X[47:41]=4表示程序中包含4个Loop指令，Xn[54:48]=1表示从编号为1的Loop开始展开，Xn[61:55]=3表示loop1，loop2，loop3分别复制展开3次，loop0不进行复制，经过展开后总Loop个数为4 + (4-1) * 3 = 13 |
+| parallelCfg | 输入 | 并行配置Variable，运行期决定并行参数。该参数包含64bit，其中[47:41]表示loopgroup内包含的Loop指令个数，其中[54:48]表示Loopgroup中包含的Loop指令需要完成Loop自动展开的Loop偏移，其中[61:55]表示Loop需要展开的次数。举例：parallelCfg[47:41]=4表示程序中包含4个Loop指令，parallelCfg[54:48]=1表示从编号为1的Loop开始展开，parallelCfg[61:55]=3表示loop1，loop2，loop3分别复制展开3次，loop0不进行复制，经过展开后总Loop个数为4 + (4-1) * 3 = 13 |
 | offsetCfg | 输入 | 偏移配置Variable，运行期决定偏移参数。 该参数包含64bit，其中[9:0]表示Loop进行展开后使用的Event资源偏移量，[20:10]表示Loop进行展开后使用的CcuBuffer资源偏移量，[52:21]表示Loop进行展开后各个数据传输类指令使用的Address累加的偏移量。|
 | maxLoopNum | 输入 | 同构造方式1。 |
 | loops | 输入 | 同构造方式1。 |
@@ -84,7 +84,7 @@ config-based构造使用的参数结构，字段如下：
 | --- | --- |
 | `maxLoopNum`为0，或var-based构造的运行期配置Variable为空 | `CCU_E_PARA` |
 | 实际加入的Loop数超过`maxLoopNum`（LoopEngine池容量不足） | `CCU_E_PARA` |
-| 物理资源（XN/GSA/CKE/MS等）不足 | `CCU_E_UNAVAIL` 等 |
+| 物理资源不足 | `CCU_E_UNAVAIL` 等 |
 
 ## 约束说明
 
@@ -147,14 +147,14 @@ CcuResult CcuLoopAddDemoKernel(CcuKernelArg arg)
     // ========== LoopGroup variable-based ==========
     Variable varLoopParam1{}, varLoopParam2{}, varParallel{}, varOffset{};
 
-    // loopParam: ctxId[52:45] | gsaOffset[44:13] | iterNum[12:0]
-    varLoopParam1 = 0x0000000002000003ULL; // gsaOffset=4096, iterNum=3
-    varLoopParam2 = 0x0000000002000004ULL; // gsaOffset=4096, iterNum=4
+    // loopParam: ctxId[52:45] | addrOffset[44:13] | iterNum[12:0]
+    varLoopParam1 = 0x0000000002000003ULL; // addrOffset=4096, iterNum=3
+    varLoopParam2 = 0x0000000002000004ULL; // addrOffset=4096, iterNum=4
 
     // repeatNum=2, repeatLoopIndex=1, totalLoopNum=2
     varParallel = 0x0101040000000000ULL;
 
-    // gsaOffset=4096, msOffset=1, ckeOffset=1
+    // addrOffset=4096, ccuBufferOffset=1, eventOffset=1
     varOffset = 0x0000000200000401ULL;
 
     Func body1([&]() {

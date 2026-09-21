@@ -20,7 +20,7 @@
 
 ## 功能说明
 
-在CCU kernel内发起跨rank读并原地归约操作，通过已建链的`ChannelHandle`从对端HBM读取数据，并与本端HBM现有数据按指定算子合并（`local = reduce(local, fetch_from_remote, opType)`），硬件完成时自动将`event`的第`mask`位置1。本接口为异步接口。
+在CCU kernel内发起跨rank读并原地归约操作，通过已建链的`ChannelHandle`从对端片上内存读取数据，并与本端片上内存现有数据按指定算子合并（`local = reduce(local, fetch_from_remote, opType)`），硬件完成时自动将`event`的第`mask`位置1。本接口为异步接口。
 
 > [!NOTE]说明
 > 参数顺序遵循"目的端在前，源端在后"约定：`ReadReduce(ch, local, remote, ...)`，即`local`（目的，同时也是归约的累加端）在第二位，`remote`（源）在第三位。
@@ -47,8 +47,8 @@ CcuResult ReadReduce(ChannelHandle ch, LocalAddr local, RemoteAddr remote,
 | 参数名 | 输入/输出 | 描述 |
 | --- | --- | --- |
 | ch | 输入 | 跨rank通道句柄（`ChannelHandle`）。channel绑定的die须与本kernel内所有channel属于同一die（在`HcommCcuKernelRegister`内统一校验，详见上文CAUTION）。 |
-| local | 输入/输出 | 本端HBM目标地址（`LocalAddr`）。调用前须写入有效初值；硬件完成后更新为归约结果。 |
-| remote | 输入 | 对端HBM源地址（`RemoteAddr`）。 |
+| local | 输入/输出 | 本端片上内存目标地址（`LocalAddr`）。调用前须写入有效初值；硬件完成后更新为归约结果。 |
+| remote | 输入 | 对端片上内存源地址（`RemoteAddr`）。 |
 | len | 输入 | 操作字节数，类型为`Variable`（运行期可变长度）。 |
 | dataType | 输入 | 数据类型，取值见`HcclDataType`枚举。仅支持以下6种：`HCCL_DATA_TYPE_UINT8`、`HCCL_DATA_TYPE_INT16`、`HCCL_DATA_TYPE_INT32`、`HCCL_DATA_TYPE_FP16`、`HCCL_DATA_TYPE_FP32`、`HCCL_DATA_TYPE_BFP16`；其他取值会被拒绝并抛出异常（携带错误码）。 |
 | opType | 输入 | 归约算子，取值见`HcclReduceOp`枚举。仅支持`HCCL_REDUCE_SUM`（求和）、`HCCL_REDUCE_MAX`（最大值）、`HCCL_REDUCE_MIN`（最小值）；`HCCL_REDUCE_PROD`不支持，传入会被拒绝并抛出异常（携带错误码）。 当采用SUM操作时低精度输入数据的求和结果会先进行精度上升然后再进行精度调整为与输入数据精度相同。 |
@@ -80,7 +80,7 @@ CcuResult ReadReduce(ChannelHandle ch, LocalAddr local, RemoteAddr remote,
 ```cpp
 using namespace AscendC::ccu;
 
-// 场景：从对端HBM读取并与本端数据做FP16 SUM归约
+// 场景：从对端片上内存读取并与本端数据做FP16 SUM归约
 CcuResult MyKernel(CcuKernelArg arg) {
     auto *params = static_cast<MyKernelArg *>(arg);  // CcuKernelArg 为void*，先转型为用户入参结构体
     ChannelHandle ch = params->channelHandle;

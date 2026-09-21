@@ -20,7 +20,7 @@
 
 ## 功能说明
 
-在CCU kernel内从HBM地址读取一个或多个`uint64_t`值写入Variable。
+在CCU kernel内从片上内存地址读取一个或多个`uint64_t`值写入Variable。
 
 支持两种地址类型，通过第一参数的类型自动选择：
 
@@ -54,16 +54,16 @@ CcuResult Load(Variable addrVar, Array<Variable>& vArr, uint32_t num);
 
 | 参数名 | 输入/输出 | 描述 |
 | --- | --- | --- |
-| addr | 输入 | 立即数HBM地址（`uint64_t`）。须为CCU可访问的物理地址或经token化的VA，注册阶段确定，运行期不可变。 |
-| v | 输入/输出 | 目标Variable（重载1，num=1）。运行期从`HBM[addr]`读取8字节写入该Variable。 |
+| addr | 输入 | 立即数片上内存地址（`uint64_t`）。须为CCU可访问的物理地址或经token化的VA，注册阶段确定，运行期不可变。 |
+| v | 输入/输出 | 目标Variable（重载1，num=1）。运行期从片上内存地址`addr`处读取8字节写入该Variable。 |
 | vArr | 输入/输出 | 目标Variable数组首元素（重载2，num>1）。须通过`ccu::Array<Variable>`申请以保证物理连续。 |
-| num | 输入 | 加载的`uint64_t`元素个数（重载2）。须大于0。`num>1`时读取`HBM[addr], HBM[addr+8], ..., HBM[addr+(num-1)*8]`，分别写入`vArr[0], vArr[1], ..., vArr[num-1]`。 |
+| num | 输入 | 加载的`uint64_t`元素个数（重载2）。须大于0。`num>1`时依次从片上内存地址`addr`、`addr+8`、…、`addr+(num-1)*8`各读取8字节，分别写入`vArr[0], vArr[1], ..., vArr[num-1]`。 |
 
 ### 重载3/4参数（Variable地址，间接寻址）
 
 | 参数名 | 输入/输出 | 描述 |
 | --- | --- | --- |
-| addrVar | 输入 | 地址Variable（`Variable`）。运行期该Variable中存储的值被用作HBM地址，须已赋有效地址值。 |
+| addrVar | 输入 | 地址Variable（`Variable`）。运行期该Variable中存储的值被用作片上内存地址，须已赋有效地址值。 |
 | v | 输入/输出 | 目标Variable（重载3，num=1）。 |
 | vArr | 输入/输出 | 目标Variable数组首元素（重载4，num>1）。须通过`ccu::Array<Variable>`申请以保证物理连续。 |
 | num | 输入 | 加载的`uint64_t`元素个数（重载4）。须大于0。语义同重载2，地址来自`addrVar`的运行期值。 |

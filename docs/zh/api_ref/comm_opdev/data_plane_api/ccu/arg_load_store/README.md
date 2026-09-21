@@ -7,8 +7,8 @@ Variable在注册阶段仅是标量占位符，本身不带值。本节接口负
 | 来源/去处 | 地址何时确定 | 接口 |
 | --- | --- | --- |
 | `taskArgs[]`（host每次Launch时注入） | 运行期Launch时 | [LoadArg](LoadArg.md) |
-| HBM立即数地址（注册期固定常量） | 注册阶段 | [Load](Load.md)（重载1/2）、[Store](Store.md)（重载1/2） |
-| HBM间接地址（运行期由Variable决定） | 运行期 | [Load](Load.md)（重载3/4）、[Store](Store.md)（重载3/4） |
+| 片上内存立即数地址（注册期固定常量） | 注册阶段 | [Load](Load.md)（重载1/2）、[Store](Store.md)（重载1/2） |
+| 片上内存间接地址（运行期由Variable决定） | 运行期 | [Load](Load.md)（重载3/4）、[Store](Store.md)（重载3/4） |
 
 `Load`和`Store`均通过第一参数的类型（`uint64_t`或`Variable`）自动选择立即数寻址或间接寻址路径，各路径内部支持单个Variable与批量`Array<Variable>`两种粒度。
 

@@ -22,7 +22,7 @@
 
 在CCU kernel内获取指向channel共享Variable槽位的句柄。
 
-该槽位是channel在建链时就已在本端预留好的、与对端编号一一镜像的共享Variable，本接口不消耗新的XN寄存器，只是将已经存在的槽位包装成可操作的Variable对象。
+该槽位是channel在建链时就已在本端预留好的、与对端编号一一镜像的共享Variable，本接口不消耗新的Variable，只是将已经存在的槽位包装成可操作的Variable对象。
 
 典型场景：对端rank通过[WriteVariableWithNotify](../synchronization/WriteVariableWithNotify.md)将值写入本端channel的共享Variable槽位N，本端kernel用`GetResByChannel<Variable>(ch, N)`取到指向同一槽位的句柄，即可读到对端发来的值。
 
@@ -53,7 +53,7 @@ Variable GetResByChannel<Variable>(ChannelHandle channel, uint32_t varIndex);
 
 ## 返回值
 
-返回一个`Variable`对象，其`handle`指向channel的第`varIndex`个共享Variable槽位。该Variable不消耗新的XN，其释放权归channel所有，不随返回的Variable析构。
+返回一个`Variable`对象，其`handle`指向channel的第`varIndex`个共享Variable槽位。该对象不申请新的Variable，其释放权归channel所有，不随返回的Variable析构。
 
 调用失败时抛出异常（携带错误码），常见错误码：
 
@@ -65,7 +65,7 @@ Variable GetResByChannel<Variable>(ChannelHandle channel, uint32_t varIndex);
 ## 约束说明
 
 - 只能在kernel注册阶段调用，须在`HcommCcuKernelRegister`执行的kernel函数体内。
-- 不消耗新的XN资源，与`Variable v;`（普通构造）的分配行为完全不同，不可互换。
+- 不消耗新的Variable资源，与`Variable v;`（普通构造）的分配行为完全不同，不可互换。
 - 返回的Variable生命周期归channel管理，在channel销毁前有效。
 - 当前仅支持`T = Variable`，对其他类型调用编译期失败。
 
@@ -81,7 +81,7 @@ CcuResult MyKernel(CcuKernelArg arg) {
     auto* params = static_cast<MyKernelArg*>(arg);
     ChannelHandle ch = params->channelHandle;
 
-    // 获取channel预分配的Variable[0]（不申请新XN）
+    // 获取channel预分配的Variable[0]（不申请新的Variable）
     Variable syncVar = GetResByChannel<Variable>(ch, 0);
 
     // 等待对端写入（详见WriteVariableWithNotify）
