@@ -437,6 +437,29 @@ HcclResult ClusterMonitor::OnConnectionEstablished(
     }
     monitorLinkStatusMap_[rem] = MonitorLinkStatus::MONITOR_LINK_COMPLETED;
     commIdMap_[commId][rem] = true; // 更新状态为已连接
+
+    // 建链完成后，对异步建链期间 ref 失败（记录在 deferredRefSet_）的通信域补做引用计数，确保 ref count 正确
+    auto deferredIt = deferredRefSet_.find(rem);
+    if (deferredIt != deferredRefSet_.end()) {
+        for (const auto& otherCommId : deferredIt->second) {
+            auto otherCommIt = commIdMap_.find(otherCommId);
+            if (otherCommIt == commIdMap_.end()) {
+                // 通信域已注销，无需补做
+                continue;
+            }
+            if (uid2SocketRefMap_.ref(rem) != HCCL_SUCCESS) {
+                HCCL_RUN_WARNING(
+                    "commId:[%s], deferred ref for rem[%s] failed.", otherCommId.c_str(), GetUID(rem).c_str());
+                continue;
+            }
+            otherCommIt->second[rem] = true;
+            HCCL_RUN_INFO(
+                "commId:[%s], establish rank[%s] to rank[%s] heartbeat connection success (deferred ref).",
+                otherCommId.c_str(), GetUID(myRankUID_).c_str(), GetUID(rem).c_str());
+        }
+        deferredRefSet_.erase(deferredIt);
+    }
+
     lock.unlock();
     HCCL_RUN_INFO(
         "commId:[%s], establish rank[%s] to rank[%s] heartbeat connection success.", commId.c_str(),
@@ -624,7 +647,16 @@ HcclResult ClusterMonitor::ProcessConnectRanks(
             || (commIdMap_[commId].count(item.first) && !commIdMap_[commId][item.first])) {
             // 若newConn=false，说明不是新增的连接
             // 1. 通信域找不到，2.通信域内能找到但还没有连接，计数++
-            uid2SocketRefMap_.ref(item.first);
+            HcclResult refRet = uid2SocketRefMap_.ref(item.first);
+            if (refRet != HCCL_SUCCESS) {
+                // socket 尚未建链完成（异步建链中），记录待补做，不标记为已连接
+                // 待 OnConnectionEstablished 建链完成后补做引用计数
+                deferredRefSet_[item.first].insert(commId);
+                HCCL_INFO(
+                    "commId:[%s] rank[%s] to rank[%s] link not ready, defer ref to OnConnectionEstablished.",
+                    commId.c_str(), GetUID(myRankUID_).c_str(), GetUID(item.first).c_str());
+                continue;
+            }
             HCCL_RUN_INFO(
                 "commId:[%s], establish rank[%s] to rank[%s] heartbeat connection success.", commId.c_str(),
                 GetUID(myRankUID_).c_str(), GetUID(item.first).c_str());
@@ -804,6 +836,7 @@ HcclResult ClusterMonitor::DeInit()
         }
         uid2SocketRefMap_.clear();
         uid2FrameStatusMap_.clear();
+        deferredRefSet_.clear();
     }
     std::queue<ClusterMonitorFrame> empty;
     std::swap(errStatusQueue_, empty);
@@ -862,6 +895,17 @@ bool ClusterMonitor::UnregisterCommIdFromMaps(const std::string& commId, const s
         HCCL_INFO("[%s]commId[%s] status erase remote:%s", __func__, commId.c_str(), GetUID(rem).c_str());
     }
     commIdMap_.erase(iter);
+
+    // 清理 deferredRefSet_ 中该通信域的待补做记录，避免建链完成后对已注销通信域误补做
+    for (auto deferredIt = deferredRefSet_.begin(); deferredIt != deferredRefSet_.end();) {
+        deferredIt->second.erase(commId);
+        if (deferredIt->second.empty()) {
+            deferredIt = deferredRefSet_.erase(deferredIt);
+        } else {
+            ++deferredIt;
+        }
+    }
+
     HCCL_INFO("[%s]commId[%s] UnregisterRanks Completed.", __func__, commId.c_str());
     return true;
 }

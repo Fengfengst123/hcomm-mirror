@@ -13,6 +13,8 @@
 #include <atomic>
 #include <thread>
 #include <map>
+#include <set>
+#include <string>
 #include <deque>
 #include <mutex>
 #include "hcclCommDfx.h"
@@ -259,6 +261,10 @@ private:
 
     // 存储UID与连接上下文的计数map，由于多个通信域都有可能使用同一个context去连接远端，需要计数处理，解注册时计数--，原rankId2SocketMap_
     hccl::ReferenceMap<ClusterUIDType, ClusterMonitorSocketCtx> uid2SocketRefMap_;
+
+    // 异步建链期间 ref 失败的通信域集合，键为远端UID，值为待补做引用计数的通信域ID集合
+    // 由 ProcessConnectRanks 写入，OnConnectionEstablished 建链完成后消费，确保 ref count 准确
+    std::map<ClusterUIDType, std::set<std::string>> deferredRefSet_;
 
     // 用来做帧的统计计数，设置对应帧的状态，原rankId2StatusMap_
     hccl::ReferenceMap<ClusterUIDType, FrameStatus> uid2FrameStatusMap_;
