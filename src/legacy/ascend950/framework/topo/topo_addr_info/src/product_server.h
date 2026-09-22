@@ -17,6 +17,16 @@
 extern "C" {
 #endif
 
+#define MAX_UE_ID (99) // 定义一个MAX_UE_ID， mesh必须使用最大的UE
+
+enum UbEntityType {
+    UE_TYPE_MESH = 0,
+    UE_TYPE_CLOS = 1,
+    UE_TYPE_UBOE = 2,
+    UE_TYPE_UB_RTP = 3,
+    UE_TYPE_CLOS_PORTS = 4,
+};
+
 int ServerGetRootinfoLen(size_t* len);
 
 int ServerGetRootinfo(int npu_id, unsigned int mainboard_id, void* buf, size_t* len);

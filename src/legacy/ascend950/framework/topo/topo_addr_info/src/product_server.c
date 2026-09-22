@@ -36,14 +36,6 @@
 #define UBOE_CLUSTER_PLANE_ID "plane_uboe"
 #define UB_RTP_CLUSTER_PLANE_ID "plane_ub_rtp"
 
-enum UbEntityType {
-    UE_TYPE_MESH = 0,
-    UE_TYPE_CLOS = 1,
-    UE_TYPE_UBOE = 2,
-    UE_TYPE_UB_RTP = 3,
-    UE_TYPE_CLOS_PORTS = 4,
-};
-
 typedef struct stUEInfo {
     int dieId;
     int feId;
@@ -96,7 +88,6 @@ int GetNetInstanceIdForSuperPod(
 int GetNetInstanceIdForCluster(
     int npu_id, const struct dcmi_spod_info* spodInfo, char* netInstanceId, int netInstanceIdLen);
 
-#define MAX_UE_ID (99) // 定义一个MAX_UE_ID， mesh必须使用最大的UE
 static const NetInfo g_netInfoList[] = {
     {
         .mainBoardId = {MAIN_BOARD_ID_SERVER_350L, MAIN_BOARD_INVALID},
@@ -525,7 +516,7 @@ static int LayerAddUbRtp(const UBEntity* ue, const UEInfo* ueInfo, NetLayer* lay
  * @param type: UB类型
  * @return UBEntity*: ue entity
  */
-static const UBEntity* GetUBEntityByFilter(const UEList* ueList, int dieId, int ueId, int type)
+STATIC const UBEntity* GetUBEntityByFilter(const UEList* ueList, int dieId, int ueId, int type)
 {
     if (type == UE_TYPE_UBOE) {
         for (unsigned int i = 0; i < ueList->ueNum; i++) {
@@ -546,7 +537,7 @@ static const UBEntity* GetUBEntityByFilter(const UEList* ueList, int dieId, int 
     int maxFe = 0;
     const UBEntity* ubEntity = NULL;
     for (unsigned int i = 0; i < ueList->ueNum; i++) {
-        if (UrmaEidIsUBOE(&ueList->ueList[i].eidList[0].eid)) {
+        if (UrmaEidIsScaleOut(&ueList->ueList[i].eidList[0].eid)) {
             continue;
         }
         int die = UrmaEidGetDieId(&ueList->ueList[i].eidList[0].eid);

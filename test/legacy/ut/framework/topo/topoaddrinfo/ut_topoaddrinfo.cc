@@ -27,10 +27,11 @@
 #include "topo_addr_info_log.h"
 #include "rank_info_types.h"
 #include "hal.h"
-#include "hal.h"
+#include "product_server.h"
 
 extern "C" int load_dcmi();
 extern "C" void reinit();
+extern "C" const UBEntity* GetUBEntityByFilter(const UEList* ueList, int dieId, int ueId, int type);
 
 /**
  * @brief 将32字符十六进制字符串转为16字节二进制数组
@@ -328,13 +329,35 @@ TEST_F(TopoAddrInfoTest, ut_get_unknow_rootinfo_size)
 }
 
 /**
+ * 打桩Atlas 950 SuperPoD
+ */
+void mock_spod_info_for_pod(UEList& ueList)
+{
+    unsigned int mainboard_id = 0x07;
+    char drv_path[256] = "/usr/local/Ascend2";
+    struct dcmi_spod_info spinfo;
+    spinfo.sdid = 0x00000000;
+    spinfo.super_pod_size = 128;
+    spinfo.super_pod_id = 1;
+    spinfo.server_index = 1; // server_index对应local id为8
+    spinfo.chassis_id = 0x00000000;
+    spinfo.super_pod_type = 0x00000000;
+
+    MOCKER(hal_get_mainboard_id).stubs().with(mockcpp::any(), outBoundP(&mainboard_id)).will(returnValue(0));
+    MOCKER(hal_get_driver_install_path)
+        .stubs()
+        .with(outBoundP(drv_path, strlen(drv_path)), mockcpp::any())
+        .will(returnValue(0));
+    MOCKER(HalGetUBEntityList).stubs().with(mockcpp::any(), outBoundP(&ueList)).will(returnValue(0));
+    MOCKER(hal_get_spod_info).stubs().with(mockcpp::any(), outBoundP(&spinfo)).will(returnValue(0));
+}
+
+/**
  * 构造一个PoD中的NPU的地址信息， 并检查是否正确
  */
 TEST_F(TopoAddrInfoTest, ut_rootinfo_for_pod)
 {
-    // mock data
-    unsigned int mainboard_id = 0x07;
-    char drv_path[256] = "/usr/local/Ascend2";
+    // mock start
     UEList ueList;
     memset_s(&ueList, sizeof(UEList), 0x00, sizeof(UEList));
     hex32_to_bin16("000000000001020000100000df100200", ueList.ueList[0].eidList[0].eid.raw);
@@ -365,25 +388,9 @@ TEST_F(TopoAddrInfoTest, ut_rootinfo_for_pod)
     hex32_to_bin16("000000000047030000100000df101800", ueList.ueList[3].eidList[1].eid.raw);
     hex32_to_bin16("00000000007f030000100000df101c00", ueList.ueList[3].eidList[2].eid.raw);
     ueList.ueList[3].eidNum = 3;
-
     ueList.ueNum = 4;
-
-    struct dcmi_spod_info spinfo;
-    spinfo.sdid = 0x00000000;
-    spinfo.super_pod_size = 128;
-    spinfo.super_pod_id = 1;
-    spinfo.server_index = 1; // server_index对应local id为8
-    spinfo.chassis_id = 0x00000000;
-    spinfo.super_pod_type = 0x00000000;
-
-    MOCKER(hal_get_mainboard_id).stubs().with(mockcpp::any(), outBoundP(&mainboard_id)).will(returnValue(0));
-    MOCKER(hal_get_driver_install_path)
-        .stubs()
-        .with(outBoundP(drv_path, strlen(drv_path)), mockcpp::any())
-        .will(returnValue(0));
-    MOCKER(HalGetUBEntityList).stubs().with(mockcpp::any(), outBoundP(&ueList)).will(returnValue(0));
-    MOCKER(hal_get_spod_info).stubs().with(mockcpp::any(), outBoundP(&spinfo)).will(returnValue(0));
-
+    mock_spod_info_for_pod(ueList);
+    // mock end
     size_t bufSize = 0;
     EXPECT_EQ(TopoAddrInfoGetSize(0, &bufSize), 0);
     char* buf = (char*)malloc(bufSize);
@@ -405,6 +412,57 @@ TEST_F(TopoAddrInfoTest, ut_rootinfo_for_pod)
     EXPECT_TRUE(strstr(buf, "TOPO_FILE_DESC") != NULL);
     // 校验clos层net type正确
     EXPECT_TRUE(strstr(buf, "CLOS") != NULL);
+    free(buf);
+}
+
+/**
+ * 构造pod机型添加UB_RTP Entity，验证在UB_RTP影响下，能够选择到正确的mesh UB Entity
+ */
+TEST_F(TopoAddrInfoTest, ut_rootinfo_for_pod_ub_rtp)
+{
+    // mock start
+    UEList ueList;
+    memset_s(&ueList, sizeof(UEList), 0x00, sizeof(UEList));
+    // 添加一个UB_RTP EID
+    hex32_to_bin16("0000000000080a8000100000df001101", ueList.ueList[0].eidList[0].eid.raw);
+    ueList.ueList[0].eidNum = 1;
+
+    // 添加一个mesh的UB Entity
+    hex32_to_bin16("000000000000030000100000df100100", ueList.ueList[1].eidList[0].eid.raw);
+    hex32_to_bin16("00000000003f030000100000df100c00", ueList.ueList[1].eidList[1].eid.raw);
+    hex32_to_bin16("000000000008030000100000df100900", ueList.ueList[1].eidList[2].eid.raw);
+    hex32_to_bin16("000000000007030000100000df100800", ueList.ueList[1].eidList[3].eid.raw);
+    hex32_to_bin16("000000000006030000100000df100700", ueList.ueList[1].eidList[4].eid.raw);
+    hex32_to_bin16("000000000005030000100000df100600", ueList.ueList[1].eidList[5].eid.raw);
+    hex32_to_bin16("000000000004030000100000df100500", ueList.ueList[1].eidList[6].eid.raw);
+    hex32_to_bin16("000000000003030000100000df100400", ueList.ueList[1].eidList[7].eid.raw);
+    ueList.ueList[1].eidNum = 8;
+    ueList.ueNum = 2;
+    mock_spod_info_for_pod(ueList);
+    // mock end
+    size_t bufSize = 0;
+    EXPECT_EQ(TopoAddrInfoGetSize(0, &bufSize), 0);
+    char* buf = (char*)malloc(bufSize);
+    memset_s(buf, bufSize, 0x00, bufSize);
+    int ret = TopoAddrInfoGet(0, buf, &bufSize);
+    EXPECT_EQ(ret, 0);
+    printf("[%s]\n", buf);
+
+    EXPECT_TRUE(strstr(buf, "\"local_id\": 8") != NULL);
+    // 校验PG口EID在地址信息中
+    EXPECT_TRUE(strstr(buf, "000000000000030000100000df100100") != NULL);
+    EXPECT_TRUE(strstr(buf, "000000000003030000100000df100400") != NULL);
+    EXPECT_TRUE(strstr(buf, "000000000004030000100000df100500") != NULL);
+    EXPECT_TRUE(strstr(buf, "000000000005030000100000df100600") != NULL);
+    EXPECT_TRUE(strstr(buf, "000000000006030000100000df100700") != NULL);
+    EXPECT_TRUE(strstr(buf, "000000000007030000100000df100800") != NULL);
+    EXPECT_TRUE(strstr(buf, "000000000008030000100000df100900") != NULL);
+    // 校验mesh层net type正确
+    EXPECT_TRUE(strstr(buf, "TOPO_FILE_DESC") != NULL);
+    // 校验clos层net type正确
+    EXPECT_TRUE(strstr(buf, "CLOS") != NULL);
+    // 校验UB_RTP未被选中
+    EXPECT_TRUE(strstr(buf, "0000000000080a8000100000df001101") == NULL);
     free(buf);
 }
 
@@ -925,7 +983,7 @@ void mock_uelist_for_pod_flex(UEList* ueList)
     memset_s(ueList, sizeof(UEList), 0x00, sizeof(UEList));
     hex32_to_bin16("000000000000020000100000df000101", ueList->ueList[0].eidList[0].eid.raw);
     ueList->ueList[0].eidNum = 1;
-    hex32_to_bin16("0000000000400a8000100000df001101", ueList->ueList[1].eidList[0].eid.raw);
+    hex32_to_bin16("0000000000080a8000100000df001101", ueList->ueList[1].eidList[0].eid.raw);
     ueList->ueList[1].eidNum = 1;
     hex32_to_bin16("000000000001040000100000df001200", ueList->ueList[2].eidList[0].eid.raw);
     hex32_to_bin16("00000000003f040000100000df001b00", ueList->ueList[2].eidList[1].eid.raw);
@@ -998,7 +1056,7 @@ TEST_F(TopoAddrInfoTest, ut_rootinfo_for_pod_flex)
     EXPECT_TRUE(strstr(buf, "00000000007f020000100000df001b00") != NULL);
 
     // 校验UBG EID
-    EXPECT_TRUE(strstr(buf, "0000000000400a8000100000df001101") != NULL);
+    EXPECT_TRUE(strstr(buf, "0000000000080a8000100000df001101") != NULL);
 
     free(buf);
 }
@@ -1252,4 +1310,28 @@ TEST_F(TopoAddrInfoTest, ut_init)
     reinit();
     ret = load_dcmi();
     EXPECT_TRUE(ret == 0);
+}
+
+/*
+ * 验证GetUBEntityByFilter能够选中正确的UB Entity
+ */
+TEST_F(TopoAddrInfoTest, test_ub_entity_filter)
+{
+    UEList ueList;
+    memset_s(&ueList, sizeof(UEList), 0x00, sizeof(UEList));
+    hex32_to_bin16("000000000000020000100000df000101", ueList.ueList[0].eidList[0].eid.raw);
+    ueList.ueList[0].eidNum = 1;
+    // 定义一个iodie = 0  UE ID对应位置为a的UB_RTP EID,  由于是RTP，不应被选中
+    hex32_to_bin16("0000000000080a8000100000df001101", ueList.ueList[1].eidList[0].eid.raw);
+    ueList.ueList[1].eidNum = 1;
+    // 定义一个iodie = 0  UE ID=4 的EID。 预期这个UB Entity被选中
+    hex32_to_bin16("000000000001040000100000df001200", ueList.ueList[2].eidList[0].eid.raw);
+    ueList.ueList[2].eidNum = 1;
+    hex32_to_bin16("000000000000020000100000df001200", ueList.ueList[3].eidList[0].eid.raw);
+    ueList.ueList[3].eidNum = 1;
+    ueList.ueNum = 4;
+
+    // 过滤iodie 0， 最大UE ID的UB entity， 类型为mesh, 预期过滤到ueList中下标为2的ub entity
+    const UBEntity* ue = GetUBEntityByFilter(&ueList, 0, MAX_UE_ID, UE_TYPE_MESH);
+    EXPECT_EQ(ue, &ueList.ueList[2]);
 }

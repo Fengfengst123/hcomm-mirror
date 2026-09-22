@@ -176,6 +176,14 @@ int UrmaEidIsUbRtp(const dcmi_urma_eid_t* eid)
     return 0;
 }
 
+/**
+ * 判断是否为UB scale out场景
+ * 判断依据: UBOE和UB_RTP都为scale out场景
+ * @param eid URMA eid结构体指针
+ * @return int 1为scale out场景，0 不是scale out场景
+ */
+int UrmaEidIsScaleOut(const dcmi_urma_eid_t* eid) { return UrmaEidIsUBOE(eid) || UrmaEidIsUbRtp(eid); }
+
 int UrmaEid2CNA(const dcmi_urma_eid_t* eid, char* cna, size_t cnaSize)
 {
     if (cna == NULL || cnaSize == 0) {
@@ -227,6 +235,9 @@ int UBGetMaxEntityId(const UEList* ueList, int dieId)
     int maxId = -1;
     for (unsigned int i = 0; i < ueList->ueNum; ++i) {
         if (ueList->ueList[i].eidNum == 0 || UBEntityGetDieId(&ueList->ueList[i]) != dieId) {
+            continue;
+        }
+        if (UrmaEidIsScaleOut(&ueList->ueList[i].eidList[0].eid)) {
             continue;
         }
         // 一个UBEntity下的所有eid的Entity ID相同

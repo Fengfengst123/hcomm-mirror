@@ -47,12 +47,6 @@
 #define INFO_TYPE_CHASSI_ID (48)
 #define INFO_TYPE_SPOD_TYPE (49)
 
-#ifdef OPEN_HCCL_TEST
-#define STATIC
-#else
-#define STATIC static
-#endif
-
 enum dcmi_main_cmd {
     DCMI_MAIN_CMD_DVPP = 0,
     DCMI_MAIN_CMD_ISP,

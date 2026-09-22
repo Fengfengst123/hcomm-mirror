@@ -75,3 +75,16 @@ TEST(EID, test_uboe_ub_rtp)
     UrmaEid2CNA(&eid2, ipaddr, sizeof(ipaddr));
     EXPECT_STREQ(ipaddr, "10.10.20.2");
 }
+
+TEST(EID, test_is_scale_out)
+{
+    dcmi_urma_eid_t eid1;
+    dcmi_urma_eid_t eid2;
+    dcmi_urma_eid_t eid3;
+    hex32_to_bin16("00000000003f030000100000df100c00", eid1.raw); // UB_CTP
+    hex32_to_bin16("0000000000ff0ac0001000000a140200", eid2.raw); // UBOE
+    hex32_to_bin16("0000000000ff0a80001000000a140200", eid3.raw); // UB_RTP
+    EXPECT_EQ(UrmaEidIsScaleOut(&eid1), 0);
+    EXPECT_EQ(UrmaEidIsScaleOut(&eid2), 1);
+    EXPECT_EQ(UrmaEidIsScaleOut(&eid3), 1);
+}

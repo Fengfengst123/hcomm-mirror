@@ -53,6 +53,15 @@ int UrmaEidIsPortGroup(const dcmi_urma_eid_t* eid);
 int UrmaEidIsUBOE(const dcmi_urma_eid_t* eid);
 
 int UrmaEidIsUbRtp(const dcmi_urma_eid_t* eid);
+
+/**
+ * 判断是否为UB scale out场景
+ * 判断依据: UBOE和UB_RTP都为scale out场景
+ * @param eid URMA eid结构体指针
+ * @return int 1为scale out场景，0 不是scale out场景
+ */
+int UrmaEidIsScaleOut(const dcmi_urma_eid_t* eid);
+
 /**
  * 从EID中解析出CNA地址,
  * @param eid URMA eid结构体指针

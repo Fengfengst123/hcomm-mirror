@@ -92,6 +92,12 @@ struct dcmi_spod_info {
 #define TOPO_TYPE_SERVER_8P (0)   // 普通服务
 #define TOPO_TYPE_SERVER_16FM (3) // 两个服务器组16p fullmesh
 
+#ifdef OPEN_HCCL_TEST
+#define STATIC
+#else
+#define STATIC static
+#endif
+
 int hal_get_eid_list_by_phy_id(int phyId, dcmi_urma_eid_info_t* eidList, size_t* eidCnt);
 
 int hal_get_mainboard_id(int phyId, unsigned int* mainboardId);
