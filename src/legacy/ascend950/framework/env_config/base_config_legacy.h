@@ -126,7 +126,6 @@ public:
     u32 GetRdmaRetryCnt() const;
     u32 GetRdmaQueueNum() const;
     u32 GetRdmaMultiQpThreshold() const;
-    const HostRdmaUdpPortsList& GetHostRdmaUdpPortsList() const;
     const MultiQpSrcPortConfig& GetMultiQpSrcPortConfig() const;
 
     static constexpr u32 HCCL_RDMA_TC_DEFAULT = 132;      // 默认的traffic class为132(33*4)
@@ -170,7 +169,6 @@ private:
     CfgField<std::string> qpPortConfigPath{
         "HCCL_RDMA_QP_PORT_CONFIG_PATH", "", Str2T<std::string>, CheckFilePath, SetRealPath};
     MultiQpSrcPortConfig multiQpSrcPortConfig_;
-    CfgField<HostRdmaUdpPortsList> hostRdmaUdpPortsList{"HCCL_HOST_RDMA_UDP_PORTS_LIST", {}, CastHostRdmaUdpPortsList};
 };
 
 // 算法配置

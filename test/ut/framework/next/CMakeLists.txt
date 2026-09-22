@@ -21,6 +21,7 @@ set(src_to_test_list
     comms/common/ut_orion_adpt_utils.cc
     comms/common/ut_tp_mgr.cc
     comms/common/ut_config_mgr.cc
+    comms/common/ut_host_multi_qp_config.cc
     comms/common/ut_rma_buffer_mgr.cc
     comms/comm_engine_res/threads/test_aicpu_ts_thread_class.cc
     comms/comm_engine_res/threads/test_cpu_ts_thread_class.cc

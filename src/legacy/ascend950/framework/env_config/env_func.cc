@@ -44,88 +44,7 @@ static bool ParseDecimalU32(const std::string& value, u32& parsed)
     return true;
 }
 
-bool ParseHostRdmaUdpPorts(const std::string& value, std::vector<std::uint16_t>& ports)
-{
-    if (value.empty() || value.back() == ',') {
-        HCCL_ERROR("[ParseHostRdmaUdpPorts] UDP source port list is empty or ends with a comma.");
-        return false;
-    }
-
-    std::vector<std::uint16_t> parsedPorts;
-    size_t start = 0;
-    while (true) {
-        const size_t comma = value.find(',', start);
-        const std::string token = value.substr(start, comma == std::string::npos ? std::string::npos : comma - start);
-        u32 port = 0;
-        if (!ParseDecimalU32(token, port) || port == 0 || port > MultiQpSrcPortConfig::CONFIG_SRC_PORT_ID_MAX) {
-            HCCL_ERROR(
-                "[ParseHostRdmaUdpPorts] UDP source port is invalid, expected a decimal integer in range [1, %u].",
-                MultiQpSrcPortConfig::CONFIG_SRC_PORT_ID_MAX);
-            return false;
-        }
-        parsedPorts.emplace_back(static_cast<std::uint16_t>(port));
-        if (parsedPorts.size() > MultiQpSrcPortConfig::CONFIG_SRC_PORT_NUM_MAX) {
-            HCCL_ERROR(
-                "[ParseHostRdmaUdpPorts] UDP source port count[%zu] exceeds the maximum[%u].", parsedPorts.size(),
-                MultiQpSrcPortConfig::CONFIG_SRC_PORT_NUM_MAX);
-            return false;
-        }
-        if (comma == std::string::npos) {
-            break;
-        }
-        start = comma + 1U;
-    }
-    ports = std::move(parsedPorts);
-    return true;
-}
-
 /*----------------------------- cast functions -------------------------*/
-
-HostRdmaUdpPortsList CastHostRdmaUdpPortsList(const std::string& s)
-{
-    HostRdmaUdpPortsList list;
-    if (s.empty()) {
-        return list;
-    }
-    if (s.size() > HostRdmaUdpPortsList::CONFIG_VALUE_LEN_MAX) {
-        HCCL_ERROR(
-            "[CastHostRdmaUdpPortsList] config value length[%zu] exceeds the maximum[%u].", s.size(),
-            HostRdmaUdpPortsList::CONFIG_VALUE_LEN_MAX);
-        return {};
-    }
-
-    size_t start = 0;
-    while (start <= s.size()) {
-        const size_t semicolon = s.find(';', start);
-        const std::string deviceConfig
-            = s.substr(start, semicolon == std::string::npos ? std::string::npos : semicolon - start);
-        const size_t colon = deviceConfig.find(':');
-        if (deviceConfig.empty() || colon == std::string::npos || colon == 0U || colon + 1U >= deviceConfig.size()
-            || deviceConfig.find(':', colon + 1U) != std::string::npos) {
-            HCCL_ERROR("[CastHostRdmaUdpPortsList] device config has invalid separators or an empty field.");
-            return {};
-        }
-
-        u32 devicePhyId = 0;
-        if (!ParseDecimalU32(deviceConfig.substr(0, colon), devicePhyId)) {
-            HCCL_ERROR("[CastHostRdmaUdpPortsList] phy_dev_id is not a valid decimal integer.");
-            return {};
-        }
-        std::vector<std::uint16_t> ports;
-        if (!ParseHostRdmaUdpPorts(deviceConfig.substr(colon + 1U), ports)) {
-            return {};
-        }
-        if (!list.portsByPhyId.emplace(devicePhyId, std::move(ports)).second) {
-            HCCL_ERROR("[CastHostRdmaUdpPortsList] phy_dev_id[%u] is duplicated.", devicePhyId);
-            return {};
-        }
-        if (semicolon == std::string::npos) {
-            break;
-        }
-        start = semicolon + 1U;
-    }
-    return list;
-}
 
 bool CastBin2Bool(const std::string& s)
 {
@@ -1065,15 +984,6 @@ HcclDetourType CastDetourType(const std::string& s)
 }
 
 /*----------------------- multi qp src port config --------------------------*/
-std::vector<std::uint16_t> GetHostRdmaUdpPortsByPhyId(const HostRdmaUdpPortsList& list, u32 devicePhyId)
-{
-    const auto iter = list.portsByPhyId.find(devicePhyId);
-    if (iter == list.portsByPhyId.end()) {
-        return {};
-    }
-    return iter->second;
-}
-
 std::vector<std::uint16_t>
 GetMultiQpSrcPortsByIpPair(const MultiQpSrcPortConfig& config, const IpAddress& srcIp, const IpAddress& dstIp)
 {

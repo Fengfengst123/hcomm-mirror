@@ -11,7 +11,6 @@
 #ifndef ROCE_CHANNEL_DESC_CONFIGURATOR_H
 #define ROCE_CHANNEL_DESC_CONFIGURATOR_H
 
-#include <string>
 #include <vector>
 
 #include "hccl/hccl_channel.h"
@@ -26,8 +25,6 @@ namespace hccl {
  */
 class RoceChannelDescConfigurator {
 public:
-    static constexpr std::size_t HOST_NIC_CONFIG_BUFFER_SIZE = 2048;
-
     explicit RoceChannelDescConfigurator(uint32_t channelNum);
     RoceChannelDescConfigurator(const RoceChannelDescConfigurator&) = delete;
     RoceChannelDescConfigurator& operator=(const RoceChannelDescConfigurator&) = delete;
@@ -37,13 +34,8 @@ public:
     // 配置 RoCE 源端口，并保证 srcPortList 指向的内存在通道创建期间有效。
     HcclResult FillRoceSrcPortList(const HcclChannelDesc& hcclDesc, uint32_t channelIndex, HcommChannelDesc& hcommDesc);
 
-    // 读取并校验 Host 网卡的多 QP 数量。
-    static void ReadHostNicMultiQpCount(uint32_t& qpCount);
-
 private:
-    static bool ParseStrictDecimal(const std::string& value, uint32_t minValue, uint32_t maxValue, uint32_t& parsed);
-    static void ReadHostNicMultiQpUdpPorts(std::vector<uint16_t>& qpUdpPorts);
-    static void FillPortsFromHostRdmaUdpPortsList(std::vector<uint16_t>& ports);
+    static void FillPortsFromHostMultiQpConfig(std::vector<uint16_t>& ports);
     static HcclResult FillPortsFromMultiQpSrcPortConfig(const HcclChannelDesc& hcclDesc, std::vector<uint16_t>& ports);
     static HcclResult ResolveRoceSrcPorts(const HcclChannelDesc& hcclDesc, std::vector<uint16_t>& ports);
 

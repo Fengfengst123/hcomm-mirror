@@ -11,166 +11,32 @@
 #include "roce_channel_desc_configurator.h"
 
 #include "adapter_rts_common.h"
+#include "coll_comm_mgr.h"
 #include "env_config/env_config_v2.h"
-#include "hcomm_adapter_hccp.h"
 #include "orion_adpt_utils.h"
-
-static bool ReadHostConfigValue(RaInfo& info, HccnCfgKey key, std::string& value)
-{
-    std::vector<char> buffer(hccl::RoceChannelDescConfigurator::HOST_NIC_CONFIG_BUFFER_SIZE, '\0');
-    uint32_t valueLen = static_cast<uint32_t>(buffer.size());
-    const int ret = RaGetHccnCfg(&info, key, buffer.data(), &valueLen);
-    // 配置文件不存在或配置项为空时，RaGetHccnCfg返回成功和空值，不会进入该分支
-    if (ret != 0) {
-        HCCL_WARNING("[%s] RaGetHccnCfg failed, phyId[%u], key[%d], ret[%d]", __func__, info.phyId, key, ret);
-        return false;
-    }
-
-    valueLen = std::min<uint32_t>(valueLen, static_cast<uint32_t>(buffer.size()));
-    value.assign(buffer.data(), valueLen);
-    if (!value.empty() && value.back() == '\0') {
-        value.pop_back();
-    }
-    return true;
-}
-
-static bool
-ReadHostNicMultiQpConfigItem(uint32_t devicePhyId, HccnCfgKey key, const char* itemName, std::string& itemValue)
-{
-    RaInfo info{};
-    info.mode = NETWORK_PEER_ONLINE;
-    info.phyId = devicePhyId;
-    std::string mode;
-    if (!ReadHostConfigValue(info, HCCN_CFG_UDP_PORT_MODE, mode)) {
-        return false;
-    }
-    if (mode.empty()) {
-        HCCL_WARNING("[%s] no host multi-qp config, phyId[%u]", __func__, devicePhyId);
-        return false;
-    }
-    if (mode != "multi_qp") {
-        HCCL_WARNING("[%s] invalid udp_port_mode[%s], phyId[%u]", __func__, mode.c_str(), devicePhyId);
-        return false;
-    }
-
-    if (!ReadHostConfigValue(info, key, itemValue)) {
-        return false;
-    }
-    if (itemValue.empty()) {
-        HCCL_WARNING("[%s] incomplete host multi-qp config, phyId[%u] %s[0]", __func__, devicePhyId, itemName);
-        return false;
-    }
-    return true;
-}
 
 namespace hccl {
 
-constexpr std::size_t RoceChannelDescConfigurator::HOST_NIC_CONFIG_BUFFER_SIZE;
-
 RoceChannelDescConfigurator::RoceChannelDescConfigurator(uint32_t channelNum) : srcPortBuffers_(channelNum) {}
 
-bool RoceChannelDescConfigurator::ParseStrictDecimal(
-    const std::string& value, uint32_t minValue, uint32_t maxValue, uint32_t& parsed)
+void RoceChannelDescConfigurator::FillPortsFromHostMultiQpConfig(std::vector<uint16_t>& ports)
 {
-    const auto isDecimalDigit = [](unsigned char character) {
-        return std::isdigit(character) != 0;
-    };
-    const bool hasValidDecimalFormat = !value.empty() && std::all_of(value.begin(), value.end(), isDecimalDigit);
-    if (!hasValidDecimalFormat) {
-        HCCL_WARNING("[%s] value[%s] is not a valid decimal number", __func__, value.c_str());
-        return false;
-    }
-
-    errno = 0;
-    char* end = nullptr;
-    const unsigned long number = std::strtoul(value.c_str(), &end, 10);
-    if (errno == ERANGE || end != value.c_str() + value.size()) {
-        HCCL_WARNING("[%s] parse value[%s] failed", __func__, value.c_str());
-        return false;
-    }
-    if (number < minValue || number > maxValue) {
-        HCCL_WARNING("[%s] value[%s] is out of range[%u, %u]", __func__, value.c_str(), minValue, maxValue);
-        return false;
-    }
-
-    parsed = static_cast<uint32_t>(number);
-    return true;
-}
-
-void RoceChannelDescConfigurator::ReadHostNicMultiQpCount(uint32_t& qpCount)
-{
-    qpCount = 0;
+    ports.clear();
     s32 deviceLogicId = INVALID_INT;
     uint32_t devicePhyId = INVALID_UINT;
     if ((hrtGetDevice(&deviceLogicId) != HCCL_SUCCESS)
         || (hrtGetDevicePhyIdByIndex(static_cast<uint32_t>(deviceLogicId), devicePhyId, false) != HCCL_SUCCESS)) {
+        HCCL_WARNING("[%s] get device phy id failed, fall back to MultiQpSrcPort.cfg", __func__);
         return;
     }
 
-    std::string count;
-    if (!ReadHostNicMultiQpConfigItem(devicePhyId, HCCN_CFG_MULTI_QP_COUNT, "multi_qp_count", count)) {
+    const auto& hostMultiQpConfig = CollCommMgr::GetInstance().GetConfigMgr().GetHostMultiQpConfig();
+    const auto* configuredPorts = hostMultiQpConfig.GetUdpPorts(devicePhyId);
+    if (configuredPorts != nullptr) {
+        ports = *configuredPorts;
         return;
     }
-
-    uint32_t parsedQpCount = 0;
-    if (!ParseStrictDecimal(count, 1, Hccl::MultiQpSrcPortConfig::CONFIG_SRC_PORT_NUM_MAX, parsedQpCount)) {
-        HCCL_WARNING("[%s] invalid multi_qp_count[%s], phyId[%u]", __func__, count.c_str(), devicePhyId);
-        return;
-    }
-
-    qpCount = parsedQpCount;
-    HCCL_INFO("[%s] host config valid, phyId[%u] count[%u]", __func__, devicePhyId, qpCount);
-}
-
-void RoceChannelDescConfigurator::ReadHostNicMultiQpUdpPorts(std::vector<uint16_t>& qpUdpPorts)
-{
-    qpUdpPorts.clear();
-    s32 deviceLogicId = INVALID_INT;
-    uint32_t devicePhyId = INVALID_UINT;
-    if ((hrtGetDevice(&deviceLogicId) != HCCL_SUCCESS)
-        || (hrtGetDevicePhyIdByIndex(static_cast<uint32_t>(deviceLogicId), devicePhyId, false) != HCCL_SUCCESS)) {
-        return;
-    }
-
-    std::string ports;
-    if (!ReadHostNicMultiQpConfigItem(devicePhyId, HCCN_CFG_MULTI_QP_UDP_PORTS, "multi_qp_udp_ports", ports)) {
-        return;
-    }
-
-    std::vector<uint16_t> parsedQpUdpPorts;
-    if (!Hccl::ParseHostRdmaUdpPorts(ports, parsedQpUdpPorts)) {
-        HCCL_WARNING("[%s] invalid multi_qp_udp_ports[%s], phyId[%u]", __func__, ports.c_str(), devicePhyId);
-        return;
-    }
-
-    qpUdpPorts = std::move(parsedQpUdpPorts);
-    HCCL_INFO("[%s] host config valid, phyId[%u] ports[%zu]", __func__, devicePhyId, qpUdpPorts.size());
-}
-
-void RoceChannelDescConfigurator::FillPortsFromHostRdmaUdpPortsList(std::vector<uint16_t>& ports)
-{
-    const auto& udpPortsList = Hccl::EnvConfig::GetInstance().GetRdmaConfig().GetHostRdmaUdpPortsList();
-    if (!udpPortsList.IsAvailable()) {
-        HCCL_INFO(
-            "[%s] hostRdmaUdpPortsList not available (env HCCL_HOST_RDMA_UDP_PORTS_LIST unset or empty)", __func__);
-        return;
-    }
-
-    s32 deviceLogicId = INVALID_INT;
-    uint32_t devicePhyId = INVALID_UINT;
-    if ((hrtGetDevice(&deviceLogicId) != HCCL_SUCCESS)
-        || (hrtGetDevicePhyIdByIndex(static_cast<uint32_t>(deviceLogicId), devicePhyId, false) != HCCL_SUCCESS)) {
-        HCCL_WARNING("[%s] hrtGetDevice or hrtGetDevicePhyIdByIndex failed, fall back to MultiQpSrcPort.cfg", __func__);
-        return;
-    }
-
-    const auto portIter = udpPortsList.portsByPhyId.find(devicePhyId);
-    if (portIter != udpPortsList.portsByPhyId.end()) {
-        ports = portIter->second;
-    }
-    if (ports.empty()) {
-        HCCL_INFO("[%s] no matching HCCL_HOST_RDMA_UDP_PORTS_LIST ports for phyId[%u]", __func__, devicePhyId);
-    }
+    HCCL_INFO("[%s] no matching host multi qp UDP ports for phyId[%u]", __func__, devicePhyId);
 }
 
 HcclResult RoceChannelDescConfigurator::FillPortsFromMultiQpSrcPortConfig(
@@ -205,13 +71,7 @@ HcclResult RoceChannelDescConfigurator::FillPortsFromMultiQpSrcPortConfig(
 HcclResult
 RoceChannelDescConfigurator::ResolveRoceSrcPorts(const HcclChannelDesc& hcclDesc, std::vector<uint16_t>& ports)
 {
-    ports.clear();
-    ReadHostNicMultiQpUdpPorts(ports);
-    if (!ports.empty()) {
-        return HCCL_SUCCESS;
-    }
-
-    FillPortsFromHostRdmaUdpPortsList(ports);
+    FillPortsFromHostMultiQpConfig(ports);
     if (!ports.empty()) {
         return HCCL_SUCCESS;
     }

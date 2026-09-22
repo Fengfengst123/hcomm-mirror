@@ -264,7 +264,6 @@ global:
         "Hccl::EnvHostNicConfig::GetWhitelistDisable() const";  # _ZNK4Hccl16EnvHostNicConfig19GetWhitelistDisableEv
         "Hccl::EnvLogConfig::GetDfsConfig() const";  # _ZNK4Hccl12EnvLogConfig12GetDfsConfigEv
         "Hccl::EnvRdmaConfig::GetMultiQpSrcPortConfig() const";  # _ZNK4Hccl13EnvRdmaConfig23GetMultiQpSrcPortConfigEv
-        "Hccl::EnvRdmaConfig::GetHostRdmaUdpPortsList() const";  # _ZNK4Hccl13EnvRdmaConfig23GetHostRdmaUdpPortsListEv
         "Hccl::EnvRdmaConfig::GetRdmaMultiQpThreshold() const";  # _ZNK4Hccl13EnvRdmaConfig23GetRdmaMultiQpThresholdEv
         "Hccl::EnvRdmaConfig::GetRdmaQueueNum() const";  # _ZNK4Hccl13EnvRdmaConfig15GetRdmaQueueNumEv
         "Hccl::EnvRdmaConfig::GetRdmaRetryCnt() const";  # _ZNK4Hccl13EnvRdmaConfig15GetRdmaRetryCntEv
@@ -278,7 +277,6 @@ global:
         "Hccl::ExceptionInfo::GetErrorMsg(Hccl::ExceptionType const&)";  # _ZN4Hccl13ExceptionInfo11GetErrorMsgERKNS_13ExceptionTypeE
         "Hccl::GetMultiQpPortsNumByIpPair(Hccl::MultiQpSrcPortConfig const&, Hccl::IpAddress const&, Hccl::IpAddress const&)";  # _ZN4Hccl26GetMultiQpPortsNumByIpPairERKNS_20MultiQpSrcPortConfigERKNS_9IpAddressES5_
         "Hccl::GetMultiQpSrcPortsByIpPair(Hccl::MultiQpSrcPortConfig const&, Hccl::IpAddress const&, Hccl::IpAddress const&)";  # _ZN4Hccl26GetMultiQpSrcPortsByIpPairERKNS_20MultiQpSrcPortConfigERKNS_9IpAddressES5_
-        "Hccl::ParseHostRdmaUdpPorts(std::string const&, std::vector<unsigned short, std::allocator<unsigned short> >&)";  # _ZN4Hccl21ParseHostRdmaUdpPortsERKSsRSt6vectorItSaItEE
         "Hccl::GetUbToken()";  # _ZN4Hccl10GetUbTokenEv
         "Hccl::GlobalMirrorTasks::FindTaskInfo(unsigned int, unsigned int, unsigned int, Hccl::TaskInfo*&) const";  # _ZNK4Hccl17GlobalMirrorTasks12FindTaskInfoEjjjRPNS_8TaskInfoE
         "Hccl::GlobalMirrorTasks::GetQueue(unsigned int, unsigned int) const";  # _ZNK4Hccl17GlobalMirrorTasks8GetQueueEjj

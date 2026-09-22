@@ -39,7 +39,6 @@
 #include "channel_config.h"
 #include "hcclCommDfx.h"
 #include "coll_comm_res_c_adpt.h"
-#include "roce_channel_desc_configurator.h"
 #include "common/loggers/channel_logger.h"
 #include "prof_cycle_time.h"
 
@@ -77,10 +76,17 @@ static u32 ResolveQueueNum(const Hccl::EnvRdmaConfig& rdmaConfig, const HcclChan
 
     if (channelDesc.channelProtocol == COMM_PROTOCOL_ROCE
         && channelDesc.localEndpoint.loc.locType == ENDPOINT_LOC_TYPE_HOST) {
-        u32 hostQpCount = 0;
-        RoceChannelDescConfigurator::ReadHostNicMultiQpCount(hostQpCount);
-        if (hostQpCount > 0) {
-            return hostQpCount;
+        s32 deviceLogicId = INVALID_INT;
+        u32 devicePhyId = INVALID_UINT;
+        if ((hrtGetDevice(&deviceLogicId) == HCCL_SUCCESS)
+            && (hrtGetDevicePhyIdByIndex(static_cast<u32>(deviceLogicId), devicePhyId, false) == HCCL_SUCCESS)) {
+            const auto& hostMultiQpConfig = CollCommMgr::GetInstance().GetConfigMgr().GetHostMultiQpConfig();
+            const u32 hostQpCount = hostMultiQpConfig.GetQpCount(devicePhyId);
+            if (hostQpCount > 0) {
+                return hostQpCount;
+            }
+        } else {
+            HCCL_WARNING("[%s] get device phy id failed, skip querying QP count from host multi qp config.", __func__);
         }
     }
 

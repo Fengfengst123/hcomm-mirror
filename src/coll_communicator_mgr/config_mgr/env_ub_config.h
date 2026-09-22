@@ -18,7 +18,7 @@ namespace hccl {
 /**
  * @brief UB 相关环境变量配置（HCCL 语义的环境变量落在通信域管理层）。
  *
- * 通信域初始化路径（CollComm::Init）调用 Parse() 完成解析：非法配置当场报错（EI0001），
+ * CollCommConfigMgr::Init()调用Parse()完成解析：非法配置当场报错（EI0001），
  * 合法值缓存在字段内；读取期通过 GetUbMultiChannelNum() 直接取缓存值，不再解析。
  * ResetParsed() 仅供 UT 重置解析状态。
  */
@@ -44,8 +44,6 @@ private:
     bool parsed_{false};
     HcclResult parseRet_{HCCL_SUCCESS};
 };
-
-EnvUbConfig& GetEnvUbConfig();
 
 } // namespace hccl
 

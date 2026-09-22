@@ -18,6 +18,7 @@
 #include <vector>
 #include <array>
 #include "coll_comm.h"
+#include "coll_comm_config_mgr.h"
 #include "cluster_monitor.h"
 #include "ns_recovery/task_abort_handler.h"
 #include "legacy_op_hcom_info.h"
@@ -39,6 +40,8 @@ public:
     OrderLaunchThreadMgr& GetOrderLaunchThreadMgr(s32 deviceLogicId);
     HcclTaskAbortHandler& GetTaskAbortHandler() { return taskAbortHandler_; }
     void InitBaseCommRes(uint32_t devId) const;
+    HcclResult InitConfigMgr();
+    const CollCommConfigMgr& GetConfigMgr() const { return configMgr_; }
     ~CollCommMgr();
 
     // 以下接口以 Legacy 前缀标记，表示用于兼容历史老接口，仅做 bug 修复与兼容维护，不再承接新特性、不再继续演进
@@ -52,6 +55,7 @@ private:
     std::array<std::string, MAX_MODULE_DEVICE_NUM> ccuMsCommIds_{};
     std::array<OrderLaunchThreadMgr, MAX_MODULE_DEVICE_NUM> orderLaunchThreadMgrs_;
     HcclTaskAbortHandler taskAbortHandler_;
+    CollCommConfigMgr configMgr_;
 
     std::array<HcclOpInfoCtx, MAX_MODULE_DEVICE_NUM + 1> opHcomInfos_;
     std::array<bool, MAX_MODULE_DEVICE_NUM + 1> baseCommInited_{};

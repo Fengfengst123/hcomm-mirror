@@ -62,6 +62,8 @@ CollCommMgr& CollCommMgr::GetInstance()
     return instance;
 }
 
+HcclResult CollCommMgr::InitConfigMgr() { return configMgr_.Init(); }
+
 CollCommMgr::~CollCommMgr()
 {
     HCCL_INFO("[CollCommMgr][~CollCommMgr] destruct begin.");

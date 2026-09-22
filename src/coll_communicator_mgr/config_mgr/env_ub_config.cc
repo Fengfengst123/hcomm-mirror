@@ -42,10 +42,4 @@ void EnvUbConfig::ResetParsed()
     parseRet_ = HCCL_SUCCESS;
 }
 
-EnvUbConfig& GetEnvUbConfig()
-{
-    static EnvUbConfig ubConfig;
-    return ubConfig;
-}
-
 } // namespace hccl

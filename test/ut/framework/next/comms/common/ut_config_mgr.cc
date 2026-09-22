@@ -12,7 +12,9 @@
 #include <string>
 
 #include "gtest/gtest.h"
+#include "mockcpp/mockcpp.hpp"
 #include "base_config.h"
+#include "coll_comm_config_mgr.h"
 #include "hcomm_res_mgr.h"
 #include "env_ub_config.h"
 
@@ -234,7 +236,7 @@ TEST(ConfigMgrTest, Ut_UbMultiChannelNum_NotSet_Expect_Default1)
 {
     EnvGuard guard("HCCL_UB_MULTI_CHANNEL_NUM");
     guard.Unset();
-    auto& ubCfg = hccl::GetEnvUbConfig();
+    hccl::EnvUbConfig ubCfg;
     ubCfg.ResetParsed();
     EXPECT_EQ(ubCfg.Parse(), HCCL_SUCCESS);
     EXPECT_EQ(ubCfg.GetUbMultiChannelNum(), 1U);
@@ -244,7 +246,7 @@ TEST(ConfigMgrTest, Ut_UbMultiChannelNum_ValidValue16_Expect_16)
 {
     EnvGuard guard("HCCL_UB_MULTI_CHANNEL_NUM");
     guard.Set("16");
-    auto& ubCfg = hccl::GetEnvUbConfig();
+    hccl::EnvUbConfig ubCfg;
     ubCfg.ResetParsed();
     EXPECT_EQ(ubCfg.Parse(), HCCL_SUCCESS);
     EXPECT_EQ(ubCfg.GetUbMultiChannelNum(), 16U);
@@ -254,7 +256,7 @@ TEST(ConfigMgrTest, Ut_UbMultiChannelNum_InvalidString_Expect_Error)
 {
     EnvGuard guard("HCCL_UB_MULTI_CHANNEL_NUM");
     guard.Set("abc"); // 非数字，解析失败返回错误码
-    auto& ubCfg = hccl::GetEnvUbConfig();
+    hccl::EnvUbConfig ubCfg;
     ubCfg.ResetParsed();
     EXPECT_NE(ubCfg.Parse(), HCCL_SUCCESS);
 }
@@ -263,7 +265,7 @@ TEST(ConfigMgrTest, Ut_UbMultiChannelNum_NegativeValue_Expect_Error)
 {
     EnvGuard guard("HCCL_UB_MULTI_CHANNEL_NUM");
     guard.Set("-1"); // StrToNum 检查全数字，负号被拒绝，解析失败返回错误码
-    auto& ubCfg = hccl::GetEnvUbConfig();
+    hccl::EnvUbConfig ubCfg;
     ubCfg.ResetParsed();
     EXPECT_NE(ubCfg.Parse(), HCCL_SUCCESS);
 }
@@ -272,7 +274,7 @@ TEST(ConfigMgrTest, Ut_UbMultiChannelNum_InvalidValue0_Expect_Error)
 {
     EnvGuard guard("HCCL_UB_MULTI_CHANNEL_NUM");
     guard.Set("0"); // 低于最小值1，范围校验失败返回错误码
-    auto& ubCfg = hccl::GetEnvUbConfig();
+    hccl::EnvUbConfig ubCfg;
     ubCfg.ResetParsed();
     EXPECT_NE(ubCfg.Parse(), HCCL_SUCCESS);
 }
@@ -281,7 +283,7 @@ TEST(ConfigMgrTest, Ut_UbMultiChannelNum_InvalidValue17_Expect_Error)
 {
     EnvGuard guard("HCCL_UB_MULTI_CHANNEL_NUM");
     guard.Set("17"); // 超过最大值16，范围校验失败返回错误码
-    auto& ubCfg = hccl::GetEnvUbConfig();
+    hccl::EnvUbConfig ubCfg;
     ubCfg.ResetParsed();
     EXPECT_NE(ubCfg.Parse(), HCCL_SUCCESS);
 }
@@ -289,7 +291,7 @@ TEST(ConfigMgrTest, Ut_UbMultiChannelNum_InvalidValue17_Expect_Error)
 TEST(ConfigMgrTest, Ut_UbMultiChannelNum_ParseOnceIdempotent_Expect_SameResult)
 {
     EnvGuard guard("HCCL_UB_MULTI_CHANNEL_NUM");
-    auto& ubCfg = hccl::GetEnvUbConfig();
+    hccl::EnvUbConfig ubCfg;
 
     // 合法值：首次解析成功后缓存，重复 Parse() 结果一致
     guard.Set("16");
@@ -303,12 +305,32 @@ TEST(ConfigMgrTest, Ut_UbMultiChannelNum_ParseOnceIdempotent_Expect_SameResult)
     ubCfg.ResetParsed();
     EXPECT_NE(ubCfg.Parse(), HCCL_SUCCESS);
     EXPECT_NE(ubCfg.Parse(), HCCL_SUCCESS);
+}
 
-    // 收尾恢复合法解析状态，避免污染同进程后续建链用例
-    guard.Unset();
-    ubCfg.ResetParsed();
-    EXPECT_EQ(ubCfg.Parse(), HCCL_SUCCESS);
-    EXPECT_EQ(ubCfg.GetUbMultiChannelNum(), 1U);
+// ==================== CollCommConfigMgr ====================
+
+class CollCommConfigMgrTest : public testing::Test {
+protected:
+    void TearDown() override { mockcpp::GlobalMockObject::verify(); }
+};
+
+TEST_F(CollCommConfigMgrTest, Ut_Init_When_AllConfigsValid_Expect_ParseOnce)
+{
+    MOCKER_CPP(&hccl::EnvUbConfig::Parse).expects(mockcpp::once()).will(mockcpp::returnValue(HCCL_SUCCESS));
+    MOCKER_CPP(&hccl::HostMultiQpConfig::Parse).expects(mockcpp::once()).will(mockcpp::returnValue(HCCL_SUCCESS));
+    hccl::CollCommConfigMgr configMgr;
+
+    EXPECT_EQ(configMgr.Init(), HCCL_SUCCESS);
+    EXPECT_EQ(configMgr.Init(), HCCL_SUCCESS);
+}
+
+TEST_F(CollCommConfigMgrTest, Ut_Init_When_UbConfigInvalid_Expect_SkipHostMultiQpConfig)
+{
+    MOCKER_CPP(&hccl::EnvUbConfig::Parse).expects(mockcpp::once()).will(mockcpp::returnValue(HCCL_E_PARA));
+    MOCKER_CPP(&hccl::HostMultiQpConfig::Parse).expects(mockcpp::never());
+    hccl::CollCommConfigMgr configMgr;
+
+    EXPECT_EQ(configMgr.Init(), HCCL_E_PARA);
 }
 
 // ==================== EnvField 无 parser 函数 ====================

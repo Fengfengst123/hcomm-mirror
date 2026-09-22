@@ -46,7 +46,6 @@
 #include "hostdpu/dpu_kernel_entrance.h"
 #if (!defined(HCCD)) && (!defined(CCL_KERNEL_AICPU))
 #include "coll_comm_mgr.h"
-#include "env_ub_config.h"
 #endif
 
 #define DOUBLE_SIZE 2
@@ -4136,7 +4135,8 @@ static HcclResult GetUbMultiChannelNumConfig(uint32_t infoLen, void* info)
         HCCL_ERROR("[%s] infoLen[%u] not expected[%zu].", __func__, infoLen, infoExpectedLen);
         return HcclResult::HCCL_E_PARA;
     }
-    const uint32_t num = hccl::GetEnvUbConfig().GetUbMultiChannelNum();
+    const auto& configMgr = hccl::CollCommMgr::GetInstance().GetConfigMgr();
+    const uint32_t num = configMgr.GetEnvUbConfig().GetUbMultiChannelNum();
     *static_cast<uint32_t*>(info) = num;
     return HcclResult::HCCL_SUCCESS;
 }

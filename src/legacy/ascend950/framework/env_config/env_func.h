@@ -261,21 +261,6 @@ struct MultiQpSrcPortConfig {
     static constexpr u32 CONFIG_IP_NUM = 2;
 };
 
-struct HostRdmaUdpPortsList {
-    std::unordered_map<u32, std::vector<std::uint16_t>> portsByPhyId;
-
-    bool IsAvailable() const { return !portsByPhyId.empty(); }
-    size_t GetDeviceConfigCount() const { return portsByPhyId.size(); }
-
-    static constexpr u32 CONFIG_VALUE_LEN_MAX = 32 * 1024;
-};
-
-extern bool ParseHostRdmaUdpPorts(const std::string& value, std::vector<std::uint16_t>& ports);
-
-extern HostRdmaUdpPortsList CastHostRdmaUdpPortsList(const std::string& s);
-
-extern std::vector<std::uint16_t> GetHostRdmaUdpPortsByPhyId(const HostRdmaUdpPortsList& list, u32 devicePhyId);
-
 extern u32
 GetMultiQpPortsNumByIpPair(const MultiQpSrcPortConfig& config, const IpAddress& srcIp, const IpAddress& dstIp);
 
