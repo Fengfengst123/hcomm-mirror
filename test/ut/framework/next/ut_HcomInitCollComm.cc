@@ -165,7 +165,7 @@ protected:
 
     static void ResetOpBaseState()
     {
-        HcclOpInfoCtx& opBaseHcom = hccl::CollCommMgr::GetInstance().LegacyGetHcclOpInfoCtx(g_hcclDeviceId);
+        HcclOpInfoCtx& opBaseHcom = hccl::CollCommMgr::GetInstance().LegacyGetHcclOpInfoCtx();
         std::lock_guard<std::mutex> lock(opBaseHcom.opGroupMapMutex);
         opBaseHcom.opGroup2CommMap.clear();
     }
@@ -199,7 +199,7 @@ TEST_F(HcclCommInitCollCommGuardTest, Ut_HcclCommInitCollComm_When_SetGroupTopoI
 
     EXPECT_EQ(InitComm(failedConfig, failedComm), HCCL_E_INTERNAL);
     EXPECT_EQ(failedComm, nullptr);
-    HcclOpInfoCtx& opBaseHcom = hccl::CollCommMgr::GetInstance().LegacyGetHcclOpInfoCtx(g_hcclDeviceId);
+    HcclOpInfoCtx& opBaseHcom = hccl::CollCommMgr::GetInstance().LegacyGetHcclOpInfoCtx();
     {
         std::lock_guard<std::mutex> lock(opBaseHcom.opGroupMapMutex);
         EXPECT_TRUE(opBaseHcom.opGroup2CommMap.empty());

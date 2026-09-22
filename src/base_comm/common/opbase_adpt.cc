@@ -43,6 +43,8 @@ s32 HcclGetThreadDeviceId()
     return g_hcclDeviceId;
 }
 
+void HcclSetThreadDeviceId(s32 deviceId) { g_hcclDeviceId = deviceId; }
+
 HcclResult HcclDeviceRefresh(s32& deviceLogicId)
 {
     HcclResult ret = hrtGetDeviceRefresh(&g_hcclDeviceId);

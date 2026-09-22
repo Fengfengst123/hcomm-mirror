@@ -107,6 +107,7 @@ void HcomUnSetGroupTopoInfo(const char* group);
 HcclResult HcomGetCommByGroup(const char* group, std::shared_ptr<hccl::hcclComm>& hcclComm);
 HcclResult HcomGetTopoDesc(const char* group, HcclTopoDescs* topoDescs, uint32_t topoSize);
 s32 HcclGetThreadDeviceId();
+void HcclSetThreadDeviceId(s32 deviceId);
 void HcomGroupCallbackFuncInstall(
     HcclResult (*p1)(const std::string&, const std::vector<u32>&), bool (*p2)(HcomInfo&),
     HcclResult (*p3)(const std::string&), HcclResult (*p4)(HcomInfo&));

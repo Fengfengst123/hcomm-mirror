@@ -194,7 +194,7 @@ public:
     void TearDown() override
     {
         // 删除所有拓扑建链的线程
-        HcclOpInfoCtx& opBaseInfo = CollCommMgr::GetInstance().LegacyGetHcclOpInfoCtx(g_hcclDeviceId);
+        HcclOpInfoCtx& opBaseInfo = CollCommMgr::GetInstance().LegacyGetHcclOpInfoCtx();
         opBaseInfo.hcclCommTopoInfoDetectServer.clear();
         opBaseInfo.hcclCommTopoInfoDetectAgent.clear();
 
@@ -417,7 +417,7 @@ TEST_F(HcclCommInitRootInfoScalableTest, Ut_InjectScalableRootMeshInfo_When_Serv
 TEST_F(HcclCommInitRootInfoScalableTest, Ut_InjectScalableRootMeshInfo_When_ServerNotScalable_Expect_HCCL_E_INTERNAL)
 {
     Ut_Device_Set(0);
-    HcclOpInfoCtx& opBaseInfo = CollCommMgr::GetInstance().LegacyGetHcclOpInfoCtx(g_hcclDeviceId);
+    HcclOpInfoCtx& opBaseInfo = CollCommMgr::GetInstance().LegacyGetHcclOpInfoCtx();
     auto plainServer = std::make_shared<TopoInfoDetect>();
     HcclRootHandle groupRootHandle{};
     (void)strcpy_s(groupRootHandle.identifier, sizeof(groupRootHandle.identifier), "plain_root");
@@ -432,7 +432,7 @@ TEST_F(HcclCommInitRootInfoScalableTest, Ut_InjectScalableRootMeshInfo_When_Serv
 TEST_F(HcclCommInitRootInfoScalableTest, Ut_InjectScalableRootMeshInfo_When_ScalableServer_Expect_Success)
 {
     Ut_Device_Set(0);
-    HcclOpInfoCtx& opBaseInfo = CollCommMgr::GetInstance().LegacyGetHcclOpInfoCtx(g_hcclDeviceId);
+    HcclOpInfoCtx& opBaseInfo = CollCommMgr::GetInstance().LegacyGetHcclOpInfoCtx();
     auto scalableServer = std::make_shared<TopoInfoDetectScalable>();
     HcclRootHandle groupRootHandle{};
     (void)strcpy_s(groupRootHandle.identifier, sizeof(groupRootHandle.identifier), "scalable_root_ok");

@@ -23,7 +23,7 @@ public:
     void TearDown() override
     {
         // 删除所有拓扑建链的线程
-        HcclOpInfoCtx& opBaseInfo = CollCommMgr::GetInstance().LegacyGetHcclOpInfoCtx(g_hcclDeviceId);
+        HcclOpInfoCtx& opBaseInfo = CollCommMgr::GetInstance().LegacyGetHcclOpInfoCtx();
         opBaseInfo.hcclCommTopoInfoDetectServer.clear();
         opBaseInfo.hcclCommTopoInfoDetectAgent.clear();
 

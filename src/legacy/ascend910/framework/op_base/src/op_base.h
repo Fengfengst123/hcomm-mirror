@@ -30,6 +30,7 @@
 #include "common/src/config.h"
 #include "../common/src/topo/topoinfo_detect.h"
 #include "legacy_op_hcom_info.h"
+#include "sal_pub.h"
 
 namespace Hccl {
 using ProfCallback = std::function<HcclResult(const TaskParam&, uint64_t)>;
@@ -293,6 +294,42 @@ HcclResult HcclCreateComResourceByComm(
     void* mc2Tiling = nullptr);
 
 HcclResult HcclDeviceRefresh(s32& deviceLogicId);
+
+HcclResult HcclCreateSubCommConfigInner(
+    hccl::hcclComm* globalComm, uint32_t rankNum, uint32_t* rankIds, uint32_t subCommRankId,
+    hccl::CommConfig& commConfig, HcclComm* subComm);
+
+void HcclCloseCommConnections(const std::string& identifier);
+
+HcclResult InitCommRootInfo(
+    const u32 nRanks, const u32 rank, const hccl::HcclRootHandle& rootHandle, const hccl::CommConfig& commConfig,
+    HcclComm* comm, bool isScalable = false);
+
+HcclResult CheckOpBasedHcom(HcclOpInfoCtx& opBaseHcom, const uint32_t rank, const hccl::CommConfig& commConfig);
+
+HcclResult InitCommClusterInfo(
+    std::string& rankTableM, const uint32_t rank, const hccl::CommConfig& commConfig, HcclOpInfoCtx& opBaseHcom,
+    HcclComm* comm);
+
+bool IsCommNameExistInOneSidedComms(s32 deviceLogicId, const std::string& commName);
+
+HcclOpInfoCtx& GetOneSidedOpInfoCtx(s32 deviceLogicId, const std::string& commName);
+
+HcclResult SetupHierarchical(
+    const u32 nRanks, const u32 rank, const hccl::HcclRootHandle& rootHandle,
+    std::shared_ptr<hccl::TopoInfoDetect>& topoDetectAgent, std::shared_ptr<hccl::TopoInfoDetect>& topoDetectMember,
+    hccl::HcclRankHandle& groupLeader);
+
+HcclResult GetTopoDetectInfo(
+    hccl::HcclCommParams& params, hccl::RankTable_t& rankTable, hccl::HcclBasicRankInfo& localRankInfo,
+    const hccl::HcclRootHandle& rootHandle, std::shared_ptr<hccl::TopoInfoDetect>& topoDetectAgent,
+    std::shared_ptr<hccl::TopoInfoDetect>& topoDetectMember);
+
+bool IsOneSidedComm(HcclComm comm);
+
+HcclResult HcclOneSidedCommDestroy(HcclComm comm, s32 deviceLogicId, HcclUs startut);
+
+extern std::mutex g_opHcomOneSideMutex;
 
 HcclResult HcclBatchSendRecvGroup(HcclSendRecvItem* sendRecvInfo, uint32_t itemNum, HcclComm comm, aclrtStream stream);
 

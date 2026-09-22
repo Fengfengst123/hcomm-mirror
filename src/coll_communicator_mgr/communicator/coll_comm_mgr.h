@@ -46,8 +46,8 @@ public:
 
     // 以下接口以 Legacy 前缀标记，表示用于兼容历史老接口，仅做 bug 修复与兼容维护，不再承接新特性、不再继续演进
     HcclOpInfoCtx& LegacyGetOpHcomInfo(uint32_t devId);
-    HcclOpInfoCtx& LegacyGetHcclExistDeviceOpInfoCtx(s32& devId);
-    HcclOpInfoCtx& LegacyGetHcclOpInfoCtx(s32& devId);
+    HcclOpInfoCtx& LegacyGetHcclExistDeviceOpInfoCtx(s32 devId);
+    HcclOpInfoCtx& LegacyGetHcclOpInfoCtx();
 
 private:
     std::unordered_map<std::string, CollComm*> allCollComms_;

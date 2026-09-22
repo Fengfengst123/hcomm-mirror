@@ -12,6 +12,7 @@
 #include "coll_comm_mgr.h"
 #include "hcomm_c_adpt.h"
 #include "hcomm_result_defs.h"
+#include "hcom_common.h"
 
 extern thread_local s32 g_hcclDeviceId;
 
@@ -91,8 +92,11 @@ TEST_F(CollCommMgrTest, Ut_LegacyGetHcclExistDeviceOpInfoCtx_When_SlotNotUsedAnd
     s32 devId = 3;
     CollCommMgr::GetInstance().LegacyGetOpHcomInfo(MAX_MODULE_DEVICE_NUM).isUsed = true;
     HcclOpInfoCtx& info = CollCommMgr::GetInstance().LegacyGetHcclExistDeviceOpInfoCtx(devId);
-    EXPECT_EQ(devId, static_cast<s32>(MAX_MODULE_DEVICE_NUM));
+    // 函数内通过 HcclSetThreadDeviceId 写回 backup 槽索引到 g_hcclDeviceId
+    HcclOpInfoCtx& backupSlot = CollCommMgr::GetInstance().LegacyGetOpHcomInfo(MAX_MODULE_DEVICE_NUM);
+    EXPECT_EQ(&info, &backupSlot);
     EXPECT_EQ(info.isUsed, true);
+    EXPECT_EQ(g_hcclDeviceId, static_cast<s32>(MAX_MODULE_DEVICE_NUM));
 }
 
 TEST_F(CollCommMgrTest, Ut_LegacyGetHcclExistDeviceOpInfoCtx_When_SlotNotUsedAndBackupNotUsed_Expect_MarkAndReturn)
@@ -108,7 +112,7 @@ TEST_F(CollCommMgrTest, Ut_LegacyGetHcclExistDeviceOpInfoCtx_When_SlotNotUsedAnd
 TEST_F(CollCommMgrTest, Ut_LegacyGetHcclOpInfoCtx_When_HcclGetDeviceIdSuccess_Expect_DelegateToExistDevice)
 {
     g_hcclDeviceId = 0;
-    HcclOpInfoCtx& info = CollCommMgr::GetInstance().LegacyGetHcclOpInfoCtx(g_hcclDeviceId);
+    HcclOpInfoCtx& info = CollCommMgr::GetInstance().LegacyGetHcclOpInfoCtx();
     EXPECT_EQ(g_hcclDeviceId, 0);
     EXPECT_EQ(info.isUsed, true);
 }
@@ -119,9 +123,12 @@ TEST_F(CollCommMgrTest, Ut_LegacyGetHcclOpInfoCtx_When_HcclGetDeviceIdFailAndHas
     MOCKER(hrtGetDevice).stubs().with(mockcpp::any()).will(returnValue(HCCL_E_INTERNAL));
 
     CollCommMgr::GetInstance().LegacyGetOpHcomInfo(5).isUsed = true;
-    HcclOpInfoCtx& info = CollCommMgr::GetInstance().LegacyGetHcclOpInfoCtx(g_hcclDeviceId);
-    EXPECT_EQ(g_hcclDeviceId, 5);
+    HcclOpInfoCtx& info = CollCommMgr::GetInstance().LegacyGetHcclOpInfoCtx();
+    // 函数内通过 HcclSetThreadDeviceId 写回 scan 命中的槽索引到 g_hcclDeviceId
+    HcclOpInfoCtx& slot5 = CollCommMgr::GetInstance().LegacyGetOpHcomInfo(5);
+    EXPECT_EQ(&info, &slot5);
     EXPECT_EQ(info.isUsed, true);
+    EXPECT_EQ(g_hcclDeviceId, 5);
 }
 
 TEST_F(CollCommMgrTest, Ut_LegacyGetHcclOpInfoCtx_When_HcclGetDeviceIdFailAndNoUsedSlot_Expect_FallbackToBackup)
@@ -129,9 +136,29 @@ TEST_F(CollCommMgrTest, Ut_LegacyGetHcclOpInfoCtx_When_HcclGetDeviceIdFailAndNoU
     g_hcclDeviceId = INVALID_INT;
     MOCKER(hrtGetDevice).stubs().with(mockcpp::any()).will(returnValue(HCCL_E_INTERNAL));
 
-    HcclOpInfoCtx& info = CollCommMgr::GetInstance().LegacyGetHcclOpInfoCtx(g_hcclDeviceId);
-    EXPECT_EQ(g_hcclDeviceId, static_cast<s32>(MAX_MODULE_DEVICE_NUM));
+    HcclOpInfoCtx& info = CollCommMgr::GetInstance().LegacyGetHcclOpInfoCtx();
+    // 函数内通过 HcclSetThreadDeviceId 写回 backup 槽索引到 g_hcclDeviceId
+    HcclOpInfoCtx& backupSlot = CollCommMgr::GetInstance().LegacyGetOpHcomInfo(MAX_MODULE_DEVICE_NUM);
+    EXPECT_EQ(&info, &backupSlot);
     EXPECT_EQ(info.isUsed, true);
+    EXPECT_EQ(g_hcclDeviceId, static_cast<s32>(MAX_MODULE_DEVICE_NUM));
+}
+
+// ===== HcclSetThreadDeviceId / HcclGetThreadDeviceId =====
+
+TEST_F(CollCommMgrTest, Ut_HcclSetThreadDeviceId_When_SetValidValue_Expect_HcclGetThreadDeviceIdReturnsSameValue)
+{
+    HcclSetThreadDeviceId(3);
+    EXPECT_EQ(g_hcclDeviceId, 3);
+    EXPECT_EQ(HcclGetThreadDeviceId(), 3);
+}
+
+TEST_F(CollCommMgrTest, Ut_HcclSetThreadDeviceId_When_Overwrite_Expect_LatestValueWins)
+{
+    HcclSetThreadDeviceId(1);
+    EXPECT_EQ(HcclGetThreadDeviceId(), 1);
+    HcclSetThreadDeviceId(5);
+    EXPECT_EQ(HcclGetThreadDeviceId(), 5);
 }
 
 // ===== InitBaseCommRes =====

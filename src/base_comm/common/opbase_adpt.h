@@ -17,6 +17,7 @@
 
 extern thread_local s32 g_hcclDeviceId;
 s32 HcclGetThreadDeviceId();
+void HcclSetThreadDeviceId(s32 deviceId);
 HcclResult HcclDeviceRefresh(s32& deviceLogicId);
 
 #endif

@@ -164,7 +164,7 @@ HcclOpInfoCtx& CollCommMgr::LegacyGetOpHcomInfo(uint32_t devId)
     return opHcomInfos_[devId];
 }
 
-HcclOpInfoCtx& CollCommMgr::LegacyGetHcclExistDeviceOpInfoCtx(s32& devId)
+HcclOpInfoCtx& CollCommMgr::LegacyGetHcclExistDeviceOpInfoCtx(s32 devId)
 {
     std::lock_guard<std::mutex> lock(opHcomInfosMutex_);
     auto& opHcomInfo = LegacyGetOpHcomInfo(devId);
@@ -172,8 +172,8 @@ HcclOpInfoCtx& CollCommMgr::LegacyGetHcclExistDeviceOpInfoCtx(s32& devId)
         HCCL_INFO("[LegacyGetHcclOpInfoCtx] Set device, use devId[%d] ", devId);
         auto& backUpOpHcomInfo = LegacyGetOpHcomInfo(MAX_MODULE_DEVICE_NUM);
         if (backUpOpHcomInfo.isUsed) {
-            devId = MAX_MODULE_DEVICE_NUM;
-            HCCL_INFO("[LegacyGetHcclOpInfoCtx] Used cover bottom devId[%d]", devId);
+            HcclSetThreadDeviceId(static_cast<s32>(MAX_MODULE_DEVICE_NUM));
+            HCCL_INFO("[LegacyGetHcclOpInfoCtx] Used cover bottom devId[%u]", MAX_MODULE_DEVICE_NUM);
             return backUpOpHcomInfo;
         }
     }
@@ -183,26 +183,26 @@ HcclOpInfoCtx& CollCommMgr::LegacyGetHcclExistDeviceOpInfoCtx(s32& devId)
     return opHcomInfo;
 }
 
-HcclOpInfoCtx& CollCommMgr::LegacyGetHcclOpInfoCtx(s32& devId)
+HcclOpInfoCtx& CollCommMgr::LegacyGetHcclOpInfoCtx()
 {
     if (HcclGetDeviceId() == HCCL_SUCCESS) {
-        return LegacyGetHcclExistDeviceOpInfoCtx(devId);
+        return LegacyGetHcclExistDeviceOpInfoCtx(HcclGetThreadDeviceId());
     }
 
     std::lock_guard<std::mutex> lock(opHcomInfosMutex_);
     for (u32 i = 0; i < MAX_MODULE_DEVICE_NUM; i++) {
         auto& opHcomInfo = LegacyGetOpHcomInfo(i);
         if (opHcomInfo.isUsed) {
-            devId = i;
+            HcclSetThreadDeviceId(static_cast<s32>(i));
             HCCL_INFO("[LegacyGetHcclOpInfoCtx] Not set device, Used devId[%u] ", i);
             return opHcomInfo;
         }
     }
 
-    devId = MAX_MODULE_DEVICE_NUM;
-    auto& backUpOpHcomInfo = LegacyGetOpHcomInfo(devId);
+    HcclSetThreadDeviceId(static_cast<s32>(MAX_MODULE_DEVICE_NUM));
+    auto& backUpOpHcomInfo = LegacyGetOpHcomInfo(MAX_MODULE_DEVICE_NUM);
     backUpOpHcomInfo.isUsed = true;
-    HCCL_INFO("[LegacyGetHcclOpInfoCtx] Used cover bottom devId[%d]", devId);
+    HCCL_INFO("[LegacyGetHcclOpInfoCtx] Used cover bottom devId[%u]", MAX_MODULE_DEVICE_NUM);
     return backUpOpHcomInfo;
 }
 
