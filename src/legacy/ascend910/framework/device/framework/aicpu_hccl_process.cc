@@ -471,7 +471,11 @@ HcclResult AicpuHcclProcess::AicpuRunRpcServerV2(
             static_cast<u64*>(alltoallvDataPtr->sendRecvInfos) + ALLTOALLV_INFO_INDEX_2 * rankSize);
         opParam.All2AllDataDes.rdispls = static_cast<void*>(
             static_cast<u64*>(alltoallvDataPtr->sendRecvInfos) + ALLTOALLV_INFO_INDEX_3 * rankSize);
-        if (algName == "RunAlltoAllVTwoLevelPipeline") {
+        // FullMesh 小规模（unfold 且 rankSize <= HCCL_ALLTOALLV_P2P_SIZE）tiling index4+
+        // 含全量 SendRecvInfo，与 TwoLevelPipeline 相同方式传递；大规模场景 index4+ 未预留不设置
+        if (algName == "RunAlltoAllVTwoLevelPipeline"
+            || (algName == "RunAlltoAllVFullMesh" && commParam->rankSize <= HCCL_ALLTOALLV_P2P_SIZE
+                && opParam.aicpuUnfoldMode != 0)) {
             hcclCommAicpu->SetSendRecvInfoPtr(static_cast<void*>(
                 static_cast<u64*>(alltoallvDataPtr->sendRecvInfos) + ALLTOALLV_INFO_INDEX_4 * rankSize));
         }

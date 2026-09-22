@@ -444,7 +444,9 @@ bool AlltoAllOperator::JudgeIfNeedPreProcessAndGetParam(
         cclBufferManager_.GetInCCLbufferSize());
     bool useContinuousPipeline = IsSatisfyAlltoallContinuousPipelineCondition(param);
     if ((param.opType == HcclCMDType::HCCL_CMD_ALLTOALLV) && !useA2AAiv) {
-        if (useDirectFullmesh || useContinuousPipeline || param.aicpuUnfoldMode) {
+        // unfold 小规模需执行 PreProcess 收集全量 SendRecvInfo，经 tiling 传递给 device 侧执行器
+        if (useDirectFullmesh || useContinuousPipeline
+            || (param.aicpuUnfoldMode && userRankSize_ > HCCL_ALLTOALLV_P2P_SIZE)) {
             return false;
         }
         CHK_RET(PrepareAlltoAllAddrInfo(

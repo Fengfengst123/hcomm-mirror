@@ -16,6 +16,7 @@
 #include <numeric>
 #include <unordered_set>
 #include <memory>
+#include "common.h"
 #include "externalinput_pub.h"
 #include "opexecounter_pub.h"
 // ltm指定config路径
@@ -1439,7 +1440,11 @@ HcclResult HcclCommunicator::SetDynamicTilingDataAlltoallv(
             sendCountsPtr[i], recvCountsPtr[i], sdisplsPtr[i], rdisplsPtr[i]);
     }
 
-    if (algName == "RunAlltoAllVTwoLevelPipeline") {
+    // FullMesh 小规模（unfold 且 rankSize <= HCCL_ALLTOALLV_P2P_SIZE，与 device 侧 AicpuRunRpcServerV2 门控对齐）
+    // PreProcess 已收集全量 SendRecvInfo，与 TwoLevelPipeline 一同拷入 index4+
+    // 注：CalcOpTilingDynamicDataSize 已为 FullMesh 预留 hostCollectBuffer_.size() 字节空间
+    if (algName == "RunAlltoAllVTwoLevelPipeline"
+        || (algName == "RunAlltoAllVFullMesh" && opParam.aicpuUnfoldMode != 0 && rankSize <= HCCL_ALLTOALLV_P2P_SIZE)) {
         u64* sendRecvInfoPtr = rdisplsPtr + rankSize;
         CHK_SAFETY_FUNC_RET(
             memcpy_s(sendRecvInfoPtr, hostCollectBuffer_.size(), hostCollectBuffer_.ptr(), hostCollectBuffer_.size()));
@@ -1504,7 +1509,10 @@ u64 HcclCommunicator::CalcOpTilingDynamicDataSize(
         dynamicDataSize = sizeof(struct OpTilingAllToAllDataDes);
     } else if (opType == HcclCMDType::HCCL_CMD_ALLTOALLV) {
         dynamicDataSize = sizeof(struct OpTilingAlltoallvDataDes) + rankSize * ALLTOALL_INFO_MATRIX_SIZE * sizeof(u64);
-        if (algName == "RunAlltoAllVTwoLevelPipeline") {
+        // 预留 index4+ 空间存放全量 SendRecvInfo；门控与 SetDynamicTilingDataAlltoallv 保持一致
+        if (algName == "RunAlltoAllVTwoLevelPipeline"
+            || (algName == "RunAlltoAllVFullMesh" && opParam.aicpuUnfoldMode != 0
+                && rankSize <= HCCL_ALLTOALLV_P2P_SIZE)) {
             dynamicDataSize += hostCollectBuffer_.size();
         }
     } else if (opType == HcclCMDType::HCCL_CMD_ALLTOALLVC) {

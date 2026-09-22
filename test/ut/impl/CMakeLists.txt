@@ -19,6 +19,7 @@ set(hccl_utest_impl_list
     ut_preempt_port_manager.cc
     ut_template_base.cc
     ut_alltoallv_continuous_pipeline.cc
+    ut_alltoall_operator.cc
     # ut_netdevice.cc
     ut_global_mem_mgr.cc
     ut_global_mem_mgr_multhread.cc
