@@ -327,9 +327,8 @@ HcommCcuKernelLaunch(ThreadHandle threadHandle, CcuKernelHandle kernelHandle, co
         return CcuResult::CCU_SUCCESS;
     }
     bool isProfilingEnabledL1 = Hccl::DfxProfilingHandler::GetInstance().GetHcclL1State();
-    bool isProfilingEnabledL0 = Hccl::DfxProfilingHandler::GetInstance().GetHcclL0State();
     bool isCached = Hccl::DfxProfilingHandler::GetInstance().GetCachedFlag();
-    bool isSaveProfilingData = isProfilingEnabledL1 || isProfilingEnabledL0 || isCached;
+    bool isSaveProfilingData = isProfilingEnabledL1 || isCached;
 
     std::vector<hcomm::CcuProfilingInfo> allCcuProfilingInfo;
     CCU_CHK_RET(ConstructProfilingInfo(
