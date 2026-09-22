@@ -385,6 +385,17 @@ TEST_F(DfxProfilingReporterTest, Ut_ReportOp_When_OpBasedFalse_Expect_NoThrow)
     EXPECT_NO_THROW(reporter_->ReportOp(1000, false, false));
 }
 
+// 协商算子(NEGOTIATIONOP)按非GE的opbase方式上报HostApi，验证ReportOp路径不抛异常
+TEST_F(DfxProfilingReporterTest, Ut_ReportOp_When_NegotiationOp_Expect_NoThrow)
+{
+    auto opInfo = std::make_shared<DfxOpInfo>();
+    opInfo->op_.opType = OpType::ALLREDUCE;
+    opInfo->op_.opMode = OpMode::NEGOTIATIONOP;
+    opInfo->engine = CommEngine::COMM_ENGINE_CPU_TS;
+    mgr_->SetCurrDfxOpInfo(opInfo);
+    EXPECT_NO_THROW(reporter_->ReportOp(1000, false, true));
+}
+
 TEST_F(DfxProfilingReporterTest, Ut_UpdateProfStat_When_SameState_Expect_NoChange)
 {
     bool state = handlerPtr_->GetHcclL1State();

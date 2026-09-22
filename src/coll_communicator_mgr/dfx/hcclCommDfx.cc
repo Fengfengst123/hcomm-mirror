@@ -65,7 +65,8 @@ HcclResult HcclCommDfx::Init(u32 deviceId, const std::string& comTag, u32 myRank
 HcclResult HcclCommDfx::GetOpModeFlags(bool& isOpBase, bool& isCached)
 {
     auto opMode = mirrorTaskManager_->GetOpMode();
-    isOpBase = opMode == Hccl::OpMode::OPBASE || opMode == Hccl::OpMode::ACLGRAPH;
+    isOpBase
+        = opMode == Hccl::OpMode::OPBASE || opMode == Hccl::OpMode::ACLGRAPH || opMode == Hccl::OpMode::NEGOTIATIONOP;
     isCached = opMode == Hccl::OpMode::OFFLOAD || opMode == Hccl::OpMode::ACLGRAPH;
     return HCCL_SUCCESS;
 }

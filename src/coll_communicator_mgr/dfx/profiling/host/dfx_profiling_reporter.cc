@@ -81,8 +81,10 @@ void DfxProfilingReporter::ReportOp(uint64_t beginTime, bool cachedReq, bool opb
     opInfo->endTime_ = endTime;
     profilingHandler_->ReportHcclOp(*opInfo, cachedReq);
 
-    // 单算子模式涉及HOST API信息上报，GE下发场景(LaunchKernelMode)不上报
-    if (opbased && !IsLaunchKernelMode()) {
+    // 单算子模式涉及HOST API信息上报，GE下发场景(LaunchKernelMode)不上报；
+    // 协商算子(NEGOTIATIONOP)为HCCL内部下发，不受GE下发场景约束，按非GE的opbase方式上报
+    bool isNegotiationOp = opInfo->op_.opMode == OpMode::NEGOTIATIONOP;
+    if (opbased && (!IsLaunchKernelMode() || isNegotiationOp)) {
         profilingHandler_->ReportHostApi(opType, beginTime, endTime, cachedReq, isAiCpu);
     }
 }

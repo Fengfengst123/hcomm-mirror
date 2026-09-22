@@ -108,8 +108,9 @@ HcclResult HcclDfxRegOpInfoByCommId(char* commId, void* hcclDfxOpInfo)
     CHK_PTR_NULL(hcclCommDfx);
     CHK_RET(hcclCommDfx->UpdateProfStat());
     CHK_RET(hcclCommDfx->SetCurrDfxOpInfo(dfxOpInfoOnce));
-    bool isOpBase
-        = dfxOpInfoOnce->op_.opMode == Hccl::OpMode::OPBASE || dfxOpInfoOnce->op_.opMode == Hccl::OpMode::ACLGRAPH;
+    bool isOpBase = dfxOpInfoOnce->op_.opMode == Hccl::OpMode::OPBASE
+                    || dfxOpInfoOnce->op_.opMode == Hccl::OpMode::ACLGRAPH
+                    || dfxOpInfoOnce->op_.opMode == Hccl::OpMode::NEGOTIATIONOP;
     bool isCached
         = dfxOpInfoOnce->op_.opMode == Hccl::OpMode::OFFLOAD || dfxOpInfoOnce->op_.opMode == Hccl::OpMode::ACLGRAPH;
     Hccl::DfxProfilingHandler::GetInstance().SetOpModeFlags(isOpBase, isCached);

@@ -223,6 +223,19 @@ TEST_F(HcclCommDfxTest, Ut_GetOpModeFlags_When_OpModeIsAclgraph_Expect_BothTrue)
     EXPECT_TRUE(isCached);
 }
 
+// 测试 GetOpModeFlags - NEGOTIATIONOP 模式按非GE的opbase方式上报（isOpBase为true、isCached为false）
+TEST_F(HcclCommDfxTest, Ut_GetOpModeFlags_When_OpModeIsNegotiationop_Expect_OpBaseTrueAndCachedFalse)
+{
+    dfx_->mirrorTaskManager_->opMode_ = Hccl::OpMode::NEGOTIATIONOP;
+
+    bool isOpBase = false;
+    bool isCached = true;
+    HcclResult ret = dfx_->GetOpModeFlags(isOpBase, isCached);
+    EXPECT_EQ(ret, HCCL_SUCCESS);
+    EXPECT_TRUE(isOpBase);
+    EXPECT_FALSE(isCached);
+}
+
 // 测试 GetChannelRemoteRankId（非Lite版）- 正常查找命中 shared_lock 读路径
 TEST_F(HcclCommDfxTest, Ut_GetChannelRemoteRankId_When_Exist_Expect_ReturnSuccess)
 {

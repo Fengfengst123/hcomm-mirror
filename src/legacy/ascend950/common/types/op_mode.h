@@ -13,6 +13,6 @@
 #include "enum_factory.h"
 namespace Hccl {
 
-MAKE_ENUM(OpMode, OFFLOAD, OPBASE, ACLGRAPH)
+MAKE_ENUM(OpMode, OFFLOAD, OPBASE, ACLGRAPH, NEGOTIATIONOP)
 } // namespace Hccl
 #endif // !HCCLV2_OP_MODE_H
