@@ -1,6 +1,6 @@
 ---
 name: hcomm-review
-description: 检视本仓（hcomm）在 GitCode 上的 PR。触发词：检视、检视PR、检视本仓PR、代码检视、代码审查、review PR、code review、检视PR123、review hcomm PR。从 GitCode 拉取指定 PR 的代码到隔离 worktree，多维度检视（代码质量/风格/逻辑/注释/架构/AGENTS.md 合规/描述与实现吻合度/功能正确性），把检视意见按行提交到 PR（自动行号验证、与已有评论去重），提交检视汇总报告，最后清理 worktree 与临时文件。支持 Windows 与 Linux。
+description: 检视本仓（hcomm）在 GitCode 上的 PR。触发词：检视、检视PR、检视本仓PR、代码检视、代码审查、review PR、code review、检视PR123、review hcomm PR。从 GitCode 拉取指定 PR 的代码到隔离 worktree，多维度检视（代码质量/风格/逻辑/注释/架构/AGENTS.md 合规/描述与实现吻合度/功能正确性/文档质量），把检视意见按行提交到 PR（自动行号验证、与已有评论去重），提交检视汇总报告，最后清理 worktree 与临时文件。支持 Windows 与 Linux。
 ---
 
 # hcomm PR 代码检视
@@ -54,17 +54,19 @@ git worktree add --detach .wt/review-<N> refs/remotes/<remote>/mr/<N>-head
 
 ### Step 3 多维检视
 
-**先读检视规范与仓内权威资料，再检视**（检视规范按五类分档，见 [`references/README.md`](./references/README.md) 索引，按 PR 触碰范围加载）：
+**先读检视规范与仓内权威资料，再检视**（检视规范按七类分档，见 [`references/README.md`](./references/README.md) 索引，按 PR 触碰范围加载）：
 
-| 资料 | 用途 |
-|------|------|
-| [`references/`](./references/README.md) 检视规范 | 编码安全红线 / 对外 API / 架构合规 / PR 完备性 |
-| 根目录 `AGENTS.md` | 架构约束（分层依赖/控制面数据面分离/legacy 约束）、编码规范、目录职责 |
-| `docs/zh/architecture/architecture-brief.md` | 架构权威来源（改 src/include/pkg_inc 前必读） |
-| `.clang-format` / `CONTRIBUTING.md` / [CANN 编码规范](https://gitcode.com/cann/community/tree/master/contributor/coding-standards) | 代码风格与贡献规范 |
-| PR 关联的 Issue 与 PR 描述 | 功能意图（对照实现是否吻合、是否完整） |
+| 资料 | 用途 | 加载条件 |
+|------|------|----------|
+| [`references/`](./references/README.md) 检视规范 | 编码安全红线 / 对外 API / 架构合规 / PR 完备性 | 所有代码 PR（按触碰范围选载，见索引） |
+| [`references/markdown-writing.md`](./references/markdown-writing.md) | Markdown 写作规范（14 类 + 通顺/敏感词/术语） | PR diff 含 `.md` 变更时 |
+| [`references/markdown-api-accuracy.md`](./references/markdown-api-accuracy.md) | Markdown 接口文档准确性（原型/参数/样例） | PR 触碰 `docs/zh/api_ref/` 或文档涉及 `include/`、`pkg_inc/` 接口原型时 |
+| 根目录 `AGENTS.md` | 架构约束（分层依赖/控制面数据面分离/legacy 约束）、编码规范、目录职责 | 所有 PR |
+| `docs/zh/architecture/architecture-brief.md` | 架构权威来源 | PR 触碰 `src/`、`include/`、`pkg_inc/` 时（改前必读） |
+| `.clang-format` / `CONTRIBUTING.md` / [CANN 编码规范](https://gitcode.com/cann/community/tree/master/contributor/coding-standards) | 代码风格与贡献规范 | 代码 PR 风格与命名检视时 |
+| PR 关联的 Issue 与 PR 描述 | 功能意图（对照实现是否吻合、是否完整） | 所有 PR |
 
-**通用检视维度**（不限于）：正确性（逻辑/边界/未初始化）、资源生命周期（泄漏/Init-Cleanup 对称）、错误处理、并发安全、API 兼容性（include/ 对外接口向后兼容）、安全（越界/注入）、架构合规（对照 AGENTS.md 约束）、命名与风格（对照仓内规范）、注释完整性、性能、测试覆盖（生产代码变更是否补测试）、PR/Issue 描述与实现的吻合度。
+**通用检视维度**（不限于）：正确性（逻辑/边界/未初始化）、资源生命周期（泄漏/Init-Cleanup 对称）、错误处理、并发安全、API 兼容性（include/ 对外接口向后兼容）、安全（越界/注入）、架构合规（对照 AGENTS.md 约束）、命名与风格（对照仓内规范）、注释完整性、性能、测试覆盖（生产代码变更是否补测试）、PR/Issue 描述与实现的吻合度、文档质量（PR 含 .md 变更时对照 markdown-writing / markdown-api-accuracy 规范）。
 
 **并行检视**（变更 ≥10 个源文件时）：按模块把文件分组，并行派发多个子 agent，每组返回结构化 JSON findings（schema 见下）。文件少于 10 个时单线程检视。
 
