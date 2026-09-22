@@ -47,10 +47,7 @@ void PhyTopoBuilder::Build(const std::string& topoPath)
     if (topoPath.empty()) {
         RPT_INPUT_ERR(
             true, "EI0004", std::vector<std::string>({"ranktable_path", "error_reason"}),
-            std::vector<std::string>(
-                {"Please check the path configuration of the topo json file.",
-                 "The rankTable file path does not exist, the permission is insufficient, or the JSON format is "
-                 "incorrect."}));
+            std::vector<std::string>({"<empty>", "The topo JSON file path is empty."}));
         HCCL_ERROR(
             "[%s][%s]errNo[0x%016llx] topo path %s is not a valid real path.", LOG_KEYWORDS_INIT_GROUP.c_str(),
             LOG_KEYWORDS_RANKTABLE_CONFIG.c_str(), HCOM_ERROR_CODE(HcclResult::HCCL_E_PARA), topoPath.c_str());

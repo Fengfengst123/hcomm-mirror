@@ -99,7 +99,7 @@ void JsonParser::ParseFileToJson(const std::string& filePath, nlohmann::json& pa
     char resolvedPath[PATH_MAX] = {0};
     if (realpath(filePath.c_str(), resolvedPath) == nullptr) {
         RPT_INPUT_ERR(
-            true, "EI0004", std::vector<std::string>({"error_reason", "ranktable_path"}),
+            true, "EI0004", std::vector<std::string>({"ranktable_path", "error_reason"}),
             std::vector<std::string>(
                 {filePath, "The rankTable file path does not exist, the permission is insufficient, or the JSON format "
                            "is incorrect."}));

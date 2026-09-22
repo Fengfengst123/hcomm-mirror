@@ -14,7 +14,10 @@
 #include <unistd.h>
 #include <cstring>
 #include <iostream>
+#include <utility>
+#include "adapter_error_manager_pub.h"
 #include "invalid_params_exception.h"
+#include "json_parser.h"
 #include "rank_graph_test_data_builder.h"
 #include "types.h"
 
@@ -25,6 +28,19 @@
 #undef private
 
 using namespace Hccl;
+
+namespace {
+std::string g_reportedErrorCode;
+std::vector<std::string> g_reportedKeys;
+std::vector<std::string> g_reportedValues;
+
+void CaptureRptInputErr(std::string errorCode, std::vector<std::string> keys, std::vector<std::string> values)
+{
+    g_reportedErrorCode = std::move(errorCode);
+    g_reportedKeys = std::move(keys);
+    g_reportedValues = std::move(values);
+}
+} // namespace
 
 std::shared_ptr<TopoInfo> LoadTopoInfoStub(PhyTopoBuilder* This, const std::string& topoPath)
 {
@@ -132,6 +148,20 @@ TEST_F(PhyTopoBuilderTest, Ut_PhyTopoBuilder_When_EmptyTopoPath_Expect_ThrowInva
     EXPECT_THROW(PhyTopoBuilderBuildStub(topoPath), InvalidParamsException);
 }
 
+TEST_F(PhyTopoBuilderTest, Ut_PhyTopoBuilder_When_EmptyTopoPath_Expect_ReportEI0004WithCorrectArguments)
+{
+    PhyTopo::GetInstance()->Clear();
+    g_reportedErrorCode.clear();
+    g_reportedKeys.clear();
+    g_reportedValues.clear();
+    MOCKER(RptInputErr).stubs().will(invoke(CaptureRptInputErr));
+
+    EXPECT_THROW(PhyTopoBuilder::GetInstance().Build(""), InvalidParamsException);
+    EXPECT_EQ(g_reportedErrorCode, "EI0004");
+    EXPECT_EQ(g_reportedKeys, std::vector<std::string>({"ranktable_path", "error_reason"}));
+    EXPECT_EQ(g_reportedValues, std::vector<std::string>({"<empty>", "The topo JSON file path is empty."}));
+}
+
 TEST_F(PhyTopoBuilderTest, Ut_PhyTopoBuilder_When_InValidTopoPath_Expect_ThrowInvalidParamsException)
 {
     std::string topoPath = "../topo_stub";
@@ -149,6 +179,24 @@ TEST_F(PhyTopoBuilderTest, Ut_PhyTopoBuilder_When_ErrorFilePath_Expect_ThrowInva
 {
     std::string topoPath = "llt/ace/comop/hccl/none_file";
     EXPECT_THROW(PhyTopoBuilderBuildStub(topoPath), InvalidParamsException);
+}
+
+TEST_F(PhyTopoBuilderTest, Ut_JsonParser_When_InvalidPath_Expect_ReportEI0004WithCorrectArguments)
+{
+    const std::string topoPath = "llt/ace/comop/hccl/none_file";
+    JsonParser jsonParser;
+    nlohmann::json parseInformation;
+    g_reportedErrorCode.clear();
+    g_reportedKeys.clear();
+    g_reportedValues.clear();
+    MOCKER(RptInputErr).stubs().will(invoke(CaptureRptInputErr));
+
+    EXPECT_THROW(jsonParser.ParseFileToJson(topoPath, parseInformation), InvalidParamsException);
+    EXPECT_EQ(g_reportedErrorCode, "EI0004");
+    EXPECT_EQ(g_reportedKeys, std::vector<std::string>({"ranktable_path", "error_reason"}));
+    ASSERT_EQ(g_reportedValues.size(), 2);
+    EXPECT_EQ(g_reportedValues[0], topoPath);
+    EXPECT_FALSE(g_reportedValues[1].empty());
 }
 
 TEST_F(PhyTopoBuilderTest, Ut_PhyTopoBuilder_When_ValidTopoPath_Expect_ReturnEdgeNum)

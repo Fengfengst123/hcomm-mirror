@@ -15,6 +15,7 @@
 #include "nlohmann/json.hpp"                      // OBJ.contains / OBJ.begin / OBJ[CONFIG].dump()
 #include "exception_util.h"                       // THROW / StringFormat
 #include "adapter_error_manager_pub.h"            // RPT_INPUT_ERR
+#include "hccl_log_keywords.h"
 
 namespace Hccl {
 
@@ -57,6 +58,10 @@ namespace Hccl {
             if (!OBJ.contains(CONFIG)) {                                                                       \
                 RPT_INPUT_ERR(                                                                                 \
                     true, "EI0017", std::vector<std::string>({"config"}), std::vector<std::string>({CONFIG})); \
+                HCCL_ERROR(                                                                                    \
+                    "[%s][%s] errNo[0x%016llx] json object does not contain property[%s]",                     \
+                    LOG_KEYWORDS_INIT_GROUP.c_str(), LOG_KEYWORDS_RANKTABLE_CONFIG.c_str(),                    \
+                    HCOM_ERROR_CODE(HcclResult::HCCL_E_PARA), CONFIG);                                         \
                 THROW<EXCEPTION>(StringFormat("%s, %s", e.what(), MSG.c_str()));                               \
             } else {                                                                                           \
                 RPT_INPUT_ERR(                                                                                 \
