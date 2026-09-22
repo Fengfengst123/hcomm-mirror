@@ -333,6 +333,7 @@ void AddOneFlipPlaceHolderSqeV1(
 {
     *sqeType = SqeType::FLIP_PLACEHOLDER_SQE;
     rtStarsPlaceHolderSqe_t* const sqe = (rtStarsPlaceHolderSqe_t*)sqeIn;
+    (void)memset_s(sqe, sizeof(rtStarsPlaceHolderSqe_t), 0, sizeof(rtStarsPlaceHolderSqe_t));
     sqe->header.type = RT_STARS_SQE_TYPE_PLACE_HOLDER;
     sqe->header.ie = 0U;
     sqe->header.preP = 1U;

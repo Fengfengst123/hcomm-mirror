@@ -9,6 +9,7 @@
  */
 
 #include "gtest/gtest.h"
+#include <cstring>
 #include <mockcpp/mockcpp.hpp>
 #include "hccl/base.h"
 #include <hccl/hccl_types.h>
@@ -270,6 +271,37 @@ TEST_F(RtsqInteract_Sqcqv1_UT, Ut_AddOneFlipPlaceHolderSqeV1)
     EXPECT_EQ(sqeStruct->header.taskId, taskId);
     EXPECT_EQ(sqeStruct->header.blockDim, RT_TASK_TYPE_FLIP);
     EXPECT_EQ(sqeStruct->kernel_credit, RT_STARS_DEFAULT_KERNEL_CREDIT);
+    EXPECT_EQ(sqeStruct->u.flip_task_info.flipNumReport, flipNum);
+}
+
+TEST_F(RtsqInteract_Sqcqv1_UT, Ut_AddOneFlipPlaceHolderSqeV1_ClearsDirtyBuffer)
+{
+    // 模拟缓存路径未清零的脏缓冲, 验证组包后残留字节全部清零且有效字段不被破坏
+    uint8_t sqe[64];
+    (void)memset(sqe, 0xFF, sizeof(sqe));
+    uint8_t sqeType = 0;
+    uint16_t streamId = 1;
+    uint16_t flipNum = 10;
+    uint16_t taskId = 2;
+
+    AddOneFlipPlaceHolderSqeV1(streamId, flipNum, taskId, sqe, &sqeType);
+
+    EXPECT_EQ(sqeType, FLIP_PLACEHOLDER_SQE);
+    rtStarsPlaceHolderSqe_t* sqeStruct = reinterpret_cast<rtStarsPlaceHolderSqe_t*>(sqe);
+    for (size_t i = 0; i < sizeof(sqeStruct->u.flip_task_info.reserved); i++) {
+        EXPECT_EQ(sqeStruct->u.flip_task_info.reserved[i], 0) << "reserved[" << i << "] not zeroed";
+    }
+    EXPECT_EQ(sqeStruct->res1, 0U);
+    EXPECT_EQ(sqeStruct->res2, 0U);
+    EXPECT_EQ(sqeStruct->res3, 0U);
+    EXPECT_EQ(sqeStruct->header.l1Lock, 0);
+    EXPECT_EQ(sqeStruct->header.l1Unlock, 0);
+    EXPECT_EQ(sqeStruct->header.type, RT_STARS_SQE_TYPE_PLACE_HOLDER);
+    EXPECT_EQ(sqeStruct->header.preP, 1);
+    EXPECT_EQ(sqeStruct->header.blockDim, RT_TASK_TYPE_FLIP);
+    EXPECT_EQ(sqeStruct->kernel_credit, RT_STARS_DEFAULT_KERNEL_CREDIT);
+    EXPECT_EQ(sqeStruct->header.rtStreamId, streamId);
+    EXPECT_EQ(sqeStruct->header.taskId, taskId);
     EXPECT_EQ(sqeStruct->u.flip_task_info.flipNumReport, flipNum);
 }
 
