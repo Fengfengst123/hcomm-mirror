@@ -448,6 +448,7 @@ AicpuTaskCacheEntry::RefreshAndLaunch(const uint64_t* baseAddrs, const uint64_t*
     }
 
     // 下发前检查jetty SQ深度, 避免cache hit时WQE溢出
+    // 目前只有这个函数失败会返回HCCL_E_AGAIN，外面的函数收到HCCL_E_AGAIN既可以判断jetty SQ overflow
     CHK_RET(CheckWqeOverflow_());
 
     CHK_RET(RefreshTokenInfos_(baseAddrs, memSizes, count));
@@ -522,9 +523,6 @@ inline HcclResult AicpuTaskCacheEntry::BuildConnOverflowInfos_()
     connOverflowInfos_.clear();
     connOverflowInfos_.reserve(wqeTaskArrayInfos_.size());
     for (size_t i = 0; i < wqeTaskArrayInfos_.size(); i++) {
-        if (!wqeTaskArrayInfos_[i].ubTransportLiteImplPtr->ciTrackerEnabled_) {
-            continue;
-        }
         UbConnLite* ubConnLitePtr = wqeTaskArrayInfos_[i].ubConnLitePtr;
         const uint32_t wqeCount = static_cast<uint32_t>(wqeTaskArrayInfos_[i].wqeTaskArray.size());
         bool found = false;
@@ -547,7 +545,8 @@ inline HcclResult AicpuTaskCacheEntry::CheckWqeOverflow_()
     for (const auto& info : connOverflowInfos_) {
         // 同步CI并检查jetty SQ深度
         if (info.ubConnLitePtr->CheckOverflow(info.wqeCount) != HCCL_SUCCESS) {
-            HCCL_INFO("[AicpuTaskCacheEntry][CheckWqeOverflow_] jetty SQ overflow, wqeCount[%u]", info.wqeCount);
+            HCCL_WARNING(
+                "[AicpuTaskCacheEntry][CheckWqeOverflow_] jetty SQ overflow, pendingWqeCount[%u]", info.wqeCount);
             return HCCL_E_AGAIN;
         }
     }
@@ -1230,9 +1229,10 @@ inline HcclResult AicpuTaskCacheEntry::LaunchWqeTasks_(WqeTaskArrayInfo& wqeTask
 
 inline HcclResult AicpuTaskCacheEntry::RefreshDbSqe_(WqeTaskArrayInfo& wqeTaskArrayInfo)
 {
-    // 获取pi
+    // 获取pi和seq
     UbConnLite* ubConnLitePtr = wqeTaskArrayInfo.ubConnLitePtr; // 注意: AddWqeArray时已校验非空
-    const uint16_t pi = ubConnLitePtr->GetPi();
+    u16 seq;
+    const uint16_t pi = ubConnLitePtr->GetPiAndIncrementSeq(seq);
 
     // 校验dbSqeLocation, AddSqeArray_中已经校验
     const DbSqeLocation& dbSqeLocation = wqeTaskArrayInfo.dbSqeLocation;
@@ -1245,14 +1245,9 @@ inline HcclResult AicpuTaskCacheEntry::RefreshDbSqe_(WqeTaskArrayInfo& wqeTaskAr
     dbSqePtr->piValue1 = pi;
 
     // 按需记录DbSendSlotMeta, 用于ciTracker的CI同步 (参考RtsqA5::UbDbSend中的dbSendSlots_记录逻辑)
-    // 注意: ciTrackerEnabled_为false时无需记录; dbSendSeqIdx_递增参考BuildUbDbSendTask
     UbTransportLiteImpl* ubTransportLiteImplPtr = wqeTaskArrayInfo.ubTransportLiteImplPtr;
-    if (ubTransportLiteImplPtr->ciTrackerEnabled_) {
-        RtsqA5* rtsqA5Ptr = sqeArrayInfos_[dbSqeLocation.sqeArrayIdx].rtsqPtr;
-        rtsqA5Ptr->RecordDbSendSlot(
-            ubTransportLiteImplPtr, dbSqeLocation.dbSqeIdx, ubTransportLiteImplPtr->dbSendSeqIdx_, pi);
-        ubTransportLiteImplPtr->dbSendSeqIdx_++;
-    }
+    RtsqA5* rtsqA5Ptr = sqeArrayInfos_[dbSqeLocation.sqeArrayIdx].rtsqPtr;
+    rtsqA5Ptr->RecordDbSendSlot(ubTransportLiteImplPtr, dbSqeLocation.dbSqeIdx, seq, pi);
 
     // 注意: UbTransportLiteImpl只针对WQE按需填充DfxTaskInfo上报profiling, DB SQE无需上报profiling
 

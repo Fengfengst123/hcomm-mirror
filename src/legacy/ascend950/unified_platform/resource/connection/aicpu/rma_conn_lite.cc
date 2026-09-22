@@ -57,6 +57,11 @@ std::unique_ptr<RmaConnLite> RmaConnLite::Create(std::vector<char>& uniqueId)
 std::string RmaConnLite::Describe() { return StringFormat("RmaConnLite"); }
 
 UbJettyLiteId RmaConnLite::GetUbJettyLiteId() const { return UbJettyLiteId(dieId_, funcId_, jettyId_); }
+UbJettyLiteId RmaConnLite::GetUbJettyLiteIdAndSeq(u16& seq)
+{
+    seq = dbSendSeq_++;
+    return GetUbJettyLiteId();
+}
 
 UbJettyLiteAttr RmaConnLite::GetUbJettyLiteAttr() const
 {

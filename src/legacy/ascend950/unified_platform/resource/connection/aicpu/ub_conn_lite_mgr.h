@@ -28,11 +28,14 @@ public:
 
     ~UbConnLiteMgr();
 
-    RmaConnLite* Get(std::vector<char>& uniqueId, UbTransportLiteImpl* transport);
+    RmaConnLite* Get(std::vector<char>& uniqueId);
 
-    void Clear(std::vector<char>& uniqueId, UbTransportLiteImpl* transport);
+    void Clear(std::vector<char>& uniqueId);
 
     void AppendCompletedCis(UbTransportLiteImpl* transport, const std::pair<u16, u16>* slots, size_t count);
+
+    void RegisterCiTracker(UbTransportLiteImpl* transport, RmaConnLite* conn);
+    void UnRegisterCiTracker(UbTransportLiteImpl* transport);
 
 private:
     UbConnLiteMgr();
@@ -42,7 +45,7 @@ private:
     std::unordered_map<std::string, std::unique_ptr<UbConnLite>> ubConnLiteMap;
 
     mutable std::shared_mutex mtx_;
-    std::unordered_map<UbTransportLiteImpl*, UbConnLite*> ciTrackerMap_;
+    std::unordered_map<UbTransportLiteImpl*, RmaConnLite*> ciTrackerMap_;
 
     bool IsExist(const std::string& key);
 };

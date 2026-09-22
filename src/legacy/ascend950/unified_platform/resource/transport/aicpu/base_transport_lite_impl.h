@@ -180,11 +180,7 @@ public:
         (void)wqeCount;
         return HCCL_SUCCESS;
     }
-    void SetCiTrackerEnabled(bool enabled) { ciTrackerEnabled_ = enabled; }
     virtual u64 GetDrainSize() const { return 0; }
-
-protected:
-    bool ciTrackerEnabled_{false};
 
 private:
 };

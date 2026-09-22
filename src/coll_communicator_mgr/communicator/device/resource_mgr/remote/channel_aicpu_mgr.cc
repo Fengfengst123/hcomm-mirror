@@ -119,7 +119,6 @@ HcclResult ChannelAicpuMgr::ParsePackData(std::vector<char>& data, ChannelHandle
     if (transType == Hccl::TransportType::UB || transType == Hccl::TransportType::UBoE) {
         Hccl::UbTransportLiteImpl* ubPtr = nullptr;
         CHK_RET(CreateAndInsertTransport<Hccl::UbTransportLiteImpl>(transpUniqueId, handle, ubPtr, transportMap_));
-        ubPtr->SetCiTrackerEnabled(true);
         ubPtr->SetTaskExceptionEnable(hcomm::GetTaskExceptionEnable());
     } else if (transType == Hccl::TransportType::P2P) {
         Hccl::P2PTransportLiteImpl* p2pPtr = nullptr;

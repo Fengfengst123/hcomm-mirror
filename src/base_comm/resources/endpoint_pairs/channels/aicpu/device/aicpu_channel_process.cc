@@ -65,8 +65,6 @@ HcclResult AicpuChannelProcess::ParsePackData(std::vector<char>& data, ChannelHa
         EXCEPTION_CATCH(
             (ubTransportLiteImpl = std::make_unique<Hccl::UbTransportLiteImpl>(transpUniqueId)), return HCCL_E_PTR);
         CHK_SMART_PTR_NULL(ubTransportLiteImpl);
-        // 单边通信时开启jetty深度的检查，集合通信保持默认值不开启
-        ubTransportLiteImpl->SetCiTrackerEnabled(true);
         CHK_RET(ubTransportLiteImpl->SetNeedCacheTaskCallback(hcomm::AicpuTaskCacheManager::NeedCacheTask));
         CHK_RET(ubTransportLiteImpl->SetAddWqeArrayCallback(hcomm::AicpuTaskCacheManager::AddWqeArray));
         handle = ReinterpretAs<uint64_t>(ubTransportLiteImpl.get());

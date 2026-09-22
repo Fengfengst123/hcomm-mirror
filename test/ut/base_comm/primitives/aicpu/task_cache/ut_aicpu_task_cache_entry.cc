@@ -941,7 +941,7 @@ TEST_F(AicpuTaskCacheEntryTest, RefreshSqeTasks_TaskConfigDebug)
 
 // ===================== CheckWqeOverflow_ Tests =====================
 
-TEST_F(AicpuTaskCacheEntryTest, CheckWqeOverflow_CiTrackerDisabled_ReturnsSuccess)
+TEST_F(AicpuTaskCacheEntryTest, CheckWqeOverflow_NoOverflow_ReturnsSuccess)
 {
     hcomm::AicpuTaskCacheEntry entry;
     ASSERT_EQ(InitEntryWithTwoAddrs(entry), HCCL_SUCCESS);
@@ -953,37 +953,14 @@ TEST_F(AicpuTaskCacheEntryTest, CheckWqeOverflow_CiTrackerDisabled_ReturnsSucces
         entry.AddWqeArray(ubConnLite_.get(), ubTransport_.get(), wqeTasks, 0, 0, false, MakeDbSqeProfInfo(false)),
         HCCL_SUCCESS);
     AddUbdmaSqeToClearTmpMap(entry);
-
-    ASSERT_EQ(entry.SubmitCacheEntry(), HCCL_SUCCESS);
-
-    // ciTrackerEnabled_ defaults to false, overflow check is skipped
-    EXPECT_EQ(entry.CheckWqeOverflow_(), HCCL_SUCCESS);
-}
-
-TEST_F(AicpuTaskCacheEntryTest, CheckWqeOverflow_CiTrackerEnabled_NoOverflow_ReturnsSuccess)
-{
-    hcomm::AicpuTaskCacheEntry entry;
-    ASSERT_EQ(InitEntryWithTwoAddrs(entry), HCCL_SUCCESS);
-
-    uint64_t locAddr = TEST_BASE_ADDR_0 + 0x10;
-    uint64_t rmtAddr = TEST_BASE_ADDR_1 + 0x20;
-    std::vector<Hccl::WqeTask> wqeTasks = {MakeWqeTaskRead(locAddr, rmtAddr)};
-    ASSERT_EQ(
-        entry.AddWqeArray(ubConnLite_.get(), ubTransport_.get(), wqeTasks, 0, 0, false, MakeDbSqeProfInfo(false)),
-        HCCL_SUCCESS);
-    AddUbdmaSqeToClearTmpMap(entry);
-
-    // Enable ciTracker with sufficient SQ depth (before SubmitCacheEntry so it is snapshotted)
-    ubTransport_->ciTrackerEnabled_ = true;
 
     ASSERT_EQ(entry.SubmitCacheEntry(), HCCL_SUCCESS);
 
     // pi=0, ci=0, inflight=0, wqeCount=1, 0+1 <= 128
     EXPECT_EQ(entry.CheckWqeOverflow_(), HCCL_SUCCESS);
-    ubTransport_->ciTrackerEnabled_ = false;
 }
 
-TEST_F(AicpuTaskCacheEntryTest, CheckWqeOverflow_CiTrackerEnabled_Overflow_ReturnsAgain)
+TEST_F(AicpuTaskCacheEntryTest, CheckWqeOverflow_Overflow_ReturnsAgain)
 {
     hcomm::AicpuTaskCacheEntry entry;
     ASSERT_EQ(InitEntryWithTwoAddrs(entry), HCCL_SUCCESS);
@@ -996,8 +973,6 @@ TEST_F(AicpuTaskCacheEntryTest, CheckWqeOverflow_CiTrackerEnabled_Overflow_Retur
         HCCL_SUCCESS);
     AddUbdmaSqeToClearTmpMap(entry);
 
-    // Enable ciTracker and set pi to fill SQ to capacity (before SubmitCacheEntry so it is snapshotted)
-    ubTransport_->ciTrackerEnabled_ = true;
     // pi=TEST_SQ_DEPTH, ci=0, inflight=128, wqeCount=1, 128+1 > 128 -> overflow
     ubConnLite_->pi = TEST_SQ_DEPTH;
 
@@ -1005,7 +980,6 @@ TEST_F(AicpuTaskCacheEntryTest, CheckWqeOverflow_CiTrackerEnabled_Overflow_Retur
 
     EXPECT_EQ(entry.CheckWqeOverflow_(), HCCL_E_AGAIN);
     ubConnLite_->pi = 0;
-    ubTransport_->ciTrackerEnabled_ = false;
 }
 
 // ===================== ReportSqeArrayProfiling_ (profiling disabled path) =====================

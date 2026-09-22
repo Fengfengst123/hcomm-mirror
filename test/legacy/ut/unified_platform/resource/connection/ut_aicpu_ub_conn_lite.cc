@@ -696,37 +696,22 @@ TEST_F(AicpuUbConnLiteTest, test_UBConnLite_BatchOneSidedWrite)
 
 /* ---------- GetInflight / UpdateCi / CheckOverflow (反压新增接口) ---------- */
 
-TEST_F(AicpuUbConnLiteTest, GetInflight_NoWrap_ExpectDiff)
+TEST_F(AicpuUbConnLiteTest, GetInflight_ExpectCorrect)
 {
     UbJettyLiteId id(1, 1, 1);
     UbJettyLiteAttr attr(1, 1, 8, 1, false);
     Eid rmtEid;
     UbConnLite ubConn(id, attr, rmtEid);
 
+    // pi > ci: 正常差值
     ubConn.pi = 20;
     ubConn.ci = 5;
     EXPECT_EQ(15u, ubConn.GetInflight());
-}
-
-TEST_F(AicpuUbConnLiteTest, GetInflight_Wrap_ExpectDiff)
-{
-    UbJettyLiteId id(1, 1, 1);
-    UbJettyLiteAttr attr(1, 1, 8, 1, false);
-    Eid rmtEid;
-    UbConnLite ubConn(id, attr, rmtEid);
-
+    // pi < ci: u16回绕
     ubConn.pi = 5;
     ubConn.ci = 65530;
     EXPECT_EQ(11u, ubConn.GetInflight());
-}
-
-TEST_F(AicpuUbConnLiteTest, GetInflight_Equal_ExpectZero)
-{
-    UbJettyLiteId id(1, 1, 1);
-    UbJettyLiteAttr attr(1, 1, 8, 1, false);
-    Eid rmtEid;
-    UbConnLite ubConn(id, attr, rmtEid);
-
+    // pi == ci: 无inflight
     ubConn.pi = 100;
     ubConn.ci = 100;
     EXPECT_EQ(0u, ubConn.GetInflight());
@@ -734,72 +719,41 @@ TEST_F(AicpuUbConnLiteTest, GetInflight_Equal_ExpectZero)
 
 /* ---------- UpdateCi ---------- */
 
-TEST_F(AicpuUbConnLiteTest, UpdateCi_Sequential_ExpectCiAdvanced)
+TEST_F(AicpuUbConnLiteTest, UpdateCi_ExpectCorrect)
 {
     UbJettyLiteId id(1, 1, 1);
     UbJettyLiteAttr attr(1, 1, 8, 1, false);
     Eid rmtEid;
     UbConnLite ubConn(id, attr, rmtEid);
 
+    // 顺序消费: seq 0/1连续, ci推进
     std::vector<std::pair<u16, u16>> slots = {{0, 10}, {1, 20}};
     ubConn.UpdateCi(slots.data(), slots.size());
     EXPECT_EQ(20u, ubConn.ci);
-}
 
-TEST_F(AicpuUbConnLiteTest, UpdateCi_PartialSequence_ExpectLastConsumedCi)
-{
-    UbJettyLiteId id(1, 1, 1);
-    UbJettyLiteAttr attr(1, 1, 8, 1, false);
-    Eid rmtEid;
-    UbConnLite ubConn(id, attr, rmtEid);
-
-    std::vector<std::pair<u16, u16>> slots = {{1, 20}, {3, 40}};
+    // piValue回绕 + 乱序暂存: seq 2连续消费(65530), seq 4暂存
+    slots = {{2, 65530}, {4, 40}};
     ubConn.UpdateCi(slots.data(), slots.size());
-    EXPECT_EQ(0u, ubConn.ci);
+    EXPECT_EQ(65530u, ubConn.ci);
 
-    std::vector<std::pair<u16, u16>> slots2 = {{0, 10}};
-    ubConn.UpdateCi(slots2.data(), slots2.size());
-    EXPECT_EQ(20u, ubConn.ci);
-}
-
-TEST_F(AicpuUbConnLiteTest, UpdateCi_Wraparound_ExpectCorrectCi)
-{
-    UbJettyLiteId id(1, 1, 1);
-    UbJettyLiteAttr attr(1, 1, 8, 1, false);
-    Eid rmtEid;
-    UbConnLite ubConn(id, attr, rmtEid);
-
-    std::vector<std::pair<u16, u16>> slots = {{0, 65530}, {1, 65535}};
+    // 补齐后连续出队: seq 3补齐(65535), 乱序的seq 4(40)随之消费
+    slots = {{3, 65535}};
     ubConn.UpdateCi(slots.data(), slots.size());
-    EXPECT_EQ(65535u, ubConn.ci);
-}
+    EXPECT_EQ(40u, ubConn.ci);
 
-TEST_F(AicpuUbConnLiteTest, UpdateCi_EmptyInput_ExpectNoChange)
-{
-    UbJettyLiteId id(1, 1, 1);
-    UbJettyLiteAttr attr(1, 1, 8, 1, false);
-    Eid rmtEid;
-    UbConnLite ubConn(id, attr, rmtEid);
+    // 重复seqIdx: 取第一个值
+    slots = {{5, 10}, {5, 99}};
+    ubConn.UpdateCi(slots.data(), slots.size());
+    EXPECT_EQ(10u, ubConn.ci);
 
+    // 空输入: 不变化
     ubConn.UpdateCi(nullptr, 0);
-    EXPECT_EQ(0u, ubConn.ci);
-}
-
-TEST_F(AicpuUbConnLiteTest, UpdateCi_DuplicateSeqIdx_ExpectLastValue)
-{
-    UbJettyLiteId id(1, 1, 1);
-    UbJettyLiteAttr attr(1, 1, 8, 1, false);
-    Eid rmtEid;
-    UbConnLite ubConn(id, attr, rmtEid);
-
-    std::vector<std::pair<u16, u16>> slots = {{0, 10}, {0, 99}};
-    ubConn.UpdateCi(slots.data(), slots.size());
     EXPECT_EQ(10u, ubConn.ci);
 }
 
-/* ---------- CheckOverflow (cache version: u32) ---------- */
+/* ---------- CheckOverflow ---------- */
 
-TEST_F(AicpuUbConnLiteTest, CheckOverflow_Cache_NoOverflow_ExpectFalse)
+TEST_F(AicpuUbConnLiteTest, CheckOverflow_ExpectCorrect)
 {
     UbJettyLiteId id(1, 1, 1);
     UbJettyLiteAttr attr(1, 1, 8, 1, false);
@@ -808,58 +762,22 @@ TEST_F(AicpuUbConnLiteTest, CheckOverflow_Cache_NoOverflow_ExpectFalse)
 
     ubConn.sqDepth_ = 8;
     ubConn.pi = 5;
-    ubConn.ci = 2;
+    ubConn.ci = 2; // inflight=3
+    ubConn.maxReadSize = 1024;
+    ubConn.maxWriteSize = 1024;
+
+    // cache版: 3+3<=8, 3+6>8
     EXPECT_FALSE(ubConn.CheckOverflow(static_cast<u32>(3)));
-}
-
-TEST_F(AicpuUbConnLiteTest, CheckOverflow_Cache_Overflow_ExpectTrue)
-{
-    UbJettyLiteId id(1, 1, 1);
-    UbJettyLiteAttr attr(1, 1, 8, 1, false);
-    Eid rmtEid;
-    UbConnLite ubConn(id, attr, rmtEid);
-
-    ubConn.sqDepth_ = 8;
-    ubConn.pi = 5;
-    ubConn.ci = 2;
     EXPECT_TRUE(ubConn.CheckOverflow(static_cast<u32>(6)));
-}
-
-/* ---------- CheckOverflow (transport version: u64, bool, bool) ---------- */
-
-TEST_F(AicpuUbConnLiteTest, CheckOverflow_Transport_Read_NoOverflow_ExpectFalse)
-{
-    UbJettyLiteId id(1, 1, 1);
-    UbJettyLiteAttr attr(1, 1, 8, 1, false);
-    Eid rmtEid;
-    UbConnLite ubConn(id, attr, rmtEid);
-
-    ubConn.sqDepth_ = 8;
-    ubConn.pi = 5;
-    ubConn.ci = 2;
-    ubConn.maxReadSize = 1024;
-    ubConn.maxWriteSize = 1024;
+    // transport版: 2048/1024=2个WQE, 3+2<=8
     EXPECT_FALSE(ubConn.CheckOverflow(static_cast<u64>(2048), true, false));
-}
-
-TEST_F(AicpuUbConnLiteTest, CheckOverflow_Transport_WriteWithNotify_Overflow_ExpectTrue)
-{
-    UbJettyLiteId id(1, 1, 1);
-    UbJettyLiteAttr attr(1, 1, 8, 1, false);
-    Eid rmtEid;
-    UbConnLite ubConn(id, attr, rmtEid);
-
-    ubConn.sqDepth_ = 8;
-    ubConn.pi = 5;
-    ubConn.ci = 2;
-    ubConn.maxReadSize = 1024;
-    ubConn.maxWriteSize = 1024;
+    // transport版: 8192/1024=8+1(notify)=9个WQE, 3+9>8
     EXPECT_TRUE(ubConn.CheckOverflow(static_cast<u64>(8192), false, true));
 }
 
 /* ---------- CalcWqeCount ---------- */
 
-TEST_F(AicpuUbConnLiteTest, CalcWqeCount_Read_ExactMultiple_ExpectNoRounding)
+TEST_F(AicpuUbConnLiteTest, CalcWqeCount_ExpectCorrect)
 {
     UbJettyLiteId id(1, 1, 1);
     UbJettyLiteAttr attr(1, 1, 8, 1, false);
@@ -868,29 +786,8 @@ TEST_F(AicpuUbConnLiteTest, CalcWqeCount_Read_ExactMultiple_ExpectNoRounding)
 
     ubConn.maxReadSize = 1024;
     ubConn.maxWriteSize = 1024;
-    EXPECT_EQ(2u, ubConn.CalcWqeCount(2048, true, false));
-}
 
-TEST_F(AicpuUbConnLiteTest, CalcWqeCount_Read_PartialSlice_ExpectCeil)
-{
-    UbJettyLiteId id(1, 1, 1);
-    UbJettyLiteAttr attr(1, 1, 8, 1, false);
-    Eid rmtEid;
-    UbConnLite ubConn(id, attr, rmtEid);
-
-    ubConn.maxReadSize = 1024;
-    ubConn.maxWriteSize = 1024;
-    EXPECT_EQ(3u, ubConn.CalcWqeCount(2049, true, false));
-}
-
-TEST_F(AicpuUbConnLiteTest, CalcWqeCount_WriteWithNotify_ExpectExtraOne)
-{
-    UbJettyLiteId id(1, 1, 1);
-    UbJettyLiteAttr attr(1, 1, 8, 1, false);
-    Eid rmtEid;
-    UbConnLite ubConn(id, attr, rmtEid);
-
-    ubConn.maxReadSize = 1024;
-    ubConn.maxWriteSize = 1024;
-    EXPECT_EQ(3u, ubConn.CalcWqeCount(2048, false, true));
+    EXPECT_EQ(2u, ubConn.CalcWqeCount(2048, true, false)); // 整除
+    EXPECT_EQ(3u, ubConn.CalcWqeCount(2049, true, false)); // 非整除取上整
+    EXPECT_EQ(3u, ubConn.CalcWqeCount(2048, false, true)); // notify多占一个WQE
 }

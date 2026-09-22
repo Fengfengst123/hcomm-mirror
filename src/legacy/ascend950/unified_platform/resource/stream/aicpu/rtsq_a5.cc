@@ -492,18 +492,14 @@ bool RtsqA5::GetPreStreamSyncStatus() { return isPreStreamSync; }
 
 void RtsqA5::UbDbSend(const UbJettyLiteId& jettyLiteId, u16 piValue, u16 seqIdx, UbTransportLiteImpl* transport)
 {
-    // ciTrackerEnabled_为false传进来transport将会是nullptr
-    if (transport) {
-        // 消耗pi调用UbDbDSend，不消耗pi的也会占用rtsq的槽位但是不会调用UbDbDSend
-        // SQ背压用QuerySqHead()保证不覆盖硬件未完成的SQE；dbSendSlots_深度2倍sqDepth_保证不被消费端追赶
-        u32 absSlotIdx = (sqTail_ + pendingSqeCnt) % sqDepth_;
-        DbSendSlotMeta& slot = dbSendSlots_[dbSendTail_];
-        slot.transport = transport;
-        slot.absSlotIdx = absSlotIdx;
-        slot.seqIdx = seqIdx;
-        slot.piValue = piValue;
-        dbSendTail_ = (dbSendTail_ + 1) % dbSendDepth_;
-    }
+    // 消耗pi调用UbDbDSend，不消耗pi的也会占用rtsq的槽位但是不会调用UbDbDSend
+    u32 absSlotIdx = (sqTail_ + pendingSqeCnt) % sqDepth_;
+    DbSendSlotMeta& slot = dbSendSlots_[dbSendTail_];
+    slot.transport = transport;
+    slot.absSlotIdx = absSlotIdx;
+    slot.seqIdx = seqIdx;
+    slot.piValue = piValue;
+    dbSendTail_ = (dbSendTail_ + 1) % dbSendDepth_;
 
     // piValue需要使用u16数据类型，保证自然增长，用于判断是否翻转
     BuildA5SqeUbDbSend(streamId_, taskId_, jettyLiteId, piValue, GetCurrSqeBuffer());
@@ -576,7 +572,6 @@ void RtsqA5::PollCompletion()
 {
     u32 newHead = QuerySqHead();
     UbTransportLiteImpl* lastTransport{nullptr};
-    UbTransportLiteImpl* tempTransport{nullptr};
     pollSnapshot_.clear();
     /* lastHead_==newHead时while不执行可能存在bug：
      * 1. head无变化：SQ无新完成，跳过这是正确的
@@ -590,25 +585,23 @@ void RtsqA5::PollCompletion()
             break;
         }
 
-        if (dbSendSlots_[dbSendHead_].absSlotIdx != lastHead_) {
+        DbSendSlotMeta& slot = dbSendSlots_[dbSendHead_];
+        if (slot.absSlotIdx != lastHead_) {
             lastHead_ = (lastHead_ + 1) % sqDepth_;
             continue;
         }
 
-        DbSendSlotMeta& slot = dbSendSlots_[dbSendHead_];
-        dbSendHead_ = (dbSendHead_ + 1) % dbSendDepth_;
-        tempTransport = slot.transport;
-        if (tempTransport != nullptr) {
-            if (tempTransport != lastTransport) {
-                if (!pollSnapshot_.empty()) {
-                    UbConnLiteMgr::GetInstance().AppendCompletedCis(
-                        lastTransport, pollSnapshot_.data(), pollSnapshot_.size());
-                    pollSnapshot_.clear();
-                }
-                lastTransport = tempTransport;
+        UbTransportLiteImpl* tempTransport = slot.transport;
+        if (tempTransport != lastTransport) {
+            if (!pollSnapshot_.empty()) {
+                UbConnLiteMgr::GetInstance().AppendCompletedCis(
+                    lastTransport, pollSnapshot_.data(), pollSnapshot_.size());
+                pollSnapshot_.clear();
             }
-            pollSnapshot_.emplace_back(slot.seqIdx, slot.piValue);
+            lastTransport = tempTransport;
         }
+        pollSnapshot_.emplace_back(slot.seqIdx, slot.piValue);
+        dbSendHead_ = (dbSendHead_ + 1) % dbSendDepth_;
         lastHead_ = (lastHead_ + 1) % sqDepth_;
     }
 

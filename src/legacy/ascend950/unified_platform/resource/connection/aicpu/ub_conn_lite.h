@@ -135,15 +135,19 @@ public:
     void LaunchOneWqeWithNotify(UdmaSqeWriteWithNotify* sqe, u32 opCode);
 
     // 用于aicpu task cache更新DbSqe
-    uint16_t GetPi() const { return pi; }
+    uint16_t GetPiAndIncrementSeq(u16& seq)
+    {
+        seq = dbSendSeq_++;
+        return pi;
+    }
 
     // 背景线程调用：批量存入完成的(seqIdx, piValue)，按seqIdx顺序推进ci
     inline void UpdateCi(const std::pair<u16, u16>* slots, size_t count) override
     {
-        u16 seqIdx = consumedSeqIdx_;
+        u16 seqIdx = dbDoneSeq_;
         u16 lastCi = ci;
 
-        // Phase 1: slots头部大概率从consumedSeqIdx_开始连续，直接消费
+        // Phase 1: slots头部大概率从dbDoneSeq_开始连续，直接消费
         size_t i = 0;
         for (; i < count; i++) {
             if (slots[i].first != seqIdx) {
@@ -173,7 +177,7 @@ public:
             outOfOrderCis_.pop_back();
         }
 
-        consumedSeqIdx_ = seqIdx;
+        dbDoneSeq_ = seqIdx;
         ci = lastCi;
     }
 
@@ -206,9 +210,8 @@ private:
     u32 ciDetourCount{0};
     u32 maxReadSize{0};
     u32 maxWriteSize{0};
-    // outOfOrderCis_/consumedSeqIdx_仅背景线程访问
+    // outOfOrderCis_/dbDoneSeq_仅背景线程访问
     std::vector<std::pair<u16, u16>> outOfOrderCis_; // (seqIdx, piValue)
-    u16 consumedSeqIdx_{0};
     void ProcessSlices(
         const RmaBufSliceLite& loc, const RmtRmaBufSliceLite& rmt, u32 maxSliceSize,
         std::function<void(const RmaBufSliceLite&, const RmtRmaBufSliceLite&, SlicePosition)> processOneSlice,

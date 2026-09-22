@@ -53,6 +53,7 @@ public:
     static std::unique_ptr<RmaConnLite> Create(std::vector<char>& uniqueId);
 
     UbJettyLiteId GetUbJettyLiteId() const;
+    UbJettyLiteId GetUbJettyLiteIdAndSeq(u16& seq);
 
     UbJettyLiteAttr GetUbJettyLiteAttr() const;
 
@@ -192,6 +193,9 @@ protected:
     bool dwqeCacheLocked_{false}; // direct WQE cache Lock
     u32 jfcPollMode_{0};          // 0代表STARS POLL， 1代表软件Poll
     u32 tpn_{0};
+
+    u16 dbSendSeq_{0}; // DbSend下发序号，通信线程自增
+    u16 dbDoneSeq_{0}; // DbSend完成序号，背景线程推进
 
     Eid rmtEid_;
     Eid locEid_;
