@@ -1262,6 +1262,8 @@ TEST_F(HeartBeatTest, ut_GetSendOpInfoList)
 {
     setenv("HCCL_DFS_CONFIG", "inconsistent_check:on", 1);
     (void)InitEnvParam();
+    // inconsistent_check 开关解析已下沉平台层 externalinput，需显式调用
+    (void)ParseDFSInconsistentCheckSwitch();
 
     OpInfoDesc opInfo;
     opInfo.isValid = true;

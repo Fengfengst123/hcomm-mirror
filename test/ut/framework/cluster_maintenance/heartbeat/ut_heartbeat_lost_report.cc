@@ -18,6 +18,7 @@
 #define protected public
 #include "heartbeat.h"
 #include "env_config.h"
+#include "externalinput.h"
 #include "sal_pub.h"
 #include "adapter_rts_common.h"
 #undef private

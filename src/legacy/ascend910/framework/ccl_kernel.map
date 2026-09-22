@@ -174,7 +174,6 @@ global:
     UnregisterGetAicpuTaskExceptionCallBack;
     extern "C++" {
         "AddStreamToModel(void*, void*&)";  # _Z16AddStreamToModelPvRS_
-        "GetExternalInconsistentCheckSwitch()";  # _Z34GetExternalInconsistentCheckSwitchv
         "GetExternalInputHcclAlgoConfig(HcclCMDType)";  # _Z30GetExternalInputHcclAlgoConfig11HcclCMDType
         "GetInternalExecTimeOut()";  # _Z22GetInternalExecTimeOutv
         "GetModelId(void*&, unsigned long long&)";  # _Z10GetModelIdRPvRy

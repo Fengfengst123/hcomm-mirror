@@ -149,6 +149,7 @@ global:
     hrtTaskAbortHandleCallback;
     extern "C++" {
         "FindLocalHostIP(std::vector<std::pair<std::string, hccl::HcclIpAddress>, std::allocator<std::pair<std::string, hccl::HcclIpAddress> > >&, hccl::HcclIpAddress&)";  # _Z15FindLocalHostIPRSt6vectorISt4pairISsN4hccl13HcclIpAddressEESaIS3_EERS2_
+        "GetExternalInconsistentCheckSwitch()";  # _Z34GetExternalInconsistentCheckSwitchv
         "GetExternalInputAicpuCacheEnable()";  # _Z32GetExternalInputAicpuCacheEnablev
         "GetExternalInputCCLBuffSize()";  # _Z27GetExternalInputCCLBuffSizev
         "GetExternalInputCannVersion()";  # _Z27GetExternalInputCannVersionv

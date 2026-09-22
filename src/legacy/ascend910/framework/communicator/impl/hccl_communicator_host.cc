@@ -18,6 +18,7 @@
 
 #include "externalinput_pub.h"
 #include "env_config.h"
+#include "externalinput.h"
 #include "p2p_mgmt_pub.h"
 #include "opexecounter_pub.h"
 #include "config.h"

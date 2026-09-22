@@ -275,7 +275,6 @@ global:
         "CqReportRecv(dfx::CqeQueryInput const&, rtLogicCqReport_t&)";  # _Z12CqReportRecvRKN3dfx13CqeQueryInputER17rtLogicCqReport_t
         "DeviceQuery(unsigned int, unsigned int, unsigned int)";  # _Z11DeviceQueryjjj
         "GetCurAicpuTimestamp()";  # _Z20GetCurAicpuTimestampv
-        "GetExternalInconsistentCheckSwitch()";  # _Z34GetExternalInconsistentCheckSwitchv
         "GetExternalInputAicpuCacheEnable()";  # _Z32GetExternalInputAicpuCacheEnablev
         "GetExternalInputCCLBuffSize()";  # _Z27GetExternalInputCCLBuffSizev
         "GetExternalInputCannVersion[abi:cxx11]()";  # _Z27GetExternalInputCannVersionB5cxx11v

@@ -10,7 +10,7 @@
 
 #include "calc_crc.h"
 #include "rank_consistentcy_checker.h"
-#include "env_config.h"
+#include "externalinput.h"
 
 namespace hccl {
 

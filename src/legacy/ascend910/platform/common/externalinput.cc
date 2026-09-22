@@ -11,6 +11,7 @@
 #include <iostream>
 #include <fstream>
 #include <algorithm>
+#include <cctype>
 #include <adapter_rts.h>
 #include <thread>
 #include <mutex>
@@ -39,6 +40,59 @@ static std::mutex g_externalInputMutex;
 static ExternalInput g_externalInput; //  外部输入参数 （环境变量，配置文件）
 static thread_local bool g_ifProf = true;
 constexpr u32 HCCL_QPS_PER_CONNECTION_MAX = 32; // HCCL 默认的rank 间QP个数（仅单算子下生效）
+const std::string INCONSISTENT_CHECK_CONFIG = "inconsistent_check:";
+
+namespace {
+HcclResult ParseDFSConfigItem(const std::string& dfsConfigEnv, const std::string& configName, std::string& configResult)
+{
+    size_t start = dfsConfigEnv.find(configName);
+    if (start == std::string::npos) {
+        HCCL_INFO("[Parse] DFS config item [%s] is not found.", configName.c_str());
+        return HCCL_SUCCESS;
+    }
+    size_t end = dfsConfigEnv.find(",", start);
+    if (end == std::string::npos) {
+        configResult = dfsConfigEnv.substr(start + configName.size());
+    } else {
+        configResult = dfsConfigEnv.substr(start + configName.size(), end - start - configName.size());
+    }
+    HCCL_INFO("[Parse] DFS config item %s [%s]", configName.c_str(), configResult.c_str());
+    return HCCL_SUCCESS;
+}
+} // namespace
+
+HcclResult ParseDFSInconsistentCheckSwitch()
+{
+    char* dfsConfigValue = nullptr;
+    MM_SYS_GET_ENV(MM_ENV_HCCL_DFS_CONFIG, dfsConfigValue);
+    std::string dfsConfigEnv = (dfsConfigValue != nullptr) ? dfsConfigValue : "EmptyString";
+    if (dfsConfigEnv == "EmptyString") {
+        HCCL_RUN_INFO("[HCCL_ENV][Parse][HCCL_DFS_CONFIG] Parse environmental variable HCCL_DFS_CONFIG is not set.");
+        return HCCL_SUCCESS;
+    }
+    // 去除空格并转为小写
+    dfsConfigEnv.erase(std::remove(dfsConfigEnv.begin(), dfsConfigEnv.end(), ' '), dfsConfigEnv.end());
+    std::transform(dfsConfigEnv.begin(), dfsConfigEnv.end(), dfsConfigEnv.begin(), [](unsigned char c) {
+        return std::tolower(c);
+    });
+
+    // 解析算子不一致故障检测能力开关
+    std::string inconsistentCheckSwitch;
+    CHK_RET(ParseDFSConfigItem(dfsConfigEnv, INCONSISTENT_CHECK_CONFIG, inconsistentCheckSwitch));
+    if (inconsistentCheckSwitch == "off") {
+        g_externalInput.inconsistentCheckSwitch = InconsistentCheckMode::OFF;
+    } else if (inconsistentCheckSwitch == "on") {
+        g_externalInput.inconsistentCheckSwitch = InconsistentCheckMode::ON;
+    } else if (inconsistentCheckSwitch == "first") {
+        g_externalInput.inconsistentCheckSwitch = InconsistentCheckMode::FIRST;
+    } else {
+        HCCL_RUN_WARNING(
+            "[ParseDFSConfig] HCCL_DFS_CONFIG-inconsistent_check was configured to [%s], please configure to "
+            "'on' or 'off' or 'first'",
+            inconsistentCheckSwitch.c_str());
+    }
+    return HCCL_SUCCESS;
+}
 
 HcclResult InitExternalInput()
 {
@@ -461,6 +515,16 @@ HcclResult InitEnvVarParam()
         HCCL_ERROR(
             "[%s][%s]errNo[0x%016llx] In init env variable param, "
             "parse HCCL_DEBUG_CONFIG failed. errorno[%d]",
+            LOG_KEYWORDS_INIT_GROUP.c_str(), LOG_KEYWORDS_ENV_CONFIG.c_str(), HCCL_ERROR_CODE(ret), ret),
+        ret);
+
+    // 解析算子不一致故障检测能力开关
+    ret = ParseDFSInconsistentCheckSwitch();
+    CHK_PRT_RET(
+        ret != HCCL_SUCCESS,
+        HCCL_ERROR(
+            "[%s][%s]errNo[0x%016llx] In init env variable param, "
+            "parse DFS inconsistent check switch failed. errorno[%d]",
             LOG_KEYWORDS_INIT_GROUP.c_str(), LOG_KEYWORDS_ENV_CONFIG.c_str(), HCCL_ERROR_CODE(ret), ret),
         ret);
 
@@ -2111,5 +2175,7 @@ const s32& GetIncreSaveExecTimeOut() { return g_externalInput.increSaveExecTimeO
 const u64& GetProfConfig() { return g_externalInput.profConfig; }
 
 const u64& GetExternalInputDebugConfig() { return g_externalInput.debugConfig; }
+
+const InconsistentCheckMode& GetExternalInconsistentCheckSwitch() { return g_externalInput.inconsistentCheckSwitch; }
 
 void SetExternalInputDebugConfig(u64 value) { g_externalInput.debugConfig = value; }

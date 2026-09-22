@@ -63,6 +63,13 @@ constexpr u32 HCCL_RETRY_INTERVAL_MAX = 60000;  // 重执行间隔，最大值60
 constexpr int HCCL_RETRY_PARAM_NUM = 3; // 重执行参数个数(MaxCnt/HoldTime/IntervalTime)，sscanf_s解析成功的返回值
 
 constexpr u32 MAX_LEN_OF_LOGIC_SUPER_ID = 128; // 逻辑超节点最大长度
+
+enum class InconsistentCheckMode {
+    OFF = -1,  // 完全不做校验
+    FIRST = 0, // 仅首次算子下发校验
+    ON = 1     // 每次算子下发都校验
+};
+
 //  外部输入参数
 struct ExternalInput {
     //  初始化判断
@@ -116,6 +123,7 @@ struct ExternalInput {
     bool aicpuUnfold;
     uint8_t aicpuCacheEnable;
     bool aivMode;
+    InconsistentCheckMode inconsistentCheckSwitch;
     bool remoteIsHdc = false;
     bool hcclRetryConfig[HCCL_RETRY_ENABLE_LEVEL_NUM];
     std::string logicSuperPodId;
@@ -182,6 +190,7 @@ struct ExternalInput {
         rdmaFastPost = false;
         multiQpSrcPortConfigPath = "";
         increSaveExecTimeOut = NOTIFY_DEFAULT_WAIT_TIME; // HCCL 默认的Notify wait超时时间设置
+        inconsistentCheckSwitch = InconsistentCheckMode::FIRST;
         debugConfig = 0;
     }
 };
@@ -252,6 +261,8 @@ HcclResult ParseLogicSuperPodId();
 
 HcclResult ParseDebugConfig();
 
+HcclResult ParseDFSInconsistentCheckSwitch();
+
 HcclResult SplitHcclRetryEnable(const std::string& retryConfig, std::vector<std::string>& retryEnables);
 
 HcclResult CollectRetryEnableFromConfig(const std::vector<std::string>& retryEnables);
@@ -283,5 +294,8 @@ const s32& GetIncreSaveExecTimeOut();
 const u64& GetProfConfig();
 
 const u64& GetExternalInputDebugConfig();
+
+const InconsistentCheckMode& GetExternalInconsistentCheckSwitch();
+
 void SetExternalInputProtocolType(ProtocolType prot);
 #endif //  EXTERNALINPUT_H

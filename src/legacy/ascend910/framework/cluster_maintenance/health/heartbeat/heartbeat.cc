@@ -14,6 +14,7 @@
 #include "device_capacity.h"
 #include "externalinput_pub.h"
 #include "env_config.h"
+#include "externalinput.h"
 #include "opexecounter_pub.h"
 #include "hccl_communicator.h"
 #include "task_exception_handler_pub.h"

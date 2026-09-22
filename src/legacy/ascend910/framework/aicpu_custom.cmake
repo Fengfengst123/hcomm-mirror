@@ -36,6 +36,7 @@ target_link_libraries(aicpu_custom PRIVATE
     ascend_hal
     c_sec
     mmpa
+    aicpu_sharder
     -Wl,--whole-archive
     ccl_kernel_plf_a            # 链接 ccl_kernel_plf 静态库
     -Wl,--no-whole-archive

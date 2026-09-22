@@ -24,12 +24,6 @@ using HcclSocketPortRange = struct HcclSocketPortRangeDef {
 
 enum SocketLocation { SOCKET_HOST = 0, SOCKET_NPU = 1 };
 
-enum class InconsistentCheckMode {
-    OFF = -1,  // 完全不做校验
-    FIRST = 0, // 仅首次算子下发校验
-    ON = 1     // 每次算子下发都校验
-};
-
 // 定义结构体封装环境变量配置参数
 struct EnvConfigParam {
     std::string envName; // 环境变量名
@@ -53,8 +47,6 @@ const bool& GetExternalInputHcclHeartBeatEnable();
 
 const bool& GetExternalInputStuckDetect();
 
-const InconsistentCheckMode& GetExternalInconsistentCheckSwitch();
-
 s32& GetExternalInputDfsConnectionFaultDetectionTime();
 
 u32& GetExternalInputDfsTaskMonitorInterval();
@@ -76,7 +68,6 @@ struct EnvConfig {
     u32 rdmaRetryCnt; // RDMA重传次数，配置范围1-7，默认值为7
     bool enableClusterHeartBeat;
     bool opCounterEnable;
-    InconsistentCheckMode inconsistentCheckSwitch;
     s32 dfsConnectionFaultDetectionTime;
     u32 dfsTaskMonitorInterval;
 
@@ -103,8 +94,6 @@ struct EnvConfig {
         // 初始化 enableClusterHeartBeat 为默认值
         enableClusterHeartBeat = true;
         opCounterEnable = true;
-        // 初始化 inconsistentCheckSwitch 为默认值
-        inconsistentCheckSwitch = InconsistentCheckMode::FIRST;
         dfsConnectionFaultDetectionTime = HCCL_MIN_CONNECT_FAULT_DETECTION_TIME;
         dfsTaskMonitorInterval = 0;
         specificAlgoMode = false;
