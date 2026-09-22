@@ -12,7 +12,10 @@
 #include "ccu_interface_assist_v1.h"
 
 #include "string_util.h"
+#include "exception_util.h"
 #include "ccu_api_exception.h"
+
+using Hccl::HcclException;
 
 namespace hcomm {
 namespace CcuRep {
@@ -23,7 +26,7 @@ namespace CcuRep {
         std::string label = "Condition";
     }
 
-    Condition::~Condition() { AppendToContext(context, endLabel); }
+    Condition::~Condition() { DECTOR_TRY_CATCH("Condition", AppendToContext(context, endLabel)); }
 
     bool Condition::Check() const { return !isExecuted; }
 

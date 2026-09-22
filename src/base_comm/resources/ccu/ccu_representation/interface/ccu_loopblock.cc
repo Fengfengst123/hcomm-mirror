@@ -12,14 +12,17 @@
 #include "ccu_interface_assist_v1.h"
 
 #include "string_util.h"
+#include "exception_util.h"
 #include "ccu_api_exception.h"
+
+using Hccl::HcclException;
 
 namespace hcomm {
 namespace CcuRep {
 
     LoopBlock::LoopBlock(CcuRepContext* context, std::string label) : context(context), label(label) {}
 
-    LoopBlock::~LoopBlock() { SetCurrentBlock(context, curActiveBlock); }
+    LoopBlock::~LoopBlock() { DECTOR_TRY_CATCH("LoopBlock", SetCurrentBlock(context, curActiveBlock)); }
 
 }; // namespace CcuRep
 }; // namespace hcomm
