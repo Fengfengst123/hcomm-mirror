@@ -20,7 +20,7 @@ An error CQE occurred during operator execution. Local information: server az0-r
 
 2. 对端进程提前异常退出，导致本端无法接收到对端的响应。
 
-3. 两个设备中的任意一个设备的HBM或UB芯片处理模块发生了硬件异常。
+3. 两个设备中的任意一个设备的片上内存或UB芯片处理模块发生了硬件异常。
 
 ## 解决方法
 
@@ -28,4 +28,4 @@ An error CQE occurred during operator execution. Local information: server az0-r
 
 2. 检查对端进程是否先退出。如果是，检查进程退出的原因。
 
-3. 通过RAS故障检查两台设备中任一设备的HBM或UB芯片处理模块是否发生硬件异常, 硬件错误请联系华为工程师处理。
+3. 通过RAS故障检查两台设备中任一设备的片上内存或UB芯片处理模块是否发生硬件异常, 硬件错误请联系华为工程师处理。

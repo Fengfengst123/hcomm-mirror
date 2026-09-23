@@ -17,7 +17,7 @@ Value 2147483648 for environment variable HCCL_EXEC_TIMEOUT is invalid. Expected
 <!-- npu="950" id1 -->
 ## Locating the fault in plog
 
-The error format above is used for ERROR MESSAGE reporting. For Ascend 950PR&950DT series products, the corresponding plog contains the environment variable name, configured value, and reason, with the following search keywords:
+The error format above is used for ERROR MESSAGE reporting. For Ascend 950PR&950DT products, the corresponding plog contains the environment variable name, configured value, and reason, with the following search keywords:
 
 | Error code | Error title | Stage keyword | Scenario keyword | Engine keyword |
 | --- | --- | --- | --- | --- |

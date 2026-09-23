@@ -104,16 +104,17 @@ typedef struct HcclCommConfigDef {
     - 该配置仅支持对称组网、推理特性。
     - 该配置项支持的算子及约束限制参见配置“3”。
 
-  - 5：通信算子在CCU（Collective Communication Unit，集合通信加速单元）展开，使用MS（Memory Slice）模式。Ascend 950PR不支持此配置。
+  - 5：通信算子在CCU（Collective Communication Unit，集合通信加速单元）展开，使用CcuBuffer进行内存转写。Ascend 950PR不支持此配置。
 
-    MS模式为与多个远端通信时，使用CCU片上Memory Slice作为中转，用于节省内存读写带宽，Memory Slice的特点是大小较小，但速度较快。当CCU资源不足时，系统会自动切换为“2：AI CPU模式”。
-    - 该配置项仅支持Broadcast、Reduce、AllReduce、ReduceScatter、AllGather、AllGatherV、ReduceScatterV算子，当前仅支持单机场景。
-      - 针对Broadcast、AllGather、AllGatherV算子，数据类型支持int8、uint8、int16、uint16、int32、uint32、int64、uint64、float16、float32、float64、bfp16。
-      - 针对Reduce、AllReduce、ReduceScatter、ReduceScatterV算子，数据类型支持int16、int32、float16、float32、bfp16。
+    此模式下，当CCU与多个远端通信时，使用CcuBuffer作为中转，用于节省内存读写带宽，CcuBuffer的特点是大小较小，但速度较快。当CCU资源不足时，系统会自动切换为“2：AI CPU模式”。
+
+    该配置项仅支持Broadcast、Reduce、AllReduce、ReduceScatter、AllGather、AllGatherV、ReduceScatterV算子，当前仅支持单机场景。
+    - 针对Broadcast、AllGather、AllGatherV算子，数据类型支持int8、uint8、int16、uint16、int32、uint32、int64、uint64、float16、float32、float64、bfp16。
+    - 针对Reduce、AllReduce、ReduceScatter、ReduceScatterV算子，数据类型支持int16、int32、float16、float32、bfp16。
       
   - 6：通信算子在CCU展开，使用调度模式。
 
-    调度模式指使用CCU作为调度器，向UB引擎调度UB WQE任务。调度模式下不使用CCU的片上MS，直接在两个rank间进行HBM到HBM的数据传输。
+    调度模式指使用CCU作为调度器，向UB引擎调度UB WQE任务。调度模式下不使用CcuBuffer，直接在两个rank间进行片上内存到片上内存的数据传输。
 
     针对单机通信场景的AllReduce、ReduceScatter、Reduce算子，当数据量超过一定值时，为防止性能下降，系统会自动切换为“2：AI_CPU模式”（该阈值并非固定，会根据算子运行模式及网络规模等因素有所调整）。
 

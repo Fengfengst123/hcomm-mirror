@@ -23,7 +23,7 @@ Value 2147483648 for environment variable HCCL_EXEC_TIMEOUT is invalid. Expected
 | --- | --- | --- | --- | --- |
 | EI0001 | Config_Error_Invalid_Environment_Variable环境变量配置异常 | InitGroupStage | EnvConfig | - |
 
-可使用`grep -F '[InitGroupStage][EnvConfig]'`检索plog。例如，设置`HCCL_ENTRY_LOG_ENABLE=-1`时，日志正文包含以下信息，表示该环境变量仅支持0或1：
+可使用`grep -F '[InitGroupStage][EnvConfig]'`检索plog日志。例如，设置`HCCL_ENTRY_LOG_ENABLE=-1`时，日志正文包含以下信息，表示该环境变量仅支持0或1：
 
 ```text
 [InitGroupStage][EnvConfig] ... Env config "HCCL_ENTRY_LOG_ENABLE" value "-1" is invalid. ... Should be 0 or 1

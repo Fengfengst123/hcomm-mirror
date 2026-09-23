@@ -79,7 +79,7 @@ RankGraph 使用图（Graph）对通信域内不同 Rank 间的连接关系进�
 |------|-----------|---------|
 | **通信设备(Endpoint)** | 网络通信的逻辑接口，包含协议与地址 | NPU 网口 / Host NIC |
 | **通信通道(Channel)** | 两端通信设备间的数据通道（含同步 Notify） | RoCE QP / UB Jetty 连接 |
-| **通信内存(CommMem)** | 注册到通信域、可被通信设备(Endpoint)访问的内存段 | NPU HBM / Host 内存 |
+| **通信内存(CommMem)** | 注册到通信域、可被通信设备(Endpoint)访问的内存段 | NPU片上内存 / Host内存 |
 | **通信引擎(CommEngine)** | 执行通信任务的模块，含 Thread 与线程调度器，驱动通信硬件搬移数据 | AICPU_TS、CCU、AIV |
 
 > **组合关系**: Channel = 两端通信设备 + 通信协议 + N Notifys
