@@ -26,14 +26,14 @@
 
 本样例支持以下产品，集群拓扑为单机 2 卡：
 
-- Ascend 950PR/Ascend 950DT
+- Ascend 950PR&950DT系列产品
 
 本样例支持以下产品，集群拓扑为单机 8 卡：
 
-- Atlas A3 训练系列产品/Atlas A3 推理系列产品
-- Atlas A2 训练系列产品
-- Atlas 训练系列产品
-- Atlas 推理系列产品
+- Atlas A3系列产品
+- Atlas A2系列产品
+- Atlas训练系列产品
+- Atlas推理系列产品
 
 ### 软件依赖
 
@@ -73,7 +73,7 @@ make
 make test N=${RANK_SIZE}
 ```
 
-其中，`RANK_SIZE` 为集群设备数量。针对Ascend 950PR/Ascend 950DT， `RANK_SIZE` 为 2，其他系列产品为8。
+其中，`RANK_SIZE` 为集群设备数量。针对Ascend 950PR&950DT系列产品， `RANK_SIZE` 为 2，其他系列产品为8。
 
 > 注意：可通过设置 `HCCL_OP_EXPANSION_MODE` 环境变量配置通信算子的展开模式，不同产品型号支持的范围可参考[环境变量列表](https://hiascend.com/document/redirect/CannCommunityEnvRef) 中该环境变量的使用方法。
 >

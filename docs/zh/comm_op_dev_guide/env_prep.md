@@ -2,7 +2,7 @@
 
 1. 安装驱动固件与CANN软件包。
 
-    HCCL通信算子的开发使用依赖CANN软件包，CANN软件包的详细安装步骤请参考《[CANN 软件安装指南](https://hiascend.com/document/redirect/CannCommunityInstSoftware)》。
+    HCCL通信算子的开发使用依赖CANN软件包，CANN软件包的详细安装步骤请参考《[CANN软件安装](https://hiascend.com/document/redirect/CannCommunityInstSoftware)》。
 
 2. 设置环境变量。
 

@@ -23,13 +23,13 @@ The software dependencies required for compiling this project are listed below. 
 
 1. **Install the driver and firmware (runtime dependency)**
 
-    For downloading and installing the driver and firmware, refer to the "Prepare Software Package" and "Install NPU Driver and Firmware" sections in the [CANN Software Installation Guide](https://www.hiascend.com/document/redirect/CannCommunityInstWizard). The driver and firmware are runtime dependencies. If you are only compiling the source code of this project, they do not need to be installed.
+    For downloading and installing the driver and firmware, refer to the "Prepare Software Package" and "Install NPU Driver and Firmware" sections in the [CANN Software Installation](https://www.hiascend.com/document/redirect/CannCommunityInstWizard). The driver and firmware are runtime dependencies. If you are only compiling the source code of this project, they do not need to be installed.
 
 2. **Install the CANN software package**
 
     - **Scenario 1: Experience or develop based on the master version**
 
-        Click the [download link](https://ascend.devcloud.huaweicloud.com/artifactory/cann-run-mirror/software/master/), select the latest version, and download the corresponding package based on the product model and environment architecture. The installation commands are as follows. For more guidance, refer to the [CANN Software Installation Guide](https://www.hiascend.com/document/redirect/CannCommunityInstWizard).
+        Click the [download link](https://ascend.devcloud.huaweicloud.com/artifactory/cann-run-mirror/software/master/), select the latest version, and download the corresponding package based on the product model and environment architecture. The installation commands are as follows. For more guidance, refer to the [CANN Software Installation](https://www.hiascend.com/document/redirect/CannCommunityInstWizard).
 
         1. Install the CANN Toolkit development kit package.
 

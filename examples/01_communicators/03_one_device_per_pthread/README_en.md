@@ -26,9 +26,9 @@ This sample demonstrates how to use the `HcclCommInitRootInfoConfig()` API to in
 
 This sample supports the following products:
 
-- Ascend 950PR/Ascend 950DT
-- Atlas A3 training products/Atlas A3 inference products
-- Atlas A2 training products
+- Ascend 950PR&950DT products
+- Atlas A3 products
+- Atlas A2 products
 - Atlas training products
 - Atlas inference products
 

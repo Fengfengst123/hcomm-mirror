@@ -104,7 +104,7 @@ typedef struct HcclCommConfigDef {
     - 该配置仅支持对称组网、推理特性。
     - 该配置项支持的算子及约束限制参见配置“3”。
 
-  - 5：通信算子在CCU（Collective Communication Unit，集合通信加速单元）展开，使用CcuBuffer进行内存转写。Ascend 950PR不支持此配置。
+  - 5：通信算子在CCU（Collective Communication Unit，集合通信加速单元）展开，使用CcuBuffer进行内存读写。Ascend 950PR不支持此配置。
 
     此模式下，当CCU与多个远端通信时，使用CcuBuffer作为中转，用于节省内存读写带宽，CcuBuffer的特点是大小较小，但速度较快。当CCU资源不足时，系统会自动切换为“2：AI CPU模式”。
 

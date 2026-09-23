@@ -23,13 +23,13 @@
 
 1. **安装驱动与固件（运行态依赖）**
 
-    驱动与固件的下载和安装操作请参考《[CANN软件安装指南](https://www.hiascend.com/document/redirect/CannCommunityInstWizard)》中“准备软件包”和“安装NPU驱动和固件”章节。驱动与固件是运行态依赖，若仅编译本项目源码，可以不安装。
+    驱动与固件的下载和安装操作请参考《[CANN软件安装](https://www.hiascend.com/document/redirect/CannCommunityInstWizard)》中“准备软件包”和“安装NPU驱动和固件”章节。驱动与固件是运行态依赖，若仅编译本项目源码，可以不安装。
 
 2. **安装CANN软件包**
 
     - **场景1：体验master版本能力或基于master版本进行开发**
 
-        请单击[下载链接](https://ascend.devcloud.huaweicloud.com/artifactory/cann-run-mirror/software/master/)，选择最新时间版本，并根据产品型号和环境架构下载对应软件包。安装命令如下，更多指导参考《[CANN软件安装指南](https://www.hiascend.com/document/redirect/CannCommunityInstWizard)》。
+        请单击[下载链接](https://ascend.devcloud.huaweicloud.com/artifactory/cann-run-mirror/software/master/)，选择最新时间版本，并根据产品型号和环境架构下载对应软件包。安装命令如下，更多指导参考《[CANN软件安装](https://www.hiascend.com/document/redirect/CannCommunityInstWizard)》。
 
         1. 安装CANN Toolkit开发套件包。
 

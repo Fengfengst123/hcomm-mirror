@@ -22,12 +22,12 @@ This sample demonstrates how to use the `HcclCommInitClusterInfoConfig()` API to
 
 This sample supports the following products with a single-node 2-card cluster topology:
 
-- Ascend 950PR/Ascend 950DT
+- Ascend 950PR&950DT products
 
 This sample supports the following products with a single-node 8-card cluster topology:
 
-- Atlas A3 training products/Atlas A3 inference products
-- Atlas A2 training products
+- Atlas A3 products
+- Atlas A2 products
 - Atlas training products
 - Atlas inference products
 
@@ -69,7 +69,7 @@ make
 make test N=${RANK_SIZE}
 ```
 
-`RANK_SIZE` is the number of cluster devices. For Ascend 950PR/Ascend 950DT, `RANK_SIZE` is 2. For other product series, it is 8.
+`RANK_SIZE` is the number of cluster devices. For Ascend 950PR&950DT products, `RANK_SIZE` is 2. For other product series, it is 8.
 
 > Note: You can set the `HCCL_OP_EXPANSION_MODE` environment variable to configure the expansion mode of communication operators. For the range supported by different product models, refer to the usage of this environment variable in the [Environment Variable List](https://hiascend.com/document/redirect/CannCommunityEnvRef).
 >
