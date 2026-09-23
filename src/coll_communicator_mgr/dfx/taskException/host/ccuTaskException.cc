@@ -1249,7 +1249,7 @@ HcclResult CcuTaskException::GenErrorInfoLoopGroup(
     const auto rep = static_pointer_cast<CcuRep::CcuRepLoopGroupBundle>(repBase);
     const auto startLoopInstrId = rep->GetStartLoopInstrId();
     LoopGroupXn loopGroupXn{};
-    loopGroupXn.value = GetCcuXnValue(baseInfo.deviceId, baseInfo.dieId, rep->GetOffsetParam().Id());
+    loopGroupXn.value = GetCcuXnValue(baseInfo.deviceId, baseInfo.dieId, rep->GetParallelVar().Id());
     errorMsg.msg.loopGroup.startLoopInsId = startLoopInstrId;
     errorMsg.msg.loopGroup.loopInsCnt = static_cast<uint16_t>(loopGroupXn.loopInsCnt);
     errorMsg.msg.loopGroup.expandOffset = static_cast<uint16_t>(loopGroupXn.expandOffset);
@@ -1441,11 +1441,7 @@ void CcuTaskException::PrintCcuErrorInfo(uint32_t deviceId, uint16_t status, con
         if (isGetCqeErrInfo) {
             isGetCqeErrInfo = false; // 只获取一次CQE错误信息，避免重复获取
             for (const auto& errorInfo : errorInfos) {
-                if (errorInfo.repType == CcuRep::CcuRepType::READ || errorInfo.repType == CcuRep::CcuRepType::WRITE
-                    || errorInfo.repType == CcuRep::CcuRepType::BUF_READ
-                    || errorInfo.repType == CcuRep::CcuRepType::BUF_WRITE) {
-                    GetCcuCqeErrorInfo(errorInfo, taskInfo, deviceId, missionStatus);
-                }
+                GetCcuCqeErrorInfo(errorInfo, taskInfo, deviceId, missionStatus);
             }
         }
         NotifyControlPlaneOnUbError(errorInfos, taskInfo, deviceId, missionStatus);
