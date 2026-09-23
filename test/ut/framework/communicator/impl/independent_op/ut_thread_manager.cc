@@ -18,6 +18,7 @@
 #include "launch_aicpu.h"
 #include "aicpu_launch_manager.h"
 #include "adapter_rts_common.h"
+#include "adapter_rts.h"
 #include "aicpu_ts_thread.h"
 
 using namespace hccl;
@@ -33,6 +34,52 @@ static HcclResult StubThreadKernelLaunchForCommDevice(
 }
 void MockGetRunSideIsDevice();
 void MockThreadKernelLaunchForComm();
+
+namespace {
+// EnsureAicpuCommInit spy：记录 init/alloc 调用次数与顺序（invoke 桩无法捕获变量，用文件级静态对象共享）
+struct AicpuCommInitSpy {
+    uint32_t seq = 0;      // 全局调用序号
+    uint32_t initSeq = 0;  // kernelLaunchAicpuCommInit 首次调用序号
+    uint32_t allocSeq = 0; // HcommThreadAllocWithCommConfig 首次调用序号
+    uint32_t initCnt = 0;
+    uint32_t allocCnt = 0;
+    HcclResult initRet = HCCL_SUCCESS;
+    bool commState = false;
+};
+AicpuCommInitSpy g_aicpuSpy;
+} // namespace
+
+// L0 线程分配桩：填充伪句柄并记录调用顺序
+static HcommResult StubThreadAllocWithCommConfig(
+    CommEngine, const char*, uint32_t threadNum, ThreadType, const ThreadConfig*, ThreadHandle* threads)
+{
+    g_aicpuSpy.allocCnt++;
+    if (g_aicpuSpy.allocSeq == 0) {
+        g_aicpuSpy.allocSeq = ++g_aicpuSpy.seq;
+    }
+    for (uint32_t i = 0; i < threadNum; ++i) {
+        threads[i] = static_cast<ThreadHandle>(0x7000 + i);
+    }
+    return static_cast<HcommResult>(HCCL_SUCCESS);
+}
+
+// L0 线程资源查询桩：返回伪 stream 指针
+static HcommResult StubThreadResGetInfo(ThreadHandle, ThreadResType, uint32_t, void** info)
+{
+    *info = reinterpret_cast<void*>(0x7100);
+    return static_cast<HcommResult>(HCCL_SUCCESS);
+}
+
+// 重置 spy 并 mock AICPU host 线程分配链路的 L0 边界，使 UT 不依赖真实线程资源
+static void MockAicpuCommInitEnv()
+{
+    g_aicpuSpy = AicpuCommInitSpy();
+    MOCKER(HcommThreadAllocWithCommConfig).stubs().will(invoke(StubThreadAllocWithCommConfig));
+    MOCKER(HcommThreadResGetInfo).stubs().will(invoke(StubThreadResGetInfo));
+    MOCKER(hrtStreamGetSqid).stubs().will(returnValue(HCCL_SUCCESS));
+    MOCKER(HcommThreadSupplementNotify).stubs().will(returnValue(static_cast<HcommResult>(HCCL_SUCCESS)));
+    MOCKER(HcommThreadFree).stubs().will(returnValue(static_cast<HcommResult>(HCCL_SUCCESS)));
+}
 
 class ThreadManagerTest : public BaseInit {
 public:
@@ -75,6 +122,29 @@ public:
             threadManager->HcclThreadAcquireV2(
                 CommEngine::COMM_ENGINE_CPU, threadNum, ThreadType::THREAD_TYPE_TS, config.data(), out, threadId),
             HCCL_SUCCESS);
+    }
+
+    // AICPU 公共域 spy 回调组：init 状态与次数可控可观测
+    ManagerCallbacks MakeAicpuSpyCallbacks()
+    {
+        ManagerCallbacks callbacks;
+        callbacks.getAicpuCommState = []() {
+            return g_aicpuSpy.commState;
+        };
+        callbacks.setAicpuCommState = [](bool state) {
+            g_aicpuSpy.commState = state;
+        };
+        callbacks.kernelLaunchAicpuCommInit = []() {
+            g_aicpuSpy.initCnt++;
+            if (g_aicpuSpy.initSeq == 0) {
+                g_aicpuSpy.initSeq = ++g_aicpuSpy.seq;
+            }
+            return g_aicpuSpy.initRet;
+        };
+        callbacks.reportProfilingKernel = [](uint64_t, std::string) {
+            return HCCL_SUCCESS;
+        };
+        return callbacks;
     }
 
 private:
@@ -314,4 +384,76 @@ TEST_F(ThreadManagerTest, Ut_ThreadMgrDestructor_When_NoLeak_Expect_Success)
     AcquireCpuThreads(1, 1, &handle);
     // 显式 Free 后析构 cache 已空
     EXPECT_EQ(HcommThreadFree(&handle, 1), HCCL_SUCCESS);
+}
+
+/* ======================== EnsureAicpuCommInit（AICPU 首扩容场景） ======================== */
+
+// AICPU 首次 acquire（existNum=0）：comm-init 恰好执行一次，且发生在线程分配之前
+TEST_F(ThreadManagerTest, Ut_HcclThreadAcquireV2_When_AicpuFirstAcquire_Expect_CommInitOnceBeforeAlloc)
+{
+    MockGetRunSideIsDevice();
+    MockAicpuCommInitEnv();
+    std::unique_ptr<ThreadMgr> mgr = std::make_unique<ThreadMgr>(4, 8, "test", MakeAicpuSpyCallbacks());
+
+    constexpr uint32_t kNum = 1;
+    ThreadConfig config[kNum];
+    ASSERT_EQ(ThreadConfigInit(config, kNum), HCCL_SUCCESS);
+    config[0].notifyNumPerThread = 2;
+    ThreadHandle out[kNum] = {0};
+    std::vector<uint32_t> threadId;
+    HcclResult ret = mgr->HcclThreadAcquireV2(
+        CommEngine::COMM_ENGINE_AICPU, kNum, ThreadType::THREAD_TYPE_TS, config, out, threadId);
+    EXPECT_EQ(ret, HCCL_SUCCESS);
+    EXPECT_EQ(g_aicpuSpy.initCnt, 1U);
+    EXPECT_EQ(g_aicpuSpy.allocCnt, 1U);
+    ASSERT_NE(g_aicpuSpy.initSeq, 0U);
+    ASSERT_NE(g_aicpuSpy.allocSeq, 0U);
+    EXPECT_LT(g_aicpuSpy.initSeq, g_aicpuSpy.allocSeq); // comm-init 先于线程分配
+}
+
+// AICPU 重复 acquire：comm-init 防重生效，不重复执行
+TEST_F(ThreadManagerTest, Ut_HcclThreadAcquireV2_When_AicpuRepeatedAcquire_Expect_CommInitNotRepeated)
+{
+    MockGetRunSideIsDevice();
+    MockAicpuCommInitEnv();
+    std::unique_ptr<ThreadMgr> mgr = std::make_unique<ThreadMgr>(4, 8, "test", MakeAicpuSpyCallbacks());
+
+    constexpr uint32_t kNum = 1;
+    ThreadConfig config[kNum];
+    ASSERT_EQ(ThreadConfigInit(config, kNum), HCCL_SUCCESS);
+    config[0].notifyNumPerThread = 2;
+    ThreadHandle out[kNum] = {0};
+    std::vector<uint32_t> threadId;
+    HcclResult ret = mgr->HcclThreadAcquireV2(
+        CommEngine::COMM_ENGINE_AICPU, kNum, ThreadType::THREAD_TYPE_TS, config, out, threadId);
+    ASSERT_EQ(ret, HCCL_SUCCESS);
+    ASSERT_EQ(g_aicpuSpy.initCnt, 1U);
+
+    ret = mgr->HcclThreadAcquireV2(
+        CommEngine::COMM_ENGINE_AICPU, kNum, ThreadType::THREAD_TYPE_TS, config, out, threadId);
+    EXPECT_EQ(ret, HCCL_SUCCESS);
+    EXPECT_EQ(g_aicpuSpy.initCnt, 1U);  // 防重生效
+    EXPECT_EQ(g_aicpuSpy.allocCnt, 1U); // 复用池命中，不重复分配
+}
+
+// comm-init 失败：acquire 返回错误并早退，不进行线程分配，状态未置位
+TEST_F(ThreadManagerTest, Ut_HcclThreadAcquireV2_When_CommInitFailed_Expect_AcquireFailedBeforeAlloc)
+{
+    MockGetRunSideIsDevice();
+    MockAicpuCommInitEnv();
+    g_aicpuSpy.initRet = HCCL_E_INTERNAL;
+    std::unique_ptr<ThreadMgr> mgr = std::make_unique<ThreadMgr>(4, 8, "test", MakeAicpuSpyCallbacks());
+
+    constexpr uint32_t kNum = 1;
+    ThreadConfig config[kNum];
+    ASSERT_EQ(ThreadConfigInit(config, kNum), HCCL_SUCCESS);
+    config[0].notifyNumPerThread = 2;
+    ThreadHandle out[kNum] = {0};
+    std::vector<uint32_t> threadId;
+    HcclResult ret = mgr->HcclThreadAcquireV2(
+        CommEngine::COMM_ENGINE_AICPU, kNum, ThreadType::THREAD_TYPE_TS, config, out, threadId);
+    EXPECT_EQ(ret, HCCL_E_INTERNAL);
+    EXPECT_EQ(g_aicpuSpy.initCnt, 1U);
+    EXPECT_EQ(g_aicpuSpy.allocCnt, 0U); // 失败早退，未走到线程分配
+    EXPECT_FALSE(g_aicpuSpy.commState); // 状态未置位，下次可重试
 }

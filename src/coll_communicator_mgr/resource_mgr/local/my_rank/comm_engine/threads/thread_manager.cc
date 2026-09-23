@@ -153,6 +153,23 @@ HcclResult ThreadMgr::CheckThreadNum(CommEngine engine, uint32_t threadNum, uint
     return CheckNotifyNum(engine, threadNum, notifyNumPerThread);
 }
 
+// AICPU 首次触碰 device 前预置公共域初始化（独立锁串行化 check+launch+set，comm 生命周期内仅执行一次；
+// 调用点分散在 threadMutex_ 与 dedicatedThreadMutex_ 两条路径，故用独立叶子锁防重，回调不回调本类无死锁风险）
+HcclResult ThreadMgr::EnsureAicpuCommInit(CommEngine engine)
+{
+    if (engine != COMM_ENGINE_AICPU) {
+        return HCCL_SUCCESS;
+    }
+    std::lock_guard<std::mutex> lock(aicpuCommInitMutex_);
+    if (callbacks_.getAicpuCommState()) {
+        return HCCL_SUCCESS;
+    }
+    HcclResult ret = callbacks_.kernelLaunchAicpuCommInit();
+    CHK_PRT_RET(ret != HCCL_SUCCESS, HCCL_ERROR("[%s] kernelLaunchAicpuCommInit failed, ret[%d].", __func__, ret), ret);
+    callbacks_.setAicpuCommState(true);
+    return HCCL_SUCCESS;
+}
+
 HcclResult ThreadMgr::HcclThreadAcquireV2(
     CommEngine engine, uint32_t threadNum, ThreadType type, const ThreadConfig* config, ThreadHandle* threads,
     std::vector<uint32_t>& threadId)
@@ -172,6 +189,9 @@ HcclResult ThreadMgr::HcclThreadAcquireV2(
                 config[i].header.magicWord, HCOMM_THREAD_CONFIG_MAGIC_WORD),
             HCCL_E_PARA);
     }
+
+    // AICPU 线程创建前置 device 侧公共域初始化（覆盖首扩容场景）
+    CHK_RET(EnsureAicpuCommInit(engine));
 
     std::lock_guard<std::mutex> lock(threadMutex_);
     std::lock_guard<std::mutex> engineToThreadMtx(engineToThreadMutex_);
@@ -231,14 +251,6 @@ HcclResult ThreadMgr::SupplementNotify(
     }
 
     CHK_RET(CheckNotifyNum(engine, 1, totalSupplement));
-    // 2. AICPU 需预调 comm init
-    if (engine == COMM_ENGINE_AICPU && !callbacks_.getAicpuCommState()) {
-        HcclResult ret = callbacks_.kernelLaunchAicpuCommInit();
-        CHK_PRT_RET(
-            ret != HCCL_SUCCESS, HCCL_ERROR("[%s] kernelLaunchAicpuCommInit failed, ret[%d]", __func__, ret), ret);
-        callbacks_.setAicpuCommState(true);
-    }
-
     // 3. 批量补充
     HcommResult ret = HcommThreadSupplementNotify(needSupplement.data(), existNum, supplementNums.data());
     CHK_PRT_RET(
@@ -483,6 +495,9 @@ HcclResult ThreadMgr::HcclDeviceOrderThreadCreate(
     HcommResult initRet = ThreadConfigInit(&config, 1);
     CHK_PRT_RET(initRet != 0, HCCL_ERROR("[%s] ThreadConfigInit failed, ret[%d]", __func__, initRet), HCCL_E_INTERNAL);
     config.notifyNumPerThread = static_cast<uint16_t>(notifyNumPerThread);
+
+    // AICPU 专用线程创建前置 device 侧公共域初始化
+    CHK_RET(EnsureAicpuCommInit(CommEngine::COMM_ENGINE_AICPU));
 
     // AICPU 专用线程统一走底层 C 接口创建，且必须带 commId：带 commId 时线程会绑定通信域（ForComm 路径）。
     // 不带 commId 的 HcommThreadAlloc 走 ForBase 路径，创建的线程不绑定通信域，这里不能用

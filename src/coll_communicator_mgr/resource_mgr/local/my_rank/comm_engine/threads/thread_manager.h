@@ -60,6 +60,7 @@ private:
     uint64_t GetMaxNotifyTotal();
     HcclResult CheckNotifyNum(CommEngine engine, uint32_t threadNum, uint32_t notifyNumPerThread);
     HcclResult CheckThreadNum(CommEngine engine, uint32_t threadNum, uint32_t notifyNumPerThread);
+    HcclResult EnsureAicpuCommInit(CommEngine engine);
     HcclResult
     HcclUnfoldThreadAcquire(HcclDedicatedThreadType useType, uint32_t notifyNumPerThread, ThreadHandle* thread);
     HcclResult
@@ -94,6 +95,8 @@ private:
 
     std::mutex dedicatedThreadMutex_;
     std::unordered_map<HcclDedicatedThreadType, ThreadHandle> dedicatedThreadMap_;
+
+    std::mutex aicpuCommInitMutex_; // AICPU 公共域初始化防重叶子锁，串行化 check+launch+set
 
     std::unordered_set<ThreadHandle>
         orderLaunchThreads_; // 保序流（非所有权，资源由 OrderLaunchThreadMgr 管理，同 comm 操作串行无需加锁）
