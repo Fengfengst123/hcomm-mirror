@@ -39,14 +39,14 @@ template <typename AlgTopoMatch, typename InsAlgTemplate>
 HcclResult InsV2ReduceScatterVSoleExecutor<AlgTopoMatch, InsAlgTemplate>::InitCommInfo(const AlgTopoInfo& topoInfo)
 {
     CHK_PRT_RET(
-        topoInfo.vTopo.empty(), HCCL_ERROR("[InsV2ReduceSoleExecutor][InitCommInfo] vTopo size is invalid"),
+        topoInfo.vTopo.empty(), HCCL_ERROR("[InsV2ReduceScatterVSoleExecutor][InitCommInfo] vTopo size is invalid"),
         HCCL_E_PARA);
     CHK_PRT_RET(
-        topoInfo.virtRankMap.empty(), HCCL_ERROR("[InsV2ReduceSoleExecutor][InitCommInfo] virtRankMap size is invalid"),
-        HCCL_E_PARA);
+        topoInfo.virtRankMap.empty(),
+        HCCL_ERROR("[InsV2ReduceScatterVSoleExecutor][InitCommInfo] virtRankMap size is invalid"), HCCL_E_PARA);
     CHK_PRT_RET(
-        topoInfo.virtRanks.empty(), HCCL_ERROR("[InsV2ReduceSoleExecutor][InitCommInfo] virtRanks size is invalid"),
-        HCCL_E_PARA);
+        topoInfo.virtRanks.empty(),
+        HCCL_ERROR("[InsV2ReduceScatterVSoleExecutor][InitCommInfo] virtRanks size is invalid"), HCCL_E_PARA);
     vTopo_ = topoInfo.vTopo[0];             // 本通信域内的通信平面
     virtRankMap_ = topoInfo.virtRankMap[0]; // 本通信域内的 rank 映射表
     virtRanks_ = topoInfo.virtRanks[0];     // 本通信域内的 rank 集合

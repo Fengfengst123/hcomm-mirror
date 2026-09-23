@@ -267,15 +267,15 @@ HcclResult InsReduceScatterParallelExecutor<AlgTopoMatch, InsAlgTemplate0, InsAl
         HCCL_DEBUG("[InsReduceScatterParallelExecutor] Rank[%d], CalcRes with detouring enabled.", myRank_);
         CHK_RET(tempAlgIntra.CalcResDetour(linkMgr, resReqIntra));
     } else {
-        HCCL_DEBUG("[InsReduceScatterParallelExecutor] Rank[%d], CalcRes with detour disabled.", myRank_);
+        HCCL_DEBUG("[InsReduceScatterParallelExecutor][Aicpu] Rank[%d], CalcRes with detour disabled.", myRank_);
         CHK_RET(tempAlgIntra.CalcRes(resReqIntra));
     }
     CHK_RET(tempAlgInter.CalcRes(resReqInter));
 
     // 申请算法模板所需资源
     if (!(resReqIntra.queNum > 0 && resReqInter.queNum > 0)) {
-        HCCL_ERROR(
-            "[InsReduceScatterParallelExecutor]resReqIntra.queNum and resReqInter.queNum must be larger than 0.");
+        HCCL_ERROR("[InsReduceScatterParallelExecutor][Aicpu] resReqIntra.queNum and resReqInter.queNum must be larger "
+                   "than 0.");
         return HcclResult::HCCL_E_INTERNAL;
     }
     u32 totalQueueNum = resReqIntra.queNum + resReqInter.queNum;

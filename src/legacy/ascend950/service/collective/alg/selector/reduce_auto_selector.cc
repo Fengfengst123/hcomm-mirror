@@ -193,14 +193,14 @@ SelectorStatus ReduceAutoSelector::SelectCcuScheduleAlgo(
                 }
                 if (op.dataType == DataType::INT8) {
                     if (dataSize_ * ratio >= REDUCE_CCU_1D_MAX_DATA_SIZE_INT8) {
-                        HCCL_INFO("[Algo][ReduceAutoSelector] fallback to aicpu.");
+                        HCCL_INFO("[Algo][ReduceAutoSelector][Mesh1dClos] fallback to aicpu.");
                         return SelectorStatus::NOT_MATCH;
                     } else {
                         primQueueGenName = "CcuReduceMeshMem2Mem1D";
                     }
                 } else {
                     if (dataSize_ * ratio >= REDUCE_CCU_1D_MAX_DATA_SIZE) {
-                        HCCL_INFO("[Algo][ReduceAutoSelector] fallback to aicpu.");
+                        HCCL_INFO("[Algo][ReduceAutoSelector][Mesh1dClos] fallback to aicpu.");
                         return SelectorStatus::NOT_MATCH;
                     } else {
                         primQueueGenName = "CcuReduceMeshTwoShotMem2Mem1D";

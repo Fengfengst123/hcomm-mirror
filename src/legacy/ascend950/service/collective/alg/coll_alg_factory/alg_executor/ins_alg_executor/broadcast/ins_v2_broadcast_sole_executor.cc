@@ -202,14 +202,15 @@ HcclResult InsV2BroadcastSoleExecutor<AlgTopoMatch, InsAlgTemplate>::Orchestrate
     CHK_PRT_RET(
         dataTypeSize_ == 0,
         HCCL_ERROR(
-            "[InsV2BroadcastSoleExecutor] [CollAlgFactory] Rank [%d], Invalid dataTypeSize_ [%u].", myRank_,
-            dataTypeSize_),
+            "[InsV2BroadcastSoleExecutor] [CollAlgFactory][OrchestrateAicpu] Rank [%d], Invalid dataTypeSize_ [%u].",
+            myRank_, dataTypeSize_),
         HcclResult::HCCL_E_INTERNAL);
 
     // 实例化算法模板类
     HCCL_DEBUG(
-        "[InsV2BroadcastSoleExecutor] Rank[%d], Init insAlgTemplate with rankSize [%u] and dmaMode [%s].", myRank_,
-        rankSize_, dmaMode_.Describe().c_str());
+        "[InsV2BroadcastSoleExecutor][OrchestrateAicpu] Rank[%d], Init insAlgTemplate with rankSize [%u] and dmaMode "
+        "[%s].",
+        myRank_, rankSize_, dmaMode_.Describe().c_str());
     std::shared_ptr<InsAlgTemplate> tempAlg = nullptr;
     CHK_RET(CreateTemplates(tempAlg));
 

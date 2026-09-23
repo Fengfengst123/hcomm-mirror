@@ -163,14 +163,17 @@ HcclResult InsSendExecutor::Orchestrate(
     const vector<LinkData> sendPath = linkMgr->GetLinks(remoteRank);
     CHK_PRT_RET(
         sendPath.size() == 0,
-        HCCL_ERROR("[InsCollAlgFactory] Unable to obtain valid link, srcRank [%d], dstRank [%d].", myRank_, remoteRank),
+        HCCL_ERROR(
+            "[InsCollAlgFactory][InsSendExecutor] Unable to obtain valid link, srcRank [%d], dstRank [%d].", myRank_,
+            remoteRank),
         HcclResult::HCCL_E_INTERNAL);
     LinkData sendLinkData(sendPath[0]);
     if (sendLinkData.GetType() == PortDeploymentType::P2P && sendLinkData.GetLinkProtocol() == LinkProtocol::PCIE) {
         dmaMode_ = DmaMode::GET;
     }
     HCCL_DEBUG(
-        "[InsCollAlgFactory][InsSendExecutor][Orchestrate] Total transfer data size [%llu], Max scratch buffer size "
+        "[InsCollAlgFactory][InsSendExecutor][OrchestrateAicpu] Total transfer data size [%llu], Max scratch buffer "
+        "size "
         "[%u].",
         totalDataSize, params.maxTmpMemSize);
 

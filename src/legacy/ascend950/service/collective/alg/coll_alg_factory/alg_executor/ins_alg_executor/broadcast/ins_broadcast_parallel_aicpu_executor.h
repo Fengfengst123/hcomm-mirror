@@ -195,7 +195,9 @@ private:
     HcclResult CalcLocalRoot()
     {
         CHK_PRT_RET(
-            root_ >= rankSize_, HCCL_ERROR("[CalcLocalRoot] root[%u] is out of rankSize[%u]", root_, rankSize_),
+            root_ >= rankSize_,
+            HCCL_ERROR(
+                "[BroadcastParallelAicpuExecutor][CalcLocalRoot] root[%u] is out of rankSize[%u]", root_, rankSize_),
             HcclResult::HCCL_E_INTERNAL);
 
         u32 intraLocalRootIdx = root_ % intraLocalRankSize_;
@@ -204,8 +206,9 @@ private:
         interLocalRoot_ = static_cast<u32>(vTopo_.at(1).at(0).at(interLocalRootIdx));
 
         HCCL_INFO(
-            "[CalcLocalRoot] localRoot: myRank[%d] intraLocalRoot[%u] interLocalRoot[%u]", myRank_, intraLocalRoot_,
-            interLocalRoot_);
+            "[BroadcastParallelAicpuExecutor][CalcLocalRoot] localRoot: myRank[%d] intraLocalRoot[%u] "
+            "interLocalRoot[%u]",
+            myRank_, intraLocalRoot_, interLocalRoot_);
         return HcclResult::HCCL_SUCCESS;
     }
 

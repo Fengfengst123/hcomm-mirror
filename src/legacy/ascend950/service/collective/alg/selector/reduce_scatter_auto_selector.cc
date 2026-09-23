@@ -189,13 +189,13 @@ SelectorStatus ReduceScatterAutoSelector::SelectCcuScheduleAlgo(
                 CHK_PRT_RET(
                     op.dataType == DataType::INT8,
                     HCCL_WARNING(
-                        "[Algo][ReduceScatterAutoSelector] dataType[%s] is not supported yet for "
+                        "[Algo][ReduceScatterAutoSelector][Mesh1dClos] dataType[%s] is not supported yet for "
                         "ccu_schedule mode with ms reduce.",
                         op.dataType.Describe().c_str()),
                     SelectorStatus::NOT_MATCH);
                 double ratio; // 以8卡为基线确定ratio，用来表示不同卡数对下发的影响系数
                 if (rankSize_ == 0) {
-                    HCCL_WARNING("[ReduceScatterAutoSelector] the selector is not set rankSize_.");
+                    HCCL_WARNING("[ReduceScatterAutoSelector][Mesh1dClos] the selector is not set rankSize_.");
                     ratio = 1;
                 } else {
                     ratio = DEFAULT_RANK_SIZE / rankSize_;

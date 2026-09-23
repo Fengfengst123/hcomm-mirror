@@ -220,7 +220,8 @@ template <typename AlgTopoMatch, typename InsAlgTemplate0, typename InsAlgTempla
 HcclResult InsBroadcastParallelExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1>::CalcLocalRoot()
 {
     CHK_PRT_RET(
-        root_ >= rankSize_, HCCL_ERROR("[CalcLocalRoot] root[%u] is out of rankSize[%u]", root_, rankSize_),
+        root_ >= rankSize_,
+        HCCL_ERROR("[BroadcastParallelExecutor][CalcLocalRoot] root[%u] is out of rankSize[%u]", root_, rankSize_),
         HcclResult::HCCL_E_INTERNAL);
 
     u32 intraLocalRootIdx = root_ % intraLocalRankSize_;
@@ -229,8 +230,8 @@ HcclResult InsBroadcastParallelExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTem
     interLocalRoot_ = static_cast<u32>(vTopo_.at(1).at(0).at(interLocalRootIdx));
 
     HCCL_INFO(
-        "[CalcLocalRoot] localRoot: myRank[%d] intraLocalRoot[%u] interLocalRoot[%u]", myRank_, intraLocalRoot_,
-        interLocalRoot_);
+        "[BroadcastParallelExecutor][CalcLocalRoot] localRoot: myRank[%d] intraLocalRoot[%u] interLocalRoot[%u]",
+        myRank_, intraLocalRoot_, interLocalRoot_);
     return HcclResult::HCCL_SUCCESS;
 }
 

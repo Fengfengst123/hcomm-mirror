@@ -60,10 +60,11 @@ HcclResult InsAllReduceParallelExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTem
     AlgTempResReq resReqIntra;
     AlgTempResReq resReqInter;
     if (enableDetour_) {
-        HCCL_DEBUG("[InsAllReduceParallelExecutor] Rank[%d], CalcRes with detouring enabled.", myRank_);
+        HCCL_DEBUG("[InsAllReduceParallelExecutor][CalcResOffload] Rank[%d], CalcRes with detouring enabled.", myRank_);
         CHK_RET(intraTempAlg.CalcResDetour(rankGraph, resReqIntra));
     } else {
-        HCCL_DEBUG("[InsAllReduceParallelExecutor] Rank[%d], CalcRes with detouring disabled.", myRank_);
+        HCCL_DEBUG(
+            "[InsAllReduceParallelExecutor][CalcResOffload] Rank[%d], CalcRes with detouring disabled.", myRank_);
         CHK_RET(intraTempAlg.CalcRes(resReqIntra));
     }
 

@@ -143,20 +143,26 @@ HcclResult InsV2RecvExecutor::Orchestrate(
     const vector<LinkData> recvPath = linkMgr->GetLinks(remoteRank);
     CHK_PRT_RET(
         recvPath.size() == 0,
-        HCCL_ERROR("[InsCollAlgFactory] Unable to obtain valid link, srcRank [%d], dstRank [%d].", myRank_, remoteRank),
+        HCCL_ERROR(
+            "[InsCollAlgFactory][InsV2RecvExecutor] Unable to obtain valid link, srcRank [%d], dstRank [%d].", myRank_,
+            remoteRank),
         HcclResult::HCCL_E_INTERNAL);
     LinkData recvLinkData(recvPath[0]);
     HCCL_DEBUG(
-        "[InsCollAlgFactory][InsV2RecvExecutor][Orchestrate] Total transfer data size [%llu], Max scratch buffer size "
+        "[InsCollAlgFactory][InsV2RecvExecutor][OrchestrateAicpu] Total transfer data size [%llu], Max scratch buffer "
+        "size "
         "[%u].",
         totalDataSize, params.maxTmpMemSize);
 
     // 模式判断
     if (opMode_ == OpMode::OFFLOAD) {
-        HCCL_ERROR("[InsCollAlgFactory][InsV2RecvExecutor][Orchestrate] offload is not supported");
+        HCCL_ERROR("[InsCollAlgFactory][InsV2RecvExecutor][OrchestrateAicpu] offload is not supported");
         return HcclResult::HCCL_E_NOT_SUPPORT;
     } else {
-        HCCL_DEBUG("[InsCollAlgFactory] Rank[%d], Generating Instruction Queues in OPBASE Mode for HOST.", myRank_);
+        HCCL_DEBUG(
+            "[InsCollAlgFactory][InsV2RecvExecutor][OrchestrateAicpu] Rank[%d], Generating Instruction Queues in "
+            "OPBASE Mode for HOST.",
+            myRank_);
 
         CHK_RET(ExecAiv(op, params, recvLinkData, insQue));
         return HcclResult::HCCL_SUCCESS;
