@@ -1023,10 +1023,10 @@ namespace CcuRep {
         curInstrId++;
 
         uint16_t loopCount = static_cast<uint16_t>(loops.size());
-        uint16_t jumpTargetInstrId = curInstrId + 2 + loopCount + 1; // 跳转目标为向后2条+loop指令条数+额外1条
-        LoadImdToXnInstr(instr++, dep.reserveXnId, jumpTargetInstrId);
+        uint16_t jumpTargetInstrId = curInstrId + 2 + loopCount;
+        LoadImdToXnInstr(instr++, dep.commXn[0], jumpTargetInstrId);
         curInstrId++;
-        JumpInstr(instr++, dep.reserveXnId, dep.reserveXnId, 1);
+        JumpInstr(instr++, dep.commXn[0], dep.reserveXnId, 1);
         curInstrId++;
 
         for (const auto& loop : loops) {
@@ -1038,7 +1038,7 @@ namespace CcuRep {
             curInstrId++;
         }
 
-        LoadImdToXnInstr(instr++, dep.reserveXnId, 0);
+        LoadImdToXnInstr(instr++, dep.commXn[0], 0);
         curInstrId++;
 
         return HcclResult::HCCL_SUCCESS;
@@ -1055,9 +1055,9 @@ namespace CcuRep {
                 curInstrId++;
             } else {
                 uint64_t ctxImm = static_cast<uint64_t>(loop.executor.Id()) << 45; // 左移45位到对应字段然后相加
-                LoadImdToXnInstr(instr++, dep.reserveXnId, ctxImm);
+                LoadImdToXnInstr(instr++, dep.commXn[0], ctxImm);
                 curInstrId++;
-                LoadXXInstr(instr++, loop.loopParamVar.Id(), loop.loopParamVar.Id(), dep.reserveXnId);
+                LoadXXInstr(instr++, loop.loopParamVar.Id(), loop.loopParamVar.Id(), dep.commXn[0]);
                 curInstrId++;
             }
         }

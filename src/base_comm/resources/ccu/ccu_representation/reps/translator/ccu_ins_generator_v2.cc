@@ -1650,17 +1650,17 @@ namespace CcuRep {
                 curInstrId++;
             } else if (loop.layout == CcuRepLoopGroupBundle::Layout::PackedVar) {
                 // loopParamVar 布局：iterNum[12:0] gsaOffset[44:13] ctxId[52:45]
-                CcuV2::LoadImdToXn(instr++, dep.reserveXnId, LOOP_ITER_NUM_MASK);
+                CcuV2::LoadImdToXn(instr++, dep.commXn[0], LOOP_ITER_NUM_MASK);
                 curInstrId++;
-                CcuV2::And(instr++, loop.iterNumVar.Id(), loop.loopParamVar.Id(), dep.reserveXnId);
+                CcuV2::And(instr++, loop.iterNumVar.Id(), loop.loopParamVar.Id(), dep.commXn[0]);
                 curInstrId++;
-                CcuV2::LoadImdToXn(instr++, dep.reserveXnId, LOOP_GSA_OFFSET_SHIFT);
+                CcuV2::LoadImdToXn(instr++, dep.commXn[0], LOOP_GSA_OFFSET_SHIFT);
                 curInstrId++;
-                CcuV2::SRL(instr++, loop.addrOffsetVar.Id(), loop.loopParamVar.Id(), dep.reserveXnId);
+                CcuV2::SRL(instr++, loop.addrOffsetVar.Id(), loop.loopParamVar.Id(), dep.commXn[0]);
                 curInstrId++;
-                CcuV2::LoadImdToXn(instr++, dep.reserveXnId, LOOP_GSA_OFFSET_MASK);
+                CcuV2::LoadImdToXn(instr++, dep.commXn[0], LOOP_GSA_OFFSET_MASK);
                 curInstrId++;
-                CcuV2::And(instr++, loop.addrOffsetVar.Id(), loop.addrOffsetVar.Id(), dep.reserveXnId);
+                CcuV2::And(instr++, loop.addrOffsetVar.Id(), loop.addrOffsetVar.Id(), dep.commXn[0]);
                 curInstrId++;
             }
         }
@@ -1694,25 +1694,23 @@ namespace CcuRep {
             const FieldMap fields[] = {{41, 0}, {48, 10}, {55, 19}};
             for (size_t i = 0; i < sizeof(fields) / sizeof(fields[0]); i++) {
                 const uint16_t dst = (i == 0) ? newXm : scratch;
-                CcuV2::LoadImdToXn(instr++, dep.reserveXnId, fields[i].srcShift);
+                CcuV2::LoadImdToXn(instr++, dep.commXn[0], fields[i].srcShift);
                 curInstrId++;
-                CcuV2::SRL(instr++, dst, src, dep.reserveXnId);
+                CcuV2::SRL(instr++, dst, src, dep.commXn[0]);
                 curInstrId++;
-                CcuV2::LoadImdToXn(instr++, dep.reserveXnId, LOOP_FIELD_MASK);
+                CcuV2::LoadImdToXn(instr++, dep.commXn[0], LOOP_FIELD_MASK);
                 curInstrId++;
-                CcuV2::And(instr++, dst, dst, dep.reserveXnId);
+                CcuV2::And(instr++, dst, dst, dep.commXn[0]);
                 curInstrId++;
                 if (fields[i].dstShift != 0) {
-                    CcuV2::LoadImdToXn(instr++, dep.reserveXnId, fields[i].dstShift);
+                    CcuV2::LoadImdToXn(instr++, dep.commXn[0], fields[i].dstShift);
                     curInstrId++;
-                    CcuV2::SLL(instr++, dst, dst, dep.reserveXnId);
+                    CcuV2::SLL(instr++, dst, dst, dep.commXn[0]);
                     curInstrId++;
                     CcuV2::Or(instr++, newXm, newXm, scratch);
                     curInstrId++;
                 }
             }
-            CcuV2::LoadImdToXn(instr++, dep.reserveXnId, 0);
-            curInstrId++;
             loopGroupConfigId = newXm;
         }
         return HcclResult::HCCL_SUCCESS;
@@ -1752,9 +1750,9 @@ namespace CcuRep {
         const uint16_t loopCount = static_cast<uint16_t>(loops.size());
         const uint16_t jumpInstrId = curInstrId + 1;
         const uint16_t targetInstrId = curInstrId + 2 + loopCount; // 跳转目的为loop指令后额外2条
-        CcuV2::LoadImdToXn(instr++, dep.reserveXnId, GetRelativeInstrId(jumpInstrId, targetInstrId));
+        CcuV2::LoadImdToXn(instr++, dep.commXn[0], GetRelativeInstrId(jumpInstrId, targetInstrId));
         curInstrId++;
-        CcuV2::Jump(instr++, dep.reserveXnId, 0, 0, static_cast<int>(ConditionType::DEFAULT));
+        CcuV2::Jump(instr++, dep.commXn[0], 0, 0, static_cast<int>(ConditionType::DEFAULT));
         curInstrId++;
 
         for (const auto& loop : loops) {
@@ -1766,7 +1764,7 @@ namespace CcuRep {
             curInstrId++;
         }
 
-        CcuV2::LoadImdToXn(instr++, dep.reserveXnId, 0);
+        CcuV2::Nop(instr++);
         curInstrId++;
 
         return HcclResult::HCCL_SUCCESS;
@@ -1784,7 +1782,7 @@ namespace CcuRep {
         constexpr uint16_t kPackedVarLoopInstrCount = 8;    // 7 条(ctxId1 + 位重排6) + 1 条 Loop
         constexpr uint16_t kConfigGroupHeaderCount = 7;     // 打包3 + loopgroup1 + 跳过2 + 收尾1
         constexpr uint16_t kVersionV2GroupHeaderCount = 4;  // loopgroup1 + 跳过2 + 收尾1
-        constexpr uint16_t kPackedVarGroupHeaderCount = 23; // 位重排19 + loopgroup1 + 跳过2 + 收尾1
+        constexpr uint16_t kPackedVarGroupHeaderCount = 22; // 位重排18 + loopgroup1 + 跳过2 + 收尾1
         for (const auto& loop : bundlePtr->GetLoops()) {
             switch (loop.layout) {
                 case CcuRepLoopGroupBundle::Layout::Config:
