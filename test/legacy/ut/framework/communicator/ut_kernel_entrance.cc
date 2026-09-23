@@ -13,6 +13,7 @@
 #include <mockcpp/mockcpp.hpp>
 #include "kernel_entrance.h"
 #include "communicator_impl_lite.h"
+#include "communicator_impl_lite_manager.h"
 #include "dlhal_function_v2.h"
 #include "aicpu_utils.h"
 
@@ -34,6 +35,27 @@ TEST(KernelEntranceTest, test_hccl_kernel_entrance_with_valid_param)
 
     auto res = HcclKernelEntrance(&param);
     EXPECT_EQ(1, res);
+    GlobalMockObject::verify();
+}
+
+TEST(KernelEntranceTest, test_hccl_kernel_entrance_release_isused_on_load_failure)
+{
+    MOCKER_CPP(&AicpuUtils::Init).stubs().will(returnValue(HCCL_SUCCESS));
+    MOCKER_CPP(&DlHalFunctionV2::DlHalFunctionInit).stubs().with(mockcpp::any()).will(returnValue(HCCL_SUCCESS));
+    HcclKernelParamLite param;
+
+    // 确保 IsUsed 初始为 false，避免前序用例残留状态影响
+    auto* communicatorImplLite = CommunicatorImplLiteMgr::GetInstance().Get(param.comm.idIndex);
+    ASSERT_NE(nullptr, communicatorImplLite);
+    communicatorImplLite->SetIsUsed(false);
+
+    MOCKER_CPP(&CommunicatorImplLite::LoadWithOpBasedMode).stubs().with(mockcpp::any()).will(returnValue(1));
+
+    auto res = HcclKernelEntrance(&param);
+    EXPECT_EQ(1, res);
+
+    // 验证 LoadWithOpBasedMode 失败后 IsUsed 被复位为 false，避免后续调用 WaitCommFree 轮询超时
+    EXPECT_FALSE(communicatorImplLite->IsUsed());
     GlobalMockObject::verify();
 }
 

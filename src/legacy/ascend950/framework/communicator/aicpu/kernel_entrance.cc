@@ -59,17 +59,20 @@ uint32_t HcclKernelEntrance(void* args)
         return 1;
     }
 
+    uint32_t ret = 0;
     CHK_RET(AicpuUtils::GetInstance().WaitCommFree(communicatorImplLite, __func__));
     if (communicatorImplLite->LoadWithOpBasedMode(kernelParam) != 0) {
         HCCL_ERROR("HcclKernelEntrance LoadWithOpBasedMode failed.");
-        return 1;
+        ret = 1;
+    } else {
+        HCCL_INFO("HcclKernelEntrance success.");
+        ret = 0;
     }
 
-    HCCL_INFO("HcclKernelEntrance success.");
     unique_lock<std::mutex> aicpuLock(communicatorImplLite->GetAicpuMc2Mutex());
     communicatorImplLite->SetIsUsed(false);
     aicpuLock.unlock();
-    return 0;
+    return ret;
 }
 
 uint32_t HcclUpdateCommKernelEntrance(void* args)
