@@ -292,6 +292,40 @@ TEST_F(MyRankTest, Ut_When_QueryListenPort_PortMiss_Expect_FallbackPort)
     EXPECT_EQ(desc.role, HCOMM_SOCKET_ROLE_CLIENT);
 }
 
+TEST_F(MyRankTest, Ut_When_GetDevicePortByAddr_EntryFound_Expect_SUCCESS)
+{
+    // SetUp 已按 (rank, IP) 填表，命中条目返回表值端口
+    uint32_t port = 0;
+    HcclResult ret = myRank->GetDevicePortByAddr(0, Hccl::IpAddress("1.0.0.0"), &port);
+    EXPECT_EQ(ret, HCCL_SUCCESS);
+    EXPECT_EQ(port, 16666);
+}
+
+TEST_F(MyRankTest, Ut_When_GetDevicePortByAddr_RankMiss_Expect_NOT_FOUND)
+{
+    uint32_t port = 0;
+    HcclResult ret = myRank->GetDevicePortByAddr(99, Hccl::IpAddress("1.0.0.0"), &port);
+    EXPECT_EQ(ret, HCCL_E_NOT_FOUND);
+}
+
+TEST_F(MyRankTest, Ut_When_GetDevicePortByAddr_AddrMiss_Expect_NOT_FOUND)
+{
+    uint32_t port = 0;
+    HcclResult ret = myRank->GetDevicePortByAddr(0, Hccl::IpAddress("9.9.9.9"), &port);
+    EXPECT_EQ(ret, HCCL_E_NOT_FOUND);
+}
+
+TEST_F(MyRankTest, Ut_When_GetDevicePortByAddr_NullMapOrPort_Expect_E_PTR)
+{
+    uint32_t port = 0;
+    EXPECT_EQ(myRank->GetDevicePortByAddr(0, Hccl::IpAddress("1.0.0.0"), nullptr), HCCL_E_PTR);
+
+    Hccl::RankIpPortMapPtr savedMap = myRank->rankIpPortMap_;
+    myRank->rankIpPortMap_ = nullptr;
+    EXPECT_EQ(myRank->GetDevicePortByAddr(0, Hccl::IpAddress("1.0.0.0"), &port), HCCL_E_PTR);
+    myRank->rankIpPortMap_ = savedMap;
+}
+
 TEST_F(MyRankTest, Ut_When_BatchCreateChannels_Expect_SUCCESS)
 {
     setenv("HCCL_DFS_CONFIG", "task_exception:on", 1);

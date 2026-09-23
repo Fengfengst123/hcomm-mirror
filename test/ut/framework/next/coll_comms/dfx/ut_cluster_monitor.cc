@@ -787,6 +787,7 @@ TEST_F(ClusterMonitorTest, Ut_GetConnectRank_When_HighLayerCommLinks_Expect_Sort
 struct InsertTestCtx {
     std::shared_ptr<Hccl::RankGraph> rankGraphData;
     std::shared_ptr<hccl::hcclComm> hcclCommPtr;
+    Hccl::RankIpPortMapPtr rankIpPortMap;
 };
 
 static InsertTestCtx CreateHcclCommForInsertTest()
@@ -806,9 +807,16 @@ static InsertTestCtx CreateHcclCommForInsertTest()
         return HCCL_SUCCESS;
     };
 
+    // 心跳端口查询数据源：(rank, IP) 两级端口表，与 GetSocketDescFromRankInfo 的查询路径保持一致
+    ctx.rankIpPortMap = std::make_shared<std::unordered_map<u32, std::unordered_map<Hccl::IpAddress, u32>>>();
+    (*ctx.rankIpPortMap)[0][Hccl::IpAddress("2.0.0.1")] = 10000; // remoteRank=0 的对端端口
+    (*ctx.rankIpPortMap)[1][Hccl::IpAddress("1.0.0.1")] = 16666; // myRankId=1 的监听端口
+
     auto collComm
         = std::make_unique<hccl::CollComm>(nullptr, 1, "test_comm", callbacks, hccl::CollCommInitMode::simpleMode);
     collComm->rankgraph_ = rankGraphV2;
+    collComm->myRank_ = std::make_shared<hccl::MyRank>(
+        nullptr, 1, hccl::CommConfig{"cluster_monitor_ut"}, callbacks, rankGraphV2, ctx.rankIpPortMap);
 
     ctx.hcclCommPtr = std::make_shared<hccl::hcclComm>(1, 1, "test_comm");
     ctx.hcclCommPtr->collComm_ = std::move(collComm);
@@ -963,33 +971,6 @@ TEST_F(ClusterMonitorTest, Ut_FormatUID_When_NormalInput_Expect_ReturnUid)
     EXPECT_TRUE(uid.id[0] != '\0');
 }
 
-TEST_F(ClusterMonitorTest, Ut_GetSocketDescFromRankInfo_When_RemotePortInvalid_Expect_ParaError)
-{
-    auto ctx = CreateHcclCommForInsertTest();
-    ASSERT_NE(ctx.hcclCommPtr, nullptr);
-    HcclComm comm = static_cast<HcclComm>(ctx.hcclCommPtr.get());
-
-    uint32_t invalidPort = Hccl::MAX_VALUE_TCPPORT + 1;
-    MOCKER_CPP(&Hccl::IRankGraph::GetDevicePort)
-        .stubs()
-        .with(mockcpp::any(), outBoundP(&invalidPort, sizeof(invalidPort)))
-        .will(returnValue(HCCL_SUCCESS));
-
-    SocketDesc socketDesc{};
-    HcclResult result = g_monitor.GetSocketDescFromRankInfo(comm, 0, 0, ClusterUIDType{}, socketDesc);
-    EXPECT_EQ(result, HCCL_E_PARA);
-
-    GlobalMockObject::verify();
-}
-
-// 对端端口正常，本端作为server但监听端口非法时命中 GetSocketDescFromRankInfo 的校验分支
-static HcclResult GetDevicePortStub(Hccl::IRankGraph* self, uint32_t rank, uint32_t* devPort)
-{
-    // remoteRank=0 返回合法端口，myRankId=1 返回非法端口（触发 listenPort 校验）
-    *devPort = (rank == 0) ? 10000 : (Hccl::MAX_VALUE_TCPPORT + 1);
-    return HCCL_SUCCESS;
-}
-
 static HcclResult HcclRankGraphGetLinksDeviceStub(
     HcclComm comm, uint32_t netLayer, uint32_t srcRank, uint32_t dstRank, CommLink** links, uint32_t* linkNum)
 {
@@ -1007,18 +988,71 @@ static HcclResult HcclRankGraphGetLinksDeviceStub(
     return HCCL_SUCCESS;
 }
 
+TEST_F(ClusterMonitorTest, Ut_GetSocketDescFromRankInfo_When_RemotePortInvalid_Expect_ParaError)
+{
+    auto ctx = CreateHcclCommForInsertTest();
+    ASSERT_NE(ctx.hcclCommPtr, nullptr);
+    HcclComm comm = static_cast<HcclComm>(ctx.hcclCommPtr.get());
+
+    // 对端 (rank 0, 2.0.0.1) 端口表填非法端口，命中 rmtPort 校验分支
+    (*ctx.rankIpPortMap)[0][Hccl::IpAddress("2.0.0.1")] = Hccl::MAX_VALUE_TCPPORT + 1;
+    MOCKER(HcclRankGraphGetLinks).stubs().will(invoke(HcclRankGraphGetLinksDeviceStub));
+
+    SocketDesc socketDesc{};
+    HcclResult result = g_monitor.GetSocketDescFromRankInfo(comm, 0, 0, ClusterUIDType{}, socketDesc);
+    EXPECT_EQ(result, HCCL_E_PARA);
+
+    GlobalMockObject::verify();
+}
+
+// 对端端口正常，本端作为server但监听端口非法时命中 GetSocketDescFromRankInfo 的校验分支
 TEST_F(ClusterMonitorTest, Ut_GetSocketDescFromRankInfo_When_ListenPortInvalid_Expect_ParaError)
 {
     auto ctx = CreateHcclCommForInsertTest();
     ASSERT_NE(ctx.hcclCommPtr, nullptr);
     HcclComm comm = static_cast<HcclComm>(ctx.hcclCommPtr.get());
 
-    MOCKER_CPP(&Hccl::IRankGraph::GetDevicePort).stubs().will(invoke(GetDevicePortStub));
+    // 对端端口正常(rank 0 -> 10000)，本端 (rank 1, 1.0.0.1) 作为server但监听端口非法，命中 listenPort 校验分支
+    (*ctx.rankIpPortMap)[1][Hccl::IpAddress("1.0.0.1")] = Hccl::MAX_VALUE_TCPPORT + 1;
     MOCKER(HcclRankGraphGetLinks).stubs().will(invoke(HcclRankGraphGetLinksDeviceStub));
 
     SocketDesc socketDesc{};
     HcclResult result = g_monitor.GetSocketDescFromRankInfo(comm, 0, 0, ClusterUIDType{}, socketDesc);
     EXPECT_EQ(result, HCCL_E_PARA);
+
+    GlobalMockObject::verify();
+}
+
+// 端口表无对端条目时返回 NOT_FOUND，InsertClusterMonitorCtx 会跳过该 rank 的心跳
+TEST_F(ClusterMonitorTest, Ut_GetSocketDescFromRankInfo_When_PortEntryMiss_Expect_NotFound)
+{
+    auto ctx = CreateHcclCommForInsertTest();
+    ASSERT_NE(ctx.hcclCommPtr, nullptr);
+    HcclComm comm = static_cast<HcclComm>(ctx.hcclCommPtr.get());
+
+    ctx.rankIpPortMap->erase(0);
+    MOCKER(HcclRankGraphGetLinks).stubs().will(invoke(HcclRankGraphGetLinksDeviceStub));
+
+    SocketDesc socketDesc{};
+    HcclResult result = g_monitor.GetSocketDescFromRankInfo(comm, 0, 0, ClusterUIDType{}, socketDesc);
+    EXPECT_EQ(result, HCCL_E_NOT_FOUND);
+
+    GlobalMockObject::verify();
+}
+
+TEST_F(ClusterMonitorTest, Ut_GetSocketDescFromRankInfo_When_NormalInput_Expect_Success)
+{
+    auto ctx = CreateHcclCommForInsertTest();
+    ASSERT_NE(ctx.hcclCommPtr, nullptr);
+    HcclComm comm = static_cast<HcclComm>(ctx.hcclCommPtr.get());
+
+    MOCKER(HcclRankGraphGetLinks).stubs().will(invoke(HcclRankGraphGetLinksDeviceStub));
+
+    SocketDesc socketDesc{};
+    HcclResult result = g_monitor.GetSocketDescFromRankInfo(comm, 0, 0, ClusterUIDType{}, socketDesc);
+    EXPECT_EQ(result, HCCL_SUCCESS);
+    EXPECT_EQ(socketDesc.role, HcommSocketRole::HCOMM_SOCKET_ROLE_SERVER);
+    EXPECT_EQ(socketDesc.listenPort, 16666);
 
     GlobalMockObject::verify();
 }

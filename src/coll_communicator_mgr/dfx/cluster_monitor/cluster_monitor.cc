@@ -127,18 +127,10 @@ HcclResult ClusterMonitor::GetSocketDescFromRankInfo(
     HcclComm comm, uint32_t remoteRank, uint32_t netLayer, const ClusterUIDType& remoteUID, SocketDesc& socketDesc)
 {
     uint32_t rmtPort = 0;
-    uint32_t listenPort = 0;
     hccl::CollComm* collComm = static_cast<hccl::hcclComm*>(comm)->GetCollComm();
-    auto rankGraph = collComm->GetRankGraph();
     auto myRankId = collComm->GetMyRankId();
-    CHK_PTR_NULL(rankGraph);
-    CHK_RET(rankGraph->GetDevicePort(remoteRank, &rmtPort));
-    if (rmtPort > Hccl::MAX_VALUE_TCPPORT) {
-        HCCL_ERROR(
-            "[%s] Invalid port[%u] of Rank[%u], max valid port is %u", __func__, rmtPort, remoteRank,
-            Hccl::MAX_VALUE_TCPPORT);
-        return HCCL_E_PARA;
-    }
+    auto myRank = collComm->GetMyRank();
+    CHK_PTR_NULL(myRank);
     CommLink* links = nullptr;
     uint32_t linkNum = 0;
     HcclResult result = HcclRankGraphGetLinks(comm, netLayer, myRankId, remoteRank, &links, &linkNum);
@@ -159,9 +151,18 @@ HcclResult ClusterMonitor::GetSocketDescFromRankInfo(
     Hccl::IpAddress remoteIpAddr{};
     CHK_RET(CommAddrToIpAddress(links[0].srcEndpointDesc.commAddr, localIpAddr));
     CHK_RET(CommAddrToIpAddress(links[0].dstEndpointDesc.commAddr, remoteIpAddr));
+    // 按 (rank, IP) 两级端口表查询对端监听端口，与建链路径使用同一端口数据源；未查到时不把该link加入needConnectRank
+    CHK_RET(myRank->GetDevicePortByAddr(remoteRank, remoteIpAddr, &rmtPort));
+    if (rmtPort > Hccl::MAX_VALUE_TCPPORT) {
+        HCCL_ERROR(
+            "[%s] Invalid port[%u] of Rank[%u], max valid port is %u", __func__, rmtPort, remoteRank,
+            Hccl::MAX_VALUE_TCPPORT);
+        return HCCL_E_PARA;
+    }
     if (localIpAddr < remoteIpAddr) { // local地址比remote地址小时，local作为server监听端
-        // 查询localRankId对应的devPort
-        CHK_RET(rankGraph->GetDevicePort(myRankId, &listenPort));
+        // 查询localRankId对应的监听端口
+        uint32_t listenPort = 0;
+        CHK_RET(myRank->GetDevicePortByAddr(myRankId, localIpAddr, &listenPort));
         socketDesc.role = HcommSocketRole::HCOMM_SOCKET_ROLE_SERVER;
         if (listenPort > Hccl::MAX_VALUE_TCPPORT) {
             HCCL_ERROR(

@@ -93,6 +93,8 @@ public:
 
     hccl::EndpointMgr* GetEndpointMgr() const { return endpointMgr_.get(); }
 
+    HcclResult GetDevicePortByAddr(uint32_t rank, const Hccl::IpAddress& addr, uint32_t* port) const;
+
     HcclResult CreateChannels(
         CommEngine engine, const std::string& commTag, const HcclChannelDesc* channelDescs, uint32_t channelNum,
         ChannelHandle* channelHandles);

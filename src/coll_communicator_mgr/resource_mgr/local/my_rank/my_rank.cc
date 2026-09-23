@@ -382,6 +382,24 @@ HcclResult MyRank::GetDevicePortInternal(uint32_t rank, uint32_t* devPort, Endpo
     return HCCL_SUCCESS;
 }
 
+HcclResult MyRank::GetDevicePortByAddr(uint32_t rank, const Hccl::IpAddress& addr, uint32_t* port) const
+{
+    CHK_PTR_NULL(port);
+    CHK_PTR_NULL(rankIpPortMap_);
+    auto iterRank = rankIpPortMap_->find(rank);
+    if (iterRank == rankIpPortMap_->end()) {
+        HCCL_INFO("[MyRank][%s] no port entry for rank[%u] addr[%s].", __func__, rank, addr.GetIpStr().c_str());
+        return HCCL_E_NOT_FOUND;
+    }
+    auto iterAddr = iterRank->second.find(addr);
+    if (iterAddr == iterRank->second.end()) {
+        HCCL_INFO("[MyRank][%s] no port entry for rank[%u] addr[%s].", __func__, rank, addr.GetIpStr().c_str());
+        return HCCL_E_NOT_FOUND;
+    }
+    *port = iterAddr->second;
+    return HCCL_SUCCESS;
+}
+
 HcclResult MyRank::GetListenPortByAddr(
     uint32_t rank, const Hccl::IpAddress& addr, EndpointLocType locType, CommEngine engine, uint32_t* port)
 {
@@ -390,14 +408,10 @@ HcclResult MyRank::GetListenPortByAddr(
     if (locType != EndpointLocType::ENDPOINT_LOC_TYPE_DEVICE || engine == COMM_ENGINE_CPU) {
         return GetDevicePortInternal(rank, port, locType);
     } else {
-        CHK_PTR_NULL(rankIpPortMap_);
-        auto iterRank = rankIpPortMap_->find(rank);
-        if (iterRank != rankIpPortMap_->end()) {
-            auto iterAddr = iterRank->second.find(addr);
-            if (iterAddr != iterRank->second.end()) {
-                *port = iterAddr->second;
-                return HCCL_SUCCESS;
-            }
+        // 查表成功直接返回；未查到（含异常返回值）统一走 fallback 端口，保证建链不因端口表缺失中断
+        HcclResult ret = GetDevicePortByAddr(rank, addr, port);
+        if (ret == HCCL_SUCCESS) {
+            return ret;
         }
 
         u32 fallbackPort = Hccl::DEFAULT_VALUE_TCPPORT;
