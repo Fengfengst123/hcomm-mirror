@@ -24,6 +24,8 @@ This file registers all assigned RFC numbers. Before adding a new RFC, claim the
 | Number | Title | Author | Status | PR |
 |------|------|------|------|-----|
 |0001|RFC: Topology-Based Cluster Communication Rapid Sub-Health Monitoring | Wang Yunhao (Xidian University)|`accepted`|#2491|
+|0002|Host NIC Plugin Mechanism|Yan Yefeng/Geng Xudong (Huawei)|`accepted`|#4610|
+|0003|HCCLang: A DSL for Collective Communication and Memory Semantics|Kexin Zou (Beihang University)|`reserved`|#5473|
 
 ## Numbering Rules
 
