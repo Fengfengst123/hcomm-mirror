@@ -56,6 +56,7 @@ const std::unordered_map<std::string, DevType> SOC_VER_CONVERT{
     {"Ascend910_9362", DevType::DEV_TYPE_910_93},
     {"Ascend910_9363", DevType::DEV_TYPE_910_93},
     {"Ascend950PR_958b", DevType::DEV_TYPE_950},
+    {"Ascend350_355e", DevType::DEV_TYPE_950},
     {"nosoc", DevType::DEV_TYPE_NOSOC}};
 
 HcclResult hrtHalSubmitEvent(u32 devId, u32 eventId, u32 groupId = HCCL_ESCHED_GROUP_ID);
