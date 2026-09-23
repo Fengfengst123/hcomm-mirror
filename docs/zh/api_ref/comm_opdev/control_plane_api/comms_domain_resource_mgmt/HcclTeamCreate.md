@@ -44,7 +44,7 @@ HcclResult HcclTeamCreate(HcclComm comm, const HcclTeamCreateDesc* desc, HcommTe
 
 1. worldTeam在通信域初始化时自动创建，用户无需手动创建。HcclTeamCreate根据`desc`中的`protocol`和`netLayer`查找对应的预制worldTeam。
 
-2. `desc`需先通过[HcclTeamCreateDescInit](HcclTeamCreateDescInit.md)初始化。`protocol`不可为COMM_PROTOCOL_RESERVED，当前只支持URMA协议（对应枚举值COMM_PROTOCOL_UB_CTP/UBC_TP/UBOE/UB_RTP）。
+2. `desc`需先通过[HcclTeamCreateDescInit](HcclTeamCreateDescInit.md)初始化。`protocol`不可为COMM_PROTOCOL_RESERVED，当前只支持URMA协议（对应枚举值COMM_PROTOCOL_UB_CTP/UBC_TP/UB_RTP）。
 
 3. 建链失败时，HcclTeamCreate会自动回滚已创建的team及其资源，`team`输出为NULL。
 4. 本接口不支持多线程并发调用。调用方须保证不同线程对本接口的调用串行执行。

@@ -55,8 +55,8 @@ static HcclResult CheckTeamCreateParam(const HcclComm comm, const HcclTeamCreate
     CHK_PRT_RET(desc->engine != COMM_ENGINE_AIV, HCCL_ERROR("[%s] only support AIV engine", __func__), HCCL_E_PARA);
     CHK_PRT_RET(
         desc->protocol != COMM_PROTOCOL_UB_CTP && desc->protocol != COMM_PROTOCOL_UBC_TP
-            && desc->protocol != COMM_PROTOCOL_UBOE && desc->protocol != COMM_PROTOCOL_UB_RTP,
-        HCCL_ERROR("[%s] only support URMA protocol", __func__), HCCL_E_PARA);
+            && desc->protocol != COMM_PROTOCOL_UB_RTP,
+        HCCL_ERROR("[%s] only support UB_CTP, UBC_TP or UB_RTP protocol", __func__), HCCL_E_PARA);
     return HCCL_SUCCESS;
 }
 

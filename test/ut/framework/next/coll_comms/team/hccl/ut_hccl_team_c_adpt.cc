@@ -508,11 +508,11 @@ TEST_F(TestCollCommTeamCAdpt, Ut_HcclTeamCreate_When_SelfRankNotInRankIds_Expect
 // ut_ain_009 (protocol,netLayer) 无预制 worldTeam。
 TEST_F(TestCollCommTeamCAdpt, Ut_HcclTeamCreate_When_NoPrebuiltWorldTeam_Expect_ReturnNotFound)
 {
-    // 不登记任何预制 worldTeam，protocol=UBOE 未预制
+    // 不登记任何预制 worldTeam，protocol=UB_RTP 未预制
     uint32_t rankIds[2] = {0, 1};
     HcclTeamCreateDesc desc;
     BuildTeamCreateDesc(desc, rankIds, 2, 1, 1);
-    desc.protocol = COMM_PROTOCOL_UBOE;
+    desc.protocol = COMM_PROTOCOL_UB_RTP;
     HcommTeamHandle team = nullptr;
 
     MOCKER(HcommTeamCreate).expects(never());
