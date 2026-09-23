@@ -202,9 +202,9 @@ HcclResult HcclCommAssignCcuIns(HcclComm comm, CcuInsHandle insHandle)
         myRank->SetAssignedCcuInstance(insHandle);
     }
 
-    HCCL_INFO(
-        "[%s] success, commId[%s] ccu instance[%llu], take time [%lld]us.", __func__, commId.c_str(),
-        static_cast<unsigned long long>(insHandle), DURATION_US(TIME_NOW() - startut));
+    HCCL_RUN_INFO(
+        "[%s] success, assign ccu instance[%llu] to commId[%s], take time [%lld]us.", __func__,
+        static_cast<unsigned long long>(insHandle), commId.c_str(), DURATION_US(TIME_NOW() - startut));
 
     EXCEPTION_HANDLE_END
     return HcclResult::HCCL_SUCCESS;

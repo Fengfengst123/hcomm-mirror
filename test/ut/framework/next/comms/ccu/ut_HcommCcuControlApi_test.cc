@@ -1795,6 +1795,34 @@ TEST_F(HcommCcuControlApiTest, Ut_HcommCcuInsDestroy_CrossDevice_Expect_Success)
     DestroyCcuResDescs(resDescs);
 }
 
+// HcommCcuInsDestroy 销毁从未注册的实例句柄（0 为合法值，但实例句柄从 1 起分配，必不在 insMap_ 中），
+// 返回 CCU_E_NOT_FOUND
+TEST_F(HcommCcuControlApiTest, Ut_HcommCcuInsDestroy_When_Unregistered_Expect_CCU_E_NOT_FOUND)
+{
+    // Destroy 未命中路径仅依赖 HcclDeviceRefresh，打通该依赖即可
+    MockControlDeviceRefresh(TEST_DEVICE_LOGIC_ID);
+
+    CcuResult ccuRet = HcommCcuInsDestroy(0);
+    EXPECT_EQ(ccuRet, CcuResult::CCU_E_NOT_FOUND);
+}
+
+// 首次销毁后重复销毁同一实例句柄：绑定通信域后手动销毁、同一实例绑多个通信域两条 Assign 约束违规，
+// 最终都触发重复销毁路径，返回 CCU_E_NOT_FOUND
+TEST_F(HcommCcuControlApiTest, Ut_HcommCcuInsDestroy_When_DoubleDestroy_Expect_CCU_E_NOT_FOUND)
+{
+    HcommCcuResDescHandle resDescs[hcomm::CCU_MAX_IODIE_NUM] = {0, 0};
+    CcuInsHandle insHandle{0};
+    SetupV1CcuInstance(resDescs, insHandle);
+
+    CcuResult ccuRet = HcommCcuInsDestroy(insHandle);
+    EXPECT_EQ(ccuRet, CcuResult::CCU_SUCCESS);
+
+    ccuRet = HcommCcuInsDestroy(insHandle);
+    EXPECT_EQ(ccuRet, CcuResult::CCU_E_NOT_FOUND);
+
+    DestroyCcuResDescs(resDescs);
+}
+
 #define CCU_RELATIONAL_V2_KERNEL_TEST(testName, demoFunc, argType, argInit)                                           \
     TEST_F(HcommCcuControlApiTest, testName)                                                                          \
     {                                                                                                                 \
