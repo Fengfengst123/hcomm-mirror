@@ -327,7 +327,7 @@ STATIC int RsUbDevShareJfrInit(struct RsUbDevCb *devCb)
     return 0;
 
 delete_jfc:
-    RsUrmaDeleteJfc(devCb->shareJfc);
+    (void)RsUrmaDeleteJfc(devCb->shareJfc);
     devCb->shareJfc = NULL;
     return ret;
 }
@@ -960,32 +960,47 @@ int RsUbCtxChanDestroy(struct RsUbDevCb *devCb, unsigned long long addr)
     }
 
     ret = RsUrmaDeleteJfce(jfce);
-    CHK_PRT_RETURN(ret != 0,
-        hccp_err("rs_urma_delete_jfce failed, ret:%d errno:%d jfce addr:0x%llx", ret, errno, jfceCb->jfceAddr),
-        -EOPENSRC);
+    if (ret != 0) {
+        hccp_err("RsUrmaDeleteJfce failed, ret:%d errno:%d jfce addr:0x%llx", ret, errno, jfceCb->jfceAddr);
+        ret = -EOPENSRC;
+        goto urma_err;
+    }
 
     free(jfceCb);
     jfceCb = NULL;
 
     hccp_info_rma("rs ctx jfce destroy success, dev jfce num is %u", devCb->jfceCnt);
     return ret;
+
+urma_err:
+    free(jfceCb);
+    jfceCb = NULL;
+    return ret;
 }
 
 STATIC int RsUbFreeJfceCb(struct RsUbDevCb *devCb, struct RsCtxJfceCb *jfceCb)
 {
+    urma_jfce_t *jfce = NULL;
     int ret = 0;
 
     RsListDel(&jfceCb->list);
     devCb->jfceCnt--;
 
+    jfce = (urma_jfce_t *)(uintptr_t)jfceCb->jfceAddr;
+    if (jfceCb->dataPlaneFlag.bs.pollCqCstm == 0) {
+        (void)RsEpollCtl(devCb->rscb->connCb.epollfd, EPOLL_CTL_DEL, jfce->fd, EPOLLIN | EPOLLRDHUP);
+    }
+
     ret = RsUrmaDeleteJfce((urma_jfce_t *)(uintptr_t)jfceCb->jfceAddr);
-    CHK_PRT_RETURN(ret != 0,
-        hccp_err("[rs_ctx_chan]rs_ub_delete_jfce failed, ret:%d, jfce addr:0x%llx", ret, jfceCb->jfceAddr), -EOPENSRC);
+    if (ret != 0) {
+        hccp_err("RsUrmaDeleteJfce failed, ret:%d, jfce addr:0x%llx", ret, jfceCb->jfceAddr);
+        ret = -EOPENSRC;
+    }
 
     free(jfceCb);
     jfceCb = NULL;
 
-    return 0;
+    return ret;
 }
 
 STATIC void RsUbFreeJfceCbList(struct RsUbDevCb *devCb, struct RsListHead *jfceList)
@@ -1413,8 +1428,17 @@ STATIC int RsUbCtxJfcCreateNormal(struct RsUbDevCb *devCb, urma_jfc_cfg_t *jfcCf
     CHK_PRT_RETURN(*outJfc == NULL, hccp_err("rs_urma_create_jfc failed, errno:%d", errno), -EOPENSRC);
 
     ret = RsUrmaRearmJfc(*outJfc, false);
-    CHK_PRT_RETURN(ret != 0, hccp_err("rs_urma_rearm_jfc failed, ret:%d errno:%d", ret, errno), -EOPENSRC);
+    if (ret != 0) {
+        hccp_err("RsUrmaRearmJfc failed, ret:%d errno:%d", ret, errno);
+        ret = -EOPENSRC;
+        goto rearm_jfc_err;
+    }
 
+    return 0;
+
+rearm_jfc_err:
+    (void)RsUrmaDeleteJfc(*outJfc);
+    *outJfc = NULL;
     return ret;
 }
 
