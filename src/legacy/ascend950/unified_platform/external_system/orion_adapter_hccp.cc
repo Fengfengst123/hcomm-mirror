@@ -3302,15 +3302,14 @@ HcclResult HrtRaGetEidByIp(RdmaHandle handle, const vector<IpAddress>& ipV4AddrL
     return HCCL_SUCCESS;
 }
 
-HcclResult WaitRequestResult(void* raReqHandle, RequestHandle& reqHandle)
+HcclResult WaitRequestResult(void* raReqHandle, RequestHandle& reqHandle, uint32_t timeoutS)
 {
     reqHandle = ReinterpretAs<RequestHandle>(raReqHandle);
     auto startTime = std::chrono::steady_clock::now();
-    constexpr uint32_t pollTimeoutMs = 10000; // 轮询超时时间
-    auto waitPollTimeOutMs = std::chrono::milliseconds(pollTimeoutMs);
+    auto waitPollTimeOutS = std::chrono::seconds(timeoutS);
     while (true) {
-        if ((std::chrono::steady_clock::now() - startTime) >= waitPollTimeOutMs) {
-            HCCL_ERROR("[WaitRequestResult] poll timeout.");
+        if ((std::chrono::steady_clock::now() - startTime) >= waitPollTimeOutS) {
+            HCCL_ERROR("[WaitRequestResult] poll timeout, timeoutS=%u.", timeoutS);
             return HCCL_E_TIMEOUT; // 超时报错
         }
 
@@ -3373,7 +3372,9 @@ HrtRaSetTpAttrAsync(RdmaHandle handle, uint64_t tpHandle, uint32_t attrBitmap, T
         THROW<NetworkApiException>(msg);
     }
 
-    CHK_RET(WaitRequestResult(raReqHandle, reqHandle));
+    // 修复ubg场景问题:底层排队和执行时间随集群规模增长而超过10s, 修改为和建链超时时间一致
+    const uint32_t pollTimeoutS = static_cast<uint32_t>(EnvLinkTimeoutGet());
+    CHK_RET(WaitRequestResult(raReqHandle, reqHandle, pollTimeoutS));
     HCCL_INFO("[HrtRaSetTpAttrAsync] success, reqHandle[%llu]", reqHandle);
     return HCCL_SUCCESS;
 }
@@ -3394,7 +3395,9 @@ HcclResult HrtRaGetTpAttrAsync(
         return HcclResult::HCCL_E_NETWORK;
     }
 
-    CHK_RET(WaitRequestResult(raReqHandle, reqHandle));
+    // 修复ubg场景问题:底层排队和执行时间随集群规模增长而超过10s, 修改为和建链超时时间一致
+    const uint32_t pollTimeoutS = static_cast<uint32_t>(EnvLinkTimeoutGet());
+    CHK_RET(WaitRequestResult(raReqHandle, reqHandle, pollTimeoutS));
     HCCL_INFO("[HrtRaGetTpAttrAsync] success, reqHandle[%llu]", reqHandle);
     return HCCL_SUCCESS;
 }
