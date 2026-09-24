@@ -17,7 +17,6 @@
 #include "acl/acl_rt.h"
 #include "log.h"
 #include "dpu_kernel_entrance.h"
-#include "env_config/env_config_v2.h"
 
 namespace Hccl {
 constexpr uint32_t CTRL_HDR_FLAG_LENGTH = 1;
@@ -347,7 +346,7 @@ HcclResult TaskService::TaskRun()
     uint64_t hdrLen = CTRL_HDR_FLAG_LENGTH + TASKTYPE_ADDR_LENGTH + CTRL_HDR_MSG_ID_LEN + TIMEOUT_SIZE_BYTE
                       + CTRL_HDR_DATA_SIZE_LEN + CTRL_HDR_DEFAULT_DATA_LEN;
     uint8_t ctrlHdr[hdrLen];
-    u32 timeout = Hccl::EnvConfig::GetInstance().GetRtsConfig().GetExecTimeOut();
+    u32 timeout = GetDpuExecTimeout();
     timeout = timeout > 1 ? timeout - 1 : timeout; // 执行超时时间减1秒，避免aicpu侧超时
     CHK_SAFETY_FUNC_RET(memcpy_s(dstTimeoutPtr, sizeof(timeout), &timeout, sizeof(timeout)));
 

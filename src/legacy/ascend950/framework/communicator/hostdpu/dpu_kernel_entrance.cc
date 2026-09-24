@@ -9,6 +9,7 @@
  */
 
 #include "dpu_kernel_entrance.h"
+#include <atomic>
 #include "log.h"
 #include "acl/acl_rt.h"
 
@@ -17,6 +18,20 @@ using u64 = unsigned long long;
 std::unordered_map<std::string, std::unordered_map<uint32_t, std::unique_ptr<Hccl::TaskService>>> g_taskServiceMap;
 std::unordered_map<std::string, std::unordered_map<uint32_t, void*>> g_taskExpMemMap;
 std::mutex g_serMapMutex;
+
+namespace {
+// DPU执行超时时间(秒)，由宿主库通过SetDpuExecTimeout下发，未下发时保持默认值
+std::atomic<uint32_t> g_dpuExecTimeoutSec{DPU_EXEC_TIMEOUT_DEFAULT_S};
+} // namespace
+
+extern "C" void SetDpuExecTimeout(uint32_t timeoutSec)
+{
+    g_dpuExecTimeoutSec.store(timeoutSec, std::memory_order_relaxed);
+}
+
+namespace Hccl {
+uint32_t GetDpuExecTimeout() { return g_dpuExecTimeoutSec.load(std::memory_order_relaxed); }
+} // namespace Hccl
 
 std::mutex& GetSerMapMutex() { return g_serMapMutex; }
 

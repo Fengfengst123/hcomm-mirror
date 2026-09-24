@@ -280,6 +280,64 @@ TEST_F(TaskServiceTest, Ut_TaskRun_When_InvalidFlag_Expect_Success)
     EXPECT_EQ(result, HCCL_SUCCESS);
 }
 
+// ==================== Exec timeout (SetDpuExecTimeout) ====================
+
+TEST_F(TaskServiceTest, Ut_TaskRun_When_ExecTimeoutSet_Expect_WriteTimeoutMinusOneSecond)
+{
+    constexpr int32_t deviceMemSize = 1024;
+    constexpr int32_t hostMemSize = 512;
+    std::vector<uint8_t> deviceMem(deviceMemSize, 0);
+    std::vector<uint8_t> hostMem(hostMemSize, 0);
+
+    TaskService taskService(deviceMem.data(), deviceMemSize, hostMem.data(), hostMemSize, commId, devId);
+    SetDpuExecTimeout(100);
+
+    HcclResult result = HCCL_SUCCESS;
+    std::thread taskThread([&taskService, &result]() {
+        result = taskService.TaskRun();
+    });
+
+    WaitForTaskRunLoop(deviceMem.data());
+
+    uint8_t* flagPtr = deviceMem.data();
+    *flagPtr = 2; // TASK_TERMINATE
+
+    taskThread.join();
+
+    EXPECT_EQ(result, HCCL_SUCCESS);
+    uint32_t timeoutVal = 0;
+    memcpy(&timeoutVal, deviceMem.data() + deviceMemSize / 2 + 1 + 256 + sizeof(uint32_t), sizeof(timeoutVal));
+    EXPECT_EQ(timeoutVal, 99U); // 下发值减1秒，避免aicpu侧超时
+}
+
+TEST_F(TaskServiceTest, Ut_TaskRun_When_ExecTimeoutDefault_Expect_WriteDefaultMinusOneSecond)
+{
+    constexpr int32_t deviceMemSize = 1024;
+    constexpr int32_t hostMemSize = 512;
+    std::vector<uint8_t> deviceMem(deviceMemSize, 0);
+    std::vector<uint8_t> hostMem(hostMemSize, 0);
+
+    TaskService taskService(deviceMem.data(), deviceMemSize, hostMem.data(), hostMemSize, commId, devId);
+    SetDpuExecTimeout(DPU_EXEC_TIMEOUT_DEFAULT_S);
+
+    HcclResult result = HCCL_SUCCESS;
+    std::thread taskThread([&taskService, &result]() {
+        result = taskService.TaskRun();
+    });
+
+    WaitForTaskRunLoop(deviceMem.data());
+
+    uint8_t* flagPtr = deviceMem.data();
+    *flagPtr = 2; // TASK_TERMINATE
+
+    taskThread.join();
+
+    EXPECT_EQ(result, HCCL_SUCCESS);
+    uint32_t timeoutVal = 0;
+    memcpy(&timeoutVal, deviceMem.data() + deviceMemSize / 2 + 1 + 256 + sizeof(uint32_t), sizeof(timeoutVal));
+    EXPECT_EQ(timeoutVal, DPU_EXEC_TIMEOUT_DEFAULT_S - 1U);
+}
+
 // ==================== TASK_OK with unknown callback ====================
 
 TEST_F(TaskServiceTest, Ut_TaskRun_When_TaskOkCallbackNotFound_Expect_NotFound)

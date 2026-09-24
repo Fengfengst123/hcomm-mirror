@@ -12,6 +12,7 @@
 {
 global:
     RunDpuRpcSrvLaunch;
+    SetDpuExecTimeout;
     g_serMapMutex;
     g_taskExpMemMap;
     g_taskServiceMap;
