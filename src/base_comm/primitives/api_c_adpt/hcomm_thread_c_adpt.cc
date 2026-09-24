@@ -207,6 +207,42 @@ HcommResult HcommThreadAllocWithStream(CommEngine engine, aclrtStream stream, ui
     return HCOMM_SUCCESS;
 }
 
+HcommResult HcommThreadAcquireByNotify(rtStream_t stream, void** notifys, uint32_t notifyNum, ThreadHandle* thread)
+{
+    CHK_PTR_NULL(thread);
+    CHK_PTR_NULL(notifys);
+    CHK_PRT_RET(
+        notifyNum == 0U || notifyNum > hccl::HCCL_THREAD_NOTIFY_MAX_NUM,
+        HCCL_ERROR(
+            "[%s] notifyNum[%u] is invalid, range (0, %u]", __func__, notifyNum, hccl::HCCL_THREAD_NOTIFY_MAX_NUM),
+        HCCL_E_PARA);
+    for (uint32_t i = 0; i < notifyNum; i++) {
+        CHK_PRT_RET(notifys[i] == nullptr, HCCL_ERROR("[%s] notifys[%u] is nullptr", __func__, i), HCCL_E_PARA);
+    }
+    HcommResult hcommRet = HcommResMgrInit();
+    CHK_PRT_RET(
+        hcommRet != HCCL_SUCCESS,
+        HCCL_ERROR("[%s] HcommResMgrInit failed, ret[%d]", __func__, static_cast<int32_t>(hcommRet)), hcommRet);
+    // C ABI面以void**传递（保持纯C类型），此处还原为实际类型LocalNotify**。
+    // 纯借用契约：对象所有权始终归调用方，CpuTsThread构造仅拷贝引用（不接管不销毁）
+    hccl::LocalNotify** notifyObjs = reinterpret_cast<hccl::LocalNotify**>(notifys);
+    std::shared_ptr<hccl::Thread> handle;
+    EXCEPTION_CATCH(handle = std::make_shared<hccl::CpuTsThread>(stream, notifyObjs, notifyNum), return HCCL_E_PTR);
+    handle->SetCommEngine(COMM_ENGINE_CPU_TS);
+    CHK_RET(handle->Init());
+    handle->SetIsMaster(true);
+    handle->SetFakeDeviceRes();
+
+    std::vector<std::shared_ptr<hccl::Thread>> newThreads{std::move(handle)};
+    CHK_RET(
+        newThreads[0]->AddThreadHandleToMap(COMM_ENGINE_CPU_TS, reinterpret_cast<ThreadHandle>(newThreads[0].get())));
+    CHK_RET(hccl::SaveThreads(newThreads));
+    *thread = reinterpret_cast<ThreadHandle>(newThreads[0].get());
+
+    HCCL_INFO("[ThreadMgr] ThreadAcquireByNotify done: stream[%p], notifyNum[%u]", stream, notifyNum);
+    return HCCL_SUCCESS;
+}
+
 HcommResult
 HcommThreadSupplementNotify(const ThreadHandle* handles, uint32_t threadNum, const uint32_t* supplementNotifyNums)
 {

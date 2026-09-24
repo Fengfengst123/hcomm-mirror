@@ -36,9 +36,15 @@ HcclResult ThreadAicpuMgr::InitThreads(ThreadMgrAicpuParam* param)
 {
     CHK_PTR_NULL(param);
     u32 threadNum = param->threadNum;
-    std::vector<std::shared_ptr<hccl::Thread>> outThreads;
-    outThreads.reserve(threadNum);
+    ThreadHandle* threadArray = static_cast<ThreadHandle*>(param->deviceHandle);
+    CHK_PTR_NULL(threadArray);
     std::string hcomId(param->hcomId);
+    // 创建期即分流：真线程入outThreads，桩线程入stubThreads暂存（后置注册/入表零判别）。
+    // stubThreads须在threadMutex_内并入cpuExportThread_（与threads_锁纪律一致）
+    std::vector<std::shared_ptr<hccl::Thread>> outThreads;
+    std::vector<std::shared_ptr<hccl::Thread>> stubThreads;
+    outThreads.reserve(threadNum);
+    stubThreads.reserve(threadNum);
     for (u32 i = 0; i < threadNum; ++i) {
         std::string thdUniqueId(param->threadParam[i], THREAD_UNIQUE_ID_MAX_SIZE);
         if (UNLIKELY(HcclCheckLogLevel(HCCL_LOG_INFO))) {
@@ -60,22 +66,32 @@ HcclResult ThreadAicpuMgr::InitThreads(ThreadMgrAicpuParam* param)
                 hcomId.c_str(), param->threadNum, i);
             return ret;
         }
-        outThreads.emplace_back(thread);
+        // 设备句柄按【原始输入序】写回（threadArray与threadParam下标对齐）——真/桩都写：
+        // host侧ThreadKernelLaunchImpl Step 6无条件读回整个deviceHandle缓冲区并按原始序
+        // 配对注册（AddThreadHandleToMap/FillThreadD2HMap），漏写桩槽位=注册未初始化内存为句柄，
+        // 按紧缩序写入=混合批次真线程句柄整体错位
+        threadArray[i] = reinterpret_cast<ThreadHandle>(thread.get());
+        HCCL_INFO(
+            "[ThreadAicpuMgr][%s] threadArray[%u] = [%llu]", __func__, i,
+            static_cast<unsigned long long>(threadArray[i]));
+        if (thread->IsFakeDeviceRes()) {
+            stubThreads.emplace_back(std::move(thread));
+        } else {
+            outThreads.emplace_back(std::move(thread));
+        }
     }
 
-    ThreadHandle* threadArray = static_cast<ThreadHandle*>(param->deviceHandle);
-    CHK_PTR_NULL(threadArray);
+    // 注册仅真线程（桩线程无StreamLite/Rtsq，dfx与缓存回调均无可挂载对象）
     for (size_t i = 0; i < outThreads.size(); ++i) {
-        threadArray[i] = reinterpret_cast<ThreadHandle>(outThreads[i].get());
-        HCCL_INFO(
-            "[ThreadAicpuMgr][%s] threadArray[%zu] = [%llu]", __func__, i,
-            static_cast<unsigned long long>(threadArray[i]));
-        CHK_RET(RegisterThreadAddDfxTaskInfo(threadArray[i]));
+        CHK_RET(RegisterThreadAddDfxTaskInfo(reinterpret_cast<ThreadHandle>(outThreads[i].get())));
         CHK_RET(RegisterThreadCacheCallback(static_cast<hccl::AicpuTsThread*>(outThreads[i].get())));
     }
     std::unique_lock<std::shared_mutex> rwLock(threadMutex_);
     threads_.insert(
         threads_.end(), std::make_move_iterator(outThreads.begin()), std::make_move_iterator(outThreads.end()));
+    cpuExportThread_.insert(
+        cpuExportThread_.end(), std::make_move_iterator(stubThreads.begin()),
+        std::make_move_iterator(stubThreads.end()));
     HCCL_INFO(
         "[ThreadAicpuMgr][%s] comm identifier[%s], init threads num[%u] success", __func__, hcomId.c_str(), threadNum);
     return HCCL_SUCCESS;

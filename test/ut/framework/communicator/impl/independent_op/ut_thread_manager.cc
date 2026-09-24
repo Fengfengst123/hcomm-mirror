@@ -12,6 +12,7 @@
 #include "hccl/hccl_res.h"
 #include "hcomm_c_adpt.h"
 #include "hcomm_thread_c_adpt.h"
+#include "hcclCommOp.h"
 #include "../../hccl_api_base_test.h"
 #include "hccl_tbe_task.h"
 #include "thread_manager.h"
@@ -34,6 +35,16 @@ static HcclResult StubThreadKernelLaunchForCommDevice(
 }
 void MockGetRunSideIsDevice();
 void MockThreadKernelLaunchForComm();
+
+// 流ID查询桩：须定义于fixture类之前（SetUp引用）。UT用假流指针（如0x1234），
+// 真实hrtGetStreamId→aclrtStreamGetId会解引用句柄读magic校验→段错误；
+// fixture级mock保证全部用例安全，返回值仅用于审计日志
+static HcclResult StubHrtGetStreamId(void* stream, s32& streamId)
+{
+    (void)stream;
+    streamId = 1;
+    return HCCL_SUCCESS;
+}
 
 namespace {
 // EnsureAicpuCommInit spy：记录 init/alloc 调用次数与顺序（invoke 桩无法捕获变量，用文件级静态对象共享）
@@ -88,6 +99,8 @@ public:
         std::cout << "ThreadManagerTest SetUp" << std::endl;
         BaseInit::SetUp();
         MOCKER(AicpuAclKernelLaunch).stubs().will(returnValue(HCCL_SUCCESS));
+        // GE链路审计日志含流ID真实查询，UT假流指针须mock（见StubHrtGetStreamId注释）
+        MOCKER(hrtGetStreamId).stubs().will(invoke(StubHrtGetStreamId));
         ManagerCallbacks callbacks;
         callbacks.getAicpuCommState = []() {
             return true;
@@ -456,4 +469,139 @@ TEST_F(ThreadManagerTest, Ut_HcclThreadAcquireV2_When_CommInitFailed_Expect_Acqu
     EXPECT_EQ(g_aicpuSpy.initCnt, 1U);
     EXPECT_EQ(g_aicpuSpy.allocCnt, 0U); // 失败早退，未走到线程分配
     EXPECT_FALSE(g_aicpuSpy.commState); // 状态未置位，下次可重试
+}
+/* ============ GE 展开链路（SetAttachedStream / HcclGeUnfoldThreadAcquire / FreeDedicatedThreads） ============ */
+
+static ThreadHandle g_geAllocHandle = 0x3000; // 模拟 HcommThreadAllocWithStream 产出的线程句柄
+static uint32_t g_geAllocCallCount = 0;
+static uint32_t g_geSupplementNum = 0;
+static uint32_t g_geSupplementCallCount = 0;
+static std::vector<ThreadHandle> g_freeCapturedHandles;
+
+static HcommResult StubGeAllocWithStream(CommEngine engine, void* stream, uint32_t notifyNum, ThreadHandle* handle)
+{
+    (void)engine;
+    (void)stream;
+    (void)notifyNum;
+    *handle = g_geAllocHandle;
+    g_geAllocCallCount++;
+    return static_cast<HcommResult>(HCCL_SUCCESS);
+}
+
+static HcommResult
+StubGeSupplementNotify(const ThreadHandle* handles, uint32_t threadNum, const uint32_t* supplementNotifyNums)
+{
+    (void)handles;
+    (void)threadNum;
+    g_geSupplementNum = *supplementNotifyNums;
+    g_geSupplementCallCount++;
+    return static_cast<HcommResult>(HCCL_SUCCESS);
+}
+
+// GE展开链路配套mock：HcclGeUnfoldThreadAcquire获取线程后调HcommThreadRegisterDfx，
+// 其实现【无句柄表查找】直接ReinterpretAs<Thread*>解引用——mock分配出的假句柄（0x3000）会被
+// 裸写成员导致段错误，须与HcommThreadAllocWithStream的mock配套使用
+static void MockGeUnfoldDfx() { MOCKER(HcommThreadRegisterDfx).stubs().will(returnValue(0)); }
+
+static HcommResult StubHcommThreadFreeCapture(const ThreadHandle* threads, uint32_t threadNum)
+{
+    for (uint32_t i = 0; i < threadNum; i++) {
+        g_freeCapturedHandles.push_back(threads[i]);
+    }
+    return static_cast<HcommResult>(HCCL_SUCCESS);
+}
+
+// SetAttachedStream：空流拒绝
+TEST_F(ThreadManagerTest, Ut_SetAttachedStream_When_NullStream_Expect_HCCL_E_PTR)
+{
+    EXPECT_EQ(threadManager->SetAttachedStream(nullptr), HCCL_E_PTR);
+}
+
+// SetAttachedStream：正常流存储（后续GE获取可用的前提）
+TEST_F(ThreadManagerTest, Ut_SetAttachedStream_When_Normal_Expect_Success)
+{
+    EXPECT_EQ(threadManager->SetAttachedStream(reinterpret_cast<void*>(0x1234)), HCCL_SUCCESS);
+}
+
+// GE展开获取：未注入附属流 → 降级返回 thread=0
+TEST_F(ThreadManagerTest, Ut_GeUnfoldAcquire_When_StreamNotSet_Expect_ZeroThread)
+{
+    ThreadHandle thread = 0;
+    HcclResult ret = threadManager->HcclDedicatedThreadAcquire(HCCL_DED_THREAD_TYPE_AICPU_LAUNCH_GE, 2, &thread);
+    EXPECT_EQ(ret, HCCL_SUCCESS);
+    EXPECT_EQ(thread, static_cast<ThreadHandle>(0)); // 未SetAttachedStream：告警降级，不报错
+}
+
+// GE展开获取：首次创建经 HcommThreadAllocWithStream 并登记 mainThread_
+TEST_F(ThreadManagerTest, Ut_GeUnfoldAcquire_When_FirstCreate_Expect_AllocAndRegister)
+{
+    ASSERT_EQ(threadManager->SetAttachedStream(reinterpret_cast<void*>(0x1234)), HCCL_SUCCESS);
+    g_geAllocCallCount = 0;
+    MOCKER(HcommThreadAllocWithStream).stubs().will(invoke(StubGeAllocWithStream));
+    MockGeUnfoldDfx();
+
+    ThreadHandle thread = 0;
+    HcclResult ret = threadManager->HcclDedicatedThreadAcquire(HCCL_DED_THREAD_TYPE_AICPU_LAUNCH_GE, 2, &thread);
+    EXPECT_EQ(ret, HCCL_SUCCESS);
+    EXPECT_EQ(thread, g_geAllocHandle);
+    EXPECT_EQ(g_geAllocCallCount, 1U); // 首次创建走分配
+}
+
+// GE展开获取：同流二次调用复用（不发生二次分配）
+TEST_F(ThreadManagerTest, Ut_GeUnfoldAcquire_When_SameStreamReacquire_Expect_ReuseWithoutAlloc)
+{
+    ASSERT_EQ(threadManager->SetAttachedStream(reinterpret_cast<void*>(0x1234)), HCCL_SUCCESS);
+    g_geAllocCallCount = 0;
+    MOCKER(HcommThreadAllocWithStream).stubs().will(invoke(StubGeAllocWithStream));
+    MockGeUnfoldDfx();
+
+    ThreadHandle thread1 = 0;
+    ASSERT_EQ(
+        threadManager->HcclDedicatedThreadAcquire(HCCL_DED_THREAD_TYPE_AICPU_LAUNCH_GE, 2, &thread1), HCCL_SUCCESS);
+    ThreadHandle thread2 = 0;
+    HcclResult ret = threadManager->HcclDedicatedThreadAcquire(HCCL_DED_THREAD_TYPE_AICPU_LAUNCH_GE, 2, &thread2);
+    EXPECT_EQ(ret, HCCL_SUCCESS);
+    EXPECT_EQ(thread2, thread1);       // 同流复用：同句柄
+    EXPECT_EQ(g_geAllocCallCount, 1U); // 未发生第二次分配
+}
+
+// GE展开获取：notifyNumPerThread 增大 → 复用分支按记账差值补充
+TEST_F(ThreadManagerTest, Ut_GeUnfoldAcquire_When_NotifyNumIncreased_Expect_SupplementIncrement)
+{
+    ASSERT_EQ(threadManager->SetAttachedStream(reinterpret_cast<void*>(0x1234)), HCCL_SUCCESS);
+    MOCKER(HcommThreadAllocWithStream).stubs().will(invoke(StubGeAllocWithStream));
+    MockGeUnfoldDfx();
+    g_geSupplementCallCount = 0;
+    g_geSupplementNum = 0;
+    MOCKER(HcommThreadSupplementNotify).stubs().will(invoke(StubGeSupplementNotify));
+
+    ThreadHandle thread1 = 0;
+    ASSERT_EQ(
+        threadManager->HcclDedicatedThreadAcquire(HCCL_DED_THREAD_TYPE_AICPU_LAUNCH_GE, 2, &thread1), HCCL_SUCCESS);
+
+    // notifyNum 2→5：复用分支按 ThreadMeta 记账差值补充（5-2=3）
+    ThreadHandle thread2 = 0;
+    HcclResult ret = threadManager->HcclDedicatedThreadAcquire(HCCL_DED_THREAD_TYPE_AICPU_LAUNCH_GE, 5, &thread2);
+    EXPECT_EQ(ret, HCCL_SUCCESS);
+    EXPECT_EQ(thread2, thread1);
+    EXPECT_EQ(g_geSupplementCallCount, 1U);
+    EXPECT_EQ(g_geSupplementNum, 3U); // 增量 = 目标值 - 已登记值
+}
+
+// 析构释放：dedicatedThreadMap_ 全类型句柄经 FreeDedicatedThreads→HcommThreadFree 释放
+TEST_F(ThreadManagerTest, Ut_ThreadMgrDestructor_When_DedicatedThreadAcquired_Expect_FreedByHcommThreadFree)
+{
+    MockAicpuThreadEnv();
+    MOCKER_CPP(&AicpuLaunchMgr::ThreadKernelLaunchForComm).stubs().will(invoke(StubThreadKernelLaunchForCommDevice));
+    ThreadHandle thread = 0;
+    ASSERT_EQ(
+        threadManager->HcclDedicatedThreadAcquire(HCCL_DED_THREAD_TYPE_AICPU_ORDER_LAUNCH_DEVICE, 1, &thread),
+        HCCL_SUCCESS);
+    ASSERT_NE(thread, static_cast<ThreadHandle>(0));
+
+    g_freeCapturedHandles.clear();
+    MOCKER(HcommThreadFree).stubs().will(invoke(StubHcommThreadFreeCapture));
+    threadManager.reset(); // 触发~ThreadMgr → FreeDedicatedThreads
+    ASSERT_EQ(g_freeCapturedHandles.size(), 1U);
+    EXPECT_EQ(g_freeCapturedHandles[0], thread); // 专用线程句柄经HcommThreadFree批量释放
 }

@@ -67,7 +67,7 @@ HcclResult LocalNotify::Post(Stream& stream, HcclDispatcher dispatcherPtr, s32 s
     return HCCL_SUCCESS;
 }
 
-HcclResult Destroy() { return HCCL_SUCCESS; }
+HcclResult LocalNotify::Destroy() { return HCCL_SUCCESS; }
 
-HcclResult SetIpc() { return HCCL_SUCCESS; }
+HcclResult LocalNotify::SetIpc() { return HCCL_SUCCESS; }
 } // namespace hccl

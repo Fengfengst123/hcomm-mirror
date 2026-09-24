@@ -116,6 +116,12 @@ HcclResult CommEngineResMgr::RegisterOrderLaunchThread(ThreadHandle thread)
     return threadMgr_->RegisterOrderLaunchThread(thread);
 }
 
+HcclResult CommEngineResMgr::SetAttachedStream(rtStream_t stream)
+{
+    CHK_SMART_PTR_NULL(threadMgr_);
+    return threadMgr_->SetAttachedStream(stream);
+}
+
 HcclResult CommEngineResMgr::ResetCommLocalNotifies()
 {
     CHK_SMART_PTR_NULL(threadMgr_);

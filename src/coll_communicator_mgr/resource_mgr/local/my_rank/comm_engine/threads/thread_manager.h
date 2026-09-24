@@ -52,6 +52,7 @@ public:
     HcclResult
     HcclDedicatedThreadAcquire(HcclDedicatedThreadType useType, uint32_t notifyNumPerThread, ThreadHandle* thread);
     HcclResult RegisterOrderLaunchThread(ThreadHandle thread);
+    HcclResult SetAttachedStream(rtStream_t stream);
     HcclResult ResetThreadLocalNotifies();
     u32 GetThreadNum() const { return threadNum_; }
     u32 GetNotifyNumPerThread() const { return notifyNumPerThread_; }
@@ -64,6 +65,8 @@ private:
     HcclResult
     HcclUnfoldThreadAcquire(HcclDedicatedThreadType useType, uint32_t notifyNumPerThread, ThreadHandle* thread);
     HcclResult
+    HcclGeUnfoldThreadAcquire(HcclDedicatedThreadType useType, uint32_t notifyNumPerThread, ThreadHandle* thread);
+    HcclResult
     HcclDeviceOrderThreadCreate(HcclDedicatedThreadType useType, uint32_t notifyNumPerThread, ThreadHandle* thread);
     HcclResult ResetThreadPoolLocalNotifies();        // 线程池 engineToThreadsMap_
     HcclResult ResetMainThreadLocalNotifies();        // 主线程 mainThread_
@@ -71,6 +74,7 @@ private:
     HcclResult ResetOrderLaunchThreadLocalNotifies(); // 保序流线程 orderLaunchThreads_
     void FreeEngineToThreads();
     void FreeMainThreads();
+    void FreeDedicatedThreads(); // 专用线程 dedicatedThreadMap_（全类型）
     HcclResult SupplementNotify(
         CommEngine engine, std::vector<ThreadMeta>& threadVec, uint32_t threadNum, const ThreadConfig* config);
     HcclResult SupplementThread(
@@ -97,6 +101,9 @@ private:
     std::unordered_map<HcclDedicatedThreadType, ThreadHandle> dedicatedThreadMap_;
 
     std::mutex aicpuCommInitMutex_; // AICPU 公共域初始化防重叶子锁，串行化 check+launch+set
+
+    std::mutex attachedStreamMutex_;
+    rtStream_t attachedStream_{nullptr}; // GE 附属流（HcomSetAttachedStream 注入，仅持有引用，不管理生命周期）
 
     std::unordered_set<ThreadHandle>
         orderLaunchThreads_; // 保序流（非所有权，资源由 OrderLaunchThreadMgr 管理，同 comm 操作串行无需加锁）

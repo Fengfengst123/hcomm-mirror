@@ -15,6 +15,8 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
+#include <memory>
 #include "hccl/base.h"
 #include "hccl/hccl_types.h"
 #include "hccl/hccl_res.h"
@@ -24,6 +26,7 @@
 namespace hccl {
 
 class CollComm;
+class LocalNotify;
 
 /** 保序 thread 模式：单算子 / aclgraph（内部使用） */
 enum class OrderThreadMode : u8 {
@@ -85,9 +88,17 @@ private:
     std::unordered_map<std::string, u64> groupCtxMap_;
     std::unordered_map<u64, std::unordered_set<std::string>> contextGroupsMap_;
     std::unordered_map<u64, OrderLaunchContextRes> contextResMap_;
-    std::unordered_map<u32, ThreadHandle> hcomAttachedThreadMap_; // graphId -> 附属从 thread（图模式使用）
-    std::unordered_map<std::string, u32> groupGraphMap_;          // group -> graphId 映射
-    u32 blockNum_{0};                                             // AICPU block 数（懒加载缓存，0=未查询）
+    // graphId -> 图粒度 host 保序流（同图各 group 共用），生命周期由 GE 图管控，仅 Destroy 时清理
+    std::unordered_map<u32, void*> hcomAttachedStreamMap_;
+    // group -> graphId 映射（SetAttachedStream 写入，随 group 注销清理）
+    std::unordered_map<std::string, u32> groupGraphMap_;
+    // group -> 保序 thread 缓存（仅记账）。失效与注销时只摘引用不释放：线程所有权在 g_ThreadMap，
+    // 运行中释放有设备侧 UAF 风险，随进程退出统一回收
+    std::unordered_map<std::string, ThreadHandle> groupAttachedThreadMap_;
+    // group -> GE 保序 LocalNotify（唯一所有者）。线程仅借用引用不销毁；换图重建线程时复用
+    // （notify 身份跨图保持），仅 UnRegisterOrderLaunch/进程退出时销毁
+    std::unordered_map<std::string, std::vector<std::unique_ptr<LocalNotify>>> groupGeNotifys_;
+    u32 blockNum_{0}; // AICPU block 数（懒加载缓存，0=未查询）
 };
 
 } // namespace hccl

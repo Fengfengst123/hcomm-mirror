@@ -21,6 +21,7 @@
 #include "dtype_common.h"
 #include "adapter_rts.h"
 #include "prof_cycle_time.h"
+#include "hcclCommOp.h"
 namespace hccl {
 
 ThreadMgr::ThreadMgr(
@@ -33,12 +34,10 @@ ThreadMgr::ThreadMgr(
 
 ThreadMgr::~ThreadMgr()
 {
-    // 1. 释放专用线程（AICPU_LAUNCH 类型），单句柄释放
-    auto it = dedicatedThreadMap_.find(HCCL_DED_THREAD_TYPE_AICPU_LAUNCH);
-    if (it != dedicatedThreadMap_.end()) {
-        ThreadHandle thread = it->second;
-        HcommThreadFree(&thread, 1);
-    }
+    // 1. 释放专用线程（dedicatedThreadMap_ 全类型）。此前仅释放 AICPU_LAUNCH 一种，
+    // ORDER_LAUNCH_DEVICE（deviceOrderThread）被遗漏——其线程与自建流只能活到进程退出
+    // 静态析构（此时 ctx/流已被 runtime 回收，销毁必然失败并产生退出期错误风暴）
+    FreeDedicatedThreads();
 
     // 线程对象由底层接口 HcommThreadFree 统一释放：这里若直接删，底层的全局线程表会残留句柄，造成泄漏
     // 2. 释放复用池线程（engineToThreadsMap_）
@@ -47,6 +46,33 @@ ThreadMgr::~ThreadMgr()
     FreeMainThreads();
 
     HCCL_INFO("[~ThreadMgr] Hcom[%s] destroy done.", commId_.c_str());
+}
+
+void ThreadMgr::FreeDedicatedThreads()
+{
+    std::vector<ThreadHandle> handles;
+    {
+        std::lock_guard<std::mutex> lock(dedicatedThreadMutex_);
+        handles.reserve(dedicatedThreadMap_.size());
+        for (auto& pair : dedicatedThreadMap_) {
+            if (pair.second != 0) {
+                handles.push_back(pair.second);
+            }
+        }
+        dedicatedThreadMap_.clear();
+    }
+    if (handles.empty()) {
+        return;
+    }
+
+    // HcommThreadFree 内部保证销毁时序：先经 ThreadKernelLaunchDestroy 拆除 device 侧线程
+    // （移出守护线程轮询列表），再释放 host 侧线程与 SQ/CQ 资源，避免设备侧 UAF
+    HcommResult ret = HcommThreadFree(handles.data(), static_cast<uint32_t>(handles.size()));
+    if (ret != HCCL_SUCCESS) {
+        HCCL_ERROR(
+            "[~ThreadMgr] dedicated threads free failed, Hcom[%s], num[%zu], ret[%d]", commId_.c_str(), handles.size(),
+            ret);
+    }
 }
 
 void ThreadMgr::FreeEngineToThreads()
@@ -463,9 +489,7 @@ ThreadMgr::HcclUnfoldThreadAcquire(HcclDedicatedThreadType useType, uint32_t not
             (HcclResult)ret);
     } else {
         if (useType == HCCL_DED_THREAD_TYPE_AICPU_LAUNCH_GE) {
-            *thread = 0;
-            HCCL_WARNING(
-                "[%s] dedicated thread not found, dedThreadType[%u], return threadHandle[0]", __func__, useType);
+            CHK_RET(HcclGeUnfoldThreadAcquire(useType, notifyNumPerThread, thread));
             return HCCL_SUCCESS;
         }
         CommEngine engine = CommEngine::COMM_ENGINE_CPU;
@@ -477,6 +501,89 @@ ThreadMgr::HcclUnfoldThreadAcquire(HcclDedicatedThreadType useType, uint32_t not
         }
         dedicatedThreadMap_[useType] = *thread;
     }
+    return HCCL_SUCCESS;
+}
+
+HcclResult ThreadMgr::SetAttachedStream(rtStream_t stream)
+{
+    CHK_PRT_RET(
+        stream == nullptr, HCCL_ERROR("[%s] stream is nullptr, Hcom[%s]", __func__, commId_.c_str()), HCCL_E_PTR);
+    std::lock_guard<std::mutex> lock(attachedStreamMutex_);
+    attachedStream_ = stream;
+    HCCL_INFO(
+        "[ThreadMgr][%s] Hcom[%s] attached stream[%p] stored, thread will be created on first GE acquire", __func__,
+        commId_.c_str(), stream);
+    return HCCL_SUCCESS;
+}
+
+HcclResult
+ThreadMgr::HcclGeUnfoldThreadAcquire(HcclDedicatedThreadType useType, uint32_t notifyNumPerThread, ThreadHandle* thread)
+{
+    *thread = 0;
+    rtStream_t stream = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(attachedStreamMutex_);
+        stream = attachedStream_;
+    }
+    if (stream == nullptr) {
+        HCCL_WARNING(
+            "[%s] dedicated thread not found, dedThreadType[%u], attached stream not set, return threadHandle[0]",
+            __func__, useType);
+        return HCCL_SUCCESS;
+    }
+
+    std::lock_guard<std::mutex> lock(mainThreadMutex_);
+    auto it = mainThread_.find(stream);
+    if (it != mainThread_.end()) {
+        // 1. 复用已有线程：notify 不足则经 L0 接口补充
+        if (it->second.notifyNum < notifyNumPerThread) {
+            u32 supplementNum = notifyNumPerThread - it->second.notifyNum;
+            ThreadHandle handle = it->second.handle;
+            HcommResult ret = HcommThreadSupplementNotify(&handle, 1, &supplementNum);
+            CHK_PRT_RET(
+                ret != HCCL_SUCCESS, HCCL_ERROR("[%s] HcommThreadSupplementNotify failed, ret[%d]", __func__, ret),
+                (HcclResult)ret);
+            it->second.notifyNum = notifyNumPerThread;
+        }
+        *thread = it->second.handle;
+        HCCL_INFO(
+            "[ThreadMgr][%s] reuse GE dedicated thread[0x%llx] by attached stream[%p], Hcom[%s]", __func__, *thread,
+            stream, commId_.c_str());
+        return HCCL_SUCCESS;
+    }
+
+    // 2. 无复用线程：经 L0 接口新申请并登记 ThreadMeta
+    HcommResult ret = HcommThreadAllocWithStream(CommEngine::COMM_ENGINE_CPU_TS, stream, notifyNumPerThread, thread);
+    CHK_PRT_RET(
+        ret != HCCL_SUCCESS, HCCL_ERROR("[%s] HcommThreadAllocWithStream failed, ret[%d]", __func__, ret),
+        (HcclResult)ret);
+    ThreadMeta meta;
+    meta.handle = *thread;
+    meta.engine = CommEngine::COMM_ENGINE_CPU_TS;
+    meta.notifyNum = notifyNumPerThread;
+    meta.stream = stream;
+    mainThread_.emplace(stream, meta);
+
+    std::function<HcclResult(u32, u32, const Hccl::TaskParam&, u64)> dfxCallback
+        = [](u32 streamId, u32 taskId, const Hccl::TaskParam& taskParam, u64 handle) {
+              (void)streamId;
+              (void)taskId;
+              (void)taskParam;
+              (void)handle;
+              return HCCL_SUCCESS;
+          };
+    int dfxRet = HcommThreadRegisterDfx(*thread, dfxCallback);
+    if (dfxRet != 0) {
+        HCCL_WARNING("[%s] HcommThreadRegisterDfx failed, ret[%d], thread[0x%llx]", __func__, dfxRet, *thread);
+    }
+
+    // 展开流建链审计日志：通信域/展开流/线程/notify数（流ID查询失败保持INVALID便于识别）
+    s32 unfoldStreamId = INVALID_INT;
+    (void)hrtGetStreamId(stream, unfoldStreamId);
+    HCCL_RUN_INFO(
+        "[ThreadMgr][%s] created GE dedicated thread by unfold stream: commId[%s], unfoldStream[%p](id[%d]), "
+        "thread[0x%llx], notifyNumPerThread[%u]",
+        __func__, commId_.c_str(), stream, unfoldStreamId, *thread, notifyNumPerThread);
     return HCCL_SUCCESS;
 }
 

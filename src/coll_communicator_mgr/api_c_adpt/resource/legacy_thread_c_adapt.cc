@@ -15,6 +15,7 @@
 #include "hccl_comm_pub.h"
 #include "coll_comm_mgr.h"
 #include "orion_adapter_rts.h"
+#include "adapter_rts_common.h" // hrtGetStreamId：注册审计日志打印流ID
 #include "hcom_common.h"
 #include "param_check_basic_v2.h"
 #include "log.h"
@@ -37,15 +38,43 @@ HcclResult HcomSetAttachedStream(const char* group, u32 graphId, const rtStream_
     }
 
     HCCLV2_FUNC_RUN([&]() -> HcclResult {
-        return HCCL_SUCCESS;
-        if (len == 0) {
-            HCCL_WARNING("[HcomSetAttachedStream] len is 0, no stream");
+        if (len <= 1) {
+            HCCL_WARNING("[HcomSetAttachedStream] len <= 1, no stream");
             return HCCL_SUCCESS;
         }
         void* attachedStream = stream[0];
         s32 deviceLogicId = Hccl::HrtGetDevice();
         auto& mgr = hccl::CollCommMgr::GetInstance().GetOrderLaunchThreadMgr(deviceLogicId);
-        return mgr.SetAttachedStream(std::string(group), graphId, attachedStream);
+        CHK_RET(mgr.SetAttachedStream(std::string(group), graphId, attachedStream));
+        // len >= 2 时第二条流为通信域粒度 GE 提前展开流，注入到通信域 ThreadMgr（仅存流，首次获取时创建 thread）
+        std::shared_ptr<hccl::hcclComm> hcclCommInV2 = nullptr;
+        if (HcomGetCommByGroup(group, hcclCommInV2) != HCCL_SUCCESS) {
+            HCCL_WARNING(
+                "[HcomSetAttachedStream] get comm by group failed, skip GE unfold stream inject, group[%s]", group);
+            return HCCL_SUCCESS;
+        }
+        hccl::CollComm* collComm = hcclCommInV2->GetCollComm();
+        if (collComm == nullptr) {
+            HCCL_WARNING("[HcomSetAttachedStream] collComm is null, skip GE unfold stream inject, group[%s]", group);
+            return HCCL_SUCCESS;
+        }
+        hccl::CommEngineResMgr* engineResMgr = collComm->GetCommEngineResMgr();
+        if (engineResMgr == nullptr) {
+            HCCL_WARNING(
+                "[HcomSetAttachedStream] engineResMgr is null, skip GE unfold stream inject, group[%s]", group);
+            return HCCL_SUCCESS;
+        }
+        HcclResult injectRet = engineResMgr->SetAttachedStream(stream[1]);
+        // 注册审计日志：通信域/图/控制流/提前展开流一次打全（流ID查询失败保持INVALID便于识别）
+        s32 ctrlStreamId = INVALID_INT;
+        s32 unfoldStreamId = INVALID_INT;
+        (void)hrtGetStreamId(stream[0], ctrlStreamId);
+        (void)hrtGetStreamId(stream[1], unfoldStreamId);
+        HCCL_RUN_INFO(
+            "[HcomSetAttachedStream] register attached streams: group[%s], commId[%s], graphId[%u], "
+            "ctrlStream[%p](id[%d]), unfoldStream[%p](id[%d])",
+            group, hcclCommInV2->GetIdentifier().c_str(), graphId, stream[0], ctrlStreamId, stream[1], unfoldStreamId);
+        return injectRet;
     }());
 
     std::shared_ptr<hccl::hcclComm> hcclComm = nullptr;

@@ -86,6 +86,13 @@ public:
     void SetCommEngine(CommEngine engine) { engine_ = engine; }
     CommEngine GetCommEngine() const { return engine_; }
 
+    // host侧流导出线程规避设备流资源构造的标记：host侧（如GE保序线程经 HcommThreadAcquireByNotify
+    // 创建）置位后，导出序列化标记 ONLINE 类型 + 零值 streamParam，不构造真实设备流/SQ/CQ；
+    // 设备侧 DeviceInit 解析到"ONLINE + 零值"假流签名时置位。置位线程不持有设备流资源（无
+    // StreamLite/pImpl_/Rtsq），相关的资源注册与任务下发统一按此标志拦截跳过
+    void SetFakeDeviceRes() { fakeDeviceRes_ = true; }
+    bool IsFakeDeviceRes() const { return fakeDeviceRes_; }
+
 protected:
     HcclResult ReportAicpuNotifyWaitTask(u64 notifyId, u64 beginTime, u32 taskId, u32 sqId) const;
     HcclResult ReportHostNotifyWaitTask(u64 notifyId, u64 beginTime, bool isMaster) const;
@@ -108,6 +115,9 @@ private:
         threadHandleMap_; // CPU_TS上的ThreadHandle与其他引擎上的ThreadHandle的映射
     std::function<HcclResult(u32, u32, const Hccl::TaskParam&, u64)> callback_; // 上报task信息的回调函数
     CommEngine engine_ = COMM_ENGINE_RESERVED;                                  // 创建时设置的引擎类型
+
+protected:
+    bool fakeDeviceRes_{false}; // host侧流导出线程标记，见 SetFakeDeviceRes 注释
 };
 
 inline Stream* GetStream(uint64_t thread)

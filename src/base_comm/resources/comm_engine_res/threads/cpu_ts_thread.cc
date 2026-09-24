@@ -39,6 +39,13 @@ CpuTsThread::CpuTsThread(StreamType streamType, uint32_t notifyNum, const Notify
 
 CpuTsThread::~CpuTsThread() { DeInitImpl(); }
 
+CpuTsThread::CpuTsThread(rtStream_t rtStream, LocalNotify** notifys, uint32_t notifyNum)
+    : rtStream_(rtStream),
+      notifyNum_(notifyNum),
+      notifyLoadType_(NotifyLoadType::HOST_NOTIFY),
+      injectedNotifys_(notifys, notifys + notifyNum) // 拷贝引用（借用：对象归管理器，线程不拥有）
+{}
+
 HcclResult CpuTsThread::Init()
 {
     // Host 侧初始化
@@ -58,6 +65,12 @@ HcclResult CpuTsThread::Init()
         } else {
             stream_.reset(new (std::nothrow) Stream(rtStream_));
             CHK_SMART_PTR_NULL(stream_);
+        }
+        if (!injectedNotifys_.empty()) {
+            // GE保序注入：借用引用已在构造时拷贝至injectedNotifys_（对象所有权始终归管理器，
+            // 本线程不销毁不delete）；GetNotify/序列化经借用数组读取。管理器注销/失效销毁
+            // 对象后不得再经本线程使用
+            return HCCL_SUCCESS;
         }
         notifys_.reserve(notifyNum_);
         for (uint32_t idx = 0; idx < notifyNum_; idx++) {
@@ -82,7 +95,8 @@ HcclResult CpuTsThread::DeInitImpl()
     streamType_ = StreamType::STREAM_TYPE_RESERVED;
     notifyNum_ = 0;
     stream_ = nullptr;
-    notifys_.clear();
+    notifys_.clear();         // 自建notify（线程拥有）析构销毁
+    injectedNotifys_.clear(); // 借用引用（对象归管理器）仅清引用，不触碰对象
     return HCCL_SUCCESS;
 }
 
@@ -96,51 +110,68 @@ std::string& CpuTsThread::GetUniqueId()
 
 std::string& CpuTsThread::UpdateUniqueId()
 {
-    // 序列化信息
+    // 序列化信息。GE保序线程规避设备流构造（fakeDeviceRes_ 标记，经 HcommThreadAcquireByNotify
+    // 的GE路径设置）：原实现为满足设备侧按 aicpu_ts_thread 格式解析，额外构造
+    // STREAM_TYPE_DEVICE 流与 SQ/CQ 上下文设备内存——仅为填序列化字段，无功能消费者。
+    // GE 路径类型标记 STREAM_TYPE_ONLINE、streamParam 零值填充，只把 notify 真实数据序列化传下去
+    // （设备侧 DeviceInit 按"ONLINE + 零值"假流签名跳过流初始化，该假流可被正确解析）；
+    // 非 GE 路径（OPBASE/ACLGRAPH/mainThread）维持真实构造不变
     uniqueIdStr_ = std::string();
     std::ostringstream oss;
-    StreamType streamType = StreamType::STREAM_TYPE_DEVICE;
+    StreamType streamType = fakeDeviceRes_ ? StreamType::STREAM_TYPE_ONLINE : StreamType::STREAM_TYPE_DEVICE;
     oss.write(reinterpret_cast<const char_t*>(&streamType), sizeof(streamType));
     oss.write(reinterpret_cast<const char_t*>(&notifyLoadType_), sizeof(notifyLoadType_));
     oss.write(reinterpret_cast<const char_t*>(&devId_), sizeof(devId_));
     oss.write(reinterpret_cast<const char_t*>(&notifyNum_), sizeof(notifyNum_));
 
-    // 临时申请一条流，用于在device侧资源展开时initStream
-    if (streamDevice_ == nullptr) {
-        streamDevice_.reset(new (std::nothrow) Stream(streamType));
-    }
-    if (streamDevice_ == nullptr) {
-        HCCL_ERROR("[CpuTsThread][%s]reset stream failed, stream type[%d]", __func__, streamType);
-        return uniqueIdStr_;
+    if (fakeDeviceRes_) {
+        HcclStreamParam streamParam{}; // 零值假流：不构造真实设备流与 SQ/CQ 上下文
+        oss.write(reinterpret_cast<const char_t*>(&streamParam), sizeof(streamParam));
+    } else {
+        // 临时申请一条流，用于在device侧资源展开时initStream
+        if (streamDevice_ == nullptr) {
+            streamDevice_.reset(new (std::nothrow) Stream(streamType));
+        }
+        if (streamDevice_ == nullptr) {
+            HCCL_ERROR("[CpuTsThread][%s]reset stream failed, stream type[%d]", __func__, streamType);
+            return uniqueIdStr_;
+        }
+
+        uint64_t size = sizeof(SqCqeContext);
+        if (sqCqeContext_.ptr() == nullptr) {
+            sqCqeContext_ = DeviceMem::alloc(size);
+        }
+        if (sqCqeContext_.ptr() == nullptr) {
+            HCCL_ERROR("[CpuTsThread][%s]alloc mem failed, mem size[%llu]", __func__, size);
+            return uniqueIdStr_;
+        }
+        HcclResult memSetRet = hrtMemSet(sqCqeContext_.ptr(), size, size);
+        if (memSetRet != HCCL_SUCCESS) {
+            HCCL_ERROR("[CpuTsThread][%s]mem set failed, mem size[%llu], ptr[%p]", __func__, size, sqCqeContext_.ptr());
+            return uniqueIdStr_;
+        }
+
+        HcclStreamParam streamParam;
+        streamParam.streamInfo.streamIds = streamDevice_->id();
+        streamParam.streamInfo.sqIds = streamDevice_->sqId();
+        streamParam.streamInfo.cqIds = streamDevice_->cqId();
+        streamParam.streamInfo.logicCqids = streamDevice_->logicCqId();
+        streamParam.sqCqContextAddr = reinterpret_cast<uint64_t>(sqCqeContext_.ptr());
+        streamParam.sqCqContextSize = sqCqeContext_.size();
+        oss.write(reinterpret_cast<const char_t*>(&streamParam), sizeof(streamParam));
     }
 
-    uint64_t size = sizeof(SqCqeContext);
-    if (sqCqeContext_.ptr() == nullptr) {
-        sqCqeContext_ = DeviceMem::alloc(size);
-    }
-    if (sqCqeContext_.ptr() == nullptr) {
-        HCCL_ERROR("[CpuTsThread][%s]alloc mem failed, mem size[%llu]", __func__, size);
-        return uniqueIdStr_;
-    }
-    HcclResult ret = hrtMemSet(sqCqeContext_.ptr(), size, size);
-    if (ret != HCCL_SUCCESS) {
-        HCCL_ERROR("[CpuTsThread][%s]mem set failed, mem size[%llu], ptr[%p]", __func__, size, sqCqeContext_.ptr());
-        return uniqueIdStr_;
-    }
-
-    HcclStreamParam streamParam;
-    streamParam.streamInfo.streamIds = streamDevice_->id();
-    streamParam.streamInfo.sqIds = streamDevice_->sqId();
-    streamParam.streamInfo.cqIds = streamDevice_->cqId();
-    streamParam.streamInfo.logicCqids = streamDevice_->logicCqId();
-    streamParam.sqCqContextAddr = reinterpret_cast<uint64_t>(sqCqeContext_.ptr());
-    streamParam.sqCqContextSize = sqCqeContext_.size();
-    oss.write(reinterpret_cast<const char_t*>(&streamParam), sizeof(streamParam));
-
-    ret = HCCL_SUCCESS;
+    HcclResult ret = HCCL_SUCCESS;
     for (uint32_t idx = 0; idx < notifyNum_; idx++) {
+        // GetNotify已按注入/自建模式分流（GE保序借用数组 or 自建notifys_）
+        LocalNotify* notify = GetNotify(idx);
+        if (notify == nullptr) {
+            HCCL_ERROR("[AicpuTsThread][UpdateUniqueId]GetNotify[%u] is nullptr", idx);
+            uniqueIdStr_ = std::string();
+            return uniqueIdStr_;
+        }
         HcclSignalInfo notifyInfo;
-        ret = notifys_[idx]->GetNotifyData(notifyInfo);
+        ret = notify->GetNotifyData(notifyInfo);
         if (ret != HCCL_SUCCESS) {
             HCCL_ERROR("[AicpuTsThread][UpdateUniqueId]GetNotifyData failed, ret[%d]", ret);
             uniqueIdStr_ = std::string();
@@ -165,6 +196,9 @@ LocalNotify* CpuTsThread::GetNotify(uint32_t index) const
         HCCL_ERROR(
             "[CpuTsThread][GetNotify] notifyNum[%u], index[%u] out of range[0, %u]", notifyNum_, index, notifyNum_ - 1);
         return nullptr;
+    }
+    if (!injectedNotifys_.empty()) {
+        return injectedNotifys_[index]; // GE保序借用：对象归管理器，仅返回引用
     }
     return notifys_[index].get();
 }
@@ -324,6 +358,11 @@ HcclResult CpuTsThread::SupplementNotify(uint32_t notifyNum)
 {
     if (streamType_ == StreamType::STREAM_TYPE_DEVICE || notifyLoadType_ == NotifyLoadType::DEVICE_NOTIFY) {
         HCCL_ERROR("[%s]Does not support this interface.", __func__);
+        return HCCL_E_NOT_SUPPORT;
+    }
+    if (!injectedNotifys_.empty()) {
+        // GE保序注入线程：notify由管理器统一创建管理（数量固定），不支持动态补充
+        HCCL_ERROR("[%s]Does not support supplement for injected notify thread.", __func__);
         return HCCL_E_NOT_SUPPORT;
     }
     HCCL_INFO("[%s]supplement notifyNum[%u], notifyNum_[%u]", __func__, notifyNum, notifyNum_);

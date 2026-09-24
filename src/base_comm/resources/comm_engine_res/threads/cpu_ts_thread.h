@@ -19,6 +19,9 @@ class CpuTsThread : public Thread {
 public:
     CpuTsThread(rtStream_t rtStream, uint32_t notifyNum, const NotifyLoadType notifyLoadType);
     CpuTsThread(StreamType streamType, uint32_t notifyNum, const NotifyLoadType notifyLoadType);
+    // GE保序线程注入构造：借用调用方（管理器）创建并持有的LocalNotify对象——本线程仅保存引用
+    // （对象所有权始终归管理器，线程不销毁不delete）；管理器注销/失效销毁后不得再经本线程使用
+    CpuTsThread(rtStream_t rtStream, LocalNotify** notifys, uint32_t notifyNum);
 
     ~CpuTsThread();
 
@@ -73,7 +76,8 @@ private:
     NotifyLoadType notifyLoadType_ = NotifyLoadType::HOST_NOTIFY;
     std::unique_ptr<Stream> stream_;
     DevType devType_ = DevType::DEV_TYPE_COUNT;
-    std::vector<std::unique_ptr<LocalNotify>> notifys_;
+    std::vector<std::unique_ptr<LocalNotify>> notifys_; // 正常路径自建自拥有
+    std::vector<LocalNotify*> injectedNotifys_; // GE保序注入的借用引用（对象归管理器，非空时GetNotify/序列化走此数组）
 
     std::unique_ptr<Stream> streamDevice_; // 在把用户的stream生成的thread导出到device时使用
     DeviceMem sqCqeContext_;

@@ -112,7 +112,7 @@ HcclResult CollCommAicpu::Resume(HcclChannelUrmaRes* commParam)
     CHK_RET(channelMgr_->Resume(commParam));
     nsRecoveryLitePtr_->SetNeedClean(false);
 
-    // 重置Rtsq维护的 sq tail/head
+    // 重置Rtsq维护的 sq tail/head（仅真线程：host侧流导出的桩线程不在threads_中）
     std::shared_lock<std::shared_mutex> lock(GetCommEngineResMgr()->GetThreadMutex());
     const std::vector<std::shared_ptr<hccl::Thread>>& threads = GetCommEngineResMgr()->GetAllThread();
     for (auto& thread : threads) {

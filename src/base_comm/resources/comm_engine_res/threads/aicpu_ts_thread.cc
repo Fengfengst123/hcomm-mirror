@@ -234,6 +234,10 @@ HcclResult AicpuTsThread::LocalNotifyWait([[maybe_unused]] uint32_t notifyId) co
 
 HcclResult AicpuTsThread::LocalNotifyRecord(uint32_t notifyId) const
 {
+    if (fakeDeviceRes_) { // host侧流导出线程无流，无法作为record src提交SQE
+        HCCL_ERROR("[%s] fakeDeviceRes thread, not support.", __func__);
+        return HCCL_E_NOT_SUPPORT;
+    }
     Hccl::StreamLite* streamLite = static_cast<Hccl::StreamLite*>(GetStreamLitePtr());
     Hccl::RtsqBase* rtsq = streamLite->GetRtsq();
     u32 taskId = rtsq->GetTaskId();
@@ -264,6 +268,10 @@ AicpuTsThread::LocalNotifyRecord([[maybe_unused]] ThreadHandle dstThread, [[mayb
 
 HcclResult AicpuTsThread::LocalNotifyWait(uint32_t notifyId, uint32_t timeout) const
 {
+    if (fakeDeviceRes_) { // host侧流导出线程无流，无法作为wait src提交SQE
+        HCCL_ERROR("[%s] fakeDeviceRes thread, not support.", __func__);
+        return HCCL_E_NOT_SUPPORT;
+    }
     Hccl::StreamLite* streamLite = static_cast<Hccl::StreamLite*>(GetStreamLitePtr());
     Hccl::RtsqBase* rtsq = streamLite->GetRtsq();
     u32 taskId = rtsq->GetTaskId();
@@ -329,6 +337,10 @@ HcclResult AicpuTsThread::LocalReduceReport(
 
 HcclResult AicpuTsThread::LocalCopy(void* dst, const void* src, uint64_t size) const
 {
+    if (fakeDeviceRes_) { // host侧流导出线程无流，无法提交SDMA任务
+        HCCL_ERROR("[%s] fakeDeviceRes thread, not support.", __func__);
+        return HCCL_E_NOT_SUPPORT;
+    }
     Hccl::StreamLite* streamLite = static_cast<Hccl::StreamLite*>(GetStreamLitePtr());
     Hccl::RtsqBase* rtsq = streamLite->GetRtsq();
 
@@ -353,6 +365,10 @@ HcclResult AicpuTsThread::LocalCopy(void* dst, const void* src, uint64_t size) c
 HcclResult AicpuTsThread::LocalReduce(
     void* dst, const void* src, uint64_t size, HcommDataType dataType, HcommReduceOp reduceOp) const
 {
+    if (fakeDeviceRes_) { // host侧流导出线程无流，无法提交SDMA任务
+        HCCL_ERROR("[%s] fakeDeviceRes thread, not support.", __func__);
+        return HCCL_E_NOT_SUPPORT;
+    }
     uint32_t dataTypeRaw = static_cast<uint32_t>(dataType);
     Hccl::StreamLite* streamLite = static_cast<Hccl::StreamLite*>(GetStreamLitePtr());
     Hccl::RtsqBase* rtsq = streamLite->GetRtsq();
@@ -428,8 +444,17 @@ HcclResult AicpuTsThread::DeviceInit()
 
     HcclStreamParam streamParam;
     iss.read(ReinterpretAs<char_t*>(&streamParam), sizeof(streamParam));
-    // 91095初始化streamlite，初始化rtsq接口
-    if (devType_ == DevType::DEV_TYPE_950 || devType_ == DevType::DEV_TYPE_960) {
+    // GE保序桩线程（host侧ONLINE导出，streamParam零值）：无流资源，仅作notify record/wait目标
+    // （dst侧仅GetNotify，record SQE由deviceOrderThread的流提交），跳过流初始化。
+    // 判据取"ONLINE+streamInfo全零"的假流签名而非仅判类型：合法ONLINE线程携带真实流参数时仍正常初始化
+    const HcclStreamInfo& streamInfo = streamParam.streamInfo;
+    const bool isFakeStream = streamType_ == StreamType::STREAM_TYPE_ONLINE && streamInfo.streamIds == 0
+                              && streamInfo.sqIds == 0U && streamInfo.cqIds == 0U && streamInfo.logicCqids == 0U;
+    if (isFakeStream) {
+        fakeDeviceRes_ = true; // 后续资源注册/任务下发按此标志统一拦截
+        HCCL_INFO("[AicpuTsThread][Init] streamType[%d] is host online stream, skip stream init.", streamType_);
+    } else if (devType_ == DevType::DEV_TYPE_950 || devType_ == DevType::DEV_TYPE_960) {
+        // 91095初始化streamlite，初始化rtsq接口
         CHK_RET(InitStreamLite(streamParam.streamInfo, hostPhyId));
     } else {
         CHK_RET(InitStream(streamParam));
@@ -462,6 +487,12 @@ HcclResult AicpuTsThread::DeviceInit()
 HcclResult AicpuTsThread::GetSqHeadAndTail([[maybe_unused]] uint32_t& sqHead, [[maybe_unused]] uint32_t& sqTail) const
 {
 #ifdef CCL_KERNEL_AICPU
+
+    if (fakeDeviceRes_) { // host侧流导出线程无SQ，视为无任务在途（head==tail）
+        sqHead = 0U;
+        sqTail = 0U;
+        return HCCL_SUCCESS;
+    }
 
     uint32_t sqIds = pImpl_->GetSqId();
 

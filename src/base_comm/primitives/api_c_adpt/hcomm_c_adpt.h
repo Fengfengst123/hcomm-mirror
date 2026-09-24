@@ -108,6 +108,8 @@ HcommResult HcommChannelKernelLaunch(
     ChannelHandle* channelHandles, ChannelHandle* hostChannelHandles, uint32_t listNum, const std::string& commTag,
     aclrtBinHandle binHandle);
 
+HcommResult HcommThreadAcquireByNotify(rtStream_t stream, void** notifys, uint32_t notifyNum, ThreadHandle* thread);
+
 HcommResult HcommThreadAllocWithConfig(
     CommEngine engine, uint32_t threadNum, ThreadType type, const ThreadConfig* config, ThreadHandle* threads);
 

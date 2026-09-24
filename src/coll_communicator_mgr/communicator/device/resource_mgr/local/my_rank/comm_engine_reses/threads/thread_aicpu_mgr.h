@@ -37,7 +37,10 @@ private:
     HcclResult RegisterThreadCacheCallback(hccl::AicpuTsThread* thread);
 
     std::shared_mutex threadMutex_;
+    // threads_：持有设备流资源的真线程（Resume/异常CQE/dfx遍历均依赖其StreamLite/Rtsq）。
+    // cpuExportThread_：host侧（CPU_TS）导出的notify桩线程（fakeDeviceRes_，GE保序线程）
     std::vector<std::shared_ptr<hccl::Thread>> threads_;
+    std::vector<std::shared_ptr<hccl::Thread>> cpuExportThread_;
     hccl::HcclCommDfxLite& dfx_;
     std::function<HcclResult(bool)> checkExecStatusCallback_;
 };
