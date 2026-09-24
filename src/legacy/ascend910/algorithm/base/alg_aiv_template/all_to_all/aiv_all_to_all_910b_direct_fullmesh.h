@@ -77,9 +77,8 @@ __aicore__ inline void AivAll2All910BDirectFullMesh::Process(
 
     __gm__ T* cclGMOutSelf = (__gm__ T*)(GM_OUT_RDMA[rank_] + ubDataBaseOffset);
     for (uint32_t i = 0; i < rankPerSever; i++) {
-        // 等待数据到达
-        uint32_t sourceRank
-            = (rank_ + rankSize_ - (blockIdx_ % serverNum + i * serverNum)) % rankSize_; // 从哪个卡收数据
+        // 与发送阶段使用相同的peer分工，保证每条QP只有一个block提交WQE。
+        uint32_t sourceRank = (rank_ + blockIdx_ + i * serverNum) % rankSize_;
         if (sourceRank == rank_) {
             continue;
         }
@@ -91,16 +90,8 @@ __aicore__ inline void AivAll2All910BDirectFullMesh::Process(
         uint64_t dataOffset = sourceRank * len;
         CpGM2GM(outputGM + dataOffset, cclGMOutSelf + dataOffset, len); // 将数据从cclout搬到自己的output
         PipeBarrier<PIPE_ALL>();
-    }
 
-    for (uint32_t i = 0; i < rankPerSever; i++) {
-        // 接收方通知发送方：已收到数据
-        uint32_t sourceRank
-            = (rank_ + rankSize_ - (blockIdx_ % serverNum + i * serverNum)) % rankSize_; // 从哪个卡收数据
-        if (sourceRank == rank_) {
-            continue;
-        }
-        // 置flag，告知对端数据已接收
+        // 该peer的数据已拷贝完成，立即由其发送block提交ACK，无需等待其他peer。
         uint64_t localFlagOffset = 2 * sourceRank * FLAG_SIZE;
         __gm__ int32_t* ctrlPostFlagGM
             = (__gm__ int32_t*)(GM_OUT_RDMA[rank_] + pingpongOffset + flagOffsetBase + ranksizeOffset + localFlagOffset
@@ -115,7 +106,7 @@ __aicore__ inline void AivAll2All910BDirectFullMesh::Process(
     }
 
     for (uint32_t i = 0; i < rankPerSever; i++) {
-        // 发送方等待接收方的通知，确保数据发完才结束
+        // 所有ACK提交后再统一等待远端ACK，避免逐peer等待形成环形依赖。
         uint32_t targetRank = (rank_ + blockIdx_ + i * serverNum) % rankSize_;
         if (targetRank == rank_) {
             continue;
