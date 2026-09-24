@@ -21,6 +21,7 @@ namespace Hccl {
 
 constexpr u32 OPBASED_UB_SQ_DEPTH_MAX = 8192;
 constexpr u32 UB_SQ_OFFLOAD_DEPTH = 128;
+constexpr u32 UB_SQ_MIN_DEPTH = 64;
 constexpr u32 UB_SQ_WQEBB_SIZE = 64;
 constexpr u32 UB_MAX_TRANS_SIZE = 256 * 1024 * 1024; // UB单次最大传输量256*1024*1024 Byte
 constexpr u32 WQE_NUM_PER_SQE = 4;                   // URMA约束每个SQE包含4个WQEBB
@@ -62,7 +63,8 @@ HostUbConnection::HostUbConnection(
     }
 
     if (inSqDepth != UB_SQ_DEPTH_NOT_SET && inSqDepth != 0) {
-        sqDepth = inSqDepth;
+        // UB驱动目前一个WQE对应四个WQEBB，HCOMM数据面接口下的WQE只占用一个WQEBB，需要HCOMM暂时屏蔽WQEBB细节
+        sqDepth = std::max(UB_SQ_MIN_DEPTH, inSqDepth / WQE_NUM_PER_SQE);
     } else {
         sqDepth = OPBASED_UB_SQ_DEPTH_MAX;
         if (opMode == OpMode::OFFLOAD) {

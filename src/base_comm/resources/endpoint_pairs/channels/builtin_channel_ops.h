@@ -74,6 +74,9 @@ inline int32_t BuiltinRwNbiOnThread(void* ctx, ThreadHandle thread, void* dst, c
     } else {
         ret = HCCL_E_NOT_SUPPORT;
     }
+    if (ret == HCCL_E_AGAIN) {
+        return ret;
+    }
     CHK_PRT_RET(
         ret != HCCL_SUCCESS,
         HCCL_ERROR(
