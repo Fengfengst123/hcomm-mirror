@@ -33,7 +33,7 @@ MAKE_ENUM(
     TASK_SEND_NOTIFY, TASK_SEND_PAYLOAD, TASK_WRITE_WITH_NOTIFY, TASK_WRITE_REDUCE_WITH_NOTIFY, TASK_CCU,
     TASK_AICPU_KERNEL, TASK_AICPU_REDUCE, TASK_AIV, TASK_UB_INLINE_WRITE, TASK_UB_REDUCE_INLINE, TASK_UB,
     TASK_DPU_KERNEL, TASK_DPU_THREAD_FENCE, TASK_DPU_CHANNEL_FENCE, TASK_DPU_INLINE_WRITE, TASK_DPU_NOTIFY_WAIT,
-    TASK_DPU_WRITE_WITH_NOTIFY)
+    TASK_DPU_WRITE_WITH_NOTIFY, TASK_DPU_CHANNEL_DRAIN)
 
 MAKE_ENUM(DfxLinkType, ONCHIP, HCCS, PCIE, ROCE, SIO, HCCS_SW, STANDARD_ROCE, UB, UBoE, RESERVED)
 
@@ -144,6 +144,7 @@ struct TaskParam {
     u64 aicpuTaskId{0};
     uint16_t npuDevId{0};
     bool isMaster{false};
+    bool isFailed{false};
     u32 tid{0};
     union {
         ParaDMA DMA;       // taskType = SDMA/RDMA使用, 包括rtRDMASend写notify
@@ -195,6 +196,7 @@ private:
             case TaskParamType::TASK_SEND_NOTIFY:
             case TaskParamType::TASK_DPU_NOTIFY_WAIT:
             case TaskParamType::TASK_DPU_CHANNEL_FENCE:
+            case TaskParamType::TASK_DPU_CHANNEL_DRAIN:
                 result += StringFormat(
                     " notifyID[%llu] value[%u]", param.taskPara.Notify.notifyID, param.taskPara.Notify.value);
                 break;

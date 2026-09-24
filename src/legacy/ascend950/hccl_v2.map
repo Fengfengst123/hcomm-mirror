@@ -108,6 +108,7 @@ global:
     HcclSnapshotGetBufSize;
     HcclSnapshotRecoverAllComms;
     HcclSnapshotSave;
+    HcclTaskGetDpuTaskInfoRegisterV2;
     HcclTaskRegisterProfV2;
     HcclTaskRegisterV2;
     HcclTaskReportRegisterV2;

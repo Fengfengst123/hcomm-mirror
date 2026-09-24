@@ -199,6 +199,7 @@ HcclResult HcclTaskRegisterV2(HcclComm comm, const char* msgTag, Callback cb);
 HcclResult
 HcclTaskRegisterProfV2(HcclComm comm, std::function<HcclResult(const Hccl::TaskParam&, uint64_t)> profCallback);
 HcclResult HcclTaskReportRegisterV2(HcclComm comm, std::function<HcclResult()> reportCallback);
+HcclResult HcclTaskGetDpuTaskInfoRegisterV2(HcclComm comm, std::function<std::pair<u32, u32>()> getDpuTaskInfoCallback);
 HcclResult HcclGetDpuSteamIdV2(HcclComm comm, u32& dpuStreamId);
 HcclResult HcclTaskUnRegisterV2(HcclComm comm, const char* msgTag);
 HcclResult HcclCheckTaskServiceExist(const std::string& commId, s32 deviceId);

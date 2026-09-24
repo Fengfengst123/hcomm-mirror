@@ -9,23 +9,22 @@
  */
 
 #include "hcclCommDfx.h"
+#include "dpu_comm_dfx.h"
 #include "dfx_dlprof_function.h"
 #include "ccu_rep_context_v1.h"
 #include "task_info.h"
-#include "dfx/channel_profiling_adpt.h"
+#include "channel_profiling_adpt.h"
 
 namespace hccl {
 
 std::shared_mutex HcclCommDfx::baseLock_;
-std::mutex HcclCommDfx::taskIdMutex_;
 std::unordered_map<std::string, std::unordered_map<u64, u32>> HcclCommDfx::channelRemoteRankId_;
-std::unordered_map<u32, u32> HcclCommDfx::streamIdToTaskId_;
 HcclCommDfx::HcclCommDfx() {}
 
 HcclCommDfx::~HcclCommDfx()
 {
     setAddTaskCallback_ = nullptr;
-    setAddDpuTaskCallback_ = nullptr;
+    dpuDfx_ = nullptr;
 }
 
 HcclResult HcclCommDfx::Init(u32 deviceId, const std::string& comTag, u32 myRankId)
@@ -55,9 +54,18 @@ HcclResult HcclCommDfx::Init(u32 deviceId, const std::string& comTag, u32 myRank
     setAddTaskCallback_ = [this](u32 streamId, u32 taskId, const Hccl::TaskParam& taskParam, u64 handle) {
         return this->AddTaskInfoCallback(streamId, taskId, taskParam, handle);
     };
-    setAddDpuTaskCallback_ = [this](const Hccl::TaskParam& taskParam, u64 handle) {
-        return this->AddDpuTaskInfoCallback(taskParam, handle);
-    };
+    // 4. 创建 DPU 专属 DFX 管理类
+    dpuDfx_ = std::make_unique<DpuCommDfx>();
+    dpuDfx_->Init(
+        deviceId_, commTag_,
+        [this](
+            u32 streamId, u32 taskId, const Hccl::TaskParam& taskParam, u64 handle,
+            std::shared_ptr<Hccl::DfxOpInfo> opInfo) {
+            return this->AddTaskInfoCallback(streamId, taskId, taskParam, handle, opInfo);
+        },
+        [this]() -> std::shared_ptr<Hccl::DfxOpInfo> {
+            return this->GetMirrorTaskManager()->GetCurrDfxOpInfo();
+        });
     initializedFlag_ = true;
     return HCCL_SUCCESS; // 初始化成功返回成功码
 }
@@ -95,7 +103,8 @@ void HcclCommDfx::AddTaskInfoCallbackLog(
     }
 }
 
-HcclResult HcclCommDfx::AddTaskInfoCallback(u32 streamId, u32 taskId, const Hccl::TaskParam& taskParam, u64 handle)
+HcclResult HcclCommDfx::AddTaskInfoCallback(
+    u32 streamId, u32 taskId, const Hccl::TaskParam& taskParam, u64 handle, std::shared_ptr<Hccl::DfxOpInfo> opInfo)
 {
     u32 remoteRankId = INVALID_UINT;
     if (handle != DFX_INVALID_U64) {
@@ -130,8 +139,12 @@ HcclResult HcclCommDfx::AddTaskInfoCallback(u32 streamId, u32 taskId, const Hccl
             }
         }
     }
+    std::shared_ptr<Hccl::DfxOpInfo> dfxOpInfo = opInfo;
+    if (dfxOpInfo == nullptr) {
+        dfxOpInfo = mirrorTaskManager_->GetCurrDfxOpInfo();
+    }
     HcclResult ret = mirrorTaskManager_->AddTaskInfo(
-        streamId, taskId, remoteRankId, taskParam, mirrorTaskManager_->GetCurrDfxOpInfo(), taskParam.isMaster,
+        streamId, taskId, remoteRankId, taskParam, dfxOpInfo, taskParam.isMaster,
         Hccl::DfxProfilingHandler::GetCachedTid());
     CHK_RET(ret);
     return HCCL_SUCCESS;
@@ -139,15 +152,7 @@ HcclResult HcclCommDfx::AddTaskInfoCallback(u32 streamId, u32 taskId, const Hccl
 
 HcclResult HcclCommDfx::AddDpuTaskInfoCallback(const Hccl::TaskParam& taskParam, u64 handle)
 {
-    u32 streamId = dpuStreamId_;
-    u32 taskId = GetTaskId(streamId);
-    Hccl::TaskParam localTaskParam = taskParam;
-    localTaskParam.aicpuTaskId = aicpuTaskId_;
-    localTaskParam.npuDevId = deviceId_;
-    HCCL_INFO(
-        "[%s] streamId[%u], taskId[%u], aicpuTaskId[%llu], npuDevId[%u].", __func__, streamId, taskId,
-        localTaskParam.aicpuTaskId, static_cast<u32>(localTaskParam.npuDevId));
-    return AddTaskInfoCallback(streamId, taskId, localTaskParam, handle);
+    return dpuDfx_->AddDpuTaskInfoCallback(taskParam, handle);
 }
 
 HcclResult HcclCommDfx::SetCurrDfxOpInfo(std::shared_ptr<Hccl::DfxOpInfo> dfxOpInfo)
@@ -219,18 +224,6 @@ HcclResult HcclCommDfx::ReportKernel(
     CHK_RET(profiling_->ReportKernel(beginTime, commTag, kernelName, threadId, cachedReq));
     return HCCL_SUCCESS;
 }
-
-u32 HcclCommDfx::GetTaskId(u32 streamId)
-{
-    std::lock_guard<std::mutex> lock(taskIdMutex_);
-    auto& taskIdRef = streamIdToTaskId_[streamId];
-    constexpr u32 TASK_ID_MODULO = 65536;
-    taskIdRef = (taskIdRef + 1) % TASK_ID_MODULO;
-    u32 retTaskId = taskIdRef;
-    return retTaskId;
-}
-
-void HcclCommDfx::SetDpuStreamId(u32 dpuStreamId) { dpuStreamId_ = dpuStreamId; }
 
 namespace {
 

@@ -807,6 +807,7 @@ static void ReportAivTaskInfo(const CommunicatorImpl& comm, AivOpArgs& aivOpArgs
         .aicpuTaskId = 0,
         .npuDevId = 0,
         .isMaster = isMaster,
+        .isFailed = false,
         .tid = 0,
         .taskPara  = {
             .Aiv = {

@@ -88,6 +88,7 @@ enum TaskParamTypeVal : u8 {
     TASK_DPU_INLINE_WRITE = 20,
     TASK_DPU_NOTIFY_WAIT = 21,
     TASK_DPU_WRITE_WITH_NOTIFY = 22,
+    TASK_DPU_CHANNEL_DRAIN = 23,
     TASK_PARAM_TYPE_COUNT
 };
 
@@ -149,6 +150,7 @@ inline std::string TaskParamTypeValToStr(u8 val)
         {TaskParamTypeVal::TASK_DPU_INLINE_WRITE, "TASK_DPU_INLINE_WRITE"},
         {TaskParamTypeVal::TASK_DPU_NOTIFY_WAIT, "TASK_DPU_NOTIFY_WAIT"},
         {TaskParamTypeVal::TASK_DPU_WRITE_WITH_NOTIFY, "TASK_DPU_WRITE_WITH_NOTIFY"},
+        {TaskParamTypeVal::TASK_DPU_CHANNEL_DRAIN, "TASK_DPU_CHANNEL_DRAIN"},
     };
     auto iter = taskParamTypeValStrMap.find(static_cast<TaskParamTypeVal>(val));
     if (iter == taskParamTypeValStrMap.end()) {

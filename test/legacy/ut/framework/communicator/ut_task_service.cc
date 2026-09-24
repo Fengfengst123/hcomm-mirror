@@ -358,7 +358,7 @@ TEST_F(TaskServiceTest, Ut_TaskRun_When_TaskOkCallbackFails_Expect_Error)
 
     taskThread.join();
 
-    EXPECT_EQ(result, HCCL_E_INTERNAL);
+    EXPECT_EQ(result, HCCL_E_NOT_FOUND);
 }
 
 // ==================== TASK_OK full success flow ====================
@@ -507,8 +507,8 @@ TEST_F(TaskServiceTest, Ut_ExecuteTaskexception_When_TaskExpShmemNull_Expect_Ret
 
     g_taskExpMemMap[commId][devId] = nullptr;
 
-    HcclResult ret = taskService.ExecuteTaskexception(1);
-    EXPECT_EQ(ret, HCCL_SUCCESS);
+    HcclResult ret = taskService.ExecuteTaskexception(1, 100, 200);
+    EXPECT_EQ(ret, HCCL_E_NOT_FOUND);
 }
 
 TEST_F(TaskServiceTest, Ut_ExecuteTaskexception_When_TaskExpShmemValid_Expect_WriteBothPositions)
@@ -517,11 +517,13 @@ TEST_F(TaskServiceTest, Ut_ExecuteTaskexception_When_TaskExpShmemValid_Expect_Wr
     std::vector<uint8_t> hostMem(512);
     TaskService taskService(deviceMem.data(), 1024, hostMem.data(), 512, commId, devId);
 
-    std::vector<uint8_t> taskexpShmem(10, 0);
+    std::vector<uint8_t> taskexpShmem(20, 0);
     g_taskExpMemMap[commId][devId] = taskexpShmem.data();
 
     int32_t errCode = 1;
-    HcclResult ret = taskService.ExecuteTaskexception(errCode);
+    u32 taskId = 100;
+    u32 streamId = 200;
+    HcclResult ret = taskService.ExecuteTaskexception(errCode, taskId, streamId);
     EXPECT_EQ(ret, HCCL_SUCCESS);
 
     uint16_t hcclRetVal = 0;
@@ -540,7 +542,7 @@ TEST_F(TaskServiceTest, Ut_ExecuteTaskexception_When_CommIdNotInMap_Expect_Inser
     std::string uniqueCommId = "notInMap_" + std::to_string(reinterpret_cast<uintptr_t>(this));
     TaskService taskService(deviceMem.data(), 1024, hostMem.data(), 512, uniqueCommId, devId);
 
-    HcclResult ret = taskService.ExecuteTaskexception(1);
+    HcclResult ret = taskService.ExecuteTaskexception(1, 100, 200);
     EXPECT_EQ(ret, HCCL_E_NOT_FOUND);
 }
 
@@ -574,7 +576,7 @@ TEST_F(TaskServiceTest, Ut_ExecuteTask_When_CallbackReturnsNonZero_Expect_CleanA
     TaskService taskService(deviceMem.data(), deviceMemSize, hostMem.data(), hostMemSize, commId, devId);
     taskService.TaskRegister("testTask", FailingCallback);
 
-    std::vector<uint8_t> taskexpShmem(10, 0);
+    std::vector<uint8_t> taskexpShmem(20, 0);
     g_taskExpMemMap[commId][devId] = taskexpShmem.data();
 
     HcclResult result = HCCL_SUCCESS;
@@ -604,7 +606,7 @@ TEST_F(TaskServiceTest, Ut_TaskRun_When_ProcessTaskOkFails_Expect_WriteTerminate
     TaskService taskService(deviceMem.data(), deviceMemSize, hostMem.data(), hostMemSize, commId, devId);
     taskService.TaskRegister("testTask", FailingCallback);
 
-    std::vector<uint8_t> taskexpShmem(10, 0);
+    std::vector<uint8_t> taskexpShmem(20, 0);
     g_taskExpMemMap[commId][devId] = taskexpShmem.data();
 
     HcclResult result = HCCL_SUCCESS;
@@ -631,7 +633,7 @@ TEST_F(TaskServiceTest, Ut_TaskRun_When_TaskOkCallbackFails_Expect_Taskexception
     TaskService taskService(deviceMem.data(), deviceMemSize, hostMem.data(), hostMemSize, commId, devId);
     taskService.TaskRegister("testTask", FailingCallback);
 
-    std::vector<uint8_t> taskexpShmem(10, 0);
+    std::vector<uint8_t> taskexpShmem(20, 0);
     g_taskExpMemMap[commId][devId] = taskexpShmem.data();
 
     HcclResult result = HCCL_SUCCESS;

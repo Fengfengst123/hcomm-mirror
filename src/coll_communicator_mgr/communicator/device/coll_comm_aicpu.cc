@@ -21,6 +21,7 @@
 #include "env_config/env_config_v2.h"
 #include "log.h"
 #include <shared_mutex>
+#include "kernel_entrance.h"
 
 CollCommAicpu::~CollCommAicpu()
 {
@@ -46,6 +47,10 @@ HcclResult CollCommAicpu::InitAicpuIndOp(CommAicpuParam* commAicpuParam)
     CHK_RET(hrtSetlocalDeviceType(topoInfo_.deviceType));
     CHK_RET(hrtDrvGetLocalDevIDByHostDevID(topoInfo_.devicePhyId, &devId_));
     CHK_RET(dfx_.Init(devId_, identifier_, topoInfo_.userRankSize, topoInfo_.userRank));
+    void* taskExpDevMem = FindTaskExpDevMem(identifier_);
+    if (taskExpDevMem != nullptr) {
+        dfx_.SetTaskExpDevMem(taskExpDevMem);
+    }
     CHK_RET(RegisterProfCallBack());
     CHK_RET(InitHDCommunicate(commAicpuParam));
 
@@ -201,7 +206,24 @@ HcclResult CollCommAicpu::InitDfxOpInfo(HcclDfxOpInfo* aicpuDfxInfo)
     CHK_SAFETY_FUNC_RET(
         memcpy_s(newDfxOpInfo.algTag, sizeof(newDfxOpInfo.algTag) - 1, aicpuDfxInfo->algTag, algTagLen));
 
+    (void)WriteOpIndexToTaskExpMem(newDfxOpInfo.opIndex);
+
     CHK_RET(dfx_.SetCurrDfxOpInfo(&newDfxOpInfo));
+    return HCCL_SUCCESS;
+}
+
+HcclResult CollCommAicpu::WriteOpIndexToTaskExpMem(u32 opIndex)
+{
+    auto taskExpDevMem = dfx_.GetTaskExpDevMem();
+    if (taskExpDevMem == nullptr) {
+        return HCCL_SUCCESS;
+    }
+    constexpr u32 OPINDEX_OFFSET = 5;
+    auto memRet = memcpy_s(static_cast<uint8_t*>(taskExpDevMem) + OPINDEX_OFFSET, sizeof(u32), &opIndex, sizeof(u32));
+    if (memRet != EOK) {
+        HCCL_ERROR("[%s] write opIndex[%u] to DPUTASKEXCEPTION failed, ret[%d]", __func__, opIndex, memRet);
+        return HCCL_E_MEMORY;
+    }
     return HCCL_SUCCESS;
 }
 

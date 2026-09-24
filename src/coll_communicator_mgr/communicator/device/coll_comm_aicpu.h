@@ -87,6 +87,7 @@ public:
 
 private:
     HcclResult InitHDCommunicate(CommAicpuParam* commAicpuParam);
+    HcclResult WriteOpIndexToTaskExpMem(u32 opIndex);
 
     u32 devId_{0};
     // 通用的通道
