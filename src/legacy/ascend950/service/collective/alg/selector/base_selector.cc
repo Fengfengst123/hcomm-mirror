@@ -159,9 +159,13 @@ HcclResult BaseSelector::ExtractNetLayerDetails(TopoInfo& topoInfo) const
 
     netLayers = rankGraph_->GetLevels(myRank_); // 有那几层网络 如：[0,1]
     netLayerNum = rankGraph_->GetLevelNum();
-    netInstNumOfLayer.resize(netLayerNum);   // 每层网络中有几个网络实例
-    instSizeListOfLayer.resize(netLayerNum); // 每层网络中的各个网络实例的大小
-    localNetInsSizeOfLayer.resize(netLayerNum);
+    CHK_PRT_RET(
+        netLayers.empty(), HCCL_ERROR("[BaseSelector][ExtractNetLayerDetails] netLayers is empty"), HCCL_E_INTERNAL);
+    // 数组按网络层级编号索引，层级编号可能不连续，例如 {0, 3}。
+    const u32 actualLayerNum = *netLayers.rbegin() + 1;
+    netInstNumOfLayer.resize(actualLayerNum);   // 每层网络中有几个网络实例
+    instSizeListOfLayer.resize(actualLayerNum); // 每层网络中的各个网络实例的大小
+    localNetInsSizeOfLayer.resize(actualLayerNum);
 
     HcclResult ret;
     // 获取并校验每一层的网路实例大小
@@ -190,11 +194,12 @@ HcclResult BaseSelector::ExtractNetLayerDetails(TopoInfo& topoInfo) const
     }
 
     topoLevelNum = 0;
-    // 获取最小的能覆盖所有卡的 layer
+    u32 currentLevelNum = 0;
+    // 统计到首次覆盖所有卡为止的实际层数，不包含缺失的层级。
     for (auto layerIdx : netLayers) {
+        ++currentLevelNum;
         if (netInstNumOfLayer[layerIdx] == 1) {
-            // 当本层只有一个网络实例时, 认为这个就是当前的 topoLevelNum
-            topoLevelNum = layerIdx + 1;
+            topoLevelNum = currentLevelNum;
             break;
         }
     }
@@ -216,11 +221,14 @@ HcclResult BaseSelector::ExtractTopoDetails(TopoInfo& topoInfo) const
 {
     HcclResult ret;
     CHK_PRT_RET(rankGraph_ == nullptr, HCCL_ERROR("[BaseSelector][ExtractTopoDetails] rankGraph_ is null"), HCCL_E_PTR);
-    u32 netLayerNum = topoInfo.netLayerDetails.netLayerNum;
+    const auto& netLayers = topoInfo.netLayerDetails.netLayers;
+    CHK_PRT_RET(
+        netLayers.empty(), HCCL_ERROR("[BaseSelector][ExtractTopoDetails] netLayers is empty"), HCCL_E_INTERNAL);
+    const u32 actualLayerNum = *netLayers.rbegin() + 1;
 
     // 初始化每一层的 TopoInstDetails
-    topoInfo.topoInstDetailsOfLayer.resize(netLayerNum);
-    for (u32 netLayerIdx = 0; netLayerIdx < netLayerNum; netLayerIdx++) {
+    topoInfo.topoInstDetailsOfLayer.resize(actualLayerNum);
+    for (auto netLayerIdx : netLayers) {
         auto& currentNetLayerTopoTopoDetail = topoInfo.topoInstDetailsOfLayer[netLayerIdx];
         auto& currentLayerTopoSize = currentNetLayerTopoTopoDetail.sizeOfTopo;
         auto& currentLayerTopoType = currentNetLayerTopoTopoDetail.typeOfTopo;
