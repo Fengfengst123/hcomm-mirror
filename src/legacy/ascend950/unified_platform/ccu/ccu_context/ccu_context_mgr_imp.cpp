@@ -263,12 +263,14 @@ HcclResult CtxMgrImp::GetResPackTotalResNum(const CcuResPack& resPack, CcuResReq
             totalRes.blockMsReq[i] += GetResTotalNum(tmpResRepository.blockMs[i]);
             totalRes.ckeReq[i] += GetResTotalNum(tmpResRepository.cke[i]);
             totalRes.blockCkeReq[i] += GetResTotalNum(tmpResRepository.blockCke[i]);
+            totalRes.legacyBlockCkeReq[i] += GetResTotalNum(tmpResRepository.legacyBlockCke[i]);
             totalRes.loopEngineReq[i] += GetResTotalNum(tmpResRepository.loopEngine[i]);
             totalRes.blockLoopEngineReq[i] += GetResTotalNum(tmpResRepository.blockLoopEngine[i]);
             totalRes.gsaReq[i] += GetResTotalNum(tmpResRepository.gsa[i]);
             totalRes.blockGsaReq[i] += GetResTotalNum(tmpResRepository.blockGsa[i]);
             totalRes.xnReq[i] += GetResTotalNum(tmpResRepository.xn[i]);
             totalRes.blockXnReq[i] += GetResTotalNum(tmpResRepository.blockXn[i]);
+            totalRes.legacyBlockXnReq[i] += GetResTotalNum(tmpResRepository.legacyBlockXn[i]);
             totalRes.missionReq.req[i] += GetResTotalNum(tmpResRepository.mission.mission[i]);
         }
     }
@@ -307,12 +309,14 @@ void CtxMgrImp::MergeCcuResReq(CcuResReq& resReqA, const CcuResReq& resReqB) con
         resReqA.blockMsReq[i] += resReqB.blockMsReq[i];
         resReqA.ckeReq[i] += resReqB.ckeReq[i];
         resReqA.blockCkeReq[i] += resReqB.blockCkeReq[i];
+        resReqA.legacyBlockCkeReq[i] += resReqB.legacyBlockCkeReq[i];
         resReqA.loopEngineReq[i] += resReqB.loopEngineReq[i];
         resReqA.blockLoopEngineReq[i] += resReqB.blockLoopEngineReq[i];
         resReqA.gsaReq[i] += resReqB.gsaReq[i];
         resReqA.blockGsaReq[i] += resReqB.blockGsaReq[i];
         resReqA.xnReq[i] += resReqB.xnReq[i];
         resReqA.blockXnReq[i] += resReqB.blockXnReq[i];
+        resReqA.legacyBlockXnReq[i] += resReqB.legacyBlockXnReq[i];
         resReqA.missionReq.req[i] += resReqB.missionReq.req[i];
 
         if (resReqB.missionReq.req[i] > 0) {
@@ -334,22 +338,31 @@ CtxMgrImp::CompareResAndApplyAsNeeded(const CcuResReq& totalRes, const CcuResReq
         needResReq.blockMsReq[i] = GetReqResNum(resReq.blockMsReq[i], totalRes.blockMsReq[i]);
         needResReq.ckeReq[i] = GetReqResNum(resReq.ckeReq[i], totalRes.ckeReq[i]);
         needResReq.blockCkeReq[i] = GetReqResNum(resReq.blockCkeReq[i], totalRes.blockCkeReq[i]);
+        needResReq.legacyBlockCkeReq[i] = GetReqResNum(resReq.legacyBlockCkeReq[i], totalRes.legacyBlockCkeReq[i]);
         needResReq.loopEngineReq[i] = GetReqResNum(resReq.loopEngineReq[i], totalRes.loopEngineReq[i]);
         needResReq.blockLoopEngineReq[i] = GetReqResNum(resReq.blockLoopEngineReq[i], totalRes.blockLoopEngineReq[i]);
         needResReq.gsaReq[i] = GetReqResNum(resReq.gsaReq[i], totalRes.gsaReq[i]);
         needResReq.blockGsaReq[i] = GetReqResNum(resReq.blockGsaReq[i], totalRes.blockGsaReq[i]);
         needResReq.xnReq[i] = GetReqResNum(resReq.xnReq[i], totalRes.xnReq[i]);
         needResReq.blockXnReq[i] = GetReqResNum(resReq.blockXnReq[i], totalRes.blockXnReq[i]);
+        needResReq.legacyBlockXnReq[i] = GetReqResNum(resReq.legacyBlockXnReq[i], totalRes.legacyBlockXnReq[i]);
         needResReq.missionReq.req[i] = GetReqResNum(resReq.missionReq.req[i], totalRes.missionReq.req[i]);
+
+        if (needResReq.legacyBlockXnReq[i] != 0 || needResReq.legacyBlockCkeReq[i] != 0) {
+            HCCL_RUN_INFO(
+                "[%s] dieId[%u] legacyBlockXnReq[%u] != 0 or legacyBlockCkeReq[%u] != 0, do resource expansion.",
+                __func__, i, needResReq.legacyBlockXnReq[i], needResReq.legacyBlockCkeReq[i]);
+        }
 
         if (needResReq.missionReq.req[i] > 0) {
             needResReq.missionReq.reqType = resReq.missionReq.reqType;
         }
 
         if (needResReq.msReq[i] != 0 || needResReq.blockMsReq[i] != 0 || needResReq.ckeReq[i] != 0
-            || needResReq.blockCkeReq[i] != 0 || needResReq.loopEngineReq[i] != 0
-            || needResReq.blockLoopEngineReq[i] != 0 || needResReq.gsaReq[i] != 0 || needResReq.blockGsaReq[i] != 0
-            || needResReq.xnReq[i] != 0 || needResReq.blockXnReq[i] != 0 || needResReq.missionReq.req[i] != 0) {
+            || needResReq.blockCkeReq[i] != 0 || needResReq.legacyBlockCkeReq[i] != 0
+            || needResReq.loopEngineReq[i] != 0 || needResReq.blockLoopEngineReq[i] != 0 || needResReq.gsaReq[i] != 0
+            || needResReq.blockGsaReq[i] != 0 || needResReq.xnReq[i] != 0 || needResReq.blockXnReq[i] != 0
+            || needResReq.legacyBlockXnReq[i] != 0 || needResReq.missionReq.req[i] != 0) {
             isNeedAlloc = true;
         }
     }
@@ -493,10 +506,12 @@ HcclResult CtxMgrImp::GetResPackTotalResRepository(const CcuResPack& resPack, Cc
             ExpandResInfo(totalRes.blockLoopEngine[i], tmpResRepository.blockLoopEngine[i]);
             ExpandResInfo(totalRes.cke[i], tmpResRepository.cke[i]);
             ExpandResInfo(totalRes.blockCke[i], tmpResRepository.blockCke[i]);
+            ExpandResInfo(totalRes.legacyBlockCke[i], tmpResRepository.legacyBlockCke[i]);
             ExpandResInfo(totalRes.gsa[i], tmpResRepository.gsa[i]);
             ExpandResInfo(totalRes.blockGsa[i], tmpResRepository.blockGsa[i]);
             ExpandResInfo(totalRes.xn[i], tmpResRepository.xn[i]);
             ExpandResInfo(totalRes.blockXn[i], tmpResRepository.blockXn[i]);
+            ExpandResInfo(totalRes.legacyBlockXn[i], tmpResRepository.legacyBlockXn[i]);
             ExpandResInfo(totalRes.mission.mission[i], tmpResRepository.mission.mission[i]);
         }
         DumpResRepositoryInfo(totalRes);
@@ -546,6 +561,10 @@ void CtxMgrImp::MergeCtxRepResource(CcuRepResource& repResourceA, CcuRepResource
             repResourceA.blockMaskSignal[i].end(), repResourceB.blockMaskSignal[i].begin(),
             repResourceB.blockMaskSignal[i].end());
 
+        repResourceA.legacyBlockMaskSignal[i].insert(
+            repResourceA.legacyBlockMaskSignal[i].end(), repResourceB.legacyBlockMaskSignal[i].begin(),
+            repResourceB.legacyBlockMaskSignal[i].end());
+
         repResourceA.address[i].insert(
             repResourceA.address[i].end(), repResourceB.address[i].begin(), repResourceB.address[i].end());
 
@@ -559,6 +578,10 @@ void CtxMgrImp::MergeCtxRepResource(CcuRepResource& repResourceA, CcuRepResource
         repResourceA.continuousVariable[i].insert(
             repResourceA.continuousVariable[i].end(), repResourceB.continuousVariable[i].begin(),
             repResourceB.continuousVariable[i].end());
+
+        repResourceA.legacyContinuousVariable[i].insert(
+            repResourceA.legacyContinuousVariable[i].end(), repResourceB.legacyContinuousVariable[i].begin(),
+            repResourceB.legacyContinuousVariable[i].end());
     }
     return;
 }
@@ -589,10 +612,12 @@ void CtxMgrImp::ResetRepResourceToResRepository(
         ResetRepResourceTemplate(totalRepRes.blockExecutor[i], totalResRepository.blockLoopEngine[i]);
         ResetRepResourceTemplate(totalRepRes.maskSignal[i], totalResRepository.cke[i]);
         ResetRepResourceTemplate(totalRepRes.blockMaskSignal[i], totalResRepository.blockCke[i]);
+        ResetRepResourceTemplate(totalRepRes.legacyBlockMaskSignal[i], totalResRepository.legacyBlockCke[i]);
         ResetRepResourceTemplate(totalRepRes.address[i], totalResRepository.gsa[i]);
         ResetRepResourceTemplate(totalRepRes.blockAddress[i], totalResRepository.blockGsa[i]);
         ResetRepResourceTemplate(totalRepRes.variable[i], totalResRepository.xn[i]);
         ResetRepResourceTemplate(totalRepRes.continuousVariable[i], totalResRepository.blockXn[i]);
+        ResetRepResourceTemplate(totalRepRes.legacyContinuousVariable[i], totalResRepository.legacyBlockXn[i]);
     }
 }
 
@@ -740,16 +765,18 @@ void CtxMgrImp::DumpResReqInfo(const CcuResReq& totalRes) const
 {
     for (uint32_t i = 0; i < MAX_CCU_IODIE_NUM; i++) {
         if (totalRes.msReq[i] != 0 || totalRes.blockMsReq[i] != 0 || totalRes.ckeReq[i] != 0
-            || totalRes.blockCkeReq[i] != 0 || totalRes.loopEngineReq[i] != 0 || totalRes.blockLoopEngineReq[i] != 0
-            || totalRes.gsaReq[i] != 0 || totalRes.blockGsaReq[i] != 0 || totalRes.xnReq[i] != 0
-            || totalRes.blockXnReq[i] != 0 || totalRes.missionReq.req[i] != 0) {
+            || totalRes.legacyBlockCkeReq[i] != 0 || totalRes.blockCkeReq[i] != 0 || totalRes.loopEngineReq[i] != 0
+            || totalRes.blockLoopEngineReq[i] != 0 || totalRes.gsaReq[i] != 0 || totalRes.blockGsaReq[i] != 0
+            || totalRes.xnReq[i] != 0 || totalRes.blockXnReq[i] != 0 || totalRes.legacyBlockXnReq[i] != 0
+            || totalRes.missionReq.req[i] != 0) {
             HCCL_INFO(
                 "DumpResReqInfo: dieId[%u], msReq[%u], blockMsReq[%u], ckeReq[%u], blockCkeReq[%u], "
-                "loopEngineReq[%u], blockLoopEngineReq[%u], gsaReq[%u], blockGsaReq[%u], "
-                "xnReq[%u], blockXnReq[%u], missionReq[%u]",
+                "legacyBlockCkeReq[%u], loopEngineReq[%u], blockLoopEngineReq[%u], gsaReq[%u], blockGsaReq[%u], "
+                "xnReq[%u], blockXnReq[%u], legacyBlockXnReq[%u], missionReq[%u]",
                 i, totalRes.msReq[i], totalRes.blockMsReq[i], totalRes.ckeReq[i], totalRes.blockCkeReq[i],
-                totalRes.loopEngineReq[i], totalRes.blockLoopEngineReq[i], totalRes.gsaReq[i], totalRes.blockGsaReq[i],
-                totalRes.xnReq[i], totalRes.blockXnReq[i], totalRes.missionReq.req[i]);
+                totalRes.legacyBlockCkeReq[i], totalRes.loopEngineReq[i], totalRes.blockLoopEngineReq[i],
+                totalRes.gsaReq[i], totalRes.blockGsaReq[i], totalRes.xnReq[i], totalRes.blockXnReq[i],
+                totalRes.legacyBlockXnReq[i], totalRes.missionReq.req[i]);
         }
     }
 }
@@ -758,17 +785,18 @@ void CtxMgrImp::DumpResRepositoryInfo(const CcuResRepository& resRepo) const
 {
     for (uint32_t i = 0; i < MAX_CCU_IODIE_NUM; i++) {
         if (resRepo.ms[i].size() != 0 || resRepo.blockMs[i].size() != 0 || resRepo.cke[i].size() != 0
-            || resRepo.blockCke[i].size() != 0 || resRepo.loopEngine[i].size() != 0
-            || resRepo.blockLoopEngine[i].size() != 0 || resRepo.gsa[i].size() != 0 || resRepo.blockGsa[i].size() != 0
-            || resRepo.xn[i].size() != 0 || resRepo.blockXn[i].size() != 0 || resRepo.mission.mission[i].size() != 0) {
+            || resRepo.blockCke[i].size() != 0 || resRepo.legacyBlockCke[i].size() != 0
+            || resRepo.loopEngine[i].size() != 0 || resRepo.blockLoopEngine[i].size() != 0 || resRepo.gsa[i].size() != 0
+            || resRepo.blockGsa[i].size() != 0 || resRepo.xn[i].size() != 0 || resRepo.blockXn[i].size() != 0
+            || resRepo.legacyBlockXn[i].size() != 0 || resRepo.mission.mission[i].size() != 0) {
             HCCL_INFO(
                 "DumpResRepository: dieId[%u], ms size[%u], blockMs size[%u], cke size[%u], blockCke size[%u], "
-                "loopEngine size[%u], blockLoopEngine size[%u], gsa size[%u], blockGsa size[%u], xn size[%u], "
-                "block xn size[%u], mission size[%u]",
+                "legacyBlockCke size[%u], loopEngine size[%u], blockLoopEngine size[%u], gsa size[%u], "
+                "blockGsa size[%u], xn size[%u], block xn size[%u], legacyBlockXn size[%u], mission size[%u]",
                 i, resRepo.ms[i].size(), resRepo.blockMs[i].size(), resRepo.cke[i].size(), resRepo.blockCke[i].size(),
-                resRepo.loopEngine[i].size(), resRepo.blockLoopEngine[i].size(), resRepo.gsa[i].size(),
-                resRepo.blockGsa[i].size(), resRepo.xn[i].size(), resRepo.blockXn[i].size(),
-                resRepo.mission.mission[i].size());
+                resRepo.legacyBlockCke[i].size(), resRepo.loopEngine[i].size(), resRepo.blockLoopEngine[i].size(),
+                resRepo.gsa[i].size(), resRepo.blockGsa[i].size(), resRepo.xn[i].size(), resRepo.blockXn[i].size(),
+                resRepo.legacyBlockXn[i].size(), resRepo.mission.mission[i].size());
         }
     }
 }

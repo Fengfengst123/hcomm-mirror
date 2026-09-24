@@ -26,8 +26,9 @@
 
 namespace Hccl {
 
-constexpr uint32_t REQ_RES_TYPE_NUM = 11;
+constexpr uint32_t REQ_RES_TYPE_NUM = 13;
 constexpr uint32_t BLOCK_RES_TYPE_NUM = 5;
+constexpr uint32_t LEGACY_BLOCK_RES_TYPE_NUM = 2;
 constexpr uint32_t CONS_RES_TYPE_NUM = 1;
 constexpr uint32_t DISCRETE_RES_TYPE_NUM = 4;
 constexpr uint32_t NON_BLOCK_TYPE_NUM = CONS_RES_TYPE_NUM + DISCRETE_RES_TYPE_NUM;
@@ -255,10 +256,19 @@ static bool CheckReqValid(const CcuResReq& req, int32_t devLogicId, std::array<b
 {
     bool ifValid = false;
     for (uint8_t i = 0; i < MAX_CCU_IODIE_NUM; i++) {
-        const std::array<uint32_t, REQ_RES_TYPE_NUM> reqs
-            = {req.loopEngineReq[i], req.blockLoopEngineReq[i], req.msReq[i],         req.blockMsReq[i],
-               req.ckeReq[i],        req.blockCkeReq[i],        req.xnReq[i],         req.blockXnReq[i],
-               req.gsaReq[i],        req.blockGsaReq[i],        req.missionReq.req[i]};
+        const std::array<uint32_t, REQ_RES_TYPE_NUM> reqs = {req.loopEngineReq[i],
+                                                             req.blockLoopEngineReq[i],
+                                                             req.msReq[i],
+                                                             req.blockMsReq[i],
+                                                             req.ckeReq[i],
+                                                             req.blockCkeReq[i],
+                                                             req.legacyBlockCkeReq[i],
+                                                             req.xnReq[i],
+                                                             req.blockXnReq[i],
+                                                             req.legacyBlockXnReq[i],
+                                                             req.gsaReq[i],
+                                                             req.blockGsaReq[i],
+                                                             req.missionReq.req[i]};
 
         const bool ifReqEmpty = std::all_of(std::begin(reqs), std::end(reqs), [](uint32_t x) {
             return x == 0;
@@ -400,7 +410,7 @@ HcclResult CcuResBatchAllocator::AllocBlockRes(
             continue;
         }
 
-        std::array<ResTypeReqNumBlockNumFunc, BLOCK_RES_TYPE_NUM> blockReqParas
+        std::array<ResTypeReqNumBlockNumFunc, BLOCK_RES_TYPE_NUM + LEGACY_BLOCK_RES_TYPE_NUM> blockReqParas
             = {std::make_tuple(
                    ResType::LOOP, resReq.blockLoopEngineReq[i], resStrategies[i].loopNum,
                    std::ref(resRepoPtr->blockLoopEngine[i])),
@@ -409,11 +419,17 @@ HcclResult CcuResBatchAllocator::AllocBlockRes(
                std::make_tuple(
                    ResType::CKE, resReq.blockCkeReq[i], resStrategies[i].ckeNum, std::ref(resRepoPtr->blockCke[i])),
                std::make_tuple(
+                   ResType::CKE, resReq.legacyBlockCkeReq[i], resStrategies[i].ckeNum,
+                   std::ref(resRepoPtr->legacyBlockCke[i])),
+               std::make_tuple(
                    ResType::XN, resReq.blockXnReq[i], resStrategies[i].xnNum, std::ref(resRepoPtr->blockXn[i])),
+               std::make_tuple(
+                   ResType::XN, resReq.legacyBlockXnReq[i], resStrategies[i].xnNum,
+                   std::ref(resRepoPtr->legacyBlockXn[i])),
                std::make_tuple(
                    ResType::GSA, resReq.blockGsaReq[i], resStrategies[i].gsaNum, std::ref(resRepoPtr->blockGsa[i]))};
 
-        for (uint32_t j = 0; j < BLOCK_RES_TYPE_NUM; j++) {
+        for (uint32_t j = 0; j < BLOCK_RES_TYPE_NUM + LEGACY_BLOCK_RES_TYPE_NUM; j++) {
             const auto& req = blockReqParas[j];
             const uint32_t num = std::get<1>(req);
             if (num == 0) {
@@ -427,10 +443,10 @@ HcclResult CcuResBatchAllocator::AllocBlockRes(
             auto ret = HandleBlockRes(handleKey, num, blockSize, blocks, resInfos);
             if (ret != HcclResult::HCCL_SUCCESS) {
                 HCCL_WARNING(
-                    "[CcuResBatchAllocator][%s] failed, devLogicId[%d] dieId[%u], "
+                    "[CcuResBatchAllocator][%s] failed, devLogicId[%d] dieId[%u], blockReqParas idx[%d]"
                     "failed to allocate [%s] block resource, remaining block resources are "
                     "not enough, request num[%u].",
-                    __func__, devLogicId, i, resType.Describe().c_str(), num);
+                    __func__, devLogicId, i, j, resType.Describe().c_str(), num);
                 DumpBlockResInfo(resType, resBlocks[i][resType]);
                 return ret;
             }
@@ -634,14 +650,16 @@ void CcuResBatchAllocator::ReleaseBlockResource(std::unique_ptr<CcuResRepository
             continue;
         }
 
-        const std::array<BlockSizeResNum, BLOCK_RES_TYPE_NUM> blockReqParas
+        const std::array<BlockSizeResNum, BLOCK_RES_TYPE_NUM + LEGACY_BLOCK_RES_TYPE_NUM> blockReqParas
             = {std::make_tuple(ResType::LOOP, resStrategies[i].loopNum, std::ref(resRepoPtr->blockLoopEngine[i])),
                std::make_tuple(ResType::MS, resStrategies[i].msNum, std::ref(resRepoPtr->blockMs[i])),
                std::make_tuple(ResType::CKE, resStrategies[i].ckeNum, std::ref(resRepoPtr->blockCke[i])),
+               std::make_tuple(ResType::CKE, resStrategies[i].ckeNum, std::ref(resRepoPtr->legacyBlockCke[i])),
                std::make_tuple(ResType::XN, resStrategies[i].xnNum, std::ref(resRepoPtr->blockXn[i])),
+               std::make_tuple(ResType::XN, resStrategies[i].xnNum, std::ref(resRepoPtr->legacyBlockXn[i])),
                std::make_tuple(ResType::GSA, resStrategies[i].gsaNum, std::ref(resRepoPtr->blockGsa[i]))};
 
-        for (uint32_t j = 0; j < BLOCK_RES_TYPE_NUM; j++) {
+        for (uint32_t j = 0; j < BLOCK_RES_TYPE_NUM + LEGACY_BLOCK_RES_TYPE_NUM; j++) {
             constexpr size_t RES_INFO_IDX = 2;
             auto req = blockReqParas[j];
             std::vector<ResInfo>& resInfos = std::get<RES_INFO_IDX>(req);

@@ -233,22 +233,26 @@ CcuResReq CcuContext::GetResourceRequest()
     req.blockMsReq[dieId] = res.blockCcubuffers[dieId].size();
     req.ckeReq[dieId] = res.maskSignal[dieId].size();
     req.blockCkeReq[dieId] = res.blockMaskSignal[dieId].size();
+    req.legacyBlockCkeReq[dieId] = res.legacyBlockMaskSignal[dieId].size();
     req.loopEngineReq[dieId] = res.executor[dieId].size();
     req.blockLoopEngineReq[dieId] = res.blockExecutor[dieId].size();
     req.gsaReq[dieId] = res.address[dieId].size();
     req.blockGsaReq[dieId] = res.blockAddress[dieId].size();
     req.xnReq[dieId] = res.variable[dieId].size();
     req.blockXnReq[dieId] = res.continuousVariable[dieId].size();
+    req.legacyBlockXnReq[dieId] = res.legacyContinuousVariable[dieId].size();
 
     req.missionReq.reqType = MissionReqType::FUSION_MULTIPLE_DIE;
     req.missionReq.req[dieId] = 1;
 
     auto info = StringFormat(
-        "resource request: dieId[%u], ms[%u], blockMs[%u], cke[%u], blockCke[%u], "
-        "loopEngine[%u], blockLoopEngine[%u], gsa[%u], blockGsa[%u], xn[%u], block xn[%u], missionId[%u]",
+        "resource request: dieId[%u], ms[%u], blockMs[%u], cke[%u], blockCke[%u], legacyBlockCke[%u], "
+        "loopEngine[%u], blockLoopEngine[%u], gsa[%u], blockGsa[%u], xn[%u], block xn[%u], legacyBlock xn[%u], "
+        "missionId[%u]",
         dieId, req.msReq[dieId], req.blockMsReq[dieId], req.ckeReq[dieId], req.blockCkeReq[dieId],
-        req.loopEngineReq[dieId], req.blockLoopEngineReq[dieId], req.gsaReq[dieId], req.blockGsaReq[dieId],
-        req.xnReq[dieId], req.blockXnReq[dieId], req.missionReq.req[dieId]);
+        req.legacyBlockCkeReq[dieId], req.loopEngineReq[dieId], req.blockLoopEngineReq[dieId], req.gsaReq[dieId],
+        req.blockGsaReq[dieId], req.xnReq[dieId], req.blockXnReq[dieId], req.legacyBlockXnReq[dieId],
+        req.missionReq.req[dieId]);
 
     HCCL_INFO("%s", info.c_str());
 
@@ -1119,7 +1123,7 @@ T CcuContext::CreateResAssist(std::array<std::vector<T>, MAX_CCU_IODIE_NUM>& res
 
 CcuRep::Variable CcuContext::CreateVariable() { return CreateResAssist(res.continuousVariable); }
 
-CcuRep::Variable CcuContext::CreateContinuousVariable() { return CreateResAssist(res.continuousVariable); }
+CcuRep::Variable CcuContext::CreateContinuousVariable() { return CreateResAssist(res.legacyContinuousVariable); }
 
 CcuRep::Address CcuContext::CreateAddress() { return CreateResAssist(res.blockAddress); }
 
@@ -1181,7 +1185,7 @@ std::vector<CcuRep::Executor> CcuContext::CreateBlockExecutor(uint32_t count)
 
 std::vector<CcuRep::MaskSignal> CcuContext::CreateBlockMaskSignal(uint32_t count)
 {
-    return CreateBlockResAssist(count, res.blockMaskSignal);
+    return CreateBlockResAssist(count, res.legacyBlockMaskSignal);
 }
 
 /*

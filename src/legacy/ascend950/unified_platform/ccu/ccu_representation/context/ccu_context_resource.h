@@ -28,10 +28,12 @@ struct CcuRepResource {
     std::array<std::vector<CcuRep::Executor>, MAX_CCU_IODIE_NUM> blockExecutor;
     std::array<std::vector<CcuRep::MaskSignal>, MAX_CCU_IODIE_NUM> maskSignal;
     std::array<std::vector<CcuRep::MaskSignal>, MAX_CCU_IODIE_NUM> blockMaskSignal;
+    std::array<std::vector<CcuRep::MaskSignal>, MAX_CCU_IODIE_NUM> legacyBlockMaskSignal;
     std::array<std::vector<CcuRep::Address>, MAX_CCU_IODIE_NUM> address;
     std::array<std::vector<CcuRep::Address>, MAX_CCU_IODIE_NUM> blockAddress;
     std::array<std::vector<CcuRep::Variable>, MAX_CCU_IODIE_NUM> continuousVariable;
     std::array<std::vector<CcuRep::Variable>, MAX_CCU_IODIE_NUM> variable;
+    std::array<std::vector<CcuRep::Variable>, MAX_CCU_IODIE_NUM> legacyContinuousVariable;
 };
 
 // Context共享资源

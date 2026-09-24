@@ -310,6 +310,13 @@ CtxMgrGetResourceStubAlg(const int32_t deviceLogicId, const CcuResHandle handle,
     ccuResRepo.blockCke[1][0].startId = 0;
     ccuResRepo.blockCke[1][0].num = 64;
 
+    ccuResRepo.legacyBlockCke[0].resize(1);
+    ccuResRepo.legacyBlockCke[0][0].startId = 0;
+    ccuResRepo.legacyBlockCke[0][0].num = 64;
+    ccuResRepo.legacyBlockCke[1].resize(1);
+    ccuResRepo.legacyBlockCke[1][0].startId = 0;
+    ccuResRepo.legacyBlockCke[1][0].num = 64;
+
     ccuResRepo.blockLoopEngine[0].resize(1);
     ccuResRepo.blockLoopEngine[0][0].startId = 0;
     ccuResRepo.blockLoopEngine[0][0].num = 64;
@@ -344,6 +351,13 @@ CtxMgrGetResourceStubAlg(const int32_t deviceLogicId, const CcuResHandle handle,
     ccuResRepo.blockXn[1].resize(1);
     ccuResRepo.blockXn[1][0].startId = 1024;
     ccuResRepo.blockXn[1][0].num = 1536;
+
+    ccuResRepo.legacyBlockXn[0].resize(1);
+    ccuResRepo.legacyBlockXn[0][0].startId = 1024;
+    ccuResRepo.legacyBlockXn[0][0].num = 1536;
+    ccuResRepo.legacyBlockXn[1].resize(1);
+    ccuResRepo.legacyBlockXn[1][0].startId = 1024;
+    ccuResRepo.legacyBlockXn[1][0].num = 1536;
 
     ccuResRepo.mission.mission[0].resize(1);
     ccuResRepo.mission.mission[0][0].startId = 0;
