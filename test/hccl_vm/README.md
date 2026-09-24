@@ -67,7 +67,7 @@ bash build_pkg.sh
 
 #### 3.2.1 环境配置
 
-请参照[hccl_rootinfo文件内容](#47-hccl_rootinfojson文件)，创建并配置hccl_rootinfo.json文件。
+若/etc路径下已存在hccl_rootinfo.json文件，请手动删除该文件。
 
 #### 3.2.2 CCU模式
 
@@ -107,8 +107,8 @@ cd /home/workspace/hcomm/test/hccl_vm/hccl_vm_install/bin
 ```
 
 3. 验证hccl_test用例运行结果
-[Runner结果查看](#491-runner插件结果) 
-[Checker结果查看](#492-checker插件结果)
+[Runner结果查看](#481-runner插件结果) 
+[Checker结果查看](#482-checker插件结果)
 
 #### 3.2.3 AICPU模式
 
@@ -148,7 +148,7 @@ cd /home/workspace/hcomm/test/hccl_vm/hccl_vm_install/bin
 (hvm)$> exit
 ```
 
-3. 验证hccl_test用例运行结果 [Runner结果查看](#491-runner插件结果) [Checker结果查看](#492-checker插件结果)
+3. 验证hccl_test用例运行结果 [Runner结果查看](#481-runner插件结果) [Checker结果查看](#482-checker插件结果)
 
 #### 3.2.4 HostDPU模式
 
@@ -193,7 +193,7 @@ cd /home/workspace/hcomm/test/hccl_vm/hccl_vm_install/bin
 (hvm)$> exit
 ```
 
-3. 验证hccl_test用例运行结果 [Runner结果查看](#491-runner插件结果) [Checker结果查看](#492-checker插件结果)
+3. 验证hccl_test用例运行结果 [Runner结果查看](#481-runner插件结果) [Checker结果查看](#482-checker插件结果)
 
 ### 3.3 Pytorch用例示例
 
@@ -229,11 +229,11 @@ export HCOMM_CODE_HOME=/home/workspace/hcomm
 | ------------------------- | --------------------------------------------------------------------------------------------------------- | --------------------- |
 | `HCCL_CODE_HOME`         | HCCL-VM编译指定HCCL源码路径。默认未配置。     | `export HCCL_CODE_HOME=/home/workspace/hccl`                     |
 | `HCOMM_CODE_HOME`         | HCCL-VM编译指定HCOMM源码路径。默认未配置。     | `export HCOMM_CODE_HOME=/home/workspace/hcomm`                     |
-| `HCCLVM_ENABLE_DUMP_DATA` | 使能Runner插件dump input\&output数据。若使能，则在测试用例执行过程中，会将每个算子的input\&output数据dump到all\_rank\_input\_output.txt文件中 | `export HCCLVM_ENABLE_DUMP_DATA=1 使能，export HCCLVM_ENABLE_DUMP_DATA=0 禁用` |
+| `HCCLVM_ENABLE_DUMP_DATA` | 1. 使能性能仿真文件输出落盘。若使能，则在测试用例执行过程中输出3个runner_hcclvm_*_data.bin文件和1个ccu_channel_jetty_config.xml文件供性能仿真使用. <br> 2.使能Runner插件dump input\&output数据。若使能，则在测试用例执行过程中，会将每个算子的input\&output数据dump到all\_rank\_input\_output.txt文件中 | `export HCCLVM_ENABLE_DUMP_DATA=1 使能，export HCCLVM_ENABLE_DUMP_DATA=0 或不配置该环境变量 禁用` |
 
 ### 4.2 HCCL-Test用例构建
 
-hccl_test用例源码在CANN包安装目录下，支持OpenMPI和MPICH两种环境编译、运行，运行时差异详见[OpenMPI和MPICH环境用例执行差异](#48-openmpi和mpich环境用例运行差异)，本用例指导中以OpenMPI环境为例。
+hccl_test用例源码在CANN包安装目录下，支持OpenMPI和MPICH两种环境编译、运行，运行时差异详见[OpenMPI和MPICH环境用例执行差异](#47-openmpi和mpich环境用例运行差异)，本用例指导中以OpenMPI环境为例。
 
 #### 4.2.1 OpenMPI环境编译
 
@@ -711,23 +711,11 @@ Checker 插件当前使用 Checker V3 执行单算子校验。Checker V3 大图�
 }
 ```
 
-### 4.7 hccl_rootinfo.json文件
-
-目前工具初始化通信域使用的是ranktable.json文件，因此hccl_rootinfo.json文件的作用仅限于提供topo.json文件的路径。
-若/etc路径下没有hccl_rootinfo.json文件，则用户需自行创建该文件，内容如下：
-
-```json
-{
-  "version": "2.0",
-  "topo_file_path": "/home/workspace/hcomm/test/hccl_vm/hccl_vm_install/data/topo.json"
-}
-```
-
-### 4.8 OpenMPI和MPICH环境用例运行差异
+### 4.7 OpenMPI和MPICH环境用例运行差异
 
 运行hccl_test用例前，用户可以通过which命令判断当前环境使用的是哪个mpirun。
 
-#### 4.8.1 环境变量配置差异
+#### 4.7.1 环境变量配置差异
 
 环境中一般默认配置的是OpenMPI，若用户使用OpenMPI运行用例，一般不需要额外配置环境变量。
 若用户使用MPICH环境运行用例，需要按照如下方式配置环境变量：
@@ -738,7 +726,7 @@ export LD_LIBRARY_PATH=/usr/lib/mpich/lib/:${ASCEND_HOME_PATH}/lib64/:${ASCEND_H
 export PATH=/usr/lib/mpich/bin:$PATH
 ```
 
-#### 4.8.2 mpirun命令参数差异
+#### 4.7.2 mpirun命令参数差异
 
 OpenMPI环境，用户按照如下命令运行hccl_test用例：
 
@@ -764,9 +752,9 @@ mpirun -np 2 ${HCCL_TEST_PATH}/bin/reduce_scatter_test -b 64 -e 64 -d int32 -o s
 
  - -np 2：指定进程数为2，与节点数一致。
 
-### 4.9 结果查看
+### 4.8 结果查看
 
-#### 4.9.1 Runner插件结果
+#### 4.8.1 Runner插件结果
 
 如果在hccl-vm终端执行hccl-vm plugin install @runner安装插件后，算子流程执行完成后会自动触发runner插件的执行，最终结果依赖hccl_test进行校验，用户需关注在重定向的日志文件中是否存在[error]级别日志和最终校验结果：
 
@@ -775,7 +763,7 @@ data_size(Bytes): | aveg_time(us): | alg_bandwidth(GB/s): | check_result:
 64                | 1000.00        | 0.00006              | success
 ```
 
-#### 4.9.2 Checker插件结果
+#### 4.8.2 Checker插件结果
 
 在hccl-vm终端内执行hccl-vm plugin run @checker后，Checker校验流程及结果会打印在终端内，用于需关注是否存在[error]级别日志和最终校验结果：
 
@@ -786,7 +774,7 @@ data_size(Bytes): | aveg_time(us): | alg_bandwidth(GB/s): | check_result:
 ```
 
 ---
-### 4.10 大块内存复用（仅校验模式）
+### 4.9 大块内存复用（仅校验模式）
 
 仅校验模式用于大规模集群仅运行 Checker 校验的场景。开启后，单块 200MB 到 4GB 的大内存申请复用同一块 4GB 共享区 `HcclCommPool`，各 rank 共享、允许互相覆盖，以此大幅降低 `/dev/shm` 占用。此时大块内容不保证正确，仅适用于不读取缓冲区数据的 Checker V3 校验链路，需要数值正确的结果时请勿开启。
 

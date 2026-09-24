@@ -13,6 +13,9 @@ add_library(hccl_proxy_level2 SHARED "")
 target_include_directories(hccl_proxy_level2 PRIVATE ${PROXY_INC_DIRS})
 target_sources(hccl_proxy_level2 PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/aclrt_device_stub.cc
+        ${CMAKE_CURRENT_SOURCE_DIR}/aclrt_model_stub.cc
+        ${CMAKE_CURRENT_SOURCE_DIR}/aclrt_graph_capture_stub.cc
+        ${CMAKE_CURRENT_SOURCE_DIR}/graph_capture.cc
         ${CMAKE_CURRENT_SOURCE_DIR}/aclrt_context_stub.cc
         ${CMAKE_CURRENT_SOURCE_DIR}/aclrt_memory_stub.cc
         ${CMAKE_CURRENT_SOURCE_DIR}/aclrt_notify_stub.cc
@@ -35,7 +38,7 @@ target_sources(hccl_proxy_level2 PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/aclrt_stub.cc
         ${CMAKE_CURRENT_SOURCE_DIR}/aclrt_runtime_config.cc
         ${CMAKE_CURRENT_SOURCE_DIR}/hcomm_api_stub.cc
-        ${CMAKE_CURRENT_SOURCE_DIR}/../ibv_dpu_stub.cc
+        ${CMAKE_CURRENT_SOURCE_DIR}/ibv_dpu_stub.cc
         ${CMAKE_CURRENT_SOURCE_DIR}/topo_addr_info_stub.cc
         # 各层级共用的公共源码
         ${CMAKE_CURRENT_SOURCE_DIR}/../common/hccl_proxy_common.cc

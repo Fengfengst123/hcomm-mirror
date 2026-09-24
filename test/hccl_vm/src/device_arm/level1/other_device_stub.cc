@@ -1,11 +1,13 @@
 /**
  * Copyright (c) 2026 Huawei Technologies Co., Ltd.
- * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * CANN Open Software License Agreement Version 2.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
+ * This program is free software, you can redistribute it and/or modify it under
+ * the terms and conditions of CANN Open Software License Agreement Version 2.0
+ * (the "License"). Please refer to the License for details. You may not use
+ * this file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS
+ * FOR A PARTICULAR PURPOSE. See LICENSE in the root of the software repository
+ * for the full text of the License.
  */
 
 /**
@@ -54,56 +56,47 @@ extern "C" {
 // 由底层 Hcomm* 设备侧桩接管实际行为。
 // ============================================================================
 
-bool HcommIsSupportHcclCommGetStatus()
-{
+bool HcommIsSupportHcclCommGetStatus() {
     HCCL_VM_INFO("{}: stub returns true", __func__);
     return true;
 }
 
-bool HcommIsSupportHcommThreadResAcquireTimeOut()
-{
+bool HcommIsSupportHcommThreadResAcquireTimeOut() {
     HCCL_VM_INFO("{}: stub returns true", __func__);
     return true;
 }
 
-bool HcommIsSupportHcommSetNotifyWaitTimeOut()
-{
+bool HcommIsSupportHcommSetNotifyWaitTimeOut() {
     HCCL_VM_INFO("{}: stub returns true", __func__);
     return true;
 }
 
-bool HcommIsSupportHcommThreadNotifyWaitOnThreadWithDefaultTimeout()
-{
+bool HcommIsSupportHcommThreadNotifyWaitOnThreadWithDefaultTimeout() {
     HCCL_VM_INFO("{}: stub returns true", __func__);
     return true;
 }
 
-bool HcommIsSupportHcommAicpuTsTaskCacheLookup()
-{
+bool HcommIsSupportHcommAicpuTsTaskCacheLookup() {
     HCCL_VM_INFO("{}: stub returns true", __func__);
     return true;
 }
 
-bool HcommIsSupportHcommAicpuTsTaskCacheStart()
-{
+bool HcommIsSupportHcommAicpuTsTaskCacheStart() {
     HCCL_VM_INFO("{}: stub returns true", __func__);
     return true;
 }
 
-bool HcommIsSupportHcommAicpuTsTaskCacheEnd()
-{
+bool HcommIsSupportHcommAicpuTsTaskCacheEnd() {
     HCCL_VM_INFO("{}: stub returns true", __func__);
     return true;
 }
 
-bool HcommIsSupportHcommAicpuTsTaskCacheExecute()
-{
+bool HcommIsSupportHcommAicpuTsTaskCacheExecute() {
     HCCL_VM_INFO("{}: stub returns true", __func__);
     return true;
 }
 
-bool HcommIsSupportHcommAicpuTsTaskCacheClear()
-{
+bool HcommIsSupportHcommAicpuTsTaskCacheClear() {
     HCCL_VM_INFO("{}: stub returns true", __func__);
     return true;
 }
@@ -126,10 +119,10 @@ bool HcommIsSupportHcommAicpuTsTaskCacheClear()
  * @param timeout 输入：超时时间（秒）。
  * @return HcclResult 接口成功返回 HCCL_SUCCESS，不支持返回 HCCL_E_NOT_SUPPORT。
  */
-HcclResult HcclThreadResAcquireTimeOut(uint32_t timeout)
-{
+HcclResult HcclThreadResAcquireTimeOut(uint32_t timeout) {
     int32_t HcommThreadResAcquireTimeOut(float);
-    return static_cast<HcclResult>(HcommThreadResAcquireTimeOut(static_cast<float>(timeout)));
+    return static_cast<HcclResult>(
+        HcommThreadResAcquireTimeOut(static_cast<float>(timeout)));
 }
 
 /**
@@ -140,10 +133,10 @@ HcclResult HcclThreadResAcquireTimeOut(uint32_t timeout)
  * @param timeout 输入：超时时间（秒）。
  * @return HcclResult 接口成功返回 HCCL_SUCCESS，不支持返回 HCCL_E_NOT_SUPPORT。
  */
-HcclResult HcclSetNotifyWaitTimeOut(uint32_t timeout)
-{
+HcclResult HcclSetNotifyWaitTimeOut(uint32_t timeout) {
     int32_t HcommSetNotifyWaitTimeOut(float);
-    return static_cast<HcclResult>(HcommSetNotifyWaitTimeOut(static_cast<float>(timeout)));
+    return static_cast<HcclResult>(
+        HcommSetNotifyWaitTimeOut(static_cast<float>(timeout)));
 }
 
 /**
@@ -159,12 +152,16 @@ HcclResult HcclSetNotifyWaitTimeOut(uint32_t timeout)
  * @param fallbackTimeout 输入：回退超时时间（秒），桩中不使用。
  * @return HcclResult 接口成功返回 HCCL_SUCCESS。
  */
-HcclResult HcclThreadNotifyWaitOnThreadDefault(ThreadHandle thread, uint32_t notifyIdx, uint32_t fallbackTimeout)
-{
+HcclResult HcclThreadNotifyWaitOnThreadDefault(ThreadHandle thread,
+                                               uint32_t notifyIdx,
+                                               uint32_t fallbackTimeout) {
     (void)fallbackTimeout;
-    int32_t HcommThreadNotifyWaitOnThreadWithDefaultTimeout(ThreadHandle, uint32_t);
-    HCCL_VM_INFO("{}: thread={:d}, notifyIdx={:d}", __func__, thread, notifyIdx);
-    return static_cast<HcclResult>(HcommThreadNotifyWaitOnThreadWithDefaultTimeout(thread, notifyIdx));
+    int32_t HcommThreadNotifyWaitOnThreadWithDefaultTimeout(ThreadHandle,
+                                                            uint32_t);
+    HCCL_VM_INFO("{}: thread={:d}, notifyIdx={:d}", __func__, thread,
+                 notifyIdx);
+    return static_cast<HcclResult>(
+        HcommThreadNotifyWaitOnThreadWithDefaultTimeout(thread, notifyIdx));
 }
 
 // ============================================================================
@@ -183,8 +180,7 @@ HcclResult HcclThreadNotifyWaitOnThreadDefault(ThreadHandle thread, uint32_t not
  *
  * @return int32_t 接口成功返回 HCCL_SUCCESS，参数为空返回 HCCL_E_PTR。
  */
-int32_t HcommAicpuTsTaskCacheLookup(const char* tag, bool* isHit)
-{
+int32_t HcommAicpuTsTaskCacheLookup(const char *tag, bool *isHit) {
     if (tag == nullptr || isHit == nullptr) {
         HCCL_VM_ERROR("{}: tag or isHit is nullptr", __func__);
         return static_cast<int32_t>(HCCL_E_PTR);
@@ -206,8 +202,8 @@ int32_t HcommAicpuTsTaskCacheLookup(const char* tag, bool* isHit)
  *
  * @return HcommResult 接口成功返回 HCCL_SUCCESS，参数为空返回 HCCL_E_PTR。
  */
-HcommResult HcommAicpuTsTaskCacheStart(const char* tag, void** addrs, uint64_t* sizes, uint64_t count)
-{
+HcommResult HcommAicpuTsTaskCacheStart(const char *tag, void **addrs,
+                                       uint64_t *sizes, uint64_t count) {
     if (tag == nullptr || addrs == nullptr || sizes == nullptr) {
         HCCL_VM_ERROR("{}: tag, addrs or sizes is nullptr", __func__);
         return static_cast<HcommResult>(HCCL_E_PTR);
@@ -225,8 +221,7 @@ HcommResult HcommAicpuTsTaskCacheStart(const char* tag, void** addrs, uint64_t* 
  *
  * @return HcommResult 接口成功返回 HCCL_SUCCESS，参数为空返回 HCCL_E_PTR。
  */
-HcommResult HcommAicpuTsTaskCacheEnd(const char* tag)
-{
+HcommResult HcommAicpuTsTaskCacheEnd(const char *tag) {
     if (tag == nullptr) {
         HCCL_VM_ERROR("{}: tag is nullptr", __func__);
         return static_cast<HcommResult>(HCCL_E_PTR);
@@ -246,8 +241,8 @@ HcommResult HcommAicpuTsTaskCacheEnd(const char* tag)
  *
  * @return HcommResult 接口成功返回 HCCL_SUCCESS，参数为空返回 HCCL_E_PTR。
  */
-HcommResult HcommAicpuTsTaskCacheExecute(const char* tag, void** addrs, uint64_t* sizes, uint64_t count)
-{
+HcommResult HcommAicpuTsTaskCacheExecute(const char *tag, void **addrs,
+                                         uint64_t *sizes, uint64_t count) {
     if (tag == nullptr || addrs == nullptr || sizes == nullptr) {
         HCCL_VM_ERROR("{}: tag, addrs or sizes is nullptr", __func__);
         return static_cast<HcommResult>(HCCL_E_PTR);
@@ -264,8 +259,7 @@ HcommResult HcommAicpuTsTaskCacheExecute(const char* tag, void** addrs, uint64_t
  *
  * @return HcommResult 接口成功返回 HCCL_SUCCESS，参数为空返回 HCCL_E_PTR。
  */
-HcommResult HcommAicpuTsTaskCacheClear(const char* tag)
-{
+HcommResult HcommAicpuTsTaskCacheClear(const char *tag) {
     if (tag == nullptr) {
         HCCL_VM_ERROR("{}: tag is nullptr", __func__);
         return static_cast<HcommResult>(HCCL_E_PTR);
@@ -306,10 +300,12 @@ HcommResult HcommAicpuTsTaskCacheClear(const char* tag)
  * @param offset    输出：ptr 在窗口内的偏移量。
  * @return HcclResult 设备侧始终返回 HCCL_E_INTERNAL。
  */
-HcclResult HcclCommSymWinGet(HcclComm comm, void* ptr, size_t size, HcclCommSymWindow* winHandle, size_t* offset)
-{
-    if (comm == nullptr || ptr == nullptr || winHandle == nullptr || offset == nullptr) {
-        HCCL_VM_ERROR("{}: comm, ptr, winHandle or offset is nullptr", __func__);
+HcclResult HcclCommSymWinGet(HcclComm comm, void *ptr, size_t size,
+                             HcclCommSymWindow *winHandle, size_t *offset) {
+    if (comm == nullptr || ptr == nullptr || winHandle == nullptr ||
+        offset == nullptr) {
+        HCCL_VM_ERROR("{}: comm, ptr, winHandle or offset is nullptr",
+                      __func__);
         return HCCL_E_PTR;
     }
     if (size == 0) {
@@ -317,10 +313,9 @@ HcclResult HcclCommSymWinGet(HcclComm comm, void* ptr, size_t size, HcclCommSymW
         return HCCL_E_PARA;
     }
 
-    HCCL_VM_ERROR(
-        "{}: symmetric memory window not registered on device side, "
-        "comm={:p}, ptr={:p}, size={:d}",
-        __func__, comm, ptr, size);
+    HCCL_VM_ERROR("{}: symmetric memory window not registered on device side, "
+                  "comm={:p}, ptr={:p}, size={:d}",
+                  __func__, comm, ptr, size);
     return HCCL_E_INTERNAL;
 }
 
@@ -336,17 +331,16 @@ HcclResult HcclCommSymWinGet(HcclComm comm, void* ptr, size_t size, HcclCommSymW
  * @param ptr       输出：对端 rank 在该偏移对应的地址指针。
  * @return HcclResult 设备侧始终返回 HCCL_E_INTERNAL。
  */
-HcclResult HcclSymWinGetPeerPointer(HcclCommSymWindow winHandle, size_t offset, uint32_t peerRank, void** ptr)
-{
+HcclResult HcclSymWinGetPeerPointer(HcclCommSymWindow winHandle, size_t offset,
+                                    uint32_t peerRank, void **ptr) {
     if (winHandle == nullptr || ptr == nullptr) {
         HCCL_VM_ERROR("{}: winHandle or ptr is nullptr", __func__);
         return HCCL_E_PTR;
     }
 
-    HCCL_VM_ERROR(
-        "{}: symmetric memory window not available on device side, "
-        "winHandle={:p}, offset={:d}, peerRank={:d}",
-        __func__, winHandle, offset, peerRank);
+    HCCL_VM_ERROR("{}: symmetric memory window not available on device side, "
+                  "winHandle={:p}, offset={:d}, peerRank={:d}",
+                  __func__, winHandle, offset, peerRank);
     return HCCL_E_INTERNAL;
 }
 
@@ -362,8 +356,8 @@ HcclResult HcclSymWinGetPeerPointer(HcclCommSymWindow winHandle, size_t offset, 
  * @param flag      输入：注册标志。
  * @return HcclResult 设备侧始终返回 HCCL_E_NOT_SUPPORT。
  */
-HcclResult HcclCommSymWinRegister(HcclComm comm, void* addr, uint64_t size, HcclCommSymWindow* winHandle, uint32_t flag)
-{
+HcclResult HcclCommSymWinRegister(HcclComm comm, void *addr, uint64_t size,
+                                  HcclCommSymWindow *winHandle, uint32_t flag) {
     HCCL_VM_WARN("{}: not supported on device side", __func__);
     return HCCL_E_NOT_SUPPORT;
 }
@@ -374,8 +368,7 @@ HcclResult HcclCommSymWinRegister(HcclComm comm, void* addr, uint64_t size, Hccl
  * @param winHandle 输入：窗口句柄。
  * @return HcclResult 设备侧始终返回 HCCL_E_NOT_SUPPORT。
  */
-HcclResult HcclCommSymWinDeregister(HcclCommSymWindow winHandle)
-{
+HcclResult HcclCommSymWinDeregister(HcclCommSymWindow winHandle) {
     HCCL_VM_WARN("{}: not supported on device side", __func__);
     return HCCL_E_NOT_SUPPORT;
 }

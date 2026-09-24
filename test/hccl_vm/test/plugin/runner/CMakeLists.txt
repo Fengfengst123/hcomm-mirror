@@ -8,17 +8,8 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
-# You may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-# http://www.apache.org/licenses/LICENSE-2.0
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and limitations under the License.
-
 set(CCU_EXECUTOR_COMMON_LIBS
-    runtime_state
-    operation_data
+    runnerdb
     store
     log
     sqlite3
@@ -98,6 +89,7 @@ target_sources(test_hccl_task_thread PRIVATE
     ${CMAKE_SOURCE_DIR}/src/proxy/level2/aiv_kernel/ascendc_stub/ascendc_base_stub.cc
     ${CMAKE_SOURCE_DIR}/src/store/store_sim_store_pub.cc
     ${CMAKE_SOURCE_DIR}/src/store/store_binary_data_operator.cc
+    ${CMAKE_SOURCE_DIR}/src/runnerdb/tracedb/db_sim_sqlite_db.cc
 )
 target_link_libraries(test_hccl_task_thread ccu_executor_common_objs ${CCU_EXECUTOR_COMMON_LIBS}
     ${ASCEND_CANN_PACKAGE_PATH}/${CANN_ARCH_DIR}/lib64/libhcomm.so)
@@ -116,6 +108,7 @@ target_sources(test_storage_manager PRIVATE
     ${CMAKE_SOURCE_DIR}/src/proxy/level2/aiv_kernel/ascendc_stub/ascendc_base_stub.cc
     ${CMAKE_SOURCE_DIR}/src/store/store_sim_store_pub.cc
     ${CMAKE_SOURCE_DIR}/src/store/store_binary_data_operator.cc
+    ${CMAKE_SOURCE_DIR}/src/runnerdb/tracedb/db_sim_sqlite_db.cc
 )
 target_link_libraries(test_storage_manager ccu_executor_common_objs ${CCU_EXECUTOR_COMMON_LIBS})
 set_target_properties(test_storage_manager PROPERTIES

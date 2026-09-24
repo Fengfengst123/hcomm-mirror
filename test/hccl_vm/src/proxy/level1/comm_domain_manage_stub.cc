@@ -1,11 +1,13 @@
 /**
  * Copyright (c) 2026 Huawei Technologies Co., Ltd.
- * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * CANN Open Software License Agreement Version 2.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
+ * This program is free software, you can redistribute it and/or modify it under
+ * the terms and conditions of CANN Open Software License Agreement Version 2.0
+ * (the "License"). Please refer to the License for details. You may not use
+ * this file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS
+ * FOR A PARTICULAR PURPOSE. See LICENSE in the root of the software repository
+ * for the full text of the License.
  */
 
 /**
@@ -20,17 +22,26 @@
 #include <cstring>
 
 #include "acl/acl_rt.h"
+#include "db_sim_runner_common.h"
+#include "db_sim_runner_ops.h"
 #include "hccl_proxy_common.h"
 #include "level1_proxy_common.h"
-#include "runtime_state/db_sim_runner_common.h"
-#include "runtime_state/db_sim_runner_ops.h"
 #include "sim_log.h"
+
+/* hcclAlgo 配置串的最大长度，对应 CANN 头文件 hccl_types.h 中的
+ * HCCL_COMM_ALGO_MAX_LENGTH。 */
+static constexpr uint32_t kHcclAlgoMaxLength = 1600;
+/* UB 多 channel 数量默认值（1 表示不使能），对应
+ * hccl::GetEnvUbConfig().GetUbMultiChannelNum()。 */
+static constexpr uint32_t kUbMultiChannelNumDefault = 1;
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-typedef HcclResult (*HcclCommStateCallback)(HcclComm comm, HcclCommStatePhase state, void* args);
+typedef HcclResult (*HcclCommStateCallback)(HcclComm comm,
+                                            HcclCommStatePhase state,
+                                            void *args);
 
 /**
  * @brief 初始化HcclCommConfig结构体。
@@ -42,8 +53,7 @@ typedef HcclResult (*HcclCommStateCallback)(HcclComm comm, HcclCommStatePhase st
  * @param config 输入/输出：待初始化的HcclCommConfig结构体指针。
  * @return HcclResult 始终返回HCCL_E_NOT_SUPPORT。
  */
-HcclResult HcclCommConfigInit(HcclCommConfig* config)
-{
+HcclResult HcclCommConfigInit(HcclCommConfig *config) {
     (void)config;
     HCCL_VM_ERROR(
         "{} is a static inline function, cannot be hijacked by proxy. "
@@ -65,22 +75,22 @@ HcclResult HcclCommConfigInit(HcclCommConfig* config)
  * @retval HCCL_E_PTR rankSize指针为空
  * @retval HCCL_E_INTERNAL 内部错误（通信域不存在）
  */
-HcclResult HcclGetRankSize(HcclComm comm, uint32_t* rankSize)
-{
+HcclResult HcclGetRankSize(HcclComm comm, uint32_t *rankSize) {
     if (comm == nullptr) {
         HCCL_VM_ERROR("{}: comm is nullptr", __func__);
         return HCCL_E_PTR;
     }
 
     uint64_t commId = reinterpret_cast<uint64_t>(comm);
-    auto optComm = sim::runtime::Db::GetById<sim::runtime::Communicator>(commId);
-    if (!optComm.ok()) {
+    auto optComm = RunnerDB::GetById<sim::Communicator>(commId);
+    if (!optComm.has_value()) {
         HCCL_VM_ERROR("{}: communicator {:d} not found", __func__, commId);
         return HCCL_E_INTERNAL;
     }
 
     *rankSize = optComm->rank_size;
-    HCCL_VM_INFO("{} success, commId={:d}, rankSize={:d}", __func__, commId, *rankSize);
+    HCCL_VM_INFO("{} success, commId={:d}, rankSize={:d}", __func__, commId,
+                 *rankSize);
     return HCCL_SUCCESS;
 }
 
@@ -98,16 +108,15 @@ HcclResult HcclGetRankSize(HcclComm comm, uint32_t* rankSize)
  * @retval HCCL_E_PTR rank指针为空
  * @retval HCCL_E_INTERNAL 内部错误（通信域不存在）
  */
-HcclResult HcclGetRankId(HcclComm comm, uint32_t* rank)
-{
+HcclResult HcclGetRankId(HcclComm comm, uint32_t *rank) {
     if (comm == nullptr) {
         HCCL_VM_ERROR("{}: comm is nullptr", __func__);
         return HCCL_E_PTR;
     }
 
     uint64_t commId = reinterpret_cast<uint64_t>(comm);
-    auto optComm = sim::runtime::Db::GetById<sim::runtime::Communicator>(commId);
-    if (!optComm.ok()) {
+    auto optComm = RunnerDB::GetById<sim::Communicator>(commId);
+    if (!optComm.has_value()) {
         HCCL_VM_ERROR("{}: communicator {:d} not found", __func__, commId);
         return HCCL_E_INTERNAL;
     }
@@ -127,8 +136,7 @@ HcclResult HcclGetRankId(HcclComm comm, uint32_t* rank)
  *
  * @return HcclResult 始终返回HCCL_SUCCESS。
  */
-HcclResult HcclBarrier(HcclComm comm, aclrtStream stream)
-{
+HcclResult HcclBarrier(HcclComm comm, aclrtStream stream) {
     if (comm == nullptr) {
         HCCL_VM_ERROR("{}: comm is nullptr", __func__);
         return HCCL_E_PTR;
@@ -147,8 +155,7 @@ HcclResult HcclBarrier(HcclComm comm, aclrtStream stream)
  *
  * @return HcclResult 始终返回HCCL_E_NOT_SUPPORT。
  */
-HcclResult HcclSetConfig(HcclConfig config, HcclConfigValue configValue)
-{
+HcclResult HcclSetConfig(HcclConfig config, HcclConfigValue configValue) {
     (void)config;
     (void)configValue;
     HCCL_VM_ERROR("{} is not supported on this platform (A5)", __func__);
@@ -165,8 +172,7 @@ HcclResult HcclSetConfig(HcclConfig config, HcclConfigValue configValue)
  *
  * @return HcclResult 始终返回HCCL_E_NOT_SUPPORT。
  */
-HcclResult HcclGetConfig(HcclConfig config, HcclConfigValue* configValue)
-{
+HcclResult HcclGetConfig(HcclConfig config, HcclConfigValue *configValue) {
     (void)config;
     (void)configValue;
     HCCL_VM_ERROR("{} is not supported on this platform (A5)", __func__);
@@ -188,16 +194,15 @@ HcclResult HcclGetConfig(HcclConfig config, HcclConfigValue* configValue)
  * @retval HCCL_E_PTR commName或comm为空
  * @retval HCCL_E_INTERNAL 内部错误（通信域不存在）
  */
-HcclResult HcclGetCommName(HcclComm comm, char* commName)
-{
+HcclResult HcclGetCommName(HcclComm comm, char *commName) {
     if (comm == nullptr) {
         HCCL_VM_ERROR("{}: comm is nullptr", __func__);
         return HCCL_E_PTR;
     }
 
     uint64_t commId = reinterpret_cast<uint64_t>(comm);
-    auto optComm = sim::runtime::Db::GetById<sim::runtime::Communicator>(commId);
-    if (!optComm.ok()) {
+    auto optComm = RunnerDB::GetById<sim::Communicator>(commId);
+    if (!optComm.has_value()) {
         HCCL_VM_ERROR("{}: communicator {:d} not found", __func__, commId);
         return HCCL_E_INTERNAL;
     }
@@ -205,7 +210,8 @@ HcclResult HcclGetCommName(HcclComm comm, char* commName)
     std::strncpy(commName, optComm->comm_id, COMM_NAME_MAX_LENGTH - 1);
     commName[COMM_NAME_MAX_LENGTH - 1] = '\0';
 
-    HCCL_VM_INFO("{} success, commId={:d}, commName={}", __func__, commId, commName);
+    HCCL_VM_INFO("{} success, commId={:d}, commName={}", __func__, commId,
+                 commName);
     return HCCL_SUCCESS;
 }
 
@@ -219,22 +225,25 @@ HcclResult HcclGetCommName(HcclComm comm, char* commName)
  * @retval HCCL_E_PTR commName或comm为空
  * @retval HCCL_E_NOT_FOUND 未找到指定名称的通信域
  */
-HcclResult HcclCommGetHandleWithName(const char* commName, HcclComm* comm)
-{
+HcclResult HcclCommGetHandleWithName(const char *commName, HcclComm *comm) {
     if (commName == nullptr) {
         HCCL_VM_ERROR("{}: commName is nullptr", __func__);
         return HCCL_E_PTR;
     }
 
-    auto comms = sim::runtime::Db::GetByPred<sim::runtime::Communicator>(
-        HcclSim::Storage::Eq(&sim::runtime::Communicator::comm_id, std::string(commName)));
-    if (!comms.ok() || comms->empty()) {
-        HCCL_VM_ERROR("{}: communicator with name '{}' not found", __func__, commName);
+    auto comms = RunnerDB::GetByPred<sim::Communicator>(
+        [commName](const sim::Communicator &c) {
+            return std::strncmp(c.comm_id, commName, sizeof(c.comm_id)) == 0;
+        });
+    if (comms.empty()) {
+        HCCL_VM_ERROR("{}: communicator with name '{}' not found", __func__,
+                      commName);
         return HCCL_E_NOT_FOUND;
     }
 
-    *comm = reinterpret_cast<HcclComm>((*comms)[0].id);
-    HCCL_VM_INFO("{} success, commId={:d}, name={}", __func__, (*comms)[0].id, commName);
+    *comm = reinterpret_cast<HcclComm>(comms[0].id);
+    HCCL_VM_INFO("{} success, commId={:d}, name={}", __func__, comms[0].id,
+                 commName);
     return HCCL_SUCCESS;
 }
 
@@ -242,8 +251,7 @@ HcclResult HcclCommGetHandleWithName(const char* commName, HcclComm* comm)
  * @brief 获取HcclCommConfig支持的Capability位掩码。
  * @return 返回12，表示支持所有配置能力。
  */
-uint32_t HcclGetCommConfigCapability()
-{
+uint32_t HcclGetCommConfigCapability() {
     HCCL_VM_INFO("{} returns 12", __func__);
     return 12;
 }
@@ -252,8 +260,7 @@ uint32_t HcclGetCommConfigCapability()
  * @brief 暂停指定通信域的执行。
  * @note 当前不支持此功能。
  */
-HcclResult HcclCommSuspend(HcclComm comm)
-{
+HcclResult HcclCommSuspend(HcclComm comm) {
     if (comm == nullptr) {
         HCCL_VM_ERROR("{}: comm is nullptr", __func__);
         return HCCL_E_PTR;
@@ -266,10 +273,10 @@ HcclResult HcclCommSuspend(HcclComm comm)
 /**
  * @brief 恢复指定通信域的执行。
  */
-HcclResult HcclCommResume(HcclComm comm)
-{
+HcclResult HcclCommResume(HcclComm comm) {
     (void)comm;
-    HCCL_VM_INFO("{} stub, commId={:d}", __func__, comm ? reinterpret_cast<uint64_t>(comm) : 0);
+    HCCL_VM_INFO("{} stub, commId={:d}", __func__,
+                 comm ? reinterpret_cast<uint64_t>(comm) : 0);
     return HCCL_SUCCESS;
 }
 
@@ -279,8 +286,7 @@ HcclResult HcclCommResume(HcclComm comm)
  * @param status 输出：通信域状态。
  * @return HcclResult 接口成功返回HCCL_SUCCESS。
  */
-HcclResult HcclCommGetStatus(const char* commId, HcclCommStatus* status)
-{
+HcclResult HcclCommGetStatus(const char *commId, HcclCommStatus *status) {
     (void)commId;
     *status = HCCL_COMM_STATUS_READY;
     HCCL_VM_INFO("{} returns HCCL_COMM_STATUS_READY", __func__);
@@ -291,8 +297,8 @@ HcclResult HcclCommGetStatus(const char* commId, HcclCommStatus* status)
  * @brief 设置通信域在设备网卡故障时使用备用网卡。
  * @note 当前平台（A5）不支持此接口，始终返回HCCL_E_NOT_SUPPORT。
  */
-HcclResult HcclCommWorkingDevNicSet(HcclComm comm, uint32_t* ranks, bool* useBackup, uint32_t nRanks)
-{
+HcclResult HcclCommWorkingDevNicSet(HcclComm comm, uint32_t *ranks,
+                                    bool *useBackup, uint32_t nRanks) {
     (void)comm;
     (void)ranks;
     (void)useBackup;
@@ -305,8 +311,7 @@ HcclResult HcclCommWorkingDevNicSet(HcclComm comm, uint32_t* ranks, bool* useBac
  * @brief 获取通信域的异步错误信息。
  * @note 当前平台（A5）不支持此接口，始终返回HCCL_E_NOT_SUPPORT。
  */
-HcclResult HcclGetCommAsyncError(HcclComm comm, HcclResult* asyncError)
-{
+HcclResult HcclGetCommAsyncError(HcclComm comm, HcclResult *asyncError) {
     (void)comm;
     (void)asyncError;
     HCCL_VM_ERROR("{} is not supported on this platform (A5)", __func__);
@@ -317,8 +322,7 @@ HcclResult HcclGetCommAsyncError(HcclComm comm, HcclResult* asyncError)
  * @brief 将HcclResult错误码转换为可读字符串。
  * @note 当前平台（A5）不支持此接口，始终返回nullptr。
  */
-const char* HcclGetErrorString(HcclResult code)
-{
+const char *HcclGetErrorString(HcclResult code) {
     (void)code;
     HCCL_VM_ERROR("{} is not supported on this platform (A5)", __func__);
     return nullptr;
@@ -328,8 +332,8 @@ const char* HcclGetErrorString(HcclResult code)
  * @brief 设置通信域的内存范围。
  * @note 当前平台（A5）不支持此接口，始终返回HCCL_E_NOT_SUPPORT。
  */
-HcclResult HcclCommSetMemoryRange(HcclComm comm, void* baseVirPtr, size_t size, size_t alignment, uint64_t flags)
-{
+HcclResult HcclCommSetMemoryRange(HcclComm comm, void *baseVirPtr, size_t size,
+                                  size_t alignment, uint64_t flags) {
     (void)comm;
     (void)baseVirPtr;
     (void)size;
@@ -343,8 +347,7 @@ HcclResult HcclCommSetMemoryRange(HcclComm comm, void* baseVirPtr, size_t size, 
  * @brief 取消设置通信域的内存范围。
  * @note A5平台不支持。
  */
-HcclResult HcclCommUnsetMemoryRange(HcclComm comm, void* baseVirPtr)
-{
+HcclResult HcclCommUnsetMemoryRange(HcclComm comm, void *baseVirPtr) {
     (void)comm;
     (void)baseVirPtr;
     HCCL_VM_ERROR("{} is not supported on A5", __func__);
@@ -355,9 +358,9 @@ HcclResult HcclCommUnsetMemoryRange(HcclComm comm, void* baseVirPtr)
  * @brief 激活通信域内存。
  * @note A5平台不支持。
  */
-HcclResult HcclCommActivateCommMemory(
-    HcclComm comm, void* virPtr, size_t size, size_t offset, aclrtDrvMemHandle handle, uint64_t flags)
-{
+HcclResult HcclCommActivateCommMemory(HcclComm comm, void *virPtr, size_t size,
+                                      size_t offset, aclrtDrvMemHandle handle,
+                                      uint64_t flags) {
     (void)comm;
     (void)virPtr;
     (void)size;
@@ -372,8 +375,7 @@ HcclResult HcclCommActivateCommMemory(
  * @brief 反激活通信域内存。
  * @note A5平台不支持。
  */
-HcclResult HcclCommDeactivateCommMemory(HcclComm comm, void* virPtr)
-{
+HcclResult HcclCommDeactivateCommMemory(HcclComm comm, void *virPtr) {
     (void)comm;
     (void)virPtr;
     HCCL_VM_ERROR("{} is not supported on A5", __func__);
@@ -394,8 +396,8 @@ HcclResult HcclCommDeactivateCommMemory(HcclComm comm, void* virPtr)
  * @param flag      输入：预留标志位，当前未使用。
  * @return HcclResult 成功返回 HCCL_SUCCESS，参数错误返回 HCCL_E_PTR。
  */
-HcclResult HcclCommSymWinRegister(HcclComm comm, void* addr, uint64_t size, HcclCommSymWindow* winHandle, uint32_t flag)
-{
+HcclResult HcclCommSymWinRegister(HcclComm comm, void *addr, uint64_t size,
+                                  HcclCommSymWindow *winHandle, uint32_t flag) {
     if (comm == nullptr || addr == nullptr || winHandle == nullptr) {
         HCCL_VM_ERROR("{}: comm, addr or winHandle is nullptr", __func__);
         return HCCL_E_PTR;
@@ -407,25 +409,29 @@ HcclResult HcclCommSymWinRegister(HcclComm comm, void* addr, uint64_t size, Hccl
     (void)flag;
 
     uint64_t commId = reinterpret_cast<uint64_t>(comm);
-    auto optComm = sim::runtime::Db::GetById<sim::runtime::Communicator>(commId);
-    if (!optComm.ok()) {
+    auto optComm = RunnerDB::GetById<sim::Communicator>(commId);
+    if (!optComm.has_value()) {
         HCCL_VM_ERROR("{}: communicator {:d} not found", __func__, commId);
         return HCCL_E_INTERNAL;
     }
 
     if (optComm->sym_win_registered) {
-        HCCL_VM_ERROR("{}: symmetric memory window already registered for comm {:d}", __func__, commId);
+        HCCL_VM_ERROR(
+            "{}: symmetric memory window already registered for comm {:d}",
+            __func__, commId);
         return HCCL_E_INTERNAL;
     }
 
-    sim::runtime::Db::Update<sim::runtime::Communicator>(
-        HcclSim::Storage::Eq(&sim::runtime::Communicator::id, commId),
-        HcclSim::Storage::Set(&sim::runtime::Communicator::sym_win_addr, reinterpret_cast<uint64_t>(addr)),
-        HcclSim::Storage::Set(&sim::runtime::Communicator::sym_win_size, size),
-        HcclSim::Storage::Set(&sim::runtime::Communicator::sym_win_registered, static_cast<uint8_t>(1)));
+    RunnerDB::Update<sim::Communicator>(
+        commId, [addr, size](sim::Communicator &record) {
+            record.sym_win_addr = reinterpret_cast<uint64_t>(addr);
+            record.sym_win_size = size;
+            record.sym_win_registered = 1;
+        });
 
     *winHandle = reinterpret_cast<HcclCommSymWindow>(commId);
-    HCCL_VM_INFO("{} success, commId={:d}, symWinAddr={:p}, symWinSize={:d}", __func__, commId, addr, size);
+    HCCL_VM_INFO("{} success, commId={:d}, symWinAddr={:p}, symWinSize={:d}",
+                 __func__, commId, addr, size);
     return HCCL_SUCCESS;
 }
 
@@ -437,25 +443,24 @@ HcclResult HcclCommSymWinRegister(HcclComm comm, void* addr, uint64_t size, Hccl
  * @param winHandle 输入：待注销的对称内存窗口资源句柄。
  * @return HcclResult 成功返回 HCCL_SUCCESS，参数错误返回 HCCL_E_PTR。
  */
-HcclResult HcclCommSymWinDeregister(HcclCommSymWindow winHandle)
-{
+HcclResult HcclCommSymWinDeregister(HcclCommSymWindow winHandle) {
     if (winHandle == nullptr) {
         HCCL_VM_ERROR("{}: winHandle is nullptr", __func__);
         return HCCL_E_PTR;
     }
 
     uint64_t commId = reinterpret_cast<uint64_t>(winHandle);
-    auto optComm = sim::runtime::Db::GetById<sim::runtime::Communicator>(commId);
-    if (!optComm.ok()) {
+    auto optComm = RunnerDB::GetById<sim::Communicator>(commId);
+    if (!optComm.has_value()) {
         HCCL_VM_ERROR("{}: communicator {:d} not found", __func__, commId);
         return HCCL_E_INTERNAL;
     }
 
-    sim::runtime::Db::Update<sim::runtime::Communicator>(
-        HcclSim::Storage::Eq(&sim::runtime::Communicator::id, commId),
-        HcclSim::Storage::Set(&sim::runtime::Communicator::sym_win_addr, 0u),
-        HcclSim::Storage::Set(&sim::runtime::Communicator::sym_win_size, 0u),
-        HcclSim::Storage::Set(&sim::runtime::Communicator::sym_win_registered, static_cast<uint8_t>(0)));
+    RunnerDB::Update<sim::Communicator>(commId, [](sim::Communicator &record) {
+        record.sym_win_addr = 0u;
+        record.sym_win_size = 0u;
+        record.sym_win_registered = 0;
+    });
 
     HCCL_VM_INFO("{} success, commId={:d}", __func__, commId);
     return HCCL_SUCCESS;
@@ -475,31 +480,33 @@ HcclResult HcclCommSymWinDeregister(HcclCommSymWindow winHandle)
  * @param offset    输出：ptr 在对称内存窗口中的偏移量（字节）。
  * @return HcclResult 成功返回 HCCL_SUCCESS，参数错误返回 HCCL_E_PTR。
  */
-HcclResult HcclCommSymWinGet(HcclComm comm, void* ptr, size_t size, HcclCommSymWindow* winHandle, size_t* offset)
-{
-    if (comm == nullptr || ptr == nullptr || winHandle == nullptr || offset == nullptr) {
-        HCCL_VM_ERROR("{}: comm, ptr, winHandle or offset is nullptr", __func__);
+HcclResult HcclCommSymWinGet(HcclComm comm, void *ptr, size_t size,
+                             HcclCommSymWindow *winHandle, size_t *offset) {
+    if (comm == nullptr || ptr == nullptr || winHandle == nullptr ||
+        offset == nullptr) {
+        HCCL_VM_ERROR("{}: comm, ptr, winHandle or offset is nullptr",
+                      __func__);
         return HCCL_E_PTR;
     }
     (void)size;
 
     uint64_t commId = reinterpret_cast<uint64_t>(comm);
-    auto optComm = sim::runtime::Db::GetById<sim::runtime::Communicator>(commId);
-    if (!optComm.ok()) {
+    auto optComm = RunnerDB::GetById<sim::Communicator>(commId);
+    if (!optComm.has_value()) {
         HCCL_VM_ERROR("{}: communicator {:d} not found", __func__, commId);
         return HCCL_E_INTERNAL;
     }
 
     if (!optComm->sym_win_registered) {
-        HCCL_VM_INFO("{}: symmetric memory window not registered for comm {:d}", __func__, commId);
+        HCCL_VM_INFO("{}: symmetric memory window not registered for comm {:d}",
+                     __func__, commId);
         return HCCL_E_INTERNAL;
     }
 
     if (optComm->sym_win_addr == 0u || optComm->sym_win_size == 0u) {
-        HCCL_VM_ERROR(
-            "{}: symmetric memory window registered but addr/size "
-            "invalid for comm {:d}",
-            __func__, commId);
+        HCCL_VM_ERROR("{}: symmetric memory window registered but addr/size "
+                      "invalid for comm {:d}",
+                      __func__, commId);
         return HCCL_E_INTERNAL;
     }
 
@@ -507,16 +514,17 @@ HcclResult HcclCommSymWinGet(HcclComm comm, void* ptr, size_t size, HcclCommSymW
     uint64_t baseAddr = optComm->sym_win_addr;
     uint64_t winSize = optComm->sym_win_size;
     if (ptrAddr < baseAddr || ptrAddr >= baseAddr + winSize) {
-        HCCL_VM_ERROR(
-            "{}: ptr {:p} is out of symmetric memory window "
-            "[addr={:p}, size={:d}) for comm {:d}",
-            __func__, ptr, reinterpret_cast<void*>(baseAddr), winSize, commId);
+        HCCL_VM_ERROR("{}: ptr {:p} is out of symmetric memory window "
+                      "[addr={:p}, size={:d}) for comm {:d}",
+                      __func__, ptr, reinterpret_cast<void *>(baseAddr),
+                      winSize, commId);
         return HCCL_E_PARA;
     }
 
     *winHandle = reinterpret_cast<HcclCommSymWindow>(commId);
     *offset = static_cast<size_t>(ptrAddr - baseAddr);
-    HCCL_VM_INFO("{} success, commId={:d}, ptr={:p}, offset={:d}", __func__, commId, ptr, *offset);
+    HCCL_VM_INFO("{} success, commId={:d}, ptr={:p}, offset={:d}", __func__,
+                 commId, ptr, *offset);
     return HCCL_SUCCESS;
 }
 
@@ -532,8 +540,8 @@ HcclResult HcclCommSymWinGet(HcclComm comm, void* ptr, size_t size, HcclCommSymW
  * @param ptr       输出：对端 rank 在对称内存窗口中该偏移对应的地址指针。
  * @return HcclResult 成功返回 HCCL_SUCCESS，参数错误返回 HCCL_E_PTR。
  */
-HcclResult HcclSymWinGetPeerPointer(HcclCommSymWindow winHandle, size_t offset, uint32_t peerRank, void** ptr)
-{
+HcclResult HcclSymWinGetPeerPointer(HcclCommSymWindow winHandle, size_t offset,
+                                    uint32_t peerRank, void **ptr) {
     if (winHandle == nullptr || ptr == nullptr) {
         HCCL_VM_ERROR("{}: winHandle or ptr is nullptr", __func__);
         return HCCL_E_PTR;
@@ -541,22 +549,22 @@ HcclResult HcclSymWinGetPeerPointer(HcclCommSymWindow winHandle, size_t offset, 
     (void)peerRank;
 
     uint64_t commId = reinterpret_cast<uint64_t>(winHandle);
-    auto optComm = sim::runtime::Db::GetById<sim::runtime::Communicator>(commId);
-    if (!optComm.ok()) {
+    auto optComm = RunnerDB::GetById<sim::Communicator>(commId);
+    if (!optComm.has_value()) {
         HCCL_VM_ERROR("{}: communicator {:d} not found", __func__, commId);
         return HCCL_E_INTERNAL;
     }
 
     if (!optComm->sym_win_registered) {
-        HCCL_VM_INFO("{}: symmetric memory window not registered for comm {:d}", __func__, commId);
+        HCCL_VM_INFO("{}: symmetric memory window not registered for comm {:d}",
+                     __func__, commId);
         return HCCL_E_INTERNAL;
     }
 
     if (optComm->sym_win_addr == 0u || optComm->sym_win_size == 0u) {
-        HCCL_VM_ERROR(
-            "{}: symmetric memory window registered but addr/size "
-            "invalid for comm {:d}",
-            __func__, commId);
+        HCCL_VM_ERROR("{}: symmetric memory window registered but addr/size "
+                      "invalid for comm {:d}",
+                      __func__, commId);
         return HCCL_E_INTERNAL;
     }
 
@@ -564,14 +572,16 @@ HcclResult HcclSymWinGetPeerPointer(HcclCommSymWindow winHandle, size_t offset, 
     uint64_t winSize = optComm->sym_win_size;
     if (offset >= winSize) {
         HCCL_VM_ERROR(
-            "{}: offset {:d} out of range (symWinSize={:d}) for comm {:d}", __func__, offset, winSize, commId);
+            "{}: offset {:d} out of range (symWinSize={:d}) for comm {:d}",
+            __func__, offset, winSize, commId);
         return HCCL_E_PARA;
     }
 
     // 对称内存模型中，所有 rank 的虚拟地址布局相同
-    *ptr = reinterpret_cast<void*>(baseAddr + offset);
+    *ptr = reinterpret_cast<void *>(baseAddr + offset);
     HCCL_VM_INFO(
-        "{} success, commId={:d}, peerRank={:d}, offset={:d}, ptr={:p}", __func__, commId, peerRank, offset, *ptr);
+        "{} success, commId={:d}, peerRank={:d}, offset={:d}, ptr={:p}",
+        __func__, commId, peerRank, offset, *ptr);
     return HCCL_SUCCESS;
 }
 
@@ -579,8 +589,7 @@ HcclResult HcclSymWinGetPeerPointer(HcclCommSymWindow winHandle, size_t offset, 
  * @brief 开始通信域分组操作。
  * @note A5平台不支持分组通信。
  */
-HcclResult HcclGroupStart()
-{
+HcclResult HcclGroupStart() {
     HCCL_VM_ERROR("{} is not supported on A5", __func__);
     return HCCL_E_NOT_SUPPORT;
 }
@@ -589,19 +598,18 @@ HcclResult HcclGroupStart()
  * @brief 结束通信域分组操作。
  * @note A5平台不支持分组通信。
  */
-HcclResult HcclGroupEnd()
-{
+HcclResult HcclGroupEnd() {
     HCCL_VM_ERROR("{} is not supported on A5", __func__);
     return HCCL_E_NOT_SUPPORT;
 }
 
-static HcclOpExpansionMode OpExpansionModeFromString(const char* envValue)
-{
+static HcclOpExpansionMode OpExpansionModeFromString(const char *envValue) {
     if (envValue == nullptr || envValue[0] == '\0') {
         return HCCL_OP_EXPANSION_MODE_INVALID;
     }
-    if (std::strcmp(envValue, "AI_CPU") == 0 || std::strcmp(envValue, "AICPU_TS") == 0
-        || std::strcmp(envValue, "AICPU_CacheDisable") == 0) {
+    if (std::strcmp(envValue, "AI_CPU") == 0 ||
+        std::strcmp(envValue, "AICPU_TS") == 0 ||
+        std::strcmp(envValue, "AICPU_CacheDisable") == 0) {
         return HCCL_OP_EXPANSION_MODE_AI_CPU;
     }
     if (std::strcmp(envValue, "AIV") == 0) {
@@ -625,12 +633,17 @@ static HcclOpExpansionMode OpExpansionModeFromString(const char* envValue)
 /**
  * @brief 获取通信域配置信息。
  *
- * 读取环境变量HCCL_OP_EXPANSION_MODE，判断当前通信域使用的算子展开模式
- * （CCU / AICPU / AIV 等）。支持的 cfgType 为
- * HCCL_CONFIG_TYPE_OP_EXPANSION_MODE， 若环境变量未设置或值不合法，返回
- * HCCL_E_PARA。
+ * 支持三种 cfgType：
+ *  - HCCL_CONFIG_TYPE_OP_EXPANSION_MODE：读取环境变量HCCL_OP_EXPANSION_MODE，
+ *    返回当前通信域使用的算子展开模式（CCU / AICPU / AIV 等），
+ *    环境变量未设置或值不合法时返回 HCCL_E_PARA；
+ *  - HCCL_CONFIG_TYPE_HCCL_ALGO：A5 设备走 costmodel 流程、不解析 HCCL_ALGO
+ * 环境变量， 本域未配置算法串，故在 infoLen 不小于 HCCL_COMM_ALGO_MAX_LENGTH
+ * 时输出空串并返回成功；
+ *  - HCCL_CONFIG_TYPE_UB_MULTI_CHANNEL_NUM：输出 UB 多 channel 数量，取默认值
+ * 1（不使能）。
  *
- * @param comm 输入：通信域句柄。
+ * @param comm 输入：通信域句柄（当前实现未使用）。
  * @param cfgType 输入：配置类型，详见HcclConfigType。
  * @param infoLen 输入：info缓冲区的长度（字节）。
  * @param info 输出：指向存放返回值的缓冲区，具体类型由cfgType决定。
@@ -640,38 +653,73 @@ static HcclOpExpansionMode OpExpansionModeFromString(const char* envValue)
  * @retval HCCL_E_PTR info指针为空
  * @retval HCCL_E_PARA cfgType不支持或infoLen不足
  */
-HcclResult HcclConfigGetInfo(HcclComm comm, HcclConfigType cfgType, uint32_t infoLen, void* info)
-{
+HcclResult HcclConfigGetInfo(HcclComm comm, HcclConfigType cfgType,
+                             uint32_t infoLen, void *info) {
     (void)comm;
 
-    if (cfgType != HCCL_CONFIG_TYPE_OP_EXPANSION_MODE) {
-        HCCL_VM_ERROR("{}: unsupported cfgType {:d}", __func__, static_cast<int>(cfgType));
-        return HCCL_E_PARA;
+    if (info == nullptr) {
+        HCCL_VM_ERROR("{}: info is nullptr", __func__);
+        return HCCL_E_PTR;
     }
 
-    if (infoLen < sizeof(int32_t)) {
-        HCCL_VM_ERROR(
-            "{}: infoLen too small: {:d}, need at least {:d}", __func__, infoLen,
-            static_cast<uint32_t>(sizeof(int32_t)));
+    switch (cfgType) {
+    case HCCL_CONFIG_TYPE_OP_EXPANSION_MODE: {
+        if (infoLen < sizeof(HcclConfigTypeOpExpansionMode)) {
+            HCCL_VM_ERROR(
+                "{}: infoLen too small: {:d}, need at least {:d}", __func__,
+                infoLen,
+                static_cast<uint32_t>(sizeof(HcclConfigTypeOpExpansionMode)));
+            return HCCL_E_PARA;
+        }
+
+        const char *envValue = std::getenv("HCCL_OP_EXPANSION_MODE");
+        HcclOpExpansionMode mode = OpExpansionModeFromString(envValue);
+        if (mode == HCCL_OP_EXPANSION_MODE_INVALID) {
+            HCCL_VM_ERROR(
+                "{}: HCCL_OP_EXPANSION_MODE not set or invalid value: {}",
+                __func__, envValue ? envValue : "(null)");
+            return HCCL_E_PARA;
+        }
+
+        *(static_cast<int32_t *>(info)) = static_cast<int32_t>(mode);
+        HCCL_VM_INFO("{} success, cfgType={:d}, opExpansionMode={:d}", __func__,
+                     static_cast<int>(cfgType), static_cast<int>(mode));
+        return HCCL_SUCCESS;
+    }
+    case HCCL_CONFIG_TYPE_HCCL_ALGO: {
+        if (infoLen < kHcclAlgoMaxLength) {
+            HCCL_VM_ERROR("{}: infoLen too small: {:d}, need at least {:d}",
+                          __func__, infoLen, kHcclAlgoMaxLength);
+            return HCCL_E_PARA;
+        }
+
+        std::memset(info, 0, infoLen);
+        HCCL_VM_INFO("{} success, cfgType={:d}, hcclAlgo is empty", __func__,
+                     static_cast<int>(cfgType));
+        return HCCL_SUCCESS;
+    }
+    case HCCL_CONFIG_TYPE_UB_MULTI_CHANNEL_NUM: {
+        if (infoLen != sizeof(uint32_t)) {
+            HCCL_VM_ERROR("{}: infoLen not expected: {:d}, need {:d}", __func__,
+                          infoLen, static_cast<uint32_t>(sizeof(uint32_t)));
+            return HCCL_E_PARA;
+        }
+
+        *(static_cast<uint32_t *>(info)) = kUbMultiChannelNumDefault;
+        HCCL_VM_INFO("{} success, cfgType={:d}, ubMultiChannelNum={:d}",
+                     __func__, static_cast<int>(cfgType),
+                     kUbMultiChannelNumDefault);
+        return HCCL_SUCCESS;
+    }
+    default:
+        HCCL_VM_ERROR("{}: unsupported cfgType {:d}", __func__,
+                      static_cast<int>(cfgType));
         return HCCL_E_PARA;
     }
-
-    const char* envValue = std::getenv("HCCL_OP_EXPANSION_MODE");
-    HcclOpExpansionMode mode = OpExpansionModeFromString(envValue);
-    if (mode == HCCL_OP_EXPANSION_MODE_INVALID) {
-        HCCL_VM_ERROR(
-            "{}: HCCL_OP_EXPANSION_MODE not set or invalid value: {}", __func__, envValue ? envValue : "(null)");
-        return HCCL_E_PARA;
-    }
-
-    *(static_cast<int32_t*>(info)) = static_cast<int32_t>(mode);
-    HCCL_VM_INFO(
-        "{} success, cfgType={:d}, opExpansionMode={:d}", __func__, static_cast<int>(cfgType), static_cast<int>(mode));
-    return HCCL_SUCCESS;
 }
 
-HcclResult HcclCommAddExchangeInfo(HcclComm comm, const void* data, uint32_t length)
-{
+HcclResult HcclCommAddExchangeInfo(HcclComm comm, const void *data,
+                                   uint32_t length) {
     if (comm == nullptr || data == nullptr) {
         HCCL_VM_ERROR("{}: comm or data is nullptr", __func__);
         return HCCL_E_PTR;
@@ -679,9 +727,9 @@ HcclResult HcclCommAddExchangeInfo(HcclComm comm, const void* data, uint32_t len
     return HCCL_SUCCESS;
 }
 
-HcclResult
-HcclCommGetExchangeInfo(HcclComm comm, uint32_t remoteRank, uint32_t length, void* data, uint32_t* actualLength)
-{
+HcclResult HcclCommGetExchangeInfo(HcclComm comm, uint32_t remoteRank,
+                                   uint32_t length, void *data,
+                                   uint32_t *actualLength) {
     if (comm == nullptr || data == nullptr) {
         HCCL_VM_ERROR("{}: comm or data is nullptr", __func__);
         return HCCL_E_PTR;
@@ -689,8 +737,8 @@ HcclCommGetExchangeInfo(HcclComm comm, uint32_t remoteRank, uint32_t length, voi
     return HCCL_SUCCESS;
 }
 
-HcclResult HcclCommRegCommStateCallback(const char* regName, HcclCommStateCallback cb, void* args)
-{
+HcclResult HcclCommRegCommStateCallback(const char *regName,
+                                        HcclCommStateCallback cb, void *args) {
     HCCL_VM_INFO("regName='{}', skipped.", regName);
     (void)cb;
     (void)args;

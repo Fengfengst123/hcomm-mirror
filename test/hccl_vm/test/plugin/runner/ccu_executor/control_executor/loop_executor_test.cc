@@ -1,11 +1,13 @@
 /**
  * Copyright (c) 2026 Huawei Technologies Co., Ltd.
- * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * CANN Open Software License Agreement Version 2.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
+ * This program is free software, you can redistribute it and/or modify it under
+ * the terms and conditions of CANN Open Software License Agreement Version 2.0
+ * (the "License"). Please refer to the License for details. You may not use
+ * this file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS
+ * FOR A PARTICULAR PURPOSE. See LICENSE in the root of the software repository
+ * for the full text of the License.
  */
 
 /**
@@ -25,7 +27,7 @@
 using namespace hcomm::CcuRep;
 
 class LoopExecutorTest : public testing::Test {
-protected:
+  protected:
     void SetUp() override {}
     void TearDown() override {}
 };
@@ -34,8 +36,7 @@ protected:
 TEST_F(LoopExecutorTest, StructSize) { EXPECT_GT(sizeof(LoopExecutor), 0); }
 
 // Test: LoopExecutor default constructor
-TEST_F(LoopExecutorTest, DefaultConstructor)
-{
+TEST_F(LoopExecutorTest, DefaultConstructor) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     LoopExecutor executor(0, 0, 0, instr, nullptr);
@@ -43,8 +44,7 @@ TEST_F(LoopExecutorTest, DefaultConstructor)
 }
 
 // Test: LoopExecutor parameterized constructor
-TEST_F(LoopExecutorTest, ParameterizedConstructor)
-{
+TEST_F(LoopExecutorTest, ParameterizedConstructor) {
     int streamId = 0;
     int rankId = 0;
     int dieId = 0;
@@ -56,8 +56,7 @@ TEST_F(LoopExecutorTest, ParameterizedConstructor)
 }
 
 // Test: LoopExecutor Parser with zero values
-TEST_F(LoopExecutorTest, ParserZeroValues)
-{
+TEST_F(LoopExecutorTest, ParserZeroValues) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
 
@@ -67,8 +66,7 @@ TEST_F(LoopExecutorTest, ParserZeroValues)
 }
 
 // Test: LoopExecutor Parser with max values
-TEST_F(LoopExecutorTest, ParserMaxValues)
-{
+TEST_F(LoopExecutorTest, ParserMaxValues) {
     CcuInstr instr;
     memset(&instr, 0xFF, sizeof(instr));
 
@@ -78,8 +76,7 @@ TEST_F(LoopExecutorTest, ParserMaxValues)
 }
 
 // Test: LoopExecutor Parser with specific loop parameters
-TEST_F(LoopExecutorTest, ParserLoopParameters)
-{
+TEST_F(LoopExecutorTest, ParserLoopParameters) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
 
@@ -95,8 +92,7 @@ TEST_F(LoopExecutorTest, ParserLoopParameters)
 }
 
 // Test: LoopExecutor with different instruction ranges
-TEST_F(LoopExecutorTest, DifferentInstructionRanges)
-{
+TEST_F(LoopExecutorTest, DifferentInstructionRanges) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
 
@@ -106,7 +102,7 @@ TEST_F(LoopExecutorTest, DifferentInstructionRanges)
     };
     Range ranges[] = {{0, 10}, {10, 100}, {0, 0xFFFF}, {1000, 2000}};
 
-    for (const auto& range : ranges) {
+    for (const auto &range : ranges) {
         instr.v1.loop.startInstrId = range.start;
         instr.v1.loop.endInstrId = range.end;
 
@@ -117,8 +113,7 @@ TEST_F(LoopExecutorTest, DifferentInstructionRanges)
 }
 
 // Test: LoopExecutor with different xn IDs
-TEST_F(LoopExecutorTest, DifferentXnIds)
-{
+TEST_F(LoopExecutorTest, DifferentXnIds) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
 
@@ -133,8 +128,7 @@ TEST_F(LoopExecutorTest, DifferentXnIds)
 }
 
 // Test: LoopExecutor Describe contains expected keywords
-TEST_F(LoopExecutorTest, DescribeContent)
-{
+TEST_F(LoopExecutorTest, DescribeContent) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     instr.v1.loop.startInstrId = 5;
@@ -150,19 +144,17 @@ TEST_F(LoopExecutorTest, DescribeContent)
 }
 
 // Test: LoopExecutor inheritance check
-TEST_F(LoopExecutorTest, InheritanceCheck)
-{
+TEST_F(LoopExecutorTest, InheritanceCheck) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
 
     LoopExecutor executor(0, 0, 0, instr, nullptr);
-    CcuExecutorBase* base = &executor;
+    CcuExecutorBase *base = &executor;
     EXPECT_NE(base, nullptr);
 }
 
 // Test: LoopExecutor with various rank and die combinations
-TEST_F(LoopExecutorTest, VariousRankDieCombinations)
-{
+TEST_F(LoopExecutorTest, VariousRankDieCombinations) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     instr.v1.loop.startInstrId = 0;

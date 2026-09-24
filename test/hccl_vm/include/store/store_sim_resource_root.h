@@ -1,11 +1,18 @@
 /**
  * Copyright (c) 2026 Huawei Technologies Co., Ltd.
- * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * CANN Open Software License Agreement Version 2.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
+ * This program is free software, you can redistribute it and/or modify it under
+ * the terms and conditions of CANN Open Software License Agreement Version 2.0
+ * (the "License"). Please refer to the License for details. You may not use
+ * this file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS
+ * FOR A PARTICULAR PURPOSE. See LICENSE in the root of the software repository
+ * for the full text of the License.
+ */
+
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License.
  */
 
 #ifndef STORE_SIM_RESOURCE_ROOT_H
@@ -17,11 +24,11 @@
 namespace sim {
 
 class SimResourceRoot {
-public:
-    static SimResourceRoot& GetInstance();
+  public:
+    static SimResourceRoot &GetInstance();
 
-    SimResourceRoot(const SimResourceRoot&) = delete;
-    SimResourceRoot& operator=(const SimResourceRoot&) = delete;
+    SimResourceRoot(const SimResourceRoot &) = delete;
+    SimResourceRoot &operator=(const SimResourceRoot &) = delete;
 
     // 主进程 start 阶段调用：强清自身 pid 目录 + mkdir root/sync + setenv
     // HCCL_VM_RESOURCE_ROOT。
@@ -30,13 +37,13 @@ public:
     // 逻辑名 -> 完整共享内存文件路径, 如 "ra_sock_pool_0" ->
     // "/dev/shm/hvm_<pid>/ra_sock_pool_0"。 供 open()/mmap(MAP_SHARED)
     // 使用（POSIX shm_open 不支持带子目录的名字）。
-    static std::string BuildName(const std::string& logical);
+    static std::string BuildName(const std::string &logical);
 
     // 根目录绝对路径, 如 "/dev/shm/hvm_21843"。
-    const std::string& GetRoot() const;
+    const std::string &GetRoot() const;
 
     // 同步文件目录, 如 "/dev/shm/hvm_21843/sync"。
-    const std::string& GetSyncDir() const;
+    const std::string &GetSyncDir() const;
 
     // runner 存活探测锁文件的完整路径, 如
     // "/dev/shm/hvm_21843/hccl_vm_runner.lock"。 主进程与 runner
@@ -65,7 +72,7 @@ public:
     // 根）。
     void CleanShmByPrefix(std::initializer_list<std::string> prefixes);
 
-private:
+  private:
     SimResourceRoot();
     ~SimResourceRoot();
 

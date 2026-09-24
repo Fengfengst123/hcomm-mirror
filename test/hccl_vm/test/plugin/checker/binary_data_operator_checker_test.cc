@@ -1,11 +1,18 @@
 /**
  * Copyright (c) 2026 Huawei Technologies Co., Ltd.
- * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * CANN Open Software License Agreement Version 2.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
+ * This program is free software, you can redistribute it and/or modify it under
+ * the terms and conditions of CANN Open Software License Agreement Version 2.0
+ * (the "License"). Please refer to the License for details. You may not use
+ * this file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS
+ * FOR A PARTICULAR PURPOSE. See LICENSE in the root of the software repository
+ * for the full text of the License.
+ */
+
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License.
  */
 
 #include <cstdio>
@@ -18,17 +25,15 @@
 
 namespace HcclSim {
 class BinaryDataOperatorCheckerTest : public testing::Test {
-protected:
-    void SetUp() override
-    {
+  protected:
+    void SetUp() override {
         strcpy(testFilePath, "/tmp/binary_checker_test_XXXXXX");
         int fd = mkstemp(testFilePath);
         ASSERT_NE(fd, -1);
         close(fd);
     }
 
-    void TearDown() override
-    {
+    void TearDown() override {
         if (access(testFilePath, F_OK) == 0) {
             unlink(testFilePath);
         }
@@ -37,9 +42,8 @@ protected:
     char testFilePath[256];
 };
 
-TEST_F(BinaryDataOperatorCheckerTest, TaskMetaWrite_Normal_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorCheckerTest, TaskMetaWrite_Normal_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     HcclTaskMetaData taskData;
@@ -54,9 +58,8 @@ TEST_F(BinaryDataOperatorCheckerTest, TaskMetaWrite_Normal_Success)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorCheckerTest, TaskMetaRead_Normal_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorCheckerTest, TaskMetaRead_Normal_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     HcclTaskMetaData taskDataIn;
@@ -82,9 +85,8 @@ TEST_F(BinaryDataOperatorCheckerTest, TaskMetaRead_Normal_Success)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorCheckerTest, HcclVmTaskMetaDataWrite_Normal_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorCheckerTest, HcclVmTaskMetaDataWrite_Normal_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     HcclVmTaskMetaData taskMeta;
@@ -113,9 +115,8 @@ TEST_F(BinaryDataOperatorCheckerTest, HcclVmTaskMetaDataWrite_Normal_Success)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorCheckerTest, HcclVmTaskMetaDataRead_Normal_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorCheckerTest, HcclVmTaskMetaDataRead_Normal_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     HcclVmTaskMetaData taskMetaIn;
@@ -138,7 +139,8 @@ TEST_F(BinaryDataOperatorCheckerTest, HcclVmTaskMetaDataRead_Normal_Success)
     ASSERT_NE(fp, nullptr);
 
     HcclVmTaskMetaData taskMetaOut;
-    HcclResult ret = HcclVmTaskMetaDataRead(fp, taskMetaOut, HCCLVM_TASK_FILE_MAGIC);
+    HcclResult ret =
+        HcclVmTaskMetaDataRead(fp, taskMetaOut, HCCLVM_TASK_FILE_MAGIC);
     EXPECT_EQ(ret, HcclResult::HCCL_SUCCESS);
     EXPECT_EQ(taskMetaOut.header.magic, HCCLVM_TASK_FILE_MAGIC);
     EXPECT_EQ(taskMetaOut.header.count, 1u);
@@ -146,9 +148,8 @@ TEST_F(BinaryDataOperatorCheckerTest, HcclVmTaskMetaDataRead_Normal_Success)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorCheckerTest, HcclVmInstrDataWrite_Normal_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorCheckerTest, HcclVmInstrDataWrite_Normal_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     HcclVmInstrData instrData;
@@ -172,9 +173,8 @@ TEST_F(BinaryDataOperatorCheckerTest, HcclVmInstrDataWrite_Normal_Success)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorCheckerTest, HcclVmInstrDataRead_Normal_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorCheckerTest, HcclVmInstrDataRead_Normal_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     HcclVmInstrData instrDataIn;
@@ -199,16 +199,16 @@ TEST_F(BinaryDataOperatorCheckerTest, HcclVmInstrDataRead_Normal_Success)
     ASSERT_NE(fp, nullptr);
 
     HcclVmInstrData instrDataOut;
-    HcclResult ret = HcclVmInstrDataRead(fp, instrDataOut, HCCLVM_INSTR_FILE_MAGIC);
+    HcclResult ret =
+        HcclVmInstrDataRead(fp, instrDataOut, HCCLVM_INSTR_FILE_MAGIC);
     EXPECT_EQ(ret, HcclResult::HCCL_SUCCESS);
     EXPECT_EQ(instrDataOut.header.magic, HCCLVM_INSTR_FILE_MAGIC);
 
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorCheckerTest, MicrocodeInstrWrite_Normal_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorCheckerTest, MicrocodeInstrWrite_Normal_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     MicrocodeInstrInner mcInstr;
@@ -223,9 +223,8 @@ TEST_F(BinaryDataOperatorCheckerTest, MicrocodeInstrWrite_Normal_Success)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorCheckerTest, MicrocodeInstrRead_Normal_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorCheckerTest, MicrocodeInstrRead_Normal_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     MicrocodeInstrInner mcInstrIn;

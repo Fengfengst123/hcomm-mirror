@@ -1,11 +1,18 @@
 /**
  * Copyright (c) 2026 Huawei Technologies Co., Ltd.
- * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * CANN Open Software License Agreement Version 2.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
+ * This program is free software, you can redistribute it and/or modify it under
+ * the terms and conditions of CANN Open Software License Agreement Version 2.0
+ * (the "License"). Please refer to the License for details. You may not use
+ * this file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS
+ * FOR A PARTICULAR PURPOSE. See LICENSE in the root of the software repository
+ * for the full text of the License.
+ */
+
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License.
  */
 
 #ifndef SIM_MODEL_DEFS_H
@@ -68,9 +75,9 @@ enum CommStatus : uint8_t {
 };
 
 typedef struct {
-    uint64_t id;        // PK（通信域锚点成员：同一 (comm_id, comm_hash) 下 id
-                        // 最小者作为通信域标识）
-    char comm_id[128];  // 通信域名称，与 comm_hash 共同唯一标识通信域
+    uint64_t id; // PK（通信域锚点成员：同一 (comm_id, comm_hash) 下 id
+                 // 最小者作为通信域标识）
+    char comm_id[128]; // 通信域名称，与 comm_hash 共同唯一标识通信域
     uint32_t rank_size; // 通信域总 Rank 数
     uint32_t rank_id;   // 当前线程在通信域中的 Rank
     uint64_t device_id; // FK -> Device.id
@@ -103,11 +110,16 @@ typedef struct {
     uint32_t physical_id;
     uint32_t super_device_id;
     uint32_t overflow_mode;
-    char soc_version[16];
+    // 完整SoC型号名(如"Ascend950DT_95A1"，16字符)需16+1字节，32对齐hal侧MAX_CHIP_NAME
+    char soc_version[32];
     uint32_t status; // 0 可用， 1不可用
 } Device;
 
-enum TsDevType { TS_DEV_TYPE_SCALAR = 0, TS_DEV_TYPE_CPU = 1, TS_DEV_TYPE_CCU = 2 };
+enum TsDevType {
+    TS_DEV_TYPE_SCALAR = 0,
+    TS_DEV_TYPE_CPU = 1,
+    TS_DEV_TYPE_CCU = 2
+};
 
 typedef struct {
     uint64_t id;        // PK
@@ -115,7 +127,11 @@ typedef struct {
     uint8_t type;       // 0:Scalar, 1:CCU, 2:CPU
 } TaskSchedulerDevice;
 
-enum ComputeDieType { COMPUTE_TYPE_CUBE = 0, COMPUTE_TYPE_VECTOR = 1, COMPUTE_TYPE_HYBRID = 2 };
+enum ComputeDieType {
+    COMPUTE_TYPE_CUBE = 0,
+    COMPUTE_TYPE_VECTOR = 1,
+    COMPUTE_TYPE_HYBRID = 2
+};
 
 typedef struct {
     uint64_t id;    // PK
@@ -153,18 +169,6 @@ typedef struct {
 } Ccu;
 
 typedef struct {
-    uint64_t id;                                                    // PK
-    uint64_t ccu_id;                                                // FK
-    uint8_t instr_space[CCU_INSTRUCTION_NUM][CCU_INSTRUCTION_SIZE]; // 指令空间1M: 32K个指令
-    uint16_t instr_cnt{0};
-    uint16_t state{0};
-    // uint64_t xn[CCU_RESOURCE_XN_MAX];  // xn寄存器
-    // uint64_t gsa[CCU_RESOURCE_GSA_MAX]; // gsa寄存器
-    // uint16_t cke[CCU_RESOURCE_CKE_MAX]; // cke寄存器
-    // char ms[CCU_RESOURCE_MS_SIZE]; // ms寄存器
-} CcuResource; // todo: 后续可能改为关系表，数据保存在共享内存
-
-typedef struct {
     uint64_t id;         // PK
     uint64_t src_dev_id; // FK
     uint64_t dst_dev_id; // FK
@@ -181,6 +185,7 @@ typedef struct {
     uint8_t eid[16];
     char ip_addr[64];
     uint8_t status{0};
+    bool is_uboe{false};
 } EndPoint;
 
 typedef struct {
@@ -312,8 +317,8 @@ typedef struct {
     uint64_t id;
     uint64_t start_ptr;      // 按照卡分配的虚拟编址的地址
     uint64_t dev_mapped_ptr; // device进程打开共享内存后的地址
-    uint8_t is_dev_access;   // 0: dev不可直接访问, 1: dev可以直接访问
-    uint64_t host_ptr{0};    // host进程打开共享内存后的地址
+    uint8_t is_dev_access; // 0: dev不可直接访问, 1: dev可以直接访问
+    uint64_t host_ptr{0};  // host进程打开共享内存后的地址
     uint64_t size;
     uint64_t ctx_id;
     uint64_t device_id; // Device表主键
@@ -385,10 +390,12 @@ typedef struct {
 
 // ReduceScatterV AllGatherV使用
 struct VDataDesTagInner {
-    uint16_t dataType;   // 数据类型
-    uint32_t count{0};   // rank size
+    uint16_t dataType; // 数据类型
+    uint32_t count{0}; // rank size
     uint64_t displs[64]; // 每个rank的数据在sendBuf中的偏移量（单位为dataType）
-    uint64_t counts[64];
+    uint64_t
+        counts[64]; // 每个rank在sendBuf中的数据size，第i个元素表示需要向rank
+                    // i发送/接受的数据量
 };
 
 struct All2AllDataDesTagInner {
@@ -539,6 +546,8 @@ typedef struct {
     uint8_t state; // 0: RESET, 1: INIT, 2: RTR, 3:RTS
     uint32_t mode; // jetty mode 0: URMA, 2: CCU, 3: Normal
     uint64_t peer_jetty_handle;
+    uint64_t
+        peer_endpoint_id; // 本jetty所在channel的对端EndPoint id(FK EndPoint.id)
     uint64_t pid;
 } RaJetty;
 
@@ -585,9 +594,9 @@ typedef struct {
 
 // 北向打桩接口——HCCL_Channel表
 typedef struct {
-    uint64_t id;           // channel的ID，PK
-    uint64_t commId;       // 所属的通信域FK
-    uint64_t endpoint_id;  // 所属的北向 HcommEndpoint 逻辑外键，0 表示未绑定
+    uint64_t id;     // channel的ID，PK
+    uint64_t commId; // 所属的通信域FK
+    uint64_t endpoint_id; // 所属的北向 HcommEndpoint 逻辑外键，0 表示未绑定
     uint8_t engine;        // 通信引起engine
     uint64_t remoteRankId; // 对端rankId
     uint16_t notifyNum;    // Notify的数量
@@ -597,44 +606,46 @@ typedef struct {
 
 // 北向打桩接口——HComm Endpoint 与南向拓扑 Endpoint 的绑定状态
 enum HcommEndpointBindState : uint8_t {
-    HCOMM_ENDPOINT_UNRESOLVED = 0,     // 尚未找到唯一的南向 Endpoint
-    HCOMM_ENDPOINT_BOUND = 1,          // 已绑定唯一的南向 Endpoint
+    HCOMM_ENDPOINT_UNRESOLVED = 0, // 尚未找到唯一的南向 Endpoint
+    HCOMM_ENDPOINT_BOUND = 1,      // 已绑定唯一的南向 Endpoint
     HCOMM_ENDPOINT_NOT_APPLICABLE = 2, // 当前位置或协议不需要南向 Endpoint
 };
 
 // 北向打桩接口——HComm Endpoint 表
 typedef struct {
-    uint64_t id;                // EndpointHandle 对应的主键
-    uint64_t runner_id;         // 创建该 Endpoint 的 Runner 逻辑外键
-    uint64_t south_endpoint_id; // 南向 sim::EndPoint 逻辑外键，0 表示未绑定或不适用
-    int32_t protocol;           // CommProtocol
-    int32_t addr_type;          // CommAddrType
-    uint8_t addr[36];           // CommAddr 中的原始地址内容
-    int32_t loc_type;           // EndpointLocType
-    uint8_t loc[60];            // EndpointLoc 中的原始位置内容
-    uint8_t extension[52];      // EndpointDesc 预留扩展内容
-    uint8_t bind_state;         // HcommEndpointBindState
+    uint64_t id;        // EndpointHandle 对应的主键
+    uint64_t runner_id; // 创建该 Endpoint 的 Runner 逻辑外键
+    uint64_t
+        south_endpoint_id; // 南向 sim::EndPoint 逻辑外键，0 表示未绑定或不适用
+    int32_t protocol;      // CommProtocol
+    int32_t addr_type;     // CommAddrType
+    uint8_t addr[36];      // CommAddr 中的原始地址内容
+    int32_t loc_type;      // EndpointLocType
+    uint8_t loc[60];       // EndpointLoc 中的原始位置内容
+    uint8_t extension[52]; // EndpointDesc 预留扩展内容
+    uint8_t bind_state;    // HcommEndpointBindState
 } HcommEndpoint;
 
 // 北向打桩接口——HComm 内存记录类型
 enum HcommMemRecordKind : uint8_t {
     HCOMM_MEM_LOCAL_REGISTERED = 0, // HcommMemReg 创建的本地注册内存
-    HCOMM_MEM_REMOTE_IMPORTED = 1,  // HcommMemImport 创建的远端导入内存
+    HCOMM_MEM_REMOTE_IMPORTED = 1, // HcommMemImport 创建的远端导入内存
 };
 
 // 北向打桩接口——HComm 内存资源表
 typedef struct {
-    uint64_t id;                 // HcommMemHandle 对应的主键
-    uint64_t endpoint_id;        // 所属的北向 HcommEndpoint 逻辑外键
-    uint64_t runner_id;          // 创建该记录的 Runner 逻辑外键
-    uint64_t source_endpoint_id; // 导入记录的源端 HcommEndpoint 主键，本地记录为 0
-    uint64_t source_mem_id;      // 导入记录的源端本地内存主键，本地记录为 0
-    uint64_t descriptor_key;     // 导出描述符的稳定校验键
-    uint64_t addr;               // CommMem.addr 的整数形式
-    uint64_t size;               // CommMem.size
-    int32_t mem_type;            // CommMemType
-    uint8_t record_kind;         // HcommMemRecordKind
-    char mem_tag[255];           // 本地注册内存标签，导入记录为空
+    uint64_t id;          // HcommMemHandle 对应的主键
+    uint64_t endpoint_id; // 所属的北向 HcommEndpoint 逻辑外键
+    uint64_t runner_id;   // 创建该记录的 Runner 逻辑外键
+    uint64_t
+        source_endpoint_id; // 导入记录的源端 HcommEndpoint 主键，本地记录为 0
+    uint64_t source_mem_id; // 导入记录的源端本地内存主键，本地记录为 0
+    uint64_t descriptor_key; // 导出描述符的稳定校验键
+    uint64_t addr;           // CommMem.addr 的整数形式
+    uint64_t size;           // CommMem.size
+    int32_t mem_type;        // CommMemType
+    uint8_t record_kind;     // HcommMemRecordKind
+    char mem_tag[255];       // 本地注册内存标签，导入记录为空
 } HcommMemReg;
 
 // 北向打桩接口——HCCL_EngineCtx表
@@ -672,6 +683,36 @@ typedef struct {
     uint32_t immData{0};
     uint8_t consumed{0}; // 0: 未被消费, 1: 已被消费
 } DpuPendingNotify;
+
+// 北向打桩接口——CCU Level1 交换资源表（跨 rank 同步值，per-channel 交换区，**按
+// op+轮次隔离**） 语义：hcomm CcuTransport::INIT_XN_NUM/INIT_CKE_NUM(4) —— 每
+// channel 固定预留
+//       XN/CKE 0..3；PreSync 时写方把值写到对端坐标，读方（NotifyWait /
+//       首次使用处）查询。
+// 逻辑键：(opIter, round, srcRank, targetRank, connOrdinal, dieId, resType,
+// resId)；
+//       opIter = 算子迭代（OpDetailTab.opIter，两侧进程按同一序列自增，天然跨
+//       rank 对齐）， round = 写方 CCU launch 序号。**一轮一行、不覆盖** ——
+//       读方按自己所在 op+轮次精确取，
+//       可免疫两进程异步漂移（写方领先时不会被"未来轮次/未来 op 的值"污染）。
+//       op 维度不可省：round 是进程内全局 launch 计数，表跨 op 累积，若不带 op
+//       则后一 op 的 行会覆盖/裁掉前一 op 尚未被读走的行，落后 rank
+//       只能取到别的 op 的地址（现象： checker 报 MEM_CPY 目标地址落不到本 op
+//       内存布局）。
+typedef struct {
+    uint64_t id{0};         // PK
+    uint32_t opIter{0};     // 算子迭代（跨 rank 一致的 op 身份）
+    uint32_t round{0};      // 轮次（= 写方 CCU launch 序号）
+    uint32_t targetRank{0}; // 被写入方 rank（= 读方 rank）
+    uint32_t connOrdinal{
+        0}; // 同 peer 多 channel 连接序号（multi-jetty；单连接=0）
+    uint32_t dieId{0};    // 资源所在 die
+    uint32_t resType{0};  // 0=XN(Var), 1=CKE
+    uint32_t resId{0};    // 0..3（交换区槽位）
+    uint64_t value{0};    // 交换值（地址/token/CKE 位置位）
+    uint32_t srcRank{0};  // 写方 rank（排障）
+    uint64_t ownerPid{0}; // 写方进程（排障）
+} CcuSyncResTab;
 
 } // namespace sim
 #endif

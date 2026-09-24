@@ -1,11 +1,18 @@
 /**
  * Copyright (c) 2026 Huawei Technologies Co., Ltd.
- * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * CANN Open Software License Agreement Version 2.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
+ * This program is free software, you can redistribute it and/or modify it under
+ * the terms and conditions of CANN Open Software License Agreement Version 2.0
+ * (the "License"). Please refer to the License for details. You may not use
+ * this file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS
+ * FOR A PARTICULAR PURPOSE. See LICENSE in the root of the software repository
+ * for the full text of the License.
+ */
+
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License.
  */
 
 #ifndef SIM_OP_DB_TYPES_H
@@ -29,21 +36,21 @@ struct DBConfig {
 };
 
 struct OpDetailTab {
-    uint32_t id;       // PK (自增)
-    uint32_t pid;      // proxy 进程 ID
+    uint32_t id;  // PK (自增)
+    uint32_t pid; // proxy 进程 ID
     uint32_t deviceId; // 物理设备 ID（全局唯一，内部逻辑统一使用）
     uint32_t rankId;   // 通信域内 rank ID
     uint64_t commId;   // 通信域成员 ID，FK -> Communicator.id
     uint32_t opIter;   // 算子迭代次数 (从 0 开始)
     uint32_t syncIter; // 所属 sync 周期 (从 0 开始)   // todo 可删
 
-    uint64_t streamId;              // streamId
-    uint32_t root;                  // root
-    uint32_t opExpansionMode;       // 算子执行模式 0: ccu, 1: aicpu, 2: aiv
-    uint32_t devType;               // 设备类型
-    uint32_t rankSize;              // ransize
-    uint32_t srcRank;               // srcRank
-    uint32_t dstRank;               // dstRank
+    uint64_t streamId;        // streamId
+    uint32_t root;            // root
+    uint32_t opExpansionMode; // 算子执行模式 0: ccu, 1: aicpu, 2: aiv
+    uint32_t devType;         // 设备类型
+    uint32_t rankSize;        // ransize
+    uint32_t srcRank;         // srcRank
+    uint32_t dstRank;         // dstRank
     std::vector<uint8_t> opDetail;  // BLOB
     std::vector<uint8_t> opExtInfo; // BLOB
 };
@@ -138,8 +145,7 @@ struct OpExecutionKey {
     uint64_t commHash{0};
     uint32_t opIter{0};
 
-    bool operator<(const OpExecutionKey& other) const
-    {
+    bool operator<(const OpExecutionKey &other) const {
         if (commName != other.commName) {
             return commName < other.commName;
         }

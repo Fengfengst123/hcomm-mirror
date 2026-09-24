@@ -1,11 +1,18 @@
 /**
  * Copyright (c) 2026 Huawei Technologies Co., Ltd.
- * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * CANN Open Software License Agreement Version 2.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
+ * This program is free software, you can redistribute it and/or modify it under
+ * the terms and conditions of CANN Open Software License Agreement Version 2.0
+ * (the "License"). Please refer to the License for details. You may not use
+ * this file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS
+ * FOR A PARTICULAR PURPOSE. See LICENSE in the root of the software repository
+ * for the full text of the License.
+ */
+
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License.
  */
 
 // clean 模式设备侧集成：IsCheckOnlyMode() 每进程只 latch 一次，本二进制全程不
@@ -16,36 +23,33 @@
 
 #include <sys/mman.h> // shm_unlink
 
-#include "runtime_state/db_sim_runner_ops.h"
-#include "runtime_state/sim_models.h"
-#include "simulation_storage_test_helper.h"
-#include "storage/internal/process_storage_context.h"
-#include "storage/storage_session.h"
+#include "db_sim_runner_db.h"
+#include "sim_models.h"
 #include "store_sim_comm_pool_policy.h"
 #include "store_sim_device_memory_manager.h"
 #include "store_sim_memory_manager.h"
 #include "store_sim_run_mode.h"
 
 class CheckOnlyOffTest : public testing::Test {
-protected:
-    void SetUp() override
-    {
+  protected:
+    void SetUp() override {
         // 清进程内/磁盘上残留的 HcclCommPool。
-        sim::MemoryManager::GetInstance().FreeMemByName(sim::CommPoolPolicy::kPoolName);
+        sim::MemoryManager::GetInstance().FreeMemByName(
+            sim::CommPoolPolicy::kPoolName);
         shm_unlink(sim::CommPoolPolicy::kPoolName);
         // 清空 RunModeConfig，保证 ProbeCheckOnlyMode 为 false。本文件不写任何
         // check-only(mode=1) 行。
-        runnerdb_test::ClearRecords<sim::runtime::RunModeConfig>();
+        RunnerDB::DeleteAll<sim::RunModeConfig>();
     }
 };
 
-TEST_F(CheckOnlyOffTest, NormalMode_BigBlocks_RealIndependentAlloc)
-{
-    EXPECT_FALSE(sim::IsCheckOnlyMode()); // 全程未 seed，首次 latch 须为 false。
-    auto& mgr = sim::DeviceMemoryManager::GetInstance();
+TEST_F(CheckOnlyOffTest, NormalMode_BigBlocks_RealIndependentAlloc) {
+    EXPECT_FALSE(
+        sim::IsCheckOnlyMode()); // 全程未 seed，首次 latch 须为 false。
+    auto &mgr = sim::DeviceMemoryManager::GetInstance();
     const size_t big = 256ULL * 1024 * 1024;
-    void* a = mgr.AllocPhyMem("clean_big_a", 0, big);
-    void* b = mgr.AllocPhyMem("clean_big_b", 0, big);
+    void *a = mgr.AllocPhyMem("clean_big_a", 0, big);
+    void *b = mgr.AllocPhyMem("clean_big_b", 0, big);
     ASSERT_NE(a, nullptr);
     ASSERT_NE(b, nullptr);
     EXPECT_NE(a,

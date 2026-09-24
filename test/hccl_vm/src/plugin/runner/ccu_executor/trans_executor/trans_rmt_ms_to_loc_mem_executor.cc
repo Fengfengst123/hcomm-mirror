@@ -1,11 +1,13 @@
 /**
  * Copyright (c) 2026 Huawei Technologies Co., Ltd.
- * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * CANN Open Software License Agreement Version 2.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
+ * This program is free software, you can redistribute it and/or modify it under
+ * the terms and conditions of CANN Open Software License Agreement Version 2.0
+ * (the "License"). Please refer to the License for details. You may not use
+ * this file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS
+ * FOR A PARTICULAR PURPOSE. See LICENSE in the root of the software repository
+ * for the full text of the License.
  */
 
 /**
@@ -27,11 +29,13 @@ using namespace std;
 using namespace hcomm::CcuRep;
 
 // 注册TransRmtMSToLocMemExecutor create Func
-REG_CCU_EXECUTOR_CREATE_FUNC(SimCcuV1::TRANS_TYPE, SimCcuV1::TRANSRMTMSTOLOCMEM_CODE, TransRmtMSToLocMemExecutor);
+REG_CCU_EXECUTOR_CREATE_FUNC(SimCcuV1::TRANS_TYPE,
+                             SimCcuV1::TRANSRMTMSTOLOCMEM_CODE,
+                             TransRmtMSToLocMemExecutor);
 
-void TransRmtMSToLocMemExecutor::Parser()
-{
-    ValidateVersionExclusive(RunnerCcuVersion::CCU_V1, "TransRmtMSToLocMemExecutor");
+void TransRmtMSToLocMemExecutor::Parser() {
+    ValidateVersionExclusive(RunnerCcuVersion::CCU_V1,
+                             "TransRmtMSToLocMemExecutor");
     locGSAId_ = instr_.v1.transRmtMSToLocMem.locGSAId;
     locXnId_ = instr_.v1.transRmtMSToLocMem.locXnId;
     rmtMSId_ = instr_.v1.transRmtMSToLocMem.rmtMSId & 0x7FFF;
@@ -47,16 +51,16 @@ void TransRmtMSToLocMemExecutor::Parser()
 }
 
 // 对端的源MS的数据搬运到本端的目的MEM中
-void TransRmtMSToLocMemExecutor::Process(CcuResourceManager& ccuResMgr)
-{
-    ValidateVersionExclusive(RunnerCcuVersion::CCU_V1, "TransRmtMSToLocMemExecutor");
+void TransRmtMSToLocMemExecutor::Process(CcuResourceManager &ccuResMgr) {
+    ValidateVersionExclusive(RunnerCcuVersion::CCU_V1,
+                             "TransRmtMSToLocMemExecutor");
     // 1.根据channel id获取remote rank id
     auto rmtCcu = ccuResMgr.GetRmtCcu(rankId_, dieId_, channelId_);
     if (rmtCcu.second != rmtDieId_) {
-        HCCL_VM_WARN(
-            "dieId[{}] from channel is not same as rmtDieId[{}]. "
-            "curCcu[{}:{}], rmtCcu[{}:{}]",
-            rmtCcu.second, rmtDieId_, rankId_, dieId_, rmtCcu.first, rmtCcu.second);
+        HCCL_VM_WARN("dieId[{}] from channel is not same as rmtDieId[{}]. "
+                     "curCcu[{}:{}], rmtCcu[{}:{}]",
+                     rmtCcu.second, rmtDieId_, rankId_, dieId_, rmtCcu.first,
+                     rmtCcu.second);
         return;
     }
     // 2.要搬运的远端内存地址及数据长度
@@ -69,21 +73,23 @@ void TransRmtMSToLocMemExecutor::Process(CcuResourceManager& ccuResMgr)
         locAddr += addrOffset;
         rmtMSId_ += msOffset;
         setCKEId_ += ckeOffset;
-        HCCL_VM_DEBUG(
-            "ccuId=[{}:{}], Get gsa addr offset = [{:04x}], ms "
-            "offset = [{:04x}], cke offset = [{:04x}]",
-            rankId_, dieId_, addrOffset, msOffset, ckeOffset);
+        HCCL_VM_DEBUG("ccuId=[{}:{}], Get gsa addr offset = [{:04x}], ms "
+                      "offset = [{:04x}], cke offset = [{:04x}]",
+                      rankId_, dieId_, addrOffset, msOffset, ckeOffset);
     }
     // 4.要搬运的本端内存地址及数据长度
-    transLength_ = (lengthEn_ == 0) ? HcclSim::BYTE_NUM_4K : ccuResMgr.GetXnValue(rankId_, dieId_, lengthXnId_);
+    transLength_ = (lengthEn_ == 0)
+                       ? HcclSim::BYTE_NUM_4K
+                       : ccuResMgr.GetXnValue(rankId_, dieId_, lengthXnId_);
     // 5.搬运动作
-    HCCL_VM_DEBUG(
-        "ccuId=[{}:{}-{}:{}] Trans data "
-        "from rmtMsId[{}] to locGSAId[{}] locAddr[{:x}], "
-        "with lengthXnId[{}] transLength[{}].",
-        rankId_, dieId_, rmtCcu.first, rmtCcu.second, rmtMSId_, locGSAId_, locAddr, lengthXnId_, transLength_);
-    bool ret
-        = ccuResMgr.TransMSToMem(rmtCcu.first, rmtCcu.second, rmtMSId_, reinterpret_cast<void*>(locAddr), transLength_);
+    HCCL_VM_DEBUG("ccuId=[{}:{}-{}:{}] Trans data "
+                  "from rmtMsId[{}] to locGSAId[{}] locAddr[{:x}], "
+                  "with lengthXnId[{}] transLength[{}].",
+                  rankId_, dieId_, rmtCcu.first, rmtCcu.second, rmtMSId_,
+                  locGSAId_, locAddr, lengthXnId_, transLength_);
+    bool ret =
+        ccuResMgr.TransMSToMem(rmtCcu.first, rmtCcu.second, rmtMSId_,
+                               reinterpret_cast<void *>(locAddr), transLength_);
     if (!ret) {
         ccuSimulator_->SetExecState(CcuExecState::EXEC_FAIL);
         return;
@@ -92,21 +98,22 @@ void TransRmtMSToLocMemExecutor::Process(CcuResourceManager& ccuResMgr)
     SetCkeSignal(ccuResMgr, setCKEId_, setCKEMask_);
 }
 
-void TransRmtMSToLocMemExecutor::Run() { WaitCkeProcess(waitCKEId_, waitCKEMask_, clearType_, "TransRmtMsToLocMem"); }
+void TransRmtMSToLocMemExecutor::Run() {
+    WaitCkeProcess(waitCKEId_, waitCKEMask_, clearType_, "TransRmtMsToLocMem");
+}
 
-std::string TransRmtMSToLocMemExecutor::Describe()
-{
+std::string TransRmtMSToLocMemExecutor::Describe() {
     return HcclSim::StringFormat(
         "ParseTransLocMSToLocMemInstr Wait CKE[%u:%04x], Trans RmtMS[%u:%u] To "
         "LocMem[%u:%u] "
         "With LengthXn[%u] Use Channel[%u], Set "
         "CKE[%u:%04x], clearType[%u], lengthEn[%u]",
-        waitCKEId_, waitCKEMask_, rmtMSId_ / 0x8000, rmtMSId_ % 0x8000, locGSAId_, locXnId_, lengthXnId_, channelId_,
-        setCKEId_, setCKEMask_, clearType_, lengthEn_);
+        waitCKEId_, waitCKEMask_, rmtMSId_ / 0x8000, rmtMSId_ % 0x8000,
+        locGSAId_, locXnId_, lengthXnId_, channelId_, setCKEId_, setCKEMask_,
+        clearType_, lengthEn_);
 }
 
-CcuTrace::CcuInstrTraceDetail TransRmtMSToLocMemExecutor::CollectTraceDetail()
-{
+CcuTrace::CcuInstrTraceDetail TransRmtMSToLocMemExecutor::CollectTraceDetail() {
     CcuTrace::CcuInstrTraceDetail detail;
     detail.typeName = "TransRmtMSToLocMem";
     return detail;

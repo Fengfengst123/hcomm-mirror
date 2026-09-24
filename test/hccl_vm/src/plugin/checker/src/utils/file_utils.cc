@@ -1,11 +1,18 @@
 /**
  * Copyright (c) 2026 Huawei Technologies Co., Ltd.
- * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * CANN Open Software License Agreement Version 2.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
+ * This program is free software, you can redistribute it and/or modify it under
+ * the terms and conditions of CANN Open Software License Agreement Version 2.0
+ * (the "License"). Please refer to the License for details. You may not use
+ * this file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS
+ * FOR A PARTICULAR PURPOSE. See LICENSE in the root of the software repository
+ * for the full text of the License.
+ */
+
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License.
  */
 
 #include "file_utils.h"
@@ -19,8 +26,7 @@
 #include "sim_log.h"
 
 namespace HcclSim {
-std::string GetCurrentPath()
-{
+std::string GetCurrentPath() {
     char absPath[PATH_MAX];
     if (realpath(".", absPath) == nullptr) {
         HCCL_VM_ERROR("realpath failed for current path.");
@@ -29,17 +35,17 @@ std::string GetCurrentPath()
     return std::string(absPath);
 }
 
-std::string GetRootPath(const std::string& anchorPath, int maxDepth)
-{
+std::string GetRootPath(const std::string &anchorPath, int maxDepth) {
     std::string currentSearchPath = GetCurrentPath();
     if (currentSearchPath.empty()) {
         return "";
     }
 
     for (int i = 0; i <= maxDepth; ++i) {
-        const std::string checkTarget = (!anchorPath.empty() && anchorPath.front() == '/') ?
-                                            currentSearchPath + anchorPath :
-                                            JoinPath(currentSearchPath, anchorPath);
+        const std::string checkTarget =
+            (!anchorPath.empty() && anchorPath.front() == '/')
+                ? currentSearchPath + anchorPath
+                : JoinPath(currentSearchPath, anchorPath);
         if (DirExists(checkTarget)) {
             return currentSearchPath;
         }
@@ -50,8 +56,7 @@ std::string GetRootPath(const std::string& anchorPath, int maxDepth)
     return "";
 }
 
-bool DirExists(const std::string& path)
-{
+bool DirExists(const std::string &path) {
     struct stat info;
     if (stat(path.c_str(), &info) != 0) {
         return false;
@@ -59,8 +64,7 @@ bool DirExists(const std::string& path)
     return S_ISDIR(info.st_mode);
 }
 
-bool FileExists(const std::string& path)
-{
+bool FileExists(const std::string &path) {
     struct stat info;
     if (stat(path.c_str(), &info) != 0) {
         return false;
@@ -68,8 +72,7 @@ bool FileExists(const std::string& path)
     return S_ISREG(info.st_mode);
 }
 
-HcclResult EnsureDirectory(const std::string& path)
-{
+HcclResult EnsureDirectory(const std::string &path) {
     if (path.empty()) {
         return HcclResult::HCCL_E_PARA;
     }
@@ -87,12 +90,14 @@ HcclResult EnsureDirectory(const std::string& path)
 
     while (start <= path.size()) {
         const std::size_t pos = path.find('/', start);
-        const std::string part = path.substr(start, pos == std::string::npos ? std::string::npos : pos - start);
+        const std::string part = path.substr(
+            start, pos == std::string::npos ? std::string::npos : pos - start);
         if (!part.empty()) {
             current = JoinPath(current, part);
             if (!DirExists(current)) {
                 if (mkdir(current.c_str(), 0755) != 0 && errno != EEXIST) {
-                    HCCL_VM_ERROR("mkdir failed for {}: {}", current, strerror(errno));
+                    HCCL_VM_ERROR("mkdir failed for {}: {}", current,
+                                  strerror(errno));
                     return HcclResult::HCCL_E_INTERNAL;
                 }
             }
@@ -107,8 +112,7 @@ HcclResult EnsureDirectory(const std::string& path)
     return HcclResult::HCCL_SUCCESS;
 }
 
-std::string GetParentPath(const std::string& path)
-{
+std::string GetParentPath(const std::string &path) {
     const std::size_t pos = path.find_last_of('/');
     if (pos == std::string::npos) {
         return ".";
@@ -119,8 +123,7 @@ std::string GetParentPath(const std::string& path)
     return path.substr(0, pos);
 }
 
-std::string JoinPath(const std::string& left, const std::string& right)
-{
+std::string JoinPath(const std::string &left, const std::string &right) {
     if (left.empty()) {
         return right;
     }

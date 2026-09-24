@@ -1,15 +1,22 @@
 /**
  * Copyright (c) 2026 Huawei Technologies Co., Ltd.
- * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * CANN Open Software License Agreement Version 2.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
+ * This program is free software, you can redistribute it and/or modify it under
+ * the terms and conditions of CANN Open Software License Agreement Version 2.0
+ * (the "License"). Please refer to the License for details. You may not use
+ * this file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS
+ * FOR A PARTICULAR PURPOSE. See LICENSE in the root of the software repository
+ * for the full text of the License.
  */
 
-#ifndef HCOMM_HCCL_VM_CHECKER_TASK_META_DEFS_H
-#define HCOMM_HCCL_VM_CHECKER_TASK_META_DEFS_H
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License.
+ */
+
+#ifndef HCCL_COMMON_DEFS_H
+#define HCCL_COMMON_DEFS_H
 
 #include <cstdint>
 #include <cstring>
@@ -26,7 +33,16 @@ enum class LinkProto {
     INVALID_A = 3,
 };
 
-enum class HccLTaskMetaType : char { NOTIFY_WAIT, NOTIFY_RECORD, REDUCE, MEM_CPY, CCU_GRAPH, AIV_GRAPH, SYNC_STREAM };
+enum class HccLTaskMetaType : char {
+    NOTIFY_WAIT,
+    NOTIFY_RECORD,
+    REDUCE,
+    MEM_CPY,
+    CCU_GRAPH,
+    AIV_GRAPH,
+    SYNC_STREAM,
+    MODEL_EXEC
+};
 
 typedef enum {
     COMM_PROTOCOL_RESERVED = -1,
@@ -53,6 +69,14 @@ typedef struct {
 typedef struct {
     uint64_t syncIdx;
 } SyncStreamTask;
+
+// 与 include/sim_common_defs.h 的 ModelExecTask 二进制布局保持一致（pack 1）
+typedef struct {
+    uint32_t execSeq; // 同一次 rtModelExecute 的 4 个任务共享
+    uint8_t role;     // 0=START, 1=START_SUB, 2=END_SUB, 3=END
+    uint64_t modelId;
+    uint64_t peerStreamId;
+} ModelExecTask;
 
 typedef struct {
     uint32_t srcDeviceId;
@@ -104,9 +128,9 @@ typedef struct HcclTaskMetaData {
         CcuTask ccu;
         AivTask aiv;
         SyncStreamTask syncStreamTask;
+        ModelExecTask modelExec;
     } taskData;
-    HcclTaskMetaData()
-    {
+    HcclTaskMetaData() {
         taskType = HccLTaskMetaType::SYNC_STREAM;
         commId = 0;
         rankId = UINT32_MAX;
@@ -156,4 +180,4 @@ typedef struct {
 } OpDetails;
 #pragma pack(pop)
 
-#endif // HCOMM_HCCL_VM_CHECKER_TASK_META_DEFS_H
+#endif

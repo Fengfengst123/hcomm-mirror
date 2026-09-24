@@ -1,11 +1,18 @@
 /**
  * Copyright (c) 2026 Huawei Technologies Co., Ltd.
- * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * CANN Open Software License Agreement Version 2.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
+ * This program is free software, you can redistribute it and/or modify it under
+ * the terms and conditions of CANN Open Software License Agreement Version 2.0
+ * (the "License"). Please refer to the License for details. You may not use
+ * this file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS
+ * FOR A PARTICULAR PURPOSE. See LICENSE in the root of the software repository
+ * for the full text of the License.
+ */
+
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License.
  */
 
 #include "sim_sub_process_manager.h"
@@ -29,85 +36,83 @@
 namespace sim {
 
 namespace {
-    namespace fs = std::filesystem;
+namespace fs = std::filesystem;
 
-    bool IsCompleteCannSysroot(const fs::path& sysroot, std::string& missingPath)
-    {
-        const std::vector<fs::path> requiredPaths{
-            sysroot / "lib64/ld-linux-aarch64.so.1", sysroot / "lib64/libc.so.6", sysroot / "usr/lib64/libstdc++.so.6",
-            sysroot / "usr/lib64/libgcc_s.so.1"};
+bool IsCompleteCannSysroot(const fs::path &sysroot, std::string &missingPath) {
+    const std::vector<fs::path> requiredPaths{
+        sysroot / "lib64/ld-linux-aarch64.so.1", sysroot / "lib64/libc.so.6",
+        sysroot / "usr/lib64/libstdc++.so.6",
+        sysroot / "usr/lib64/libgcc_s.so.1"};
 
-        std::error_code ec;
-        for (const auto& requiredPath : requiredPaths) {
-            ec.clear();
-            if (!fs::exists(requiredPath, ec)) {
-                missingPath = requiredPath.string();
-                if (ec) {
-                    missingPath += ": " + ec.message();
-                }
-                return false;
+    std::error_code ec;
+    for (const auto &requiredPath : requiredPaths) {
+        ec.clear();
+        if (!fs::exists(requiredPath, ec)) {
+            missingPath = requiredPath.string();
+            if (ec) {
+                missingPath += ": " + ec.message();
             }
+            return false;
         }
-        return true;
     }
+    return true;
+}
 
-    std::string ResolveCannSysroot(const char* ascendHomePath)
-    {
-        const char* configuredSysroot = std::getenv("CANN_HCC_SYSROOT");
-        if (configuredSysroot != nullptr && configuredSysroot[0] != '\0') {
-            std::string missingPath;
-            if (IsCompleteCannSysroot(configuredSysroot, missingPath)) {
-                return configuredSysroot;
-            }
-            HCCL_VM_ERROR(
-                "invalid CANN_HCC_SYSROOT [{}]: required component [{}] "
-                "was not found.",
-                configuredSysroot, missingPath);
-            return {};
+std::string ResolveCannSysroot(const char *ascendHomePath) {
+    const char *configuredSysroot = std::getenv("CANN_HCC_SYSROOT");
+    if (configuredSysroot != nullptr && configuredSysroot[0] != '\0') {
+        std::string missingPath;
+        if (IsCompleteCannSysroot(configuredSysroot, missingPath)) {
+            return configuredSysroot;
         }
-
-        if (ascendHomePath == nullptr || ascendHomePath[0] == '\0') {
-            HCCL_VM_ERROR("CANN sysroot is not configured; set ASCEND_HOME_PATH or "
-                          "CANN_HCC_SYSROOT.");
-            return {};
-        }
-
-        const std::vector<fs::path> candidates{
-            fs::path(ascendHomePath) / "tools/hcc/sysroot", fs::path(ascendHomePath) / "toolkit/toolchain/hcc/sysroot"};
-        std::ostringstream diagnostics;
-        for (const auto& candidate : candidates) {
-            std::string missingPath;
-            if (IsCompleteCannSysroot(candidate, missingPath)) {
-                return candidate.string();
-            }
-            diagnostics << "\n  " << candidate.string() << ": missing " << missingPath;
-        }
-
-        HCCL_VM_ERROR(
-            "complete CANN sysroot was not found under ASCEND_HOME_PATH "
-            "[{}]. Tried:{}",
-            ascendHomePath, diagnostics.str());
+        HCCL_VM_ERROR("invalid CANN_HCC_SYSROOT [{}]: required component [{}] "
+                      "was not found.",
+                      configuredSysroot, missingPath);
         return {};
     }
+
+    if (ascendHomePath == nullptr || ascendHomePath[0] == '\0') {
+        HCCL_VM_ERROR("CANN sysroot is not configured; set ASCEND_HOME_PATH or "
+                      "CANN_HCC_SYSROOT.");
+        return {};
+    }
+
+    const std::vector<fs::path> candidates{
+        fs::path(ascendHomePath) / "tools/hcc/sysroot",
+        fs::path(ascendHomePath) / "toolkit/toolchain/hcc/sysroot"};
+    std::ostringstream diagnostics;
+    for (const auto &candidate : candidates) {
+        std::string missingPath;
+        if (IsCompleteCannSysroot(candidate, missingPath)) {
+            return candidate.string();
+        }
+        diagnostics << "\n  " << candidate.string() << ": missing "
+                    << missingPath;
+    }
+
+    HCCL_VM_ERROR("complete CANN sysroot was not found under ASCEND_HOME_PATH "
+                  "[{}]. Tried:{}",
+                  ascendHomePath, diagnostics.str());
+    return {};
+}
 } // namespace
 
-thread_local static sim::SubProcessManager g_aiCpuProcMgr;
+static sim::SubProcessManager g_aiCpuProcMgr;
 
-SubProcessManager& GetAicpuProcMgr() { return g_aiCpuProcMgr; }
+SubProcessManager &GetAicpuProcMgr() { return g_aiCpuProcMgr; }
 
-SubProcessManager::~SubProcessManager()
-{
+SubProcessManager::~SubProcessManager() {
     if (m_pid > 0) {
         DestroyProcess();
     }
 }
 
-int SubProcessManager::CreateProcess(const SubProcessConfig& config)
-{
+int SubProcessManager::CreateProcess(const SubProcessConfig &config) {
     std::lock_guard<std::mutex> lock(m_forkLock);
 
     if (config.executable.empty() || config.args.empty()) {
-        HCCL_VM_ERROR("Invalid subprocess config: executable or argv is empty.");
+        HCCL_VM_ERROR(
+            "Invalid subprocess config: executable or argv is empty.");
         return -1;
     }
 
@@ -139,22 +144,22 @@ int SubProcessManager::CreateProcess(const SubProcessConfig& config)
     }
 
     // device进程执行参数拼接
-    std::vector<char*> argv;
-    for (const auto& arg : config.args) {
-        argv.push_back(const_cast<char*>(arg.c_str()));
+    std::vector<char *> argv;
+    for (const auto &arg : config.args) {
+        argv.push_back(const_cast<char *>(arg.c_str()));
     }
 
     std::string h2dReadFdStr = std::to_string(kH2dReadFd);
     std::string d2hWriteFdStr = std::to_string(kD2hWriteFd);
-    argv.push_back(const_cast<char*>(h2dReadFdStr.c_str()));
-    argv.push_back(const_cast<char*>(d2hWriteFdStr.c_str()));
+    argv.push_back(const_cast<char *>(h2dReadFdStr.c_str()));
+    argv.push_back(const_cast<char *>(d2hWriteFdStr.c_str()));
     argv.push_back(nullptr);
 
     if (pid == 0) {
         g_logger = nullptr;
         sim::PipeChildSetup(h2dPipe, d2hPipe, kH2dReadFd, kD2hWriteFd);
 
-        for (const auto& env : config.envVars) {
+        for (const auto &env : config.envVars) {
             setenv(env.first.c_str(), env.second.c_str(), 1);
         }
 
@@ -168,11 +173,13 @@ int SubProcessManager::CreateProcess(const SubProcessConfig& config)
     m_h2dWriteFd = h2dPipe.writeFd;
     m_d2hReadFd = d2hPipe.readFd;
 
-    HCCL_VM_INFO("Child process {} created (m_h2dWriteFd={}, m_d2hReadFd={}).", m_pid, m_h2dWriteFd, m_d2hReadFd);
+    HCCL_VM_INFO("Child process {} created (m_h2dWriteFd={}, m_d2hReadFd={}).",
+                 m_pid, m_h2dWriteFd, m_d2hReadFd);
 
     // 等待device进程管道准备就绪进入Ready状态
     if (WaitForReady() != 0) {
-        HCCL_VM_ERROR("Child process {} failed to become READY, aborting.", m_pid);
+        HCCL_VM_ERROR("Child process {} failed to become READY, aborting.",
+                      m_pid);
         DestroyProcess();
         return -1;
     }
@@ -180,8 +187,7 @@ int SubProcessManager::CreateProcess(const SubProcessConfig& config)
     return 0;
 }
 
-int SubProcessManager::WaitForReady()
-{
+int SubProcessManager::WaitForReady() {
     if (m_d2hReadFd < 0 || m_pid < 0) {
         HCCL_VM_ERROR("WaitForReady: child not running.");
         return -1;
@@ -191,7 +197,8 @@ int SubProcessManager::WaitForReady()
     uint8_t buf[16] = {0};
     uint32_t rspLen = 0;
     if (HostRecvMsg(rspCmd, buf, sizeof(buf), rspLen) != 0) {
-        HCCL_VM_ERROR("WaitForReady: child pid={} exited or read failed.", m_pid);
+        HCCL_VM_ERROR("WaitForReady: child pid={} exited or read failed.",
+                      m_pid);
         return -1;
     }
     if (rspCmd != PIPE_RSP_READY) {
@@ -202,8 +209,7 @@ int SubProcessManager::WaitForReady()
     return 0;
 }
 
-int SubProcessManager::DestroyProcess(int timeoutMs)
-{
+int SubProcessManager::DestroyProcess(int timeoutMs) {
     if (m_pid < 0) {
         HCCL_VM_INFO("Process already stopped.");
         return 0;
@@ -222,17 +228,19 @@ int SubProcessManager::DestroyProcess(int timeoutMs)
         int status;
         pid_t wPid = waitpid(m_pid, &status, WNOHANG);
         if (wPid == m_pid) {
-            HCCL_VM_INFO("Child process {} exited with status {}.", m_pid, status);
+            HCCL_VM_INFO("Child process {} exited with status {}.", m_pid,
+                         status);
             break;
         } else if (wPid == -1 && errno == ECHILD) {
             break;
         }
 
-        auto elapsed
-            = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - startTime)
-                  .count();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                           std::chrono::steady_clock::now() - startTime)
+                           .count();
         if (elapsed >= timeoutMs) {
-            HCCL_VM_WARN("Child process {} did not exit within {} ms, SIGKILL.", m_pid, timeoutMs);
+            HCCL_VM_WARN("Child process {} did not exit within {} ms, SIGKILL.",
+                         m_pid, timeoutMs);
             kill(m_pid, SIGKILL);
             waitpid(m_pid, &status, 0);
             break;
@@ -246,8 +254,7 @@ int SubProcessManager::DestroyProcess(int timeoutMs)
     return 0;
 }
 
-bool SubProcessManager::IsAlive() const
-{
+bool SubProcessManager::IsAlive() const {
     if (m_pid < 0) {
         return false;
     }
@@ -257,10 +264,9 @@ bool SubProcessManager::IsAlive() const
     return wPid == 0;
 }
 
-int SubProcessManager::Request(
-    uint8_t reqCmd, const void* reqData, uint32_t reqLen, uint8_t& rspCmd, void* rspData, uint32_t rspMaxLen,
-    uint32_t& rspLen)
-{
+int SubProcessManager::Request(uint8_t reqCmd, const void *reqData,
+                               uint32_t reqLen, uint8_t &rspCmd, void *rspData,
+                               uint32_t rspMaxLen, uint32_t &rspLen) {
     std::lock_guard<std::mutex> lock(m_rpcLock);
     if (HostSendMsg(reqCmd, reqData, reqLen) != 0) {
         return -1;
@@ -273,10 +279,10 @@ int SubProcessManager::Request(
     return 0;
 }
 
-int SubProcessManager::RequestV(
-    uint8_t reqCmd, const struct iovec* reqIov, uint32_t reqSegCnt, uint8_t& rspCmd, void* rspData, uint32_t rspMaxLen,
-    uint32_t& rspLen)
-{
+int SubProcessManager::RequestV(uint8_t reqCmd, const struct iovec *reqIov,
+                                uint32_t reqSegCnt, uint8_t &rspCmd,
+                                void *rspData, uint32_t rspMaxLen,
+                                uint32_t &rspLen) {
     std::lock_guard<std::mutex> lock(m_rpcLock);
     if (HostSendMsgV(reqCmd, reqIov, reqSegCnt) != 0) {
         return -1;
@@ -289,8 +295,8 @@ int SubProcessManager::RequestV(
     return 0;
 }
 
-int SubProcessManager::HostSendMsg(uint8_t cmd, const void* data, uint32_t len)
-{
+int SubProcessManager::HostSendMsg(uint8_t cmd, const void *data,
+                                   uint32_t len) {
     if (m_h2dWriteFd < 0) {
         HCCL_VM_ERROR("HostSendMsg: h2d pipe not open.");
         return -1;
@@ -299,8 +305,8 @@ int SubProcessManager::HostSendMsg(uint8_t cmd, const void* data, uint32_t len)
     return PipeSendMsg(m_h2dWriteFd, cmd, data, len);
 }
 
-int SubProcessManager::HostSendMsgV(uint8_t cmd, const struct iovec* iov, uint32_t iovcnt)
-{
+int SubProcessManager::HostSendMsgV(uint8_t cmd, const struct iovec *iov,
+                                    uint32_t iovcnt) {
     if (m_h2dWriteFd < 0) {
         HCCL_VM_ERROR("HostSendMsgV: h2d pipe not open.");
         return -1;
@@ -309,8 +315,8 @@ int SubProcessManager::HostSendMsgV(uint8_t cmd, const struct iovec* iov, uint32
     return PipeSendMsgV(m_h2dWriteFd, cmd, iov, iovcnt);
 }
 
-int SubProcessManager::HostRecvMsg(uint8_t& outCmd, void* outData, uint32_t maxLen, uint32_t& outLen)
-{
+int SubProcessManager::HostRecvMsg(uint8_t &outCmd, void *outData,
+                                   uint32_t maxLen, uint32_t &outLen) {
     if (m_d2hReadFd < 0) {
         HCCL_VM_ERROR("HostRecvMsg: d2h pipe not open.");
         return -1;
@@ -319,34 +325,38 @@ int SubProcessManager::HostRecvMsg(uint8_t& outCmd, void* outData, uint32_t maxL
     return PipeRecvMsg(m_d2hReadFd, outCmd, outData, maxLen, outLen);
 }
 
-bool IsAarch64Host()
-{
+bool IsAarch64Host() {
     utsname utsBuf;
     uname(&utsBuf);
-    return (std::strstr(utsBuf.machine, "aarch64") != nullptr || std::strstr(utsBuf.machine, "arm") != nullptr);
+    return (std::strstr(utsBuf.machine, "aarch64") != nullptr ||
+            std::strstr(utsBuf.machine, "arm") != nullptr);
 }
 
-SubProcessConfig CreateAicpuDeviceConfig(uint32_t rankId, uint32_t deviceKey)
-{
+SubProcessConfig CreateAicpuDeviceConfig(uint32_t rankId, uint32_t deviceKey) {
     SubProcessConfig config;
-    const char* ascendHomePath = std::getenv("ASCEND_HOME_PATH");
+    const char *ascendHomePath = std::getenv("ASCEND_HOME_PATH");
     const std::string cannSysroot = ResolveCannSysroot(ascendHomePath);
     if (cannSysroot.empty()) {
         return config;
     }
 
-    const std::string devBinPath = InstallPath::ResolveToInstallRoot("bin/device");
-    const std::string preloadPath = InstallPath::ResolveToInstallRoot("lib/aarch64/libhccl_device_proxy.so");
-    const std::string preloadPathL1 = InstallPath::ResolveToInstallRoot("lib/aarch64/libhccl_device_proxy_level1.so");
+    const std::string devBinPath =
+        InstallPath::ResolveToInstallRoot("bin/device");
+    const std::string preloadPath = InstallPath::ResolveToInstallRoot(
+        "lib/aarch64/libhccl_device_proxy.so");
+    const std::string preloadPathL1 = InstallPath::ResolveToInstallRoot(
+        "lib/aarch64/libhccl_device_proxy_level1.so");
     std::string libPath = InstallPath::ResolveToInstallRoot("lib/aarch64");
     if (ascendHomePath != nullptr) {
-        libPath += ":" + std::string(ascendHomePath) + "/" + GetArchStr() + "-linux/devlib/device";
+        libPath += ":" + std::string(ascendHomePath) + "/" + GetArchStr() +
+                   "-linux/devlib/device";
     }
     libPath += ":" + cannSysroot + "/lib64";
     libPath += ":" + cannSysroot + "/usr/lib64";
 
     if (IsAarch64Host()) {
-        const std::string cannLoaderPath = (fs::path(cannSysroot) / "lib64/ld-linux-aarch64.so.1").string();
+        const std::string cannLoaderPath =
+            (fs::path(cannSysroot) / "lib64/ld-linux-aarch64.so.1").string();
         config.executable = cannLoaderPath;
         config.args = {cannLoaderPath, "--library-path", libPath, devBinPath};
     } else {
@@ -359,9 +369,9 @@ SubProcessConfig CreateAicpuDeviceConfig(uint32_t rankId, uint32_t deviceKey)
     config.args.push_back(std::to_string(deviceKey));
 
     uint32_t vmLevel = 2;
-    const char* levelEnv = std::getenv("HCCL_VM_LEVEL");
+    const char *levelEnv = std::getenv("HCCL_VM_LEVEL");
     if (levelEnv != nullptr && levelEnv[0] != '\0') {
-        char* endptr = nullptr;
+        char *endptr = nullptr;
         unsigned long val = std::strtoul(levelEnv, &endptr, 10);
         if (endptr != levelEnv && *endptr == '\0') {
             vmLevel = static_cast<uint32_t>(val);
@@ -374,7 +384,8 @@ SubProcessConfig CreateAicpuDeviceConfig(uint32_t rankId, uint32_t deviceKey)
     }
     config.envVars["LD_LIBRARY_PATH"] = libPath;
 
-    HCCL_VM_INFO("AICPU CANN runtime: sysroot=[{}], executable=[{}].", cannSysroot, config.executable);
+    HCCL_VM_INFO("AICPU CANN runtime: sysroot=[{}], executable=[{}].",
+                 cannSysroot, config.executable);
 
     return config;
 }

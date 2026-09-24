@@ -1,11 +1,13 @@
 /**
  * Copyright (c) 2026 Huawei Technologies Co., Ltd.
- * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * CANN Open Software License Agreement Version 2.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
+ * This program is free software, you can redistribute it and/or modify it under
+ * the terms and conditions of CANN Open Software License Agreement Version 2.0
+ * (the "License"). Please refer to the License for details. You may not use
+ * this file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS
+ * FOR A PARTICULAR PURPOSE. See LICENSE in the root of the software repository
+ * for the full text of the License.
  */
 
 /**
@@ -44,13 +46,13 @@ extern "C" {
  * @retval HCCL_SUCCESS 注册成功（桩实现始终返回）
  * @retval HCCL_E_PTR commId 为空
  */
-HcclResult HcclDfxRegOpInfoByCommId(char* commId, void* hcclDfxOpInfo)
-{
+HcclResult HcclDfxRegOpInfoByCommId(char *commId, void *hcclDfxOpInfo) {
     if (commId == nullptr) {
         HCCL_VM_ERROR("{}: commId is nullptr", __func__);
         return HCCL_E_PTR;
     }
-    HCCL_VM_INFO("{}: commId={}, hcclDfxOpInfo={:p}", __func__, commId, static_cast<void*>(hcclDfxOpInfo));
+    HCCL_VM_INFO("{}: commId={}, hcclDfxOpInfo={:p}", __func__, commId,
+                 static_cast<void *>(hcclDfxOpInfo));
     return HCCL_SUCCESS;
 }
 
@@ -68,10 +70,10 @@ HcclResult HcclDfxRegOpInfoByCommId(char* commId, void* hcclDfxOpInfo)
  * @return HcclResult 接口成功返回 HCCL_SUCCESS。
  * @retval HCCL_SUCCESS 上报成功（桩实现始终返回）
  */
-HcclResult HcclProfilingReportOp(HcclComm comm, uint64_t beginTime)
-{
+HcclResult HcclProfilingReportOp(HcclComm comm, uint64_t beginTime) {
     uint64_t commId = reinterpret_cast<uint64_t>(comm);
-    HCCL_VM_INFO("{}: commId={:d}, beginTime={:d}", __func__, commId, beginTime);
+    HCCL_VM_INFO("{}: commId={:d}, beginTime={:d}", __func__, commId,
+                 beginTime);
     return HCCL_SUCCESS;
 }
 
@@ -90,12 +92,11 @@ HcclResult HcclProfilingReportOp(HcclComm comm, uint64_t beginTime)
  * @return HcclResult 接口成功返回 HCCL_SUCCESS。
  * @retval HCCL_SUCCESS 上报成功（桩实现始终返回）
  */
-HcclResult HcclReportAicpuKernel(HcclComm comm, uint64_t beginTime, char* kernelName)
-{
+HcclResult HcclReportAicpuKernel(HcclComm comm, uint64_t beginTime,
+                                 char *kernelName) {
     uint64_t commId = reinterpret_cast<uint64_t>(comm);
-    HCCL_VM_INFO(
-        "{}: commId={:d}, beginTime={:d}, kernelName={}", __func__, commId, beginTime,
-        kernelName ? kernelName : "(null)");
+    HCCL_VM_INFO("{}: commId={:d}, beginTime={:d}, kernelName={}", __func__,
+                 commId, beginTime, kernelName ? kernelName : "(null)");
     return HCCL_SUCCESS;
 }
 
@@ -113,10 +114,10 @@ HcclResult HcclReportAicpuKernel(HcclComm comm, uint64_t beginTime, char* kernel
  * @return HcclResult 接口成功返回 HCCL_SUCCESS。
  * @retval HCCL_SUCCESS 上报成功（桩实现始终返回）
  */
-HcclResult HcclReportAivKernel(HcclComm comm, uint64_t beginTime)
-{
+HcclResult HcclReportAivKernel(HcclComm comm, uint64_t beginTime) {
     uint64_t commId = reinterpret_cast<uint64_t>(comm);
-    HCCL_VM_INFO("{}: commId={:d}, beginTime={:d}", __func__, commId, beginTime);
+    HCCL_VM_INFO("{}: commId={:d}, beginTime={:d}", __func__, commId,
+                 beginTime);
     return HCCL_SUCCESS;
 }
 
@@ -130,8 +131,7 @@ HcclResult HcclReportAivKernel(HcclComm comm, uint64_t beginTime)
  *
  * @return uint64_t 系统周期时间（桩实现始终返回 0）。
  */
-uint64_t HcommGetProfilingSysCycleTime()
-{
+uint64_t HcommGetProfilingSysCycleTime() {
     HCCL_VM_INFO("{}: stub returns 0", __func__);
     return 0;
 }

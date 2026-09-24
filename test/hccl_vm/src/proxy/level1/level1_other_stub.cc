@@ -1,11 +1,13 @@
 /**
  * Copyright (c) 2026 Huawei Technologies Co., Ltd.
- * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * CANN Open Software License Agreement Version 2.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
+ * This program is free software, you can redistribute it and/or modify it under
+ * the terms and conditions of CANN Open Software License Agreement Version 2.0
+ * (the "License"). Please refer to the License for details. You may not use
+ * this file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS
+ * FOR A PARTICULAR PURPOSE. See LICENSE in the root of the software repository
+ * for the full text of the License.
  */
 
 /**
@@ -45,12 +47,13 @@ extern "C" {
  * @retval HCCL_E_PTR comm、threads或exportedThreads为空
  * @retval HCCL_E_PARA threadNum为0
  */
-HcclResult HcclThreadExportToCommEngine(
-    HcclComm comm, uint32_t threadNum, const ThreadHandle* threads, CommEngine dstCommEngine,
-    ThreadHandle* exportedThreads)
-{
+HcclResult HcclThreadExportToCommEngine(HcclComm comm, uint32_t threadNum,
+                                        const ThreadHandle *threads,
+                                        CommEngine dstCommEngine,
+                                        ThreadHandle *exportedThreads) {
     if (comm == nullptr || threads == nullptr || exportedThreads == nullptr) {
-        HCCL_VM_ERROR("{}: comm, threads or exportedThreads is nullptr", __func__);
+        HCCL_VM_ERROR("{}: comm, threads or exportedThreads is nullptr",
+                      __func__);
         return HCCL_E_PTR;
     }
     if (threadNum == 0) {
@@ -62,9 +65,8 @@ HcclResult HcclThreadExportToCommEngine(
     }
 
     uint64_t commId = reinterpret_cast<uint64_t>(comm);
-    HCCL_VM_INFO(
-        "{} success, commId={:d}, threadNum={:d}, dstCommEngine={:d}", __func__, commId, threadNum,
-        static_cast<int>(dstCommEngine));
+    HCCL_VM_INFO("{} success, commId={:d}, threadNum={:d}, dstCommEngine={:d}",
+                 __func__, commId, threadNum, static_cast<int>(dstCommEngine));
     return HCCL_SUCCESS;
 }
 
@@ -81,8 +83,7 @@ HcclResult HcclThreadExportToCommEngine(
  * @retval HCCL_SUCCESS 查询完成（始终为 miss）
  * @retval HCCL_E_PTR tag或isHit指针为空
  */
-int32_t HcommAicpuTsTaskCacheLookup(const char* tag, bool* isHit)
-{
+int32_t HcommAicpuTsTaskCacheLookup(const char *tag, bool *isHit) {
     if (tag == nullptr || isHit == nullptr) {
         HCCL_VM_ERROR("{}: tag or isHit is nullptr", __func__);
         return HCCL_E_PTR;
@@ -107,8 +108,8 @@ int32_t HcommAicpuTsTaskCacheLookup(const char* tag, bool* isHit)
  * @retval HCCL_SUCCESS 空操作成功
  * @retval HCCL_E_PTR tag、addrs或sizes指针为空
  */
-HcommResult HcommAicpuTsTaskCacheStart(const char* tag, void** addrs, uint64_t* sizes, uint64_t count)
-{
+HcommResult HcommAicpuTsTaskCacheStart(const char *tag, void **addrs,
+                                       uint64_t *sizes, uint64_t count) {
     if (tag == nullptr || addrs == nullptr || sizes == nullptr) {
         HCCL_VM_ERROR("{}: tag, addrs or sizes is nullptr", __func__);
         return HCCL_E_PTR;
@@ -129,8 +130,7 @@ HcommResult HcommAicpuTsTaskCacheStart(const char* tag, void** addrs, uint64_t* 
  * @retval HCCL_SUCCESS 空操作成功
  * @retval HCCL_E_PTR tag指针为空
  */
-HcommResult HcommAicpuTsTaskCacheEnd(const char* tag)
-{
+HcommResult HcommAicpuTsTaskCacheEnd(const char *tag) {
     if (tag == nullptr) {
         HCCL_VM_ERROR("{}: tag is nullptr", __func__);
         return HCCL_E_PTR;
@@ -155,8 +155,8 @@ HcommResult HcommAicpuTsTaskCacheEnd(const char* tag)
  * @retval HCCL_SUCCESS 空操作成功
  * @retval HCCL_E_PTR tag、addrs或sizes指针为空
  */
-HcommResult HcommAicpuTsTaskCacheExecute(const char* tag, void** addrs, uint64_t* sizes, uint64_t count)
-{
+HcommResult HcommAicpuTsTaskCacheExecute(const char *tag, void **addrs,
+                                         uint64_t *sizes, uint64_t count) {
     if (tag == nullptr || addrs == nullptr || sizes == nullptr) {
         HCCL_VM_ERROR("{}: tag, addrs or sizes is nullptr", __func__);
         return HCCL_E_PTR;
@@ -177,8 +177,7 @@ HcommResult HcommAicpuTsTaskCacheExecute(const char* tag, void** addrs, uint64_t
  * @retval HCCL_SUCCESS 空操作成功
  * @retval HCCL_E_PTR tag指针为空
  */
-HcommResult HcommAicpuTsTaskCacheClear(const char* tag)
-{
+HcommResult HcommAicpuTsTaskCacheClear(const char *tag) {
     if (tag == nullptr) {
         HCCL_VM_ERROR("{}: tag is nullptr", __func__);
         return HCCL_E_PTR;

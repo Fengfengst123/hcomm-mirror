@@ -1,11 +1,18 @@
 /**
  * Copyright (c) 2026 Huawei Technologies Co., Ltd.
- * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * CANN Open Software License Agreement Version 2.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
+ * This program is free software, you can redistribute it and/or modify it under
+ * the terms and conditions of CANN Open Software License Agreement Version 2.0
+ * (the "License"). Please refer to the License for details. You may not use
+ * this file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS
+ * FOR A PARTICULAR PURPOSE. See LICENSE in the root of the software repository
+ * for the full text of the License.
+ */
+
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License.
  */
 
 #include <cstdint>
@@ -19,15 +26,13 @@
 namespace {
 const std::string kTestDbPath = "/tmp/test_sim_runner_db.db";
 
-void CleanUpDb()
-{
+void CleanUpDb() {
     std::remove(kTestDbPath.c_str());
     std::remove((kTestDbPath + "-wal").c_str());
     std::remove((kTestDbPath + "-shm").c_str());
 }
 
-void SetupTestData()
-{
+void SetupTestData() {
     CleanUpDb();
     sim::SqliteDatabase::SetDbPath(kTestDbPath);
     SimRunnerSqliteDB::Instance().ClearAll();
@@ -52,28 +57,26 @@ void SetupTestData()
 } // namespace
 
 class SimRunnerDbTest : public testing::Test {
-protected:
+  protected:
     void SetUp() override { SetupTestData(); }
 
     void TearDown() override { CleanUpDb(); }
 };
 
-TEST_F(SimRunnerDbTest, GetAllTableName_ReturnsNonEmptyList)
-{
+TEST_F(SimRunnerDbTest, GetAllTableName_ReturnsNonEmptyList) {
     auto tableNames = RunnerDB::GetAllTableName();
 
     EXPECT_GT(tableNames.size(), 0);
 }
 
-TEST_F(SimRunnerDbTest, GetAllTableName_ContainsExpectedTables)
-{
+TEST_F(SimRunnerDbTest, GetAllTableName_ContainsExpectedTables) {
     auto tableNames = RunnerDB::GetAllTableName();
 
     bool foundServer = false;
     bool foundHost = false;
     bool foundDevice = false;
 
-    for (const auto& name : tableNames) {
+    for (const auto &name : tableNames) {
         if (name == "Server") {
             foundServer = true;
         }
@@ -90,8 +93,7 @@ TEST_F(SimRunnerDbTest, GetAllTableName_ContainsExpectedTables)
     EXPECT_TRUE(foundDevice);
 }
 
-TEST_F(SimRunnerDbTest, Add_And_GetById_Server)
-{
+TEST_F(SimRunnerDbTest, Add_And_GetById_Server) {
     sim::Server server{};
     server.pod_id = 200;
     snprintf(server.version, sizeof(server.version), "v2.0");
@@ -105,8 +107,7 @@ TEST_F(SimRunnerDbTest, Add_And_GetById_Server)
     EXPECT_STREQ(result->version, "v2.0");
 }
 
-TEST_F(SimRunnerDbTest, Add_And_GetById_Host)
-{
+TEST_F(SimRunnerDbTest, Add_And_GetById_Host) {
     sim::Host host{};
     host.server_id = 2;
     snprintf(host.ip_addr, sizeof(host.ip_addr), "192.168.2.1");
@@ -122,71 +123,56 @@ TEST_F(SimRunnerDbTest, Add_And_GetById_Host)
     EXPECT_EQ(result->arch, 2);
 }
 
-TEST_F(SimRunnerDbTest, GetByPred_ReturnsMatchingRecords)
-{
-    auto results = RunnerDB::GetByPred<sim::Device>([](const sim::Device& d) {
-        return d.server_id == 1;
-    });
+TEST_F(SimRunnerDbTest, GetByPred_ReturnsMatchingRecords) {
+    auto results = RunnerDB::GetByPred<sim::Device>(
+        [](const sim::Device &d) { return d.server_id == 1; });
 
     EXPECT_GE(results.size(), 1);
 }
 
-TEST_F(SimRunnerDbTest, GetByPred_ReturnsEmptyForNoMatch)
-{
-    auto results = RunnerDB::GetByPred<sim::Device>([](const sim::Device& d) {
-        return d.server_id == 999;
-    });
+TEST_F(SimRunnerDbTest, GetByPred_ReturnsEmptyForNoMatch) {
+    auto results = RunnerDB::GetByPred<sim::Device>(
+        [](const sim::Device &d) { return d.server_id == 999; });
 
     EXPECT_EQ(results.size(), 0);
 }
 
-TEST_F(SimRunnerDbTest, GetOneByPred_ReturnsFirstMatch)
-{
-    auto result = RunnerDB::GetOneByPred<sim::Device>([](const sim::Device& d) {
-        return d.server_id == 1;
-    });
+TEST_F(SimRunnerDbTest, GetOneByPred_ReturnsFirstMatch) {
+    auto result = RunnerDB::GetOneByPred<sim::Device>(
+        [](const sim::Device &d) { return d.server_id == 1; });
 
     EXPECT_TRUE(result.second);
     EXPECT_EQ(result.first.server_id, 1);
 }
 
-TEST_F(SimRunnerDbTest, GetOneByPred_ReturnsFalseForNoMatch)
-{
-    auto result = RunnerDB::GetOneByPred<sim::Device>([](const sim::Device& d) {
-        return d.server_id == 999;
-    });
+TEST_F(SimRunnerDbTest, GetOneByPred_ReturnsFalseForNoMatch) {
+    auto result = RunnerDB::GetOneByPred<sim::Device>(
+        [](const sim::Device &d) { return d.server_id == 999; });
 
     EXPECT_FALSE(result.second);
 }
 
-TEST_F(SimRunnerDbTest, Update_ModifiesRecord)
-{
-    auto result = RunnerDB::GetOneByPred<sim::Device>([](const sim::Device& d) {
-        return d.physical_id == 0;
-    });
+TEST_F(SimRunnerDbTest, Update_ModifiesRecord) {
+    auto result = RunnerDB::GetOneByPred<sim::Device>(
+        [](const sim::Device &d) { return d.physical_id == 0; });
     ASSERT_TRUE(result.second);
 
     uint64_t id = result.first.id;
-    RunnerDB::Update<sim::Device>(id, [](sim::Device& d) {
-        d.logic_id = 999;
-    });
+    RunnerDB::Update<sim::Device>(id, [](sim::Device &d) { d.logic_id = 999; });
 
     auto updated = RunnerDB::GetById<sim::Device>(id);
     ASSERT_TRUE(updated.has_value());
     EXPECT_EQ(updated->logic_id, 999);
 }
 
-TEST_F(SimRunnerDbTest, Update_ReturnsFalseForInvalidId)
-{
-    bool ret = RunnerDB::Update<sim::Device>(99999, [](sim::Device& d) {
-        d.logic_id = 999;
-    });
+TEST_F(SimRunnerDbTest, Update_ReturnsFalseForInvalidId) {
+    bool ret = RunnerDB::Update<sim::Device>(
+        99999, [](sim::Device &d) { d.logic_id = 999; });
 
     EXPECT_FALSE(ret);
 }
 
-TEST_F(SimRunnerDbTest, Delete_RemovesRecord)
-{
+TEST_F(SimRunnerDbTest, Delete_RemovesRecord) {
     sim::Device device{};
     device.server_id = 1;
     device.logic_id = 100;
@@ -200,15 +186,13 @@ TEST_F(SimRunnerDbTest, Delete_RemovesRecord)
     EXPECT_FALSE(result.has_value());
 }
 
-TEST_F(SimRunnerDbTest, Delete_ReturnsFalseForInvalidId)
-{
+TEST_F(SimRunnerDbTest, Delete_ReturnsFalseForInvalidId) {
     bool ret = RunnerDB::Delete<sim::Device>(99999);
 
     EXPECT_FALSE(ret);
 }
 
-TEST_F(SimRunnerDbTest, DeleteAll_RemovesAllRecords)
-{
+TEST_F(SimRunnerDbTest, DeleteAll_RemovesAllRecords) {
     sim::Server server1{};
     server1.pod_id = 1;
     snprintf(server1.version, sizeof(server1.version), "v1");
@@ -227,14 +211,12 @@ TEST_F(SimRunnerDbTest, DeleteAll_RemovesAllRecords)
     bool ret = RunnerDB::DeleteAll<sim::Server>();
     EXPECT_TRUE(ret);
 
-    auto results = RunnerDB::GetByPred<sim::Server>([](const sim::Server&) {
-        return true;
-    });
+    auto results = RunnerDB::GetByPred<sim::Server>(
+        [](const sim::Server &) { return true; });
     EXPECT_EQ(results.size(), 0);
 }
 
-TEST_F(SimRunnerDbTest, MultipleAdd_MaintainsDataIntegrity)
-{
+TEST_F(SimRunnerDbTest, MultipleAdd_MaintainsDataIntegrity) {
     for (int i = 0; i < 10; i++) {
         sim::Device device{};
         device.server_id = 1;
@@ -243,23 +225,20 @@ TEST_F(SimRunnerDbTest, MultipleAdd_MaintainsDataIntegrity)
         RunnerDB::Add<sim::Device>(device);
     }
 
-    auto results = RunnerDB::GetByPred<sim::Device>([](const sim::Device&) {
-        return true;
-    });
+    auto results = RunnerDB::GetByPred<sim::Device>(
+        [](const sim::Device &) { return true; });
 
     EXPECT_GE(results.size(), 11);
 }
 
 class SimRunnerDbContextTest : public testing::Test {
-protected:
-    void SetUp() override
-    {
+  protected:
+    void SetUp() override {
         SetupTestData();
 
         sim::Device device{};
-        auto ret = RunnerDB::GetOneByPred<sim::Device>([](const sim::Device& d) {
-            return d.physical_id == 0;
-        });
+        auto ret = RunnerDB::GetOneByPred<sim::Device>(
+            [](const sim::Device &d) { return d.physical_id == 0; });
         ASSERT_TRUE(ret.second);
 
         sim::Context ctx{};
@@ -272,35 +251,30 @@ protected:
     void TearDown() override { CleanUpDb(); }
 };
 
-TEST_F(SimRunnerDbContextTest, GetById_Context)
-{
-    auto results = RunnerDB::GetByPred<sim::Context>([](const sim::Context&) {
-        return true;
-    });
+TEST_F(SimRunnerDbContextTest, GetById_Context) {
+    auto results = RunnerDB::GetByPred<sim::Context>(
+        [](const sim::Context &) { return true; });
 
     EXPECT_GE(results.size(), 1);
     EXPECT_EQ(results[0].is_default, 1);
 }
 
-TEST_F(SimRunnerDbContextTest, GetDefaultContext)
-{
-    auto ctx = RunnerDB::GetOneByPred<sim::Context>([](const sim::Context& c) {
-        return c.is_default == 1;
-    });
+TEST_F(SimRunnerDbContextTest, GetDefaultContext) {
+    auto ctx = RunnerDB::GetOneByPred<sim::Context>(
+        [](const sim::Context &c) { return c.is_default == 1; });
 
     EXPECT_TRUE(ctx.second);
     EXPECT_EQ(ctx.first.is_default, 1);
 }
 
 class SimRunnerDbStreamTest : public testing::Test {
-protected:
+  protected:
     void SetUp() override { SetupTestData(); }
 
     void TearDown() override { CleanUpDb(); }
 };
 
-TEST_F(SimRunnerDbStreamTest, Add_Stream)
-{
+TEST_F(SimRunnerDbStreamTest, Add_Stream) {
     sim::Stream stream{};
     stream.ctx_id = 1;
     stream.priority = 1;
@@ -314,23 +288,19 @@ TEST_F(SimRunnerDbStreamTest, Add_Stream)
     EXPECT_EQ(result->priority, 1);
 }
 
-TEST_F(SimRunnerDbStreamTest, Update_Stream)
-{
+TEST_F(SimRunnerDbStreamTest, Update_Stream) {
     sim::Stream stream{};
     stream.ctx_id = 1;
     uint64_t id = RunnerDB::Add<sim::Stream>(stream);
 
-    RunnerDB::Update<sim::Stream>(id, [](sim::Stream& s) {
-        s.priority = 5;
-    });
+    RunnerDB::Update<sim::Stream>(id, [](sim::Stream &s) { s.priority = 5; });
 
     auto result = RunnerDB::GetById<sim::Stream>(id);
     ASSERT_TRUE(result.has_value());
     EXPECT_EQ(result->priority, 5);
 }
 
-TEST_F(SimRunnerDbStreamTest, GetStreamsByCtxId)
-{
+TEST_F(SimRunnerDbStreamTest, GetStreamsByCtxId) {
     sim::Stream stream1{};
     stream1.ctx_id = 10;
     RunnerDB::Add<sim::Stream>(stream1);
@@ -339,9 +309,8 @@ TEST_F(SimRunnerDbStreamTest, GetStreamsByCtxId)
     stream2.ctx_id = 10;
     RunnerDB::Add<sim::Stream>(stream2);
 
-    auto results = RunnerDB::GetByPred<sim::Stream>([](const sim::Stream& s) {
-        return s.ctx_id == 10;
-    });
+    auto results = RunnerDB::GetByPred<sim::Stream>(
+        [](const sim::Stream &s) { return s.ctx_id == 10; });
 
     EXPECT_EQ(results.size(), 2);
 }

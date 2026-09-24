@@ -1,11 +1,13 @@
 /**
  * Copyright (c) 2026 Huawei Technologies Co., Ltd.
- * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * CANN Open Software License Agreement Version 2.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
+ * This program is free software, you can redistribute it and/or modify it under
+ * the terms and conditions of CANN Open Software License Agreement Version 2.0
+ * (the "License"). Please refer to the License for details. You may not use
+ * this file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS
+ * FOR A PARTICULAR PURPOSE. See LICENSE in the root of the software repository
+ * for the full text of the License.
  */
 
 /**
@@ -77,8 +79,7 @@ extern "C" {
  *
  * @return bool 始终返回 true。
  */
-bool HcommIsSupportHcommRegOpInfo()
-{
+bool HcommIsSupportHcommRegOpInfo() {
     HCCL_VM_INFO("{}: stub returns true", __func__);
     return true;
 }
@@ -96,13 +97,13 @@ bool HcommIsSupportHcommRegOpInfo()
  * @param size 输入：算子信息数据长度。
  * @return HcclResult 成功返回 HCCL_SUCCESS，commId 为空返回 HCCL_E_PTR。
  */
-HcclResult HcommRegOpInfo(const char* commId, void* opInfo, size_t size)
-{
+HcclResult HcommRegOpInfo(const char *commId, void *opInfo, size_t size) {
     if (commId == nullptr) {
         HCCL_VM_ERROR("{}: commId is nullptr", __func__);
         return HCCL_E_PTR;
     }
-    HCCL_VM_INFO("{}: commId={}, opInfo={:p}, size={}", __func__, commId, opInfo, size);
+    HCCL_VM_INFO("{}: commId={}, opInfo={:p}, size={}", __func__, commId,
+                 opInfo, size);
     return HCCL_SUCCESS;
 }
 
@@ -115,8 +116,7 @@ HcclResult HcommRegOpInfo(const char* commId, void* opInfo, size_t size)
  *
  * @return bool 始终返回 true。
  */
-bool HcommIsSupportHcommRegOpTaskException()
-{
+bool HcommIsSupportHcommRegOpTaskException() {
     HCCL_VM_INFO("{}: stub returns true", __func__);
     return true;
 }
@@ -133,13 +133,14 @@ bool HcommIsSupportHcommRegOpTaskException()
  * @param callback 输入：解析算子信息并输出字符数组的回调函数指针。
  * @return HcclResult 成功返回 HCCL_SUCCESS，commId 为空返回 HCCL_E_PTR。
  */
-HcclResult HcommRegOpTaskException(const char* commId, HcommGetOpInfoCallback callback)
-{
+HcclResult HcommRegOpTaskException(const char *commId,
+                                   HcommGetOpInfoCallback callback) {
     if (commId == nullptr) {
         HCCL_VM_ERROR("{}: commId is nullptr", __func__);
         return HCCL_E_PTR;
     }
-    HCCL_VM_INFO("{}: commId={}, callback={:p}", __func__, commId, reinterpret_cast<void*>(callback));
+    HCCL_VM_INFO("{}: commId={}, callback={:p}", __func__, commId,
+                 reinterpret_cast<void *>(callback));
     return HCCL_SUCCESS;
 }
 
@@ -155,13 +156,13 @@ HcclResult HcommRegOpTaskException(const char* commId, HcommGetOpInfoCallback ca
  * @param hcclDfxOpInfo 输入：指向 DFX 算子信息结构体的指针。
  * @return HcclResult 成功返回 HCCL_SUCCESS，commId 为空返回 HCCL_E_PTR。
  */
-HcclResult HcclDfxRegOpInfoByCommId(char* commId, void* hcclDfxOpInfo)
-{
+HcclResult HcclDfxRegOpInfoByCommId(char *commId, void *hcclDfxOpInfo) {
     if (commId == nullptr) {
         HCCL_VM_ERROR("{}: commId is nullptr", __func__);
         return HCCL_E_PTR;
     }
-    HCCL_VM_INFO("{}: commId={}, hcclDfxOpInfo={:p}", __func__, commId, hcclDfxOpInfo);
+    HCCL_VM_INFO("{}: commId={}, hcclDfxOpInfo={:p}", __func__, commId,
+                 hcclDfxOpInfo);
     return HCCL_SUCCESS;
 }
 
@@ -175,9 +176,9 @@ HcclResult HcclDfxRegOpInfoByCommId(char* commId, void* hcclDfxOpInfo)
  * @param groupname 输入：设备算子所属组名。
  * @return HcclResult 始终返回 HCCL_SUCCESS。
  */
-HcclResult HcommProfilingReportDeviceOp(const char* groupname)
-{
-    HCCL_VM_INFO("{}: groupname={}", __func__, groupname ? groupname : "(null)");
+HcclResult HcommProfilingReportDeviceOp(const char *groupname) {
+    HCCL_VM_INFO("{}: groupname={}", __func__,
+                 groupname ? groupname : "(null)");
     return HCCL_SUCCESS;
 }
 
@@ -192,9 +193,10 @@ HcclResult HcommProfilingReportDeviceOp(const char* groupname)
  * @param groupname 输入：算子所属组名。
  * @return HcclResult 始终返回 HCCL_SUCCESS。
  */
-HcclResult HcommProfilingReportKernelStartTask(uint64_t thread, const char* groupname)
-{
-    HCCL_VM_INFO("{}: thread={:d}, groupname={}", __func__, thread, groupname ? groupname : "(null)");
+HcclResult HcommProfilingReportKernelStartTask(uint64_t thread,
+                                               const char *groupname) {
+    HCCL_VM_INFO("{}: thread={:d}, groupname={}", __func__, thread,
+                 groupname ? groupname : "(null)");
     return HCCL_SUCCESS;
 }
 
@@ -209,9 +211,10 @@ HcclResult HcommProfilingReportKernelStartTask(uint64_t thread, const char* grou
  * @param groupname 输入：算子所属组名。
  * @return HcclResult 始终返回 HCCL_SUCCESS。
  */
-HcclResult HcommProfilingReportKernelEndTask(uint64_t thread, const char* groupname)
-{
-    HCCL_VM_INFO("{}: thread={:d}, groupname={}", __func__, thread, groupname ? groupname : "(null)");
+HcclResult HcommProfilingReportKernelEndTask(uint64_t thread,
+                                             const char *groupname) {
+    HCCL_VM_INFO("{}: thread={:d}, groupname={}", __func__, thread,
+                 groupname ? groupname : "(null)");
     return HCCL_SUCCESS;
 }
 
@@ -227,10 +230,9 @@ HcclResult HcommProfilingReportKernelEndTask(uint64_t thread, const char* groupn
  * @param threadNum 输入：线程数量。
  * @return HcclResult 始终返回 HCCL_SUCCESS。
  */
-HcclResult HcommProfilingInit(ThreadHandle* threads, uint32_t threadNum)
-{
-    HCCL_VM_INFO(
-        "{}: threads={:p}, threadNum={:d}", __func__, threads ? static_cast<void*>(threads) : nullptr, threadNum);
+HcclResult HcommProfilingInit(ThreadHandle *threads, uint32_t threadNum) {
+    HCCL_VM_INFO("{}: threads={:p}, threadNum={:d}", __func__,
+                 threads ? static_cast<void *>(threads) : nullptr, threadNum);
     return HCCL_SUCCESS;
 }
 
@@ -246,10 +248,9 @@ HcclResult HcommProfilingInit(ThreadHandle* threads, uint32_t threadNum)
  * @param threadNum 输入：线程数量。
  * @return HcclResult 始终返回 HCCL_SUCCESS。
  */
-HcclResult HcommProfilingEnd(ThreadHandle* threads, uint32_t threadNum)
-{
-    HCCL_VM_INFO(
-        "{}: threads={:p}, threadNum={:d}", __func__, threads ? static_cast<void*>(threads) : nullptr, threadNum);
+HcclResult HcommProfilingEnd(ThreadHandle *threads, uint32_t threadNum) {
+    HCCL_VM_INFO("{}: threads={:p}, threadNum={:d}", __func__,
+                 threads ? static_cast<void *>(threads) : nullptr, threadNum);
     return HCCL_SUCCESS;
 }
 
@@ -263,8 +264,7 @@ HcclResult HcommProfilingEnd(ThreadHandle* threads, uint32_t threadNum)
  * @param thread 输入：线程句柄。
  * @return HcclResult 始终返回 HCCL_SUCCESS。
  */
-HcclResult HcommProfilingReportMainStreamAndFirstTask(ThreadHandle thread)
-{
+HcclResult HcommProfilingReportMainStreamAndFirstTask(ThreadHandle thread) {
     HCCL_VM_INFO("{}: thread={:d}", __func__, thread);
     return HCCL_SUCCESS;
 }
@@ -279,8 +279,7 @@ HcclResult HcommProfilingReportMainStreamAndFirstTask(ThreadHandle thread)
  * @param thread 输入：线程句柄。
  * @return HcclResult 始终返回 HCCL_SUCCESS。
  */
-HcclResult HcommProfilingReportMainStreamAndLastTask(ThreadHandle thread)
-{
+HcclResult HcommProfilingReportMainStreamAndLastTask(ThreadHandle thread) {
     HCCL_VM_INFO("{}: thread={:d}", __func__, thread);
     return HCCL_SUCCESS;
 }
@@ -295,8 +294,7 @@ HcclResult HcommProfilingReportMainStreamAndLastTask(ThreadHandle thread)
  * @param profInfo 输入：算子 Profiling 信息结构体（按值传递）。
  * @return HcclResult 始终返回 HCCL_SUCCESS。
  */
-HcclResult HcommProfilingReportDeviceHcclOpInfo(HcomProInfoTmp profInfo)
-{
+HcclResult HcommProfilingReportDeviceHcclOpInfo(HcomProInfoTmp profInfo) {
     (void)profInfo;
     HCCL_VM_INFO("{}: stub returns SUCCESS", __func__);
     return HCCL_SUCCESS;

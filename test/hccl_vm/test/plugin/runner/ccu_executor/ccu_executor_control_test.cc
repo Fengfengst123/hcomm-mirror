@@ -1,11 +1,13 @@
 /**
  * Copyright (c) 2026 Huawei Technologies Co., Ltd.
- * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * CANN Open Software License Agreement Version 2.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
+ * This program is free software, you can redistribute it and/or modify it under
+ * the terms and conditions of CANN Open Software License Agreement Version 2.0
+ * (the "License"). Please refer to the License for details. You may not use
+ * this file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS
+ * FOR A PARTICULAR PURPOSE. See LICENSE in the root of the software repository
+ * for the full text of the License.
  */
 
 /**
@@ -30,7 +32,7 @@ using namespace hcomm::CcuRep;
 
 // Base fixture with common helpers
 class ControlExecutorTest : public testing::Test {
-protected:
+  protected:
     void SetUp() override {}
     void TearDown() override {}
 };
@@ -41,11 +43,12 @@ protected:
 class ClearCkeExecutorTest : public ControlExecutorTest {};
 
 // Test: ClearCkeExecutor struct size check
-TEST_F(ClearCkeExecutorTest, StructSize) { EXPECT_GT(sizeof(ClearCkeExecutor), 0); }
+TEST_F(ClearCkeExecutorTest, StructSize) {
+    EXPECT_GT(sizeof(ClearCkeExecutor), 0);
+}
 
 // Test: ClearCkeExecutor default constructor
-TEST_F(ClearCkeExecutorTest, DefaultConstructor)
-{
+TEST_F(ClearCkeExecutorTest, DefaultConstructor) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     ClearCkeExecutor executor(0, 0, 0, instr, nullptr);
@@ -54,8 +57,7 @@ TEST_F(ClearCkeExecutorTest, DefaultConstructor)
 }
 
 // Test: ClearCkeExecutor parameterized constructor with valid parameters
-TEST_F(ClearCkeExecutorTest, ParameterizedConstructor)
-{
+TEST_F(ClearCkeExecutorTest, ParameterizedConstructor) {
     int streamId = 0;
     int rankId = 0;
     int dieId = 0;
@@ -68,8 +70,7 @@ TEST_F(ClearCkeExecutorTest, ParameterizedConstructor)
 }
 
 // Test: ClearCkeExecutor Parser with zero values
-TEST_F(ClearCkeExecutorTest, ParserZeroValues)
-{
+TEST_F(ClearCkeExecutorTest, ParserZeroValues) {
     int streamId = 0;
     int rankId = 0;
     int dieId = 0;
@@ -83,8 +84,7 @@ TEST_F(ClearCkeExecutorTest, ParserZeroValues)
 }
 
 // Test: ClearCkeExecutor Parser with max values
-TEST_F(ClearCkeExecutorTest, ParserMaxValues)
-{
+TEST_F(ClearCkeExecutorTest, ParserMaxValues) {
     int streamId = 0;
     int rankId = 0;
     int dieId = 0;
@@ -98,8 +98,7 @@ TEST_F(ClearCkeExecutorTest, ParserMaxValues)
 }
 
 // Test: ClearCkeExecutor Parser with boundary values
-TEST_F(ClearCkeExecutorTest, ParserBoundaryValues)
-{
+TEST_F(ClearCkeExecutorTest, ParserBoundaryValues) {
     int streamId = 0;
     int rankId = 0;
     int dieId = 0;
@@ -121,8 +120,7 @@ TEST_F(ClearCkeExecutorTest, ParserBoundaryValues)
 }
 
 // Test: ClearCkeExecutor with different rank and die IDs
-TEST_F(ClearCkeExecutorTest, DifferentRankDieIds)
-{
+TEST_F(ClearCkeExecutorTest, DifferentRankDieIds) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
 
@@ -137,8 +135,7 @@ TEST_F(ClearCkeExecutorTest, DifferentRankDieIds)
 }
 
 // Test: ClearCkeExecutor Describe returns non-empty string
-TEST_F(ClearCkeExecutorTest, DescribeNonEmpty)
-{
+TEST_F(ClearCkeExecutorTest, DescribeNonEmpty) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     instr.v1.clearCKE.clearType = 1;
@@ -156,14 +153,13 @@ TEST_F(ClearCkeExecutorTest, DescribeNonEmpty)
 }
 
 // Test: ClearCkeExecutor inheritance from CcuExecutorBase
-TEST_F(ClearCkeExecutorTest, InheritanceCheck)
-{
+TEST_F(ClearCkeExecutorTest, InheritanceCheck) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
 
     ClearCkeExecutor executor(0, 0, 0, instr, nullptr);
     executor.SetVersion(RunnerCcuVersion::CCU_V1);
-    CcuExecutorBase* base = &executor;
+    CcuExecutorBase *base = &executor;
     EXPECT_NE(base, nullptr);
 }
 
@@ -176,8 +172,7 @@ class JumpExecutorTest : public ControlExecutorTest {};
 TEST_F(JumpExecutorTest, StructSize) { EXPECT_GT(sizeof(JumpExecutor), 0); }
 
 // Test: JumpExecutor default constructor
-TEST_F(JumpExecutorTest, DefaultConstructor)
-{
+TEST_F(JumpExecutorTest, DefaultConstructor) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     JumpExecutor executor(0, 0, 0, instr, nullptr);
@@ -186,8 +181,7 @@ TEST_F(JumpExecutorTest, DefaultConstructor)
 }
 
 // Test: JumpExecutor parameterized constructor
-TEST_F(JumpExecutorTest, ParameterizedConstructor)
-{
+TEST_F(JumpExecutorTest, ParameterizedConstructor) {
     int streamId = 0;
     int rankId = 0;
     int dieId = 0;
@@ -200,8 +194,7 @@ TEST_F(JumpExecutorTest, ParameterizedConstructor)
 }
 
 // Test: JumpExecutor Parser with zero values
-TEST_F(JumpExecutorTest, ParserZeroValues)
-{
+TEST_F(JumpExecutorTest, ParserZeroValues) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
 
@@ -212,8 +205,7 @@ TEST_F(JumpExecutorTest, ParserZeroValues)
 }
 
 // Test: JumpExecutor Parser with max values
-TEST_F(JumpExecutorTest, ParserMaxValues)
-{
+TEST_F(JumpExecutorTest, ParserMaxValues) {
     CcuInstr instr;
     memset(&instr, 0xFF, sizeof(instr));
 
@@ -224,8 +216,7 @@ TEST_F(JumpExecutorTest, ParserMaxValues)
 }
 
 // Test: JumpExecutor Parser with boundary values
-TEST_F(JumpExecutorTest, ParserBoundaryValues)
-{
+TEST_F(JumpExecutorTest, ParserBoundaryValues) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
 
@@ -241,12 +232,16 @@ TEST_F(JumpExecutorTest, ParserBoundaryValues)
 }
 
 // Test: JumpExecutor with different expectData values
-TEST_F(JumpExecutorTest, DifferentExpectDataValues)
-{
+TEST_F(JumpExecutorTest, DifferentExpectDataValues) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
 
-    uint64_t testValues[] = {0, 1, 0x7FFFFFFFFFFFFFFFLL, 0xFFFFFFFFFFFFFFFFULL, 1000, 0x12345678ABCDEF00ULL};
+    uint64_t testValues[] = {0,
+                             1,
+                             0x7FFFFFFFFFFFFFFFLL,
+                             0xFFFFFFFFFFFFFFFFULL,
+                             1000,
+                             0x12345678ABCDEF00ULL};
 
     for (auto val : testValues) {
         instr.v1.jmp.expectData = val;
@@ -258,8 +253,7 @@ TEST_F(JumpExecutorTest, DifferentExpectDataValues)
 }
 
 // Test: JumpExecutor Describe contains expected keywords
-TEST_F(JumpExecutorTest, DescribeContent)
-{
+TEST_F(JumpExecutorTest, DescribeContent) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     instr.v1.jmp.dstInstrXnId = 100;
@@ -275,8 +269,7 @@ TEST_F(JumpExecutorTest, DescribeContent)
 }
 
 // Test: JumpExecutor with different stream IDs
-TEST_F(JumpExecutorTest, DifferentStreamIds)
-{
+TEST_F(JumpExecutorTest, DifferentStreamIds) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
 
@@ -289,20 +282,18 @@ TEST_F(JumpExecutorTest, DifferentStreamIds)
 }
 
 // Test: JumpExecutor inheritance check
-TEST_F(JumpExecutorTest, InheritanceCheck)
-{
+TEST_F(JumpExecutorTest, InheritanceCheck) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
 
     JumpExecutor executor(0, 0, 0, instr, nullptr);
     executor.SetVersion(RunnerCcuVersion::CCU_V1);
-    CcuExecutorBase* base = &executor;
+    CcuExecutorBase *base = &executor;
     EXPECT_NE(base, nullptr);
 }
 
 // Test: JumpExecutor multiple parse calls
-TEST_F(JumpExecutorTest, MultipleParseCalls)
-{
+TEST_F(JumpExecutorTest, MultipleParseCalls) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     instr.v1.jmp.dstInstrXnId = 100;
@@ -323,8 +314,7 @@ class LoopExecutorTest : public ControlExecutorTest {};
 TEST_F(LoopExecutorTest, StructSize) { EXPECT_GT(sizeof(LoopExecutor), 0); }
 
 // Test: LoopExecutor default constructor
-TEST_F(LoopExecutorTest, DefaultConstructor)
-{
+TEST_F(LoopExecutorTest, DefaultConstructor) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     LoopExecutor executor(0, 0, 0, instr, nullptr);
@@ -333,8 +323,7 @@ TEST_F(LoopExecutorTest, DefaultConstructor)
 }
 
 // Test: LoopExecutor parameterized constructor
-TEST_F(LoopExecutorTest, ParameterizedConstructor)
-{
+TEST_F(LoopExecutorTest, ParameterizedConstructor) {
     int streamId = 0;
     int rankId = 0;
     int dieId = 0;
@@ -347,8 +336,7 @@ TEST_F(LoopExecutorTest, ParameterizedConstructor)
 }
 
 // Test: LoopExecutor Parser with zero values
-TEST_F(LoopExecutorTest, ParserZeroValues)
-{
+TEST_F(LoopExecutorTest, ParserZeroValues) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
 
@@ -359,8 +347,7 @@ TEST_F(LoopExecutorTest, ParserZeroValues)
 }
 
 // Test: LoopExecutor Parser with max values
-TEST_F(LoopExecutorTest, ParserMaxValues)
-{
+TEST_F(LoopExecutorTest, ParserMaxValues) {
     CcuInstr instr;
     memset(&instr, 0xFF, sizeof(instr));
 
@@ -371,8 +358,7 @@ TEST_F(LoopExecutorTest, ParserMaxValues)
 }
 
 // Test: LoopExecutor Parser with specific loop parameters
-TEST_F(LoopExecutorTest, ParserLoopParameters)
-{
+TEST_F(LoopExecutorTest, ParserLoopParameters) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
 
@@ -389,8 +375,7 @@ TEST_F(LoopExecutorTest, ParserLoopParameters)
 }
 
 // Test: LoopExecutor with different instruction ranges
-TEST_F(LoopExecutorTest, DifferentInstructionRanges)
-{
+TEST_F(LoopExecutorTest, DifferentInstructionRanges) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
 
@@ -400,7 +385,7 @@ TEST_F(LoopExecutorTest, DifferentInstructionRanges)
     };
     Range ranges[] = {{0, 10}, {10, 100}, {0, 0xFFFF}, {1000, 2000}};
 
-    for (const auto& range : ranges) {
+    for (const auto &range : ranges) {
         instr.v1.loop.startInstrId = range.start;
         instr.v1.loop.endInstrId = range.end;
 
@@ -412,8 +397,7 @@ TEST_F(LoopExecutorTest, DifferentInstructionRanges)
 }
 
 // Test: LoopExecutor with different xn IDs
-TEST_F(LoopExecutorTest, DifferentXnIds)
-{
+TEST_F(LoopExecutorTest, DifferentXnIds) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
 
@@ -429,8 +413,7 @@ TEST_F(LoopExecutorTest, DifferentXnIds)
 }
 
 // Test: LoopExecutor Describe contains expected keywords
-TEST_F(LoopExecutorTest, DescribeContent)
-{
+TEST_F(LoopExecutorTest, DescribeContent) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     instr.v1.loop.startInstrId = 5;
@@ -447,20 +430,18 @@ TEST_F(LoopExecutorTest, DescribeContent)
 }
 
 // Test: LoopExecutor inheritance check
-TEST_F(LoopExecutorTest, InheritanceCheck)
-{
+TEST_F(LoopExecutorTest, InheritanceCheck) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
 
     LoopExecutor executor(0, 0, 0, instr, nullptr);
     executor.SetVersion(RunnerCcuVersion::CCU_V1);
-    CcuExecutorBase* base = &executor;
+    CcuExecutorBase *base = &executor;
     EXPECT_NE(base, nullptr);
 }
 
 // Test: LoopExecutor with various rank and die combinations
-TEST_F(LoopExecutorTest, VariousRankDieCombinations)
-{
+TEST_F(LoopExecutorTest, VariousRankDieCombinations) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     instr.v1.loop.startInstrId = 0;
@@ -483,11 +464,12 @@ TEST_F(LoopExecutorTest, VariousRankDieCombinations)
 class LoopGroupExecutorTest : public ControlExecutorTest {};
 
 // Test: LoopGroupExecutor struct size check
-TEST_F(LoopGroupExecutorTest, StructSize) { EXPECT_GT(sizeof(LoopGroupExecutor), 0); }
+TEST_F(LoopGroupExecutorTest, StructSize) {
+    EXPECT_GT(sizeof(LoopGroupExecutor), 0);
+}
 
 // Test: LoopGroupExecutor default constructor
-TEST_F(LoopGroupExecutorTest, DefaultConstructor)
-{
+TEST_F(LoopGroupExecutorTest, DefaultConstructor) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     LoopGroupExecutor executor(0, 0, 0, instr, nullptr);
@@ -496,8 +478,7 @@ TEST_F(LoopGroupExecutorTest, DefaultConstructor)
 }
 
 // Test: LoopGroupExecutor parameterized constructor
-TEST_F(LoopGroupExecutorTest, ParameterizedConstructor)
-{
+TEST_F(LoopGroupExecutorTest, ParameterizedConstructor) {
     int streamId = 0;
     int rankId = 0;
     int dieId = 0;
@@ -510,8 +491,7 @@ TEST_F(LoopGroupExecutorTest, ParameterizedConstructor)
 }
 
 // Test: LoopGroupExecutor Parser with zero values
-TEST_F(LoopGroupExecutorTest, ParserZeroValues)
-{
+TEST_F(LoopGroupExecutorTest, ParserZeroValues) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
 
@@ -522,8 +502,7 @@ TEST_F(LoopGroupExecutorTest, ParserZeroValues)
 }
 
 // Test: LoopGroupExecutor Parser with max values
-TEST_F(LoopGroupExecutorTest, ParserMaxValues)
-{
+TEST_F(LoopGroupExecutorTest, ParserMaxValues) {
     CcuInstr instr;
     memset(&instr, 0xFF, sizeof(instr));
 
@@ -534,8 +513,7 @@ TEST_F(LoopGroupExecutorTest, ParserMaxValues)
 }
 
 // Test: LoopGroupExecutor Parser with specific parameters
-TEST_F(LoopGroupExecutorTest, ParserSpecificParameters)
-{
+TEST_F(LoopGroupExecutorTest, ParserSpecificParameters) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
 
@@ -552,8 +530,7 @@ TEST_F(LoopGroupExecutorTest, ParserSpecificParameters)
 }
 
 // Test: LoopGroupExecutor with different highPerfModeEn values
-TEST_F(LoopGroupExecutorTest, DifferentHighPerfModeValues)
-{
+TEST_F(LoopGroupExecutorTest, DifferentHighPerfModeValues) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
 
@@ -567,8 +544,7 @@ TEST_F(LoopGroupExecutorTest, DifferentHighPerfModeValues)
 }
 
 // Test: LoopGroupExecutor Describe contains expected keywords
-TEST_F(LoopGroupExecutorTest, DescribeContent)
-{
+TEST_F(LoopGroupExecutorTest, DescribeContent) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     instr.v1.loopGroup.startLoopInstrId = 5;
@@ -585,20 +561,18 @@ TEST_F(LoopGroupExecutorTest, DescribeContent)
 }
 
 // Test: LoopGroupExecutor inheritance check
-TEST_F(LoopGroupExecutorTest, InheritanceCheck)
-{
+TEST_F(LoopGroupExecutorTest, InheritanceCheck) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
 
     LoopGroupExecutor executor(0, 0, 0, instr, nullptr);
     executor.SetVersion(RunnerCcuVersion::CCU_V1);
-    CcuExecutorBase* base = &executor;
+    CcuExecutorBase *base = &executor;
     EXPECT_NE(base, nullptr);
 }
 
 // Test: LoopGroupExecutor with various xnId and xmId combinations
-TEST_F(LoopGroupExecutorTest, VariousXnXmCombinations)
-{
+TEST_F(LoopGroupExecutorTest, VariousXnXmCombinations) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
 
@@ -625,8 +599,7 @@ class SetCkeExecutorTest : public ControlExecutorTest {};
 TEST_F(SetCkeExecutorTest, StructSize) { EXPECT_GT(sizeof(SetCkeExecutor), 0); }
 
 // Test: SetCkeExecutor default constructor
-TEST_F(SetCkeExecutorTest, DefaultConstructor)
-{
+TEST_F(SetCkeExecutorTest, DefaultConstructor) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     SetCkeExecutor executor(0, 0, 0, instr, nullptr);
@@ -635,8 +608,7 @@ TEST_F(SetCkeExecutorTest, DefaultConstructor)
 }
 
 // Test: SetCkeExecutor parameterized constructor
-TEST_F(SetCkeExecutorTest, ParameterizedConstructor)
-{
+TEST_F(SetCkeExecutorTest, ParameterizedConstructor) {
     int streamId = 0;
     int rankId = 0;
     int dieId = 0;
@@ -649,8 +621,7 @@ TEST_F(SetCkeExecutorTest, ParameterizedConstructor)
 }
 
 // Test: SetCkeExecutor Parser with zero values
-TEST_F(SetCkeExecutorTest, ParserZeroValues)
-{
+TEST_F(SetCkeExecutorTest, ParserZeroValues) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
 
@@ -661,8 +632,7 @@ TEST_F(SetCkeExecutorTest, ParserZeroValues)
 }
 
 // Test: SetCkeExecutor Parser with max values
-TEST_F(SetCkeExecutorTest, ParserMaxValues)
-{
+TEST_F(SetCkeExecutorTest, ParserMaxValues) {
     CcuInstr instr;
     memset(&instr, 0xFF, sizeof(instr));
 
@@ -673,8 +643,7 @@ TEST_F(SetCkeExecutorTest, ParserMaxValues)
 }
 
 // Test: SetCkeExecutor Parser with specific CKE parameters
-TEST_F(SetCkeExecutorTest, ParserCkeParameters)
-{
+TEST_F(SetCkeExecutorTest, ParserCkeParameters) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
 
@@ -692,8 +661,7 @@ TEST_F(SetCkeExecutorTest, ParserCkeParameters)
 }
 
 // Test: SetCkeExecutor with different clearType values
-TEST_F(SetCkeExecutorTest, DifferentClearTypeValues)
-{
+TEST_F(SetCkeExecutorTest, DifferentClearTypeValues) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
 
@@ -707,8 +675,7 @@ TEST_F(SetCkeExecutorTest, DifferentClearTypeValues)
 }
 
 // Test: SetCkeExecutor with different mask patterns
-TEST_F(SetCkeExecutorTest, DifferentMaskPatterns)
-{
+TEST_F(SetCkeExecutorTest, DifferentMaskPatterns) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
 
@@ -725,8 +692,7 @@ TEST_F(SetCkeExecutorTest, DifferentMaskPatterns)
 }
 
 // Test: SetCkeExecutor Describe contains expected keywords
-TEST_F(SetCkeExecutorTest, DescribeContent)
-{
+TEST_F(SetCkeExecutorTest, DescribeContent) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     instr.v1.setCKE.setCKEId = 10;
@@ -743,20 +709,18 @@ TEST_F(SetCkeExecutorTest, DescribeContent)
 }
 
 // Test: SetCkeExecutor inheritance check
-TEST_F(SetCkeExecutorTest, InheritanceCheck)
-{
+TEST_F(SetCkeExecutorTest, InheritanceCheck) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
 
     SetCkeExecutor executor(0, 0, 0, instr, nullptr);
     executor.SetVersion(RunnerCcuVersion::CCU_V1);
-    CcuExecutorBase* base = &executor;
+    CcuExecutorBase *base = &executor;
     EXPECT_NE(base, nullptr);
 }
 
 // Test: SetCkeExecutor with various CKE IDs
-TEST_F(SetCkeExecutorTest, VariousCkeIds)
-{
+TEST_F(SetCkeExecutorTest, VariousCkeIds) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
 

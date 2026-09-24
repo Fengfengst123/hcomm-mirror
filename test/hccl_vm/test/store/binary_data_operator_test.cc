@@ -1,11 +1,18 @@
 /**
  * Copyright (c) 2026 Huawei Technologies Co., Ltd.
- * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * CANN Open Software License Agreement Version 2.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
+ * This program is free software, you can redistribute it and/or modify it under
+ * the terms and conditions of CANN Open Software License Agreement Version 2.0
+ * (the "License"). Please refer to the License for details. You may not use
+ * this file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS
+ * FOR A PARTICULAR PURPOSE. See LICENSE in the root of the software repository
+ * for the full text of the License.
+ */
+
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License.
  */
 
 #include <cstdint>
@@ -19,17 +26,15 @@
 
 namespace HcclSim {
 class BinaryDataOperatorTest : public testing::Test {
-protected:
-    void SetUp() override
-    {
+  protected:
+    void SetUp() override {
         strcpy(testFilePath, "/tmp/binary_test_XXXXXX");
         int fd = mkstemp(testFilePath);
         ASSERT_NE(fd, -1);
         close(fd);
     }
 
-    void TearDown() override
-    {
+    void TearDown() override {
         if (access(testFilePath, F_OK) == 0) {
             unlink(testFilePath);
         }
@@ -40,9 +45,8 @@ protected:
 
 // ==================== FileHeader 测试 ====================
 
-TEST_F(BinaryDataOperatorTest, FileHeaderWrite_Normal_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, FileHeaderWrite_Normal_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     FileHeader header;
@@ -58,9 +62,8 @@ TEST_F(BinaryDataOperatorTest, FileHeaderWrite_Normal_Success)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, FileHeaderRead_Normal_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, FileHeaderRead_Normal_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     FileHeader headerIn;
@@ -87,9 +90,8 @@ TEST_F(BinaryDataOperatorTest, FileHeaderRead_Normal_Success)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, FileHeaderRead_MagicMismatch_Fail)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, FileHeaderRead_MagicMismatch_Fail) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     FileHeader headerIn;
@@ -110,9 +112,8 @@ TEST_F(BinaryDataOperatorTest, FileHeaderRead_MagicMismatch_Fail)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, FileHeaderRead_InvalidFile_Fail)
-{
-    FILE* fp = fopen(testFilePath, "rb");
+TEST_F(BinaryDataOperatorTest, FileHeaderRead_InvalidFile_Fail) {
+    FILE *fp = fopen(testFilePath, "rb");
     ASSERT_NE(fp, nullptr);
 
     FileHeader header;
@@ -124,9 +125,8 @@ TEST_F(BinaryDataOperatorTest, FileHeaderRead_InvalidFile_Fail)
 
 // ==================== ModelInfoComm 测试 ====================
 
-TEST_F(BinaryDataOperatorTest, ModelInfoCommWrite_Normal_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, ModelInfoCommWrite_Normal_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     ModelInfoCommInner comm;
@@ -143,9 +143,8 @@ TEST_F(BinaryDataOperatorTest, ModelInfoCommWrite_Normal_Success)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, ModelInfoCommRead_Normal_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, ModelInfoCommRead_Normal_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     ModelInfoCommInner commIn;
@@ -176,9 +175,8 @@ TEST_F(BinaryDataOperatorTest, ModelInfoCommRead_Normal_Success)
 
 // ==================== VDataDesTag 测试 ====================
 
-TEST_F(BinaryDataOperatorTest, VDataDesTagWrite_Normal_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, VDataDesTagWrite_Normal_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     VDataDesTagInner vDataDes;
@@ -193,9 +191,8 @@ TEST_F(BinaryDataOperatorTest, VDataDesTagWrite_Normal_Success)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, VDataDesTagRead_Normal_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, VDataDesTagRead_Normal_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     VDataDesTagInner vDataDesIn;
@@ -221,9 +218,8 @@ TEST_F(BinaryDataOperatorTest, VDataDesTagRead_Normal_Success)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, VDataDesTagWrite_Empty_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, VDataDesTagWrite_Empty_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     VDataDesTagInner vDataDes;
@@ -238,9 +234,8 @@ TEST_F(BinaryDataOperatorTest, VDataDesTagWrite_Empty_Success)
 
 // ==================== All2AllDataDesTag 测试 ====================
 
-TEST_F(BinaryDataOperatorTest, All2AllDataDesTagWrite_Normal_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, All2AllDataDesTagWrite_Normal_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     All2AllDataDesTagInner all2AllDataDes;
@@ -257,9 +252,8 @@ TEST_F(BinaryDataOperatorTest, All2AllDataDesTagWrite_Normal_Success)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, All2AllDataDesTagRead_Normal_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, All2AllDataDesTagRead_Normal_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     All2AllDataDesTagInner all2AllDataDesIn;
@@ -291,9 +285,8 @@ TEST_F(BinaryDataOperatorTest, All2AllDataDesTagRead_Normal_Success)
 
 // ==================== ChannelInfo 测试 ====================
 
-TEST_F(BinaryDataOperatorTest, ChannelInfoWrite_Normal_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, ChannelInfoWrite_Normal_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     ChannelInfoInner chInfo;
@@ -308,9 +301,8 @@ TEST_F(BinaryDataOperatorTest, ChannelInfoWrite_Normal_Success)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, ChannelInfoRead_Normal_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, ChannelInfoRead_Normal_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     ChannelInfoInner chInfoIn;
@@ -334,9 +326,8 @@ TEST_F(BinaryDataOperatorTest, ChannelInfoRead_Normal_Success)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, ChannelInfoWrite_Empty_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, ChannelInfoWrite_Empty_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     ChannelInfoInner chInfo;
@@ -350,9 +341,8 @@ TEST_F(BinaryDataOperatorTest, ChannelInfoWrite_Empty_Success)
 
 // ==================== MemLayout 测试 ====================
 
-TEST_F(BinaryDataOperatorTest, MemLayoutWrite_Normal_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, MemLayoutWrite_Normal_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     MemLayoutInfoInner memLayoutInfo;
@@ -367,9 +357,8 @@ TEST_F(BinaryDataOperatorTest, MemLayoutWrite_Normal_Success)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, MemLayoutRead_Normal_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, MemLayoutRead_Normal_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     MemLayoutInfoInner memLayoutInfoIn;
@@ -395,9 +384,8 @@ TEST_F(BinaryDataOperatorTest, MemLayoutRead_Normal_Success)
 
 // ==================== HcclVmSynData 测试 ====================
 
-TEST_F(BinaryDataOperatorTest, HcclVmSynDataWrite_Normal_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, HcclVmSynDataWrite_Normal_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     HcclVmSynData synData;
@@ -420,9 +408,8 @@ TEST_F(BinaryDataOperatorTest, HcclVmSynDataWrite_Normal_Success)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, HcclVmSynDataRead_Normal_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, HcclVmSynDataRead_Normal_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     HcclVmSynData synDataIn;
@@ -457,9 +444,8 @@ TEST_F(BinaryDataOperatorTest, HcclVmSynDataRead_Normal_Success)
 
 // ==================== HcclVmFlagData 测试 ====================
 
-TEST_F(BinaryDataOperatorTest, HcclVmFlagDataWrite_Normal_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, HcclVmFlagDataWrite_Normal_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     HcclVmFlagData flagData;
@@ -475,9 +461,8 @@ TEST_F(BinaryDataOperatorTest, HcclVmFlagDataWrite_Normal_Success)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, HcclVmFlagDataRead_Normal_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, HcclVmFlagDataRead_Normal_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     HcclVmFlagData flagDataIn;
@@ -494,7 +479,8 @@ TEST_F(BinaryDataOperatorTest, HcclVmFlagDataRead_Normal_Success)
     ASSERT_NE(fp, nullptr);
 
     HcclVmFlagData flagDataOut;
-    HcclVmResult ret = HcclVmFlagDataRead(fp, flagDataOut, HCCLVM_FLAG_FILE_MAGIC);
+    HcclVmResult ret =
+        HcclVmFlagDataRead(fp, flagDataOut, HCCLVM_FLAG_FILE_MAGIC);
     EXPECT_EQ(ret, HcclVmResult::HCCL_SIM_SUCCESS);
     EXPECT_EQ(flagDataOut.header.magic, HCCLVM_FLAG_FILE_MAGIC);
     EXPECT_EQ(flagDataOut.runner_status, 1u);
@@ -504,9 +490,8 @@ TEST_F(BinaryDataOperatorTest, HcclVmFlagDataRead_Normal_Success)
 
 // ==================== 边界条件测试 ====================
 
-TEST_F(BinaryDataOperatorTest, FileHeaderWrite_LargeCount_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, FileHeaderWrite_LargeCount_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     FileHeader header;
@@ -520,9 +505,8 @@ TEST_F(BinaryDataOperatorTest, FileHeaderWrite_LargeCount_Success)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, ChannelInfoWrite_LargeData_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, ChannelInfoWrite_LargeData_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     ChannelInfoInner chInfo;
@@ -538,9 +522,8 @@ TEST_F(BinaryDataOperatorTest, ChannelInfoWrite_LargeData_Success)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, VDataDesTagWrite_LargeCount_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, VDataDesTagWrite_LargeCount_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     VDataDesTagInner vDataDes;
@@ -557,9 +540,8 @@ TEST_F(BinaryDataOperatorTest, VDataDesTagWrite_LargeCount_Success)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, All2AllDataDesTagWrite_LargeMatrix_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, All2AllDataDesTagWrite_LargeMatrix_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     All2AllDataDesTagInner all2AllDataDes;
@@ -578,9 +560,8 @@ TEST_F(BinaryDataOperatorTest, All2AllDataDesTagWrite_LargeMatrix_Success)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, ModelInfoWrite_Normal_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, ModelInfoWrite_Normal_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     ModelInfoInner modelInfo;
@@ -599,9 +580,8 @@ TEST_F(BinaryDataOperatorTest, ModelInfoWrite_Normal_Success)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, ModelInfoRead_Normal_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, ModelInfoRead_Normal_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     ModelInfoInner modelInfoIn;
@@ -629,9 +609,8 @@ TEST_F(BinaryDataOperatorTest, ModelInfoRead_Normal_Success)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, ModelInfoCommRead_InvalidFile_Fail)
-{
-    FILE* fp = fopen(testFilePath, "rb");
+TEST_F(BinaryDataOperatorTest, ModelInfoCommRead_InvalidFile_Fail) {
+    FILE *fp = fopen(testFilePath, "rb");
     ASSERT_NE(fp, nullptr);
 
     ModelInfoCommInner comm;
@@ -641,9 +620,8 @@ TEST_F(BinaryDataOperatorTest, ModelInfoCommRead_InvalidFile_Fail)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, VDataDesTagRead_InvalidFile_Fail)
-{
-    FILE* fp = fopen(testFilePath, "rb");
+TEST_F(BinaryDataOperatorTest, VDataDesTagRead_InvalidFile_Fail) {
+    FILE *fp = fopen(testFilePath, "rb");
     ASSERT_NE(fp, nullptr);
 
     VDataDesTagInner vDataDes;
@@ -653,9 +631,8 @@ TEST_F(BinaryDataOperatorTest, VDataDesTagRead_InvalidFile_Fail)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, All2AllDataDesTagRead_InvalidFile_Fail)
-{
-    FILE* fp = fopen(testFilePath, "rb");
+TEST_F(BinaryDataOperatorTest, All2AllDataDesTagRead_InvalidFile_Fail) {
+    FILE *fp = fopen(testFilePath, "rb");
     ASSERT_NE(fp, nullptr);
 
     All2AllDataDesTagInner all2AllDataDes;
@@ -665,9 +642,8 @@ TEST_F(BinaryDataOperatorTest, All2AllDataDesTagRead_InvalidFile_Fail)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, ChannelInfoRead_InvalidFile_Fail)
-{
-    FILE* fp = fopen(testFilePath, "rb");
+TEST_F(BinaryDataOperatorTest, ChannelInfoRead_InvalidFile_Fail) {
+    FILE *fp = fopen(testFilePath, "rb");
     ASSERT_NE(fp, nullptr);
 
     ChannelInfoInner chInfo;
@@ -677,9 +653,8 @@ TEST_F(BinaryDataOperatorTest, ChannelInfoRead_InvalidFile_Fail)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, JettyInfoRead_InvalidFile_Fail)
-{
-    FILE* fp = fopen(testFilePath, "rb");
+TEST_F(BinaryDataOperatorTest, JettyInfoRead_InvalidFile_Fail) {
+    FILE *fp = fopen(testFilePath, "rb");
     ASSERT_NE(fp, nullptr);
 
     JettyInfoInner jettyInfo;
@@ -689,9 +664,8 @@ TEST_F(BinaryDataOperatorTest, JettyInfoRead_InvalidFile_Fail)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, MemLayoutRead_InvalidFile_Fail)
-{
-    FILE* fp = fopen(testFilePath, "rb");
+TEST_F(BinaryDataOperatorTest, MemLayoutRead_InvalidFile_Fail) {
+    FILE *fp = fopen(testFilePath, "rb");
     ASSERT_NE(fp, nullptr);
 
     MemLayoutInfoInner memLayoutInfo;
@@ -701,9 +675,8 @@ TEST_F(BinaryDataOperatorTest, MemLayoutRead_InvalidFile_Fail)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, MicrocodeInstrRead_InvalidFile_Fail)
-{
-    FILE* fp = fopen(testFilePath, "rb");
+TEST_F(BinaryDataOperatorTest, MicrocodeInstrRead_InvalidFile_Fail) {
+    FILE *fp = fopen(testFilePath, "rb");
     ASSERT_NE(fp, nullptr);
 
     MicrocodeInstrInner mcInstr;
@@ -713,9 +686,8 @@ TEST_F(BinaryDataOperatorTest, MicrocodeInstrRead_InvalidFile_Fail)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, TaskMetaRead_InvalidFile_Fail)
-{
-    FILE* fp = fopen(testFilePath, "rb");
+TEST_F(BinaryDataOperatorTest, TaskMetaRead_InvalidFile_Fail) {
+    FILE *fp = fopen(testFilePath, "rb");
     ASSERT_NE(fp, nullptr);
 
     HcclTaskMetaData taskData;
@@ -725,21 +697,20 @@ TEST_F(BinaryDataOperatorTest, TaskMetaRead_InvalidFile_Fail)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, HcclVmTaskMetaDataRead_InvalidFile_Fail)
-{
-    FILE* fp = fopen(testFilePath, "rb");
+TEST_F(BinaryDataOperatorTest, HcclVmTaskMetaDataRead_InvalidFile_Fail) {
+    FILE *fp = fopen(testFilePath, "rb");
     ASSERT_NE(fp, nullptr);
 
     HcclVmTaskMetaData taskMeta;
-    HcclVmResult ret = HcclVmTaskMetaDataRead(fp, taskMeta, HCCLVM_TASK_FILE_MAGIC);
+    HcclVmResult ret =
+        HcclVmTaskMetaDataRead(fp, taskMeta, HCCLVM_TASK_FILE_MAGIC);
     EXPECT_EQ(ret, HcclVmResult::HCCL_SIM_E_INTERNAL);
 
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, HcclVmFlagDataRead_InvalidFile_Fail)
-{
-    FILE* fp = fopen(testFilePath, "rb");
+TEST_F(BinaryDataOperatorTest, HcclVmFlagDataRead_InvalidFile_Fail) {
+    FILE *fp = fopen(testFilePath, "rb");
     ASSERT_NE(fp, nullptr);
 
     HcclVmFlagData flagData;
@@ -749,9 +720,8 @@ TEST_F(BinaryDataOperatorTest, HcclVmFlagDataRead_InvalidFile_Fail)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, HcclVmSynDataRead_InvalidFile_Fail)
-{
-    FILE* fp = fopen(testFilePath, "rb");
+TEST_F(BinaryDataOperatorTest, HcclVmSynDataRead_InvalidFile_Fail) {
+    FILE *fp = fopen(testFilePath, "rb");
     ASSERT_NE(fp, nullptr);
 
     HcclVmSynData synData;
@@ -761,21 +731,20 @@ TEST_F(BinaryDataOperatorTest, HcclVmSynDataRead_InvalidFile_Fail)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, HcclVmInstrDataRead_InvalidFile_Fail)
-{
-    FILE* fp = fopen(testFilePath, "rb");
+TEST_F(BinaryDataOperatorTest, HcclVmInstrDataRead_InvalidFile_Fail) {
+    FILE *fp = fopen(testFilePath, "rb");
     ASSERT_NE(fp, nullptr);
 
     HcclVmInstrData instrData;
-    HcclVmResult ret = HcclVmInstrDataRead(fp, instrData, HCCLVM_INSTR_FILE_MAGIC);
+    HcclVmResult ret =
+        HcclVmInstrDataRead(fp, instrData, HCCLVM_INSTR_FILE_MAGIC);
     EXPECT_EQ(ret, HcclVmResult::HCCL_SIM_E_INTERNAL);
 
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, ModelInfoRead_InvalidFile_Fail)
-{
-    FILE* fp = fopen(testFilePath, "rb");
+TEST_F(BinaryDataOperatorTest, ModelInfoRead_InvalidFile_Fail) {
+    FILE *fp = fopen(testFilePath, "rb");
     ASSERT_NE(fp, nullptr);
 
     ModelInfoInner modelInfo;
@@ -785,9 +754,8 @@ TEST_F(BinaryDataOperatorTest, ModelInfoRead_InvalidFile_Fail)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, HcclVmFlagDataRead_MagicMismatch_Fail)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, HcclVmFlagDataRead_MagicMismatch_Fail) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     HcclVmFlagData flagDataIn;
@@ -810,9 +778,8 @@ TEST_F(BinaryDataOperatorTest, HcclVmFlagDataRead_MagicMismatch_Fail)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, HcclVmFlagDataWrite_ReadOnlyFile_Fail)
-{
-    FILE* fp = fopen(testFilePath, "rb");
+TEST_F(BinaryDataOperatorTest, HcclVmFlagDataWrite_ReadOnlyFile_Fail) {
+    FILE *fp = fopen(testFilePath, "rb");
     ASSERT_NE(fp, nullptr);
 
     HcclVmFlagData flagData;
@@ -822,9 +789,8 @@ TEST_F(BinaryDataOperatorTest, HcclVmFlagDataWrite_ReadOnlyFile_Fail)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, HcclVmSynDataWrite_AivMode_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, HcclVmSynDataWrite_AivMode_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     HcclVmSynData synData;
@@ -847,9 +813,8 @@ TEST_F(BinaryDataOperatorTest, HcclVmSynDataWrite_AivMode_Success)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, HcclVmSynDataRead_AivMode_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, HcclVmSynDataRead_AivMode_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     HcclVmSynData synDataIn;
@@ -880,9 +845,8 @@ TEST_F(BinaryDataOperatorTest, HcclVmSynDataRead_AivMode_Success)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, FileHeaderWrite_ReadOnlyFile_Fail)
-{
-    FILE* fp = fopen(testFilePath, "rb");
+TEST_F(BinaryDataOperatorTest, FileHeaderWrite_ReadOnlyFile_Fail) {
+    FILE *fp = fopen(testFilePath, "rb");
     ASSERT_NE(fp, nullptr);
 
     FileHeader header;
@@ -895,9 +859,8 @@ TEST_F(BinaryDataOperatorTest, FileHeaderWrite_ReadOnlyFile_Fail)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, ModelInfoCommWrite_ReadOnlyFile_Fail)
-{
-    FILE* fp = fopen(testFilePath, "rb");
+TEST_F(BinaryDataOperatorTest, ModelInfoCommWrite_ReadOnlyFile_Fail) {
+    FILE *fp = fopen(testFilePath, "rb");
     ASSERT_NE(fp, nullptr);
 
     ModelInfoCommInner comm;
@@ -909,9 +872,8 @@ TEST_F(BinaryDataOperatorTest, ModelInfoCommWrite_ReadOnlyFile_Fail)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, VDataDesTagWrite_ReadOnlyFile_Fail)
-{
-    FILE* fp = fopen(testFilePath, "rb");
+TEST_F(BinaryDataOperatorTest, VDataDesTagWrite_ReadOnlyFile_Fail) {
+    FILE *fp = fopen(testFilePath, "rb");
     ASSERT_NE(fp, nullptr);
 
     VDataDesTagInner vDataDes;
@@ -924,9 +886,8 @@ TEST_F(BinaryDataOperatorTest, VDataDesTagWrite_ReadOnlyFile_Fail)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, All2AllDataDesTagWrite_ReadOnlyFile_Fail)
-{
-    FILE* fp = fopen(testFilePath, "rb");
+TEST_F(BinaryDataOperatorTest, All2AllDataDesTagWrite_ReadOnlyFile_Fail) {
+    FILE *fp = fopen(testFilePath, "rb");
     ASSERT_NE(fp, nullptr);
 
     All2AllDataDesTagInner all2AllDataDes;
@@ -942,9 +903,8 @@ TEST_F(BinaryDataOperatorTest, All2AllDataDesTagWrite_ReadOnlyFile_Fail)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, ChannelInfoWrite_ReadOnlyFile_Fail)
-{
-    FILE* fp = fopen(testFilePath, "rb");
+TEST_F(BinaryDataOperatorTest, ChannelInfoWrite_ReadOnlyFile_Fail) {
+    FILE *fp = fopen(testFilePath, "rb");
     ASSERT_NE(fp, nullptr);
 
     ChannelInfoInner chInfo;
@@ -956,9 +916,8 @@ TEST_F(BinaryDataOperatorTest, ChannelInfoWrite_ReadOnlyFile_Fail)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, JettyInfoWrite_ReadOnlyFile_Fail)
-{
-    FILE* fp = fopen(testFilePath, "rb");
+TEST_F(BinaryDataOperatorTest, JettyInfoWrite_ReadOnlyFile_Fail) {
+    FILE *fp = fopen(testFilePath, "rb");
     ASSERT_NE(fp, nullptr);
 
     JettyInfoInner jettyInfo;
@@ -970,9 +929,8 @@ TEST_F(BinaryDataOperatorTest, JettyInfoWrite_ReadOnlyFile_Fail)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, MemLayoutWrite_ReadOnlyFile_Fail)
-{
-    FILE* fp = fopen(testFilePath, "rb");
+TEST_F(BinaryDataOperatorTest, MemLayoutWrite_ReadOnlyFile_Fail) {
+    FILE *fp = fopen(testFilePath, "rb");
     ASSERT_NE(fp, nullptr);
 
     MemLayoutInfoInner memLayoutInfo;
@@ -984,9 +942,8 @@ TEST_F(BinaryDataOperatorTest, MemLayoutWrite_ReadOnlyFile_Fail)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, MicrocodeInstrWrite_ReadOnlyFile_Fail)
-{
-    FILE* fp = fopen(testFilePath, "rb");
+TEST_F(BinaryDataOperatorTest, MicrocodeInstrWrite_ReadOnlyFile_Fail) {
+    FILE *fp = fopen(testFilePath, "rb");
     ASSERT_NE(fp, nullptr);
 
     MicrocodeInstrInner mcInstr;
@@ -999,9 +956,8 @@ TEST_F(BinaryDataOperatorTest, MicrocodeInstrWrite_ReadOnlyFile_Fail)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, TaskMetaWrite_ReadOnlyFile_Fail)
-{
-    FILE* fp = fopen(testFilePath, "rb");
+TEST_F(BinaryDataOperatorTest, TaskMetaWrite_ReadOnlyFile_Fail) {
+    FILE *fp = fopen(testFilePath, "rb");
     ASSERT_NE(fp, nullptr);
 
     HcclTaskMetaData taskData;
@@ -1013,9 +969,8 @@ TEST_F(BinaryDataOperatorTest, TaskMetaWrite_ReadOnlyFile_Fail)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, HcclVmTaskMetaDataWrite_ReadOnlyFile_Fail)
-{
-    FILE* fp = fopen(testFilePath, "rb");
+TEST_F(BinaryDataOperatorTest, HcclVmTaskMetaDataWrite_ReadOnlyFile_Fail) {
+    FILE *fp = fopen(testFilePath, "rb");
     ASSERT_NE(fp, nullptr);
 
     HcclVmTaskMetaData taskMeta;
@@ -1028,9 +983,8 @@ TEST_F(BinaryDataOperatorTest, HcclVmTaskMetaDataWrite_ReadOnlyFile_Fail)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, HcclVmSynDataWrite_ReadOnlyFile_Fail)
-{
-    FILE* fp = fopen(testFilePath, "rb");
+TEST_F(BinaryDataOperatorTest, HcclVmSynDataWrite_ReadOnlyFile_Fail) {
+    FILE *fp = fopen(testFilePath, "rb");
     ASSERT_NE(fp, nullptr);
 
     HcclVmSynData synData;
@@ -1042,9 +996,8 @@ TEST_F(BinaryDataOperatorTest, HcclVmSynDataWrite_ReadOnlyFile_Fail)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, HcclVmInstrDataWrite_ReadOnlyFile_Fail)
-{
-    FILE* fp = fopen(testFilePath, "rb");
+TEST_F(BinaryDataOperatorTest, HcclVmInstrDataWrite_ReadOnlyFile_Fail) {
+    FILE *fp = fopen(testFilePath, "rb");
     ASSERT_NE(fp, nullptr);
 
     HcclVmInstrData instrData;
@@ -1057,9 +1010,8 @@ TEST_F(BinaryDataOperatorTest, HcclVmInstrDataWrite_ReadOnlyFile_Fail)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, ModelInfoWrite_ReadOnlyFile_Fail)
-{
-    FILE* fp = fopen(testFilePath, "rb");
+TEST_F(BinaryDataOperatorTest, ModelInfoWrite_ReadOnlyFile_Fail) {
+    FILE *fp = fopen(testFilePath, "rb");
     ASSERT_NE(fp, nullptr);
 
     ModelInfoInner modelInfo;
@@ -1071,9 +1023,8 @@ TEST_F(BinaryDataOperatorTest, ModelInfoWrite_ReadOnlyFile_Fail)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, HcclVmSynDataWrite_JettyMode_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, HcclVmSynDataWrite_JettyMode_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     HcclVmSynData synData;
@@ -1086,7 +1037,8 @@ TEST_F(BinaryDataOperatorTest, HcclVmSynDataWrite_JettyMode_Success)
     synData.model_info.comm.root = 0;
     synData.model_info.comm.rank_size = 8;
     synData.model_info.comm.op_type = 1;
-    synData.model_info.comm.op_expansion_mode = 0; // Jetty mode (neither CCU nor AIV)
+    synData.model_info.comm.op_expansion_mode =
+        0; // Jetty mode (neither CCU nor AIV)
 
     synData.memory_info.count = 0;
 
@@ -1096,9 +1048,8 @@ TEST_F(BinaryDataOperatorTest, HcclVmSynDataWrite_JettyMode_Success)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, HcclVmSynDataRead_JettyMode_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, HcclVmSynDataRead_JettyMode_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     HcclVmSynData synDataIn;
@@ -1129,9 +1080,8 @@ TEST_F(BinaryDataOperatorTest, HcclVmSynDataRead_JettyMode_Success)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, MicrocodeInstrWrite_Normal_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, MicrocodeInstrWrite_Normal_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     MicrocodeInstrInner mcInstr;
@@ -1149,9 +1099,8 @@ TEST_F(BinaryDataOperatorTest, MicrocodeInstrWrite_Normal_Success)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, MicrocodeInstrRead_Normal_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, MicrocodeInstrRead_Normal_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     MicrocodeInstrInner mcInstrIn;
@@ -1178,9 +1127,8 @@ TEST_F(BinaryDataOperatorTest, MicrocodeInstrRead_Normal_Success)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, TaskMetaWrite_Normal_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, TaskMetaWrite_Normal_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     HcclTaskMetaData taskData;
@@ -1194,9 +1142,8 @@ TEST_F(BinaryDataOperatorTest, TaskMetaWrite_Normal_Success)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, TaskMetaRead_Normal_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, TaskMetaRead_Normal_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     HcclTaskMetaData taskDataIn;
@@ -1219,9 +1166,8 @@ TEST_F(BinaryDataOperatorTest, TaskMetaRead_Normal_Success)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, HcclVmTaskMetaDataWrite_Normal_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, HcclVmTaskMetaDataWrite_Normal_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     HcclVmTaskMetaData taskMeta;
@@ -1245,9 +1191,8 @@ TEST_F(BinaryDataOperatorTest, HcclVmTaskMetaDataWrite_Normal_Success)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, HcclVmTaskMetaDataRead_Normal_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, HcclVmTaskMetaDataRead_Normal_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     HcclVmTaskMetaData taskMetaIn;
@@ -1272,7 +1217,8 @@ TEST_F(BinaryDataOperatorTest, HcclVmTaskMetaDataRead_Normal_Success)
     ASSERT_NE(fp, nullptr);
 
     HcclVmTaskMetaData taskMetaOut;
-    HcclVmResult ret = HcclVmTaskMetaDataRead(fp, taskMetaOut, HCCLVM_TASK_FILE_MAGIC);
+    HcclVmResult ret =
+        HcclVmTaskMetaDataRead(fp, taskMetaOut, HCCLVM_TASK_FILE_MAGIC);
     EXPECT_EQ(ret, HcclVmResult::HCCL_SIM_SUCCESS);
     EXPECT_EQ(taskMetaOut.header.count, 2u);
     EXPECT_EQ(taskMetaOut.task_meta.size(), 2u);
@@ -1280,9 +1226,8 @@ TEST_F(BinaryDataOperatorTest, HcclVmTaskMetaDataRead_Normal_Success)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, HcclVmInstrDataWrite_Normal_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, HcclVmInstrDataWrite_Normal_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     HcclVmInstrData instrData;
@@ -1306,9 +1251,8 @@ TEST_F(BinaryDataOperatorTest, HcclVmInstrDataWrite_Normal_Success)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, HcclVmInstrDataRead_Normal_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, HcclVmInstrDataRead_Normal_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     HcclVmInstrData instrDataIn;
@@ -1333,7 +1277,8 @@ TEST_F(BinaryDataOperatorTest, HcclVmInstrDataRead_Normal_Success)
     ASSERT_NE(fp, nullptr);
 
     HcclVmInstrData instrDataOut;
-    HcclVmResult ret = HcclVmInstrDataRead(fp, instrDataOut, HCCLVM_INSTR_FILE_MAGIC);
+    HcclVmResult ret =
+        HcclVmInstrDataRead(fp, instrDataOut, HCCLVM_INSTR_FILE_MAGIC);
     EXPECT_EQ(ret, HcclVmResult::HCCL_SIM_SUCCESS);
     EXPECT_EQ(instrDataOut.header.count, 2u);
     EXPECT_EQ(instrDataOut.instr_data.size(), 2u);
@@ -1341,9 +1286,8 @@ TEST_F(BinaryDataOperatorTest, HcclVmInstrDataRead_Normal_Success)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, JettyInfoWrite_Normal_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, JettyInfoWrite_Normal_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     JettyInfoInner jettyInfo;
@@ -1358,9 +1302,8 @@ TEST_F(BinaryDataOperatorTest, JettyInfoWrite_Normal_Success)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, JettyInfoRead_Normal_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, JettyInfoRead_Normal_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     JettyInfoInner jettyInfoIn;
@@ -1384,9 +1327,8 @@ TEST_F(BinaryDataOperatorTest, JettyInfoRead_Normal_Success)
     fclose(fp);
 }
 
-TEST_F(BinaryDataOperatorTest, JettyInfoWrite_Empty_Success)
-{
-    FILE* fp = fopen(testFilePath, "wb");
+TEST_F(BinaryDataOperatorTest, JettyInfoWrite_Empty_Success) {
+    FILE *fp = fopen(testFilePath, "wb");
     ASSERT_NE(fp, nullptr);
 
     JettyInfoInner jettyInfo;

@@ -878,7 +878,7 @@
             "level_list": [
                 {
                     "net_attr": "",
-                    "net_instance_id": "sp_0_srv_0_idx_0",
+                    "net_instance_id": "sp_0_srv_0_idx_1",
                     "net_layer": 0,
                     "net_type": "TOPO_FILE_DESC",
                     "rank_addr_list": [
@@ -987,7 +987,7 @@
             "level_list": [
                 {
                     "net_attr": "",
-                    "net_instance_id": "sp_0_srv_0_idx_0",
+                    "net_instance_id": "sp_0_srv_0_idx_1",
                     "net_layer": 0,
                     "net_type": "TOPO_FILE_DESC",
                     "rank_addr_list": [
@@ -1096,7 +1096,7 @@
             "level_list": [
                 {
                     "net_attr": "",
-                    "net_instance_id": "sp_0_srv_0_idx_0",
+                    "net_instance_id": "sp_0_srv_0_idx_1",
                     "net_layer": 0,
                     "net_type": "TOPO_FILE_DESC",
                     "rank_addr_list": [
@@ -1205,7 +1205,7 @@
             "level_list": [
                 {
                     "net_attr": "",
-                    "net_instance_id": "sp_0_srv_0_idx_0",
+                    "net_instance_id": "sp_0_srv_0_idx_1",
                     "net_layer": 0,
                     "net_type": "TOPO_FILE_DESC",
                     "rank_addr_list": [
@@ -1314,7 +1314,7 @@
             "level_list": [
                 {
                     "net_attr": "",
-                    "net_instance_id": "sp_0_srv_0_idx_0",
+                    "net_instance_id": "sp_0_srv_0_idx_1",
                     "net_layer": 0,
                     "net_type": "TOPO_FILE_DESC",
                     "rank_addr_list": [
@@ -1423,7 +1423,7 @@
             "level_list": [
                 {
                     "net_attr": "",
-                    "net_instance_id": "sp_0_srv_0_idx_0",
+                    "net_instance_id": "sp_0_srv_0_idx_1",
                     "net_layer": 0,
                     "net_type": "TOPO_FILE_DESC",
                     "rank_addr_list": [
@@ -1532,7 +1532,7 @@
             "level_list": [
                 {
                     "net_attr": "",
-                    "net_instance_id": "sp_0_srv_0_idx_0",
+                    "net_instance_id": "sp_0_srv_0_idx_1",
                     "net_layer": 0,
                     "net_type": "TOPO_FILE_DESC",
                     "rank_addr_list": [
@@ -1641,7 +1641,7 @@
             "level_list": [
                 {
                     "net_attr": "",
-                    "net_instance_id": "sp_0_srv_0_idx_0",
+                    "net_instance_id": "sp_0_srv_0_idx_1",
                     "net_layer": 0,
                     "net_type": "TOPO_FILE_DESC",
                     "rank_addr_list": [

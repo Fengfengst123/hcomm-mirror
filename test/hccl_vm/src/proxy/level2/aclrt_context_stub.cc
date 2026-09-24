@@ -1,11 +1,18 @@
 /**
  * Copyright (c) 2026 Huawei Technologies Co., Ltd.
- * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * CANN Open Software License Agreement Version 2.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
+ * This program is free software, you can redistribute it and/or modify it under
+ * the terms and conditions of CANN Open Software License Agreement Version 2.0
+ * (the "License"). Please refer to the License for details. You may not use
+ * this file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS
+ * FOR A PARTICULAR PURPOSE. See LICENSE in the root of the software repository
+ * for the full text of the License.
+ */
+
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License.
  */
 
 // 日志染色: 模块 tag (须在 include sim_log.h 之前)
@@ -27,8 +34,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
-aclError aclrtCreateContext(aclrtContext* context, int32_t deviceId)
-{
+aclError aclrtCreateContext(aclrtContext *context, int32_t deviceId) {
     auto serverId = sim::GetCurServerId();
     if (serverId == 0) {
         return ACL_ERROR_INVALID_PARAM;
@@ -37,9 +43,10 @@ aclError aclrtCreateContext(aclrtContext* context, int32_t deviceId)
     if (!sim::GetCurrRunnerTls(serverId, runner)) {
         return ACL_ERROR_INVALID_PARAM;
     }
-    auto ret = RunnerDB::GetOneByPred<sim::Device>([deviceId](const sim::Device& d) {
-        return d.logic_id == (uint32_t)deviceId;
-    });
+    auto ret =
+        RunnerDB::GetOneByPred<sim::Device>([deviceId](const sim::Device &d) {
+            return d.logic_id == (uint32_t)deviceId;
+        });
     if (!ret.second) {
         HCCL_VM_ERROR("device not found:{:d}", deviceId);
         return HcclResult::HCCL_E_NOT_FOUND;
@@ -60,13 +67,13 @@ aclError aclrtCreateContext(aclrtContext* context, int32_t deviceId)
     return ACL_SUCCESS;
 }
 
-aclError aclrtDestroyContext(aclrtContext context)
-{
+aclError aclrtDestroyContext(aclrtContext context) {
     uint64_t ctxId = (uint64_t)(uintptr_t)context;
 
-    auto ret = RunnerDB::GetOneByPred<sim::Stream>([ctxId](const sim::Stream& stm) {
-        return stm.ctx_id == ctxId && stm.is_primary_default == 1;
-    });
+    auto ret =
+        RunnerDB::GetOneByPred<sim::Stream>([ctxId](const sim::Stream &stm) {
+            return stm.ctx_id == ctxId && stm.is_primary_default == 1;
+        });
     if (!ret.second) {
         HCCL_VM_ERROR("stream not found ctxId:{:d}", ctxId);
         return HcclResult::HCCL_E_NOT_FOUND;
@@ -77,15 +84,13 @@ aclError aclrtDestroyContext(aclrtContext context)
     return ACL_SUCCESS;
 }
 
-aclError aclrtSetCurrentContext(aclrtContext context)
-{
+aclError aclrtSetCurrentContext(aclrtContext context) {
     uint64_t ctxId = (uint64_t)(uintptr_t)context;
     sim::SetCurrCtxTls(ctxId);
     return ACL_SUCCESS;
 }
 
-aclError aclrtGetCurrentContext(aclrtContext* context)
-{
+aclError aclrtGetCurrentContext(aclrtContext *context) {
     auto serverId = sim::GetCurServerId();
     if (serverId == 0) {
         return ACL_ERROR_INVALID_PARAM;
@@ -98,8 +103,7 @@ aclError aclrtGetCurrentContext(aclrtContext* context)
     return ACL_SUCCESS;
 }
 
-aclError aclrtCtxGetCurrentDefaultStream(aclrtStream* stream)
-{
+aclError aclrtCtxGetCurrentDefaultStream(aclrtStream *stream) {
     auto serverId = sim::GetCurServerId();
     if (serverId == 0) {
         return ACL_ERROR_INVALID_PARAM;
@@ -109,9 +113,10 @@ aclError aclrtCtxGetCurrentDefaultStream(aclrtStream* stream)
         return ACL_ERROR_INVALID_PARAM;
     }
     auto curCtxId = runner.current_ctx_id;
-    auto stm = RunnerDB::GetOneByPred<sim::Stream>([curCtxId](const sim::Stream& stm) {
-        return stm.ctx_id == curCtxId && stm.is_primary_default == 1;
-    });
+    auto stm =
+        RunnerDB::GetOneByPred<sim::Stream>([curCtxId](const sim::Stream &stm) {
+            return stm.ctx_id == curCtxId && stm.is_primary_default == 1;
+        });
     if (!stm.second) {
         HCCL_VM_ERROR("stream not found ctxId:{:d}", curCtxId);
         return HcclResult::HCCL_E_NOT_FOUND;
@@ -121,8 +126,8 @@ aclError aclrtCtxGetCurrentDefaultStream(aclrtStream* stream)
     return ACL_SUCCESS;
 }
 
-aclError aclrtGetPrimaryCtxState(int32_t deviceId, uint32_t* flags, int32_t* active)
-{
+aclError aclrtGetPrimaryCtxState(int32_t deviceId, uint32_t *flags,
+                                 int32_t *active) {
     (void)deviceId;
     (void)flags;
     auto serverId = sim::GetCurServerId();
@@ -144,22 +149,19 @@ aclError aclrtGetPrimaryCtxState(int32_t deviceId, uint32_t* flags, int32_t* act
     return ACL_SUCCESS;
 }
 
-aclError aclrtCtxSetSysParamOpt(aclSysParamOpt opt, int64_t value)
-{
+aclError aclrtCtxSetSysParamOpt(aclSysParamOpt opt, int64_t value) {
     (void)opt;
     (void)value;
     return ACL_SUCCESS;
 }
 
-aclError aclrtCtxGetSysParamOpt(aclSysParamOpt opt, int64_t* value)
-{
+aclError aclrtCtxGetSysParamOpt(aclSysParamOpt opt, int64_t *value) {
     (void)opt;
     (void)value;
     return ACL_SUCCESS;
 }
 
-aclError aclrtCtxGetFloatOverflowAddr(void** overflowAddr)
-{
+aclError aclrtCtxGetFloatOverflowAddr(void **overflowAddr) {
     (void)overflowAddr;
     return ACL_SUCCESS;
 }

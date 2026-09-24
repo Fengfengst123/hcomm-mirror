@@ -2,26 +2,34 @@
 
 ## Document Information
 
-| Item          | Content                                |
-|---------------|----------------------------------------|
-| Version       | v1.0                                   |
-| Update Date   | 2025-01-16                             |
-| Use Case      | HCCL VM simulation data export and read|
-| Author        | HCCL VM Team                           |
+| Item       | Content                                |
+|------------|----------------------------------------|
+| Version    | v2.0                                   |
+| Updated    | 2026-09-17                             |
+| Use Case   | HCCL VM Simulation Data Export and Read |
+| Author     | HCCL VM Team                           |
+
+> **v2.0 Change Notes**: For the comprehensive data file (`*_hcclvm_syn_data.bin`), **the version remains 1 and the file header has no version changes**
+> (this feature does not differentiate between old and new file compatibility). The `ChannelData` binary layout is **consistent with previous versions (no new fields added, 176 bytes)**,
+> but the AICPU mode dump **semantics** have changed to support the multi-channel (`HCCL_UB_MULTI_CHANNEL_NUM`) feature:
+> jetty precisely attributed to the (local eid, remote eid) link + **one aggregated record per eid pair**
+> (`jettyNum` is the number of jetties for that eid pair, `jettyId[0..jettyNum)` carries all local jetties,
+> and the reader must search for `task.jettyId` within the array, and must no longer assume `jettyNum` is always 1 or directly use `jettyId[0]`).
+> Task/microcode/flag file formats remain unchanged.
 
 ---
 
 ## 1. Overview
 
-The `DumpData` interface exports HCCL VM simulation data to binary stream files. It generates **3 file types**:
+The `DumpData` interface exports HCCL VM simulation runtime data into binary stream files, generating **3 types of files**:
 
-| No.  | File Name Format                      | Magic Number | Purpose                              |
-|:----:|---------------------------------------|--------------|--------------------------------------|
-|  1   | `{dataId}_hcclvm_syn_data.bin`        | `0x48564D44` | Synthesis data (model, channel, memory layout) |
-|  2   | `{dataId}_hcclvm_instr_data.bin`      | `0x434D4349` | Microcode instruction data           |
-|  3   | `{dataId}_hcclvm_task_data.bin`       | `0x48565444` | Task metadata                        |
+| No.  | File Name Format                      | Magic Number | Purpose                                     |
+|:----:|---------------------------------------|--------------|---------------------------------------------|
+|  1   | `{dataId}_hcclvm_syn_data.bin`       | `0x48564D44` | Comprehensive data (model, channel, memory layout) |
+|  2   | `{dataId}_hcclvm_instr_data.bin`     | `0x434D4349` | Microcode instruction data                  |
+|  3   | `{dataId}_hcclvm_task_data.bin`      | `0x48565444` | Task metadata                               |
 
-> **Description**: `{dataId}` is a unique identifier in timestamp format, for example `20250115_143052_3847`.
+> **Note**: `{dataId}` is a unique identifier in timestamp format, e.g., `20250115_143052_3847`.
 
 ---
 
@@ -31,14 +39,14 @@ All binary files start with a **20-byte** file header.
 
 ### 2.1 File Header Structure
 
-| Offset | Bytes  | Type    | Field Name  | Description                  |
-|:------:|:------:|---------|-------------|------------------------------|
-|   0    |   4    | uint32  | magic       | Magic number, identifies file type |
-|   4    |   2    | uint16  | version     | Version number (currently 1) |
-|   6    |   2    | uint16  | header_size | File header size (20 bytes)  |
-|   8    |   4    | uint32  | flags       | Flags (reserved)             |
-|   12   |   4    | uint32  | count       | Number of data entries       |
-|   16   |   4    | uint32  | checksum    | Checksum (reserved)          |
+| Offset | Bytes | Type    | Field       | Description                    |
+|:------:|:-----:|---------|-------------|--------------------------------|
+|   0    |   4   | uint32  | magic       | Magic number, identifies file type |
+|   4    |   2   | uint16  | version     | Version number (currently 1)   |
+|   6    |   2   | uint16  | header_size | File header size (20 bytes)    |
+|   8    |   4   | uint32  | flags       | Flags (reserved)               |
+|   12   |   4   | uint32  | count       | Number of data entries         |
+|   16   |   4   | uint32  | checksum    | Checksum (reserved)            |
 
 ### 2.2 C/C++ Structure Definition
 
@@ -57,23 +65,23 @@ struct FileHeader {
 
 ---
 
-## 3. Synthesis Data File (`*_hcclvm_syn_data.bin`)
+## 3. Comprehensive Data File (`*_hcclvm_syn_data.bin`)
 
 ### 3.1 Overall Structure
 
-| No.  | Data Block                       | Size       | Description                                      |
-|:----:|----------------------------------|------------|--------------------------------------------------|
-|  1   | FileHeader                       | 20 Bytes   | File header                                      |
-|  2   | ModelInfo                        | Variable   | Model info (includes ModelInfoCommInner, VDataDesTag, All2AllDataDesTag) |
-|  3   | ChannelInfo or JettyInfo         | Variable   | One of the two, determined by `op_expansion_mode`|
-|  4   | MemLayoutInfo                    | Variable   | Memory layout information                        |
+| No.  | Data Block                         | Size     | Description                                        |
+|:----:|------------------------------------|----------|----------------------------------------------------|
+|  1   | FileHeader                         | 20 Bytes | File header                                        |
+|  2   | ModelInfo                          | Variable | Model information (includes ModelInfoCommInner, VDataDesTag, All2AllDataDesTag) |
+|  3   | ChannelInfo (shared by CCU/AICPU)  | Variable | This data block is absent in AIV mode              |
+|  4   | MemLayoutInfo                      | Variable | Memory layout information                          |
 
-**op_expansion_mode value description:**
+**op_expansion_mode Value Description:**
 
-| Value | Mode    | Data Structure Used |
-|:-----:|---------|---------------------|
-|  0    | CCU     | ChannelInfo         |
-|  1    | AICPU   | JettyInfo           |
+| Value | Mode   | Data Structure Used |
+|:-----:|--------|---------------------|
+|   0   | CCU    | ChannelInfo         |
+|   1   | AICPU  | ChannelInfo (multi-channel semantics, see 3.3.3) |
 
 ### 3.2 ModelInfo Structure
 
@@ -81,124 +89,140 @@ struct FileHeader {
 
 **Size**: 36 bytes.
 
-| Offset | Bytes  | Type    | Field Name          | Description              |
-|:------:|:------:|---------|---------------------|--------------------------|
-|   0    |   4    | uint32  | src_rank            | Source Rank ID           |
-|   4    |   4    | uint32  | dst_rank            | Destination Rank ID      |
-|   8    |   4    | uint32  | root                | Root node Rank           |
-|   12   |   4    | uint32  | rank_size           | Total number of Ranks    |
-|   16   |   2    | uint16  | chip_type           | Chip type                |
-|   18   |   2    | uint16  | op_type             | Operation type           |
-|   20   |   2    | uint16  | reduce_op           | Reduce operation type    |
-|   22   |   2    | uint16  | data_type           | Data type                |
-|   24   |   8    | uint64  | data_count          | Number of data elements  |
-|   32   |   4    | uint32  | op_expansion_mode   | Expansion mode (see enum)|
-|   36   |   8    | uint64  | ccu0_resource_base_addr | die0 CCU resource base address |
-|   44   |   8    | uint64  | ccu1_resource_base_addr | die1 CCU resource base address |
+| Offset | Bytes | Type    | Field                | Description                      |
+|:------:|:-----:|---------|----------------------|----------------------------------|
+|   0    |   4   | uint32  | src_rank             | Source Rank ID                   |
+|   4    |   4   | uint32  | dst_rank             | Destination Rank ID              |
+|   8    |   4   | uint32  | root                 | Root node Rank                   |
+|   12   |   4   | uint32  | rank_size            | Total number of Ranks            |
+|   16   |   2   | uint16  | chip_type            | Chip type                        |
+|   18   |   2   | uint16  | op_type              | Operation type                   |
+|   20   |   2   | uint16  | reduce_op            | Reduce operation type            |
+|   22   |   2   | uint16  | data_type            | Data type                        |
+|   24   |   8   | uint64  | data_count           | Number of data elements          |
+|   32   |   4   | uint32  | op_expansion_mode    | Expansion mode (see enum)        |
+|   36   |   8   | uint64  | ccu0_resource_base_addr | Die0 CCU resource base address |
+|   44   |   8   | uint64  | ccu1_resource_base_addr | Die1 CCU resource base address |
 
 #### 3.2.2 VDataDesTag
 
 **Purpose**: ReduceScatterV / AllGatherV operations.
 
-**Size**: Variable.
+**Size**: Variable length.
 
-| Offset  | Bytes      | Type     | Field Name | Description                |
-|:-------:|:----------:|----------|------------|----------------------------|
-|    0    |     2      | uint16   | dataType   | Data type                  |
-|    2    |     4      | uint32   | count      | Number of Ranks            |
-|    6    | 8 x count  | uint64[] | displs     | Data offset per Rank       |
-|  6+8xn  | 8 x count  | uint64[] | counts     | Data size per Rank         |
+| Offset  | Bytes      | Type     | Field  | Description                    |
+|:-------:|:----------:|----------|--------|--------------------------------|
+|    0    |     2      | uint16   | dataType | Data type                    |
+|    2    |     4      | uint32   | count  | Number of Ranks                |
+|    6    | 8 x count  | uint64[] | displs | Data offset per Rank           |
+|  6+8xn  | 8 x count  | uint64[] | counts | Data size per Rank             |
 
 #### 3.2.3 All2AllDataDesTag
 
 **Purpose**: All2All / All2AllV operations.
 
-**Size**: Variable.
+**Size**: Variable length.
 
-| Offset | Bytes      | Type     | Field Name      | Description                  |
-|:------:|:----------:|----------|-----------------|------------------------------|
-|   0    |     2      | uint16   | sendType        | Send data type               |
-|   2    |     2      | uint16   | recvType        | Receive data type            |
-|   4    |     8      | uint64   | sendCount       | Send data count              |
-|   12   |     8      | uint64   | recvCount       | Receive data count           |
-|   20   |     4      | uint32   | count           | Matrix size (= rankSize²)    |
-|   24   | 8 x count  | uint64[] | sendCountMatrix | Send matrix                  |
+| Offset | Bytes      | Type     | Field           | Description                      |
+|:------:|:----------:|----------|-----------------|----------------------------------|
+|   0    |     2      | uint16   | sendType        | Send data type                   |
+|   2    |     2      | uint16   | recvType        | Receive data type                |
+|   4    |     8      | uint64   | sendCount       | Send data count                  |
+|   12   |     8      | uint64   | recvCount       | Receive data count               |
+|   20   |     4      | uint32   | count           | Matrix size (= rankSize^2)       |
+|   24   | 8 x count  | uint64[] | sendCountMatrix | Send matrix                      |
 
 ### 3.3 ChannelInfo Structure
 
-**Applicable condition**: `op_expansion_mode = 0` (CCU mode)
+**Applicable conditions**: `op_expansion_mode = 0` (CCU mode) or `1` (AICPU mode) -- both modes use the fixed-length ChannelData structure; not written in AIV mode.
 
 #### 3.3.1 ChannelInfo Header
 
-| Offset | Bytes  | Type          | Field Name | Description          |
-|:------:|:------:|---------------|------------|----------------------|
-|   0    |   4    | uint32        | count      | Number of channels   |
-|   4    | Variable | ChannelData[] | data     | Channel data array   |
+| Offset | Bytes | Type          | Field | Description           |
+|:------:|:-----:|---------------|-------|-----------------------|
+|   0    |   4   | uint32        | count | Number of channels    |
+|   4    | Variable | ChannelData[] | data | Channel data array  |
 
 #### 3.3.2 ChannelData
 
-**Size**: 152 bytes.
+**Size**: 176 bytes (layout consistent with previous versions).
 
-| Offset | Bytes  | Type       | Field Name  | Description        |
-|:------:|:------:|------------|-------------|--------------------|
-|   0    |   2    | uint16     | channelId   | Channel ID         |
-|   2    |   1    | uint8      | srcDieId    | Source Die ID      |
-|   3    |   1    | uint8      | dstDieId    | Destination Die ID |
-|   4    |   4    | uint32     | srcRank     | Source Rank ID     |
-|   8    |   4    | uint32     | dstRank     | Destination Rank ID|
-|   12   |  16    | uint8[16]  | leid        | Local EID          |
-|   28   |  16    | uint8[16]  | reid        | Remote EID         |
-|   44   |   2    | uint16     | protocol    | Protocol type      |
-|   46   |   2    | uint16     | jettyNum    | Number of Jetties  |
-|   48   |  128   | uint32[32] | jettyId     | Jetty ID array     |
+| Offset | Bytes | Type       | Field       | Description                                                      |
+|:------:|:-----:|------------|-------------|------------------------------------------------------------------|
+|   0    |   2   | uint16     | channelId   | CCU mode: Channel ID; AICPU mode: EndPointPair primary key (eid pair identifier) |
+|   2    |   1   | uint8      | srcDieId    | Source Die ID                                                    |
+|   3    |   1   | uint8      | dstDieId    | Destination Die ID                                               |
+|   4    |   4   | uint32     | srcRank     | Source Rank ID                                                   |
+|   8    |   4   | uint32     | dstRank     | Destination Rank ID                                              |
+|   12   |  16   | uint8[16]  | leid        | Local EID                                                        |
+|   28   |  16   | uint8[16]  | reid        | Remote EID                                                       |
+|   44   |   2   | uint16     | protocol    | Protocol type                                                    |
+|   46   |   2   | uint16     | jettyNum    | Number of Jetties                                                |
+|   48   | 128   | uint32[32] | jettyId     | Jetty ID array                                                   |
 
-### 3.4 JettyInfo Structure
+#### 3.3.3 Multi-Channel Semantics (AICPU Mode)
 
-**Applicable condition**: `op_expansion_mode = 1` (AICPU mode)
+Under the `HCCL_UB_MULTI_CHANNEL_NUM=N` feature, there are N parallel channels between the same pair of ranks (same pair of eids).
+AICPU mode dump rules:
+
+1. **One aggregated ChannelData record per eid pair**: N channels with the same `channelId` (eid pair) output **1 record**,
+   `jettyNum=N`, `jettyId[0..jettyNum)` contains **all local (send-side) jetties** for that eid pair,
+   ordered by **local jetty creation order** (array index is the channel index within the pair);
+2. The reader searches for `task.jettyId` from the task metadata **within the `jettyId[0..jettyNum)` array**
+   to determine which jetty the task uses to send from the local eid (`leid`) to the remote eid (`reid`);
+3. `jettyId[0..jettyNum)` is **precisely attributed** to that eid pair (backfilled by the RA layer `RaCtxQpImport`),
+   and does not contain jetties on the same local eid that go to other remote endpoints.
+
+CCU mode maintains the existing semantics of "one record per channel, with `jettyId[]` carrying the jetty list for that channel."
+
+### 3.4 JettyInfo Structure (Unused, Retained for Historical Reference)
+
+`JettyData` was an independent structure for AICPU mode in early designs, **not used in the current implementation**: AICPU mode actually also writes
+ChannelData (see 3.3). This section is retained only as a historical format reference; readers should not parse AICPU data as JettyData.
 
 #### 3.4.1 JettyInfo Header
 
-| Offset | Bytes  | Type       | Field Name | Description          |
-|:------:|:------:|------------|------------|----------------------|
-|   0    |   4    | uint32     | count      | Number of Jetties    |
-|   4    | Variable | JettyData[]| data     | Jetty data array     |
+| Offset | Bytes | Type       | Field | Description          |
+|:------:|:-----:|------------|-------|----------------------|
+|   0    |   4   | uint32     | count | Number of Jetties    |
+|   4    | Variable | JettyData[] | data | Jetty data array  |
 
 #### 3.4.2 JettyData
 
 **Size**: 48 bytes.
 
-| Offset | Bytes  | Type      | Field Name | Description          |
-|:------:|:------:|-----------|------------|----------------------|
-|   0    |   4    | uint32    | jettyId    | Jetty ID             |
-|   4    |   1    | uint8     | srcDieId   | Source Die ID        |
-|   5    |   1    | uint8     | dstDieId   | Destination Die ID   |
-|   6    |   2    | uint16    | protocol   | Protocol type        |
-|   8    |   4    | uint32    | srcRank    | Source Rank ID       |
-|   12   |   4    | uint32    | dstRank    | Destination Rank ID  |
-|   16   |  16    | uint8[16] | leid       | Local EID            |
-|   32   |  16    | uint8[16] | reid       | Remote EID           |
+| Offset | Bytes | Type      | Field    | Description       |
+|:------:|:-----:|-----------|----------|-------------------|
+|   0    |   4   | uint32    | jettyId  | Jetty ID          |
+|   4    |   1   | uint8     | srcDieId | Source Die ID     |
+|   5    |   1   | uint8     | dstDieId | Destination Die ID|
+|   6    |   2   | uint16    | protocol | Protocol type     |
+|   8    |   4   | uint32    | srcRank  | Source Rank ID    |
+|   12   |   4   | uint32    | dstRank  | Destination Rank ID|
+|   16   |  16   | uint8[16] | leid     | Local EID         |
+|   32   |  16   | uint8[16] | reid     | Remote EID        |
 
 ### 3.5 MemLayoutInfo Structure
 
 #### 3.5.1 MemLayoutInfo Header
 
-| Offset | Bytes  | Type            | Field Name | Description            |
-|:------:|:------:|-----------------|------------|------------------------|
-|   0    |   4    | uint32          | count      | Number of memory blocks|
-|   4    | Variable | MemLayoutData[] | data     | Memory layout array    |
+| Offset | Bytes | Type            | Field | Description           |
+|:------:|:-----:|-----------------|-------|-----------------------|
+|   0    |   4   | uint32          | count | Number of memory blocks |
+|   4    | Variable | MemLayoutData[] | data | Memory layout array |
 
 #### 3.5.2 MemLayoutData
 
 **Size**: 32 bytes.
 
-| Offset | Bytes  | Type   | Field Name   | Description                |
-|:------:|:------:|--------|--------------|----------------------------|
-|   0    |   4    | uint32 | rank_id      | Rank ID                    |
-|   4    |   1    | uint8  | buffer_type  | Buffer type (see enum)     |
-|   5    |   1    | uint8  | reserved     | Reserved                   |
-|   6    |   8    | uint64 | start_addr   | Physical start address     |
-|   14   |   8    | uint64 | size         | Block size                 |
-|   22   |   8    | uint64 | global_offset| Total offset for this type |
+| Offset | Bytes | Type   | Field        | Description                      |
+|:------:|:-----:|--------|--------------|----------------------------------|
+|   0    |   4   | uint32 | rank_id      | Rank ID                          |
+|   4    |   1   | uint8  | buffer_type  | Buffer type (see enum)           |
+|   5    |   1   | uint8  | reserved     | Reserved                         |
+|   6    |   8   | uint64 | start_addr   | Physical start address           |
+|   14   |   8   | uint64 | size         | Block size                       |
+|   22   |   8   | uint64 | global_offset| Total offset for this type       |
 
 ---
 
@@ -206,29 +230,29 @@ struct FileHeader {
 
 ### 4.1 Overall Structure
 
-| No.  | Data Block                     | Size       | Description                            |
-|:----:|--------------------------------|------------|----------------------------------------|
-|  1   | FileHeader                     | 20 Bytes   | File header                            |
-|  2   | MicrocodeInstrInner x count    | Variable   | Microcode instruction data (with Desc and Instr) |
+| No.  | Data Block                    | Size     | Description                               |
+|:----:|-------------------------------|----------|-------------------------------------------|
+|  1   | FileHeader                    | 20 Bytes | File header                               |
+|  2   | MicrocodeInstrInner x count   | Variable | Microcode instruction data (includes Desc and Instr) |
 
 ### 4.2 MicrocodeInstrDesc
 
 **Size**: 8 bytes.
 
-| Offset | Bytes  | Type   | Field Name | Description          |
-|:------:|:------:|--------|------------|----------------------|
-|   0    |   4    | uint32 | rank_id    | Rank ID              |
-|   4    |   1    | uint8  | die_id     | Die ID               |
-|   5    |   1    | uint8  | reserved   | Reserved             |
-|   6    |   2    | uint16 | count      | Number of instructions|
+| Offset | Bytes | Type   | Field    | Description          |
+|:------:|:-----:|--------|----------|----------------------|
+|   0    |   4   | uint32 | rank_id  | Rank ID              |
+|   4    |   1   | uint8  | die_id   | Die ID               |
+|   5    |   1   | uint8  | reserved | Reserved             |
+|   6    |   2   | uint16 | count    | Number of instructions |
 
 ### 4.3 Microcode Instruction Data
 
 Each MicrocodeInstrInner contains:
 
-| Data Block               | Size              | Description            |
-|--------------------------|-------------------|------------------------|
-| MicrocodeInstrDesc       | 8 Bytes           | Instruction descriptor |
+| Data Block               | Size              | Description             |
+|--------------------------|-------------------|-------------------------|
+| MicrocodeInstrDesc       | 8 Bytes           | Instruction descriptor  |
 | CcuInstr[desc.count]     | 32 x count Bytes  | Microcode instruction array |
 
 ---
@@ -237,71 +261,71 @@ Each MicrocodeInstrInner contains:
 
 ### 5.1 Overall Structure
 
-| No.  | Data Block                  | Size       | Description  |
-|:----:|-----------------------------|------------|--------------|
-|  1   | FileHeader                  | 20 Bytes   | File header  |
-|  2   | HcclTaskMetaData x count    | Variable   | Task list    |
+| No.  | Data Block                 | Size     | Description   |
+|:----:|----------------------------|----------|---------------|
+|  1   | FileHeader                 | 20 Bytes | File header   |
+|  2   | HcclTaskMetaData x count   | Variable | Task list     |
 
 ### 5.2 HcclTaskMetaData Structure
 
 **Size**: Approximately 136 bytes (including union)
 
-| Offset | Bytes  | Type            | Field Name | Description                  |
-|:------:|:------:|-----------------|------------|------------------------------|
-|   0    |   1    | int8            | taskType   | Task type (see enum)         |
-|   1    |   2    | uint16          | commId     | Communication domain ID      |
-|   3    |   4    | uint32          | rankId     | Rank ID                      |
-|   7    |   8    | uint64          | streamId   | Stream ID                    |
-|   15   |   4    | uint32          | jettyId    | Jetty ID                     |
-|   19   | Variable | union         | taskData   | Task data (parse by type)    |
+| Offset | Bytes | Type            | Field    | Description                          |
+|:------:|:-----:|-----------------|----------|--------------------------------------|
+|   0    |   1   | int8            | taskType | Task type (see enum)                 |
+|   1    |   2   | uint16          | commId   | Communication domain ID              |
+|   3    |   4   | uint32          | rankId   | Rank ID                              |
+|   7    |   8   | uint64          | streamId | Stream ID                            |
+|   15   |   4   | uint32          | jettyId  | Jetty ID                             |
+|   19   | Variable | union        | taskData | Task data (parsed based on type)     |
 
 ### 5.3 taskData Union
 
 #### 5.3.1 TransMemTask
 
-**Applicable task type**: `MEM_CPY (3)`.
+**Applicable task types**: `MEM_CPY (3)`.
 
 **Size**: 33 bytes.
 
-| Offset | Bytes  | Type   | Field Name | Description          |
-|:------:|:------:|--------|------------|----------------------|
-|   0    |   4    | uint32 | srcRankId  | Source Rank ID       |
-|   4    |   8    | uint64 | srcOffset  | Source offset address|
-|   12   |   4    | uint32 | dstRankId  | Destination Rank ID  |
-|   16   |   8    | uint64 | dstOffset  | Destination offset address |
-|   24   |   8    | uint64 | len        | Data length          |
-|   32   |   1    | uint8  | protocol   | Protocol type        |
+| Offset | Bytes | Type   | Field     | Description          |
+|:------:|:-----:|--------|-----------|----------------------|
+|   0    |   4   | uint32 | srcRankId | Source Rank ID       |
+|   4    |   8   | uint64 | srcOffset | Source offset address |
+|   12   |   4   | uint32 | dstRankId | Destination Rank ID  |
+|   16   |   8   | uint64 | dstOffset | Destination offset address |
+|   24   |   8   | uint64 | len       | Data length          |
+|   32   |   1   | uint8  | protocol  | Protocol type        |
 
 #### 5.3.2 ReduceTask
 
-**Applicable task type**: `REDUCE (2)`.
+**Applicable task types**: `REDUCE (2)`.
 
 **Size**: 35 bytes.
 
-| Offset | Bytes  | Type   | Field Name | Description          |
-|:------:|:------:|--------|------------|----------------------|
-|   0    |   4    | uint32 | srcRankId  | Source Rank ID       |
-|   4    |   8    | uint64 | srcOffset  | Source offset address|
-|   12   |   4    | uint32 | dstRankId  | Destination Rank ID  |
-|   16   |   8    | uint64 | dstOffset  | Destination offset address |
-|   24   |   8    | uint64 | dataCount  | Number of data elements |
-|   32   |   1    | uint8  | dataType   | Data type            |
-|   33   |   1    | uint8  | reduceOp   | Reduce operation type|
-|   34   |   1    | uint8  | protocol   | Protocol type        |
+| Offset | Bytes | Type   | Field     | Description              |
+|:------:|:-----:|--------|-----------|--------------------------|
+|   0    |   4   | uint32 | srcRankId | Source Rank ID           |
+|   4    |   8   | uint64 | srcOffset | Source offset address    |
+|   12   |   4   | uint32 | dstRankId | Destination Rank ID      |
+|   16   |   8   | uint64 | dstOffset | Destination offset address |
+|   24   |   8   | uint64 | dataCount | Number of data elements  |
+|   32   |   1   | uint8  | dataType  | Data type                |
+|   33   |   1   | uint8  | reduceOp  | Reduce operation type    |
+|   34   |   1   | uint8  | protocol  | Protocol type            |
 
 #### 5.3.3 NotifyTask
 
-**Applicable task type**: `NOTIFY_WAIT (0)` / `NOTIFY_RECORD (1)`.
+**Applicable task types**: `NOTIFY_WAIT (0)` / `NOTIFY_RECORD (1)`.
 
 **Size**: 18 bytes.
 
-| Offset | Bytes  | Type   | Field Name  | Description          |
-|:------:|:------:|--------|-------------|----------------------|
-|   0    |   4    | uint32 | srcRankId   | Source Rank ID       |
-|   4    |   8    | uint64 | notifyId    | Notification ID      |
-|   12   |   4    | uint32 | dstRankId   | Destination Rank ID  |
-|   16   |   1    | uint8  | notifyCount | Notification count   |
-|   17   |   1    | uint8  | protocol    | Protocol type        |
+| Offset | Bytes | Type   | Field       | Description          |
+|:------:|:-----:|--------|-------------|----------------------|
+|   0    |   4   | uint32 | srcRankId   | Source Rank ID       |
+|   4    |   8   | uint64 | notifyId    | Notification ID      |
+|   12   |   4   | uint32 | dstRankId   | Destination Rank ID  |
+|   16   |   1   | uint8  | notifyCount | Notification count   |
+|   17   |   1   | uint8  | protocol    | Protocol type        |
 
 ---
 
@@ -309,48 +333,48 @@ Each MicrocodeInstrInner contains:
 
 ### 6.1 Task Type (HccLTaskMetaType)
 
-| Value | Name          | Description        |
-|:-----:|---------------|--------------------|
-|  0    | NOTIFY_WAIT   | Wait for notification |
-|  1    | NOTIFY_RECORD | Record notification   |
-|  2    | REDUCE        | Reduce operation      |
-|  3    | MEM_CPY       | Memory copy           |
-|  4    | CCU_GRAPH     | CCU graph execution   |
-|  5    | AIV_GRAPH     | AIV graph execution   |
-|  6    | EVENT_WAIT    | Wait for event        |
-|  7    | EVENT_RECORD  | Record event          |
+| Value | Name          | Description       |
+|:-----:|---------------|-------------------|
+|   0   | NOTIFY_WAIT   | Wait for notification |
+|   1   | NOTIFY_RECORD | Record notification |
+|   2   | REDUCE        | Reduce operation  |
+|   3   | MEM_CPY       | Memory copy       |
+|   4   | CCU_GRAPH     | CCU graph execution |
+|   5   | AIV_GRAPH     | AIV graph execution |
+|   6   | EVENT_WAIT    | Event wait        |
+|   7   | EVENT_RECORD  | Event record      |
 
 ### 6.2 Protocol Type (ProtocolType)
 
-| Value | Name    | Description                        |
-|:-----:|---------|------------------------------------|
-|  0    | HCCS    | High-speed chip-to-chip communication |
-|  1    | ROCE    | RDMA over Converged Ethernet       |
-|  2    | PCIE    | PCIe communication                 |
-|  3    | SIO     | Socket I/O                         |
-|  4    | UBC_CTP | UBC CTP protocol                   |
-|  5    | UBC_TP  | UBC TP protocol                    |
-|  6    | UB_MEM  | UB memory protocol                 |
+| Value | Name    | Description                      |
+|:-----:|---------|----------------------------------|
+|   0   | HCCS    | High-speed inter-chip communication |
+|   1   | ROCE    | RDMA over Converged Ethernet     |
+|   2   | PCIE    | PCIe communication               |
+|   3   | SIO     | Socket I/O                       |
+|   4   | UBC_CTP | UBC CTP protocol                 |
+|   5   | UBC_TP  | UBC TP protocol                  |
+|   6   | UB_MEM  | UB memory protocol               |
 
 ### 6.3 Buffer Type (BufferType)
 
-| Value | Name     | Description      |
-|:-----:|----------|------------------|
-|  0    | INPUT    | Input buffer     |
-|  1    | OUTPUT   | Output buffer    |
-|  2    | CCL      | Communication buffer |
-|  3    | RESERVED | Reserved         |
+| Value | Name     | Description     |
+|:-----:|----------|-----------------|
+|   0   | INPUT    | Input buffer    |
+|   1   | OUTPUT   | Output buffer   |
+|   2   | CCL      | Communication buffer |
+|   3   | RESERVED | Reserved        |
 
 ### 6.4 Expansion Mode (SimOpExpansionMode)
 
-| Value | Name                            | Description                    |
-|:-----:|---------------------------------|--------------------------------|
-|  0    | SIM_OP_EXPANSION_MODE_CCU       | CCU mode, uses ChannelInfo     |
-|  1    | SIM_OP_EXPANSION_MODE_AICPU     | AICPU mode, uses JettyInfo     |
+| Value | Name                            | Description                        |
+|:-----:|---------------------------------|-------------------------------------|
+|   0   | SIM_OP_EXPANSION_MODE_CCU       | CCU mode, uses ChannelInfo          |
+|   1   | SIM_OP_EXPANSION_MODE_AICPU     | AICPU mode, uses ChannelInfo        |
 
 ---
 
-## 7. C/C++ Read Samples
+## 7. C/C++ Read Example
 
 ### 7.1 Structure Definitions
 
@@ -392,10 +416,10 @@ struct ModelInfoCommInner {
 };
 
 // ============================================================================
-// Channel Data (CCU Mode)
+// Channel Data (shared by CCU / AICPU modes)
 // ============================================================================
 struct ChannelData {
-    uint16_t channelId;
+    uint16_t channelId;      // CCU: channel ID; AICPU: EndPointPair primary key (eid pair identifier)
     uint8_t  srcDieId;
     uint8_t  dstDieId;
     uint32_t srcRank;
@@ -403,12 +427,12 @@ struct ChannelData {
     uint8_t  leid[16];
     uint8_t  reid[16];
     uint16_t protocol;
-    uint16_t jettyNum;
-    uint32_t jettyId[32];
+    uint16_t jettyNum;       // AICPU: number of local jetties for this eid pair (may be >1 for multi-channel); CCU: number of jetties for this channel
+    uint32_t jettyId[32];    // AICPU: all local (send) jetties for this eid pair, ordered by creation order, task.jettyId searched within array
 };
 
 // ============================================================================
-// Jetty Data (AICPU Mode)
+// Jetty Data (unused historical structure; AICPU actually uses ChannelData, see above)
 // ============================================================================
 struct JettyData {
     uint32_t jettyId;
@@ -497,7 +521,7 @@ struct HcclTaskMetaData {
 #pragma pack(pop)
 ```
 
-### 7.2 Read Synthesis Data File Sample
+### 7.2 Reading Comprehensive Data File Example
 
 ```cpp
 #include <cstdio>
@@ -513,7 +537,7 @@ bool ReadSynthesisData(const char* filename) {
         return false;
     }
 
-    // ===== Step 1: Read the file header =====
+    // ===== Step 1: Read file header =====
     FileHeader header;
     if (fread(&header, sizeof(FileHeader), 1, fp) != 1) {
         std::cerr << "Failed to read header" << std::endl;
@@ -521,7 +545,7 @@ bool ReadSynthesisData(const char* filename) {
         return false;
     }
 
-    // Verify the magic number
+    // Verify magic number
     if (header.magic != HCCLVM_SYN_FILE_MAGIC) {
         std::cerr << "Invalid magic number: 0x" << std::hex << header.magic << std::endl;
         fclose(fp);
@@ -572,9 +596,8 @@ bool ReadSynthesisData(const char* filename) {
         std::cout << "\n[All2All] Matrix Count: " << matrixCount << std::endl;
     }
 
-    // ===== Step 5: Read channel or Jetty information based on op_expansion_mode =====
-    if (modelComm.op_expansion_mode == 0) {
-        // CCU mode - read ChannelInfo
+    // ===== Step 5: Read ChannelInfo (both CCU and AICPU modes use fixed-length ChannelData structure; absent in AIV mode) =====
+    if (modelComm.op_expansion_mode != 2) {
         uint32_t channelCount;
         fread(&channelCount, sizeof(uint32_t), 1, fp);
         
@@ -585,21 +608,12 @@ bool ReadSynthesisData(const char* filename) {
         for (size_t i = 0; i < channels.size() && i < 3; ++i) {
             std::cout << "  Channel[" << i << "]: ID=" << channels[i].channelId
                       << ", srcRank=" << channels[i].srcRank
-                      << ", dstRank=" << channels[i].dstRank << std::endl;
-        }
-    } else {
-        // AICPU mode - read JettyInfo
-        uint32_t jettyCount;
-        fread(&jettyCount, sizeof(uint32_t), 1, fp);
-        
-        std::vector<JettyData> jetties(jettyCount);
-        fread(jetties.data(), sizeof(JettyData), jettyCount, fp);
-        
-        std::cout << "\n[JettyInfo] Count: " << jettyCount << std::endl;
-        for (size_t i = 0; i < jetties.size() && i < 3; ++i) {
-            std::cout << "  Jetty[" << i << "]: ID=" << jetties[i].jettyId
-                      << ", srcRank=" << jetties[i].srcRank
-                      << ", dstRank=" << jetties[i].dstRank << std::endl;
+                      << ", dstRank=" << channels[i].dstRank
+                      << ", jettyNum=" << channels[i].jettyNum;
+            for (uint16_t j = 0; j < channels[i].jettyNum; ++j) {
+                std::cout << ", jetty[" << j << "]=" << channels[i].jettyId[j];
+            }
+            std::cout << std::endl;
         }
     }
 
@@ -623,7 +637,7 @@ bool ReadSynthesisData(const char* filename) {
 }
 ```
 
-### 7.3 Read Task Metadata File Sample
+### 7.3 Reading Task Metadata File Example
 
 ```cpp
 constexpr uint32_t HCCLVM_TASK_FILE_MAGIC = 0x48565444;
@@ -635,7 +649,7 @@ bool ReadTaskMetaData(const char* filename) {
         return false;
     }
 
-    // ===== Step 1: Read the file header =====
+    // ===== Step 1: Read file header =====
     FileHeader header;
     fread(&header, sizeof(FileHeader), 1, fp);
 
@@ -697,39 +711,39 @@ bool ReadTaskMetaData(const char* filename) {
 
 ---
 
-## 8. Precautions
+## 8. Notes
 
-| No.  | Precaution            | Description                                                        |
-|:----:|-----------------------|--------------------------------------------------------------------|
-|  1   | Byte order            | All multi-byte fields use **Little-Endian** byte order             |
-|  2   | Memory alignment      | Structures use `#pragma pack(1)` for **1-byte alignment**          |
-|  3   | Variable-length field read | Read the `count` field first, then read the corresponding number of data entries |
-|  4   | Mode determination    | Determine whether to read ChannelInfo or JettyInfo based on `op_expansion_mode` |
-|  5   | Union parsing         | Parse `taskData` in task metadata using the correct structure based on `taskType` |
-|  6   | Magic number verification | Always verify the magic number first when reading a file to ensure correct file type |
+| No.  | Note                | Description                                                         |
+|:----:|---------------------|---------------------------------------------------------------------|
+|  1   | Byte Order          | All multi-byte fields use **Little-Endian** byte order              |
+|  2   | Memory Alignment    | Structures use `#pragma pack(1)` for **1-byte alignment**           |
+|  3   | Variable-Length Fields | Read the `count` field first, then read the corresponding number of data entries based on the count value |
+|  4   | Mode Detection      | Both CCU and AICPU modes read ChannelInfo (fixed-length ChannelData structure); this section is absent in AIV mode; JettyData is an unused historical structure |
+|  5   | Union Parsing        | The `taskData` in task metadata must be parsed with the correct structure based on `taskType` |
+|  6   | Magic Number Verification | Always verify the magic number when reading a file to ensure the correct file type |
 
 ---
 
 ## Appendix A: Magic Number Quick Reference
 
-| File Type       | Magic Number | ASCII  | Description               |
-|-----------------|--------------|--------|---------------------------|
-| Synthesis data  | `0x48564D44` | "HVMD" | Hccl VM Data              |
-| Microcode instruction | `0x434D4349` | "CMCI" | CCU Microcode Instruction |
-| Task metadata   | `0x48565444` | "HVTM" | Hccl VM Task Metadata     |
+| File Type      | Magic Number | ASCII  | Description               |
+|----------------|--------------|--------|---------------------------|
+| Comprehensive Data | `0x48564D44` | "HVMD" | Hccl VM Data             |
+| Microcode Instructions | `0x434D4349` | "CMCI" | CCU Microcode Instruction |
+| Task Metadata  | `0x48565444` | "HVTM" | Hccl VM Task Metadata     |
 
 ---
 
-## Appendix B: File Read Procedure
+## Appendix B: File Reading Flow
 
 **Step 1**: Open the binary file.
 
-**Step 2**: Read the FileHeader (20 Bytes)
+**Step 2**: Read FileHeader (20 Bytes)
 
-**Step 3**: Verify the magic number
+**Step 3**: Verify magic number
 
-- Magic number mismatch: return error and close the file.
-- Magic number match: continue.
+- Magic number mismatch -> Return error, close file.
+- Magic number matches -> Continue.
 
 **Step 4**: Read data content based on count.
 
@@ -739,7 +753,7 @@ bool ReadTaskMetaData(const char* filename) {
 
 ## Appendix C: Contact Information
 
-Contact HCCL VM Team for questions.
+For any questions, please contact HCCL VM Team.
 
 ---
 

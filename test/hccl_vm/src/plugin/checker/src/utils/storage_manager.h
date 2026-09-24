@@ -1,11 +1,18 @@
 /**
  * Copyright (c) 2026 Huawei Technologies Co., Ltd.
- * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * CANN Open Software License Agreement Version 2.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
+ * This program is free software, you can redistribute it and/or modify it under
+ * the terms and conditions of CANN Open Software License Agreement Version 2.0
+ * (the "License"). Please refer to the License for details. You may not use
+ * this file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS
+ * FOR A PARTICULAR PURPOSE. See LICENSE in the root of the software repository
+ * for the full text of the License.
+ */
+
+/**
+AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,  *
+the full text of the License.
  */
 
 #ifndef STORAGE_MANAGER_H
@@ -21,8 +28,8 @@
 #include "data_slice.h"
 #include "dtype_common.h"
 #include "framework/task_graph_generator_v3/task_def_v3.h"
-#include "operation_data/operation_data_types.h"
 #include "sim_common.h"
+#include "sim_op_db_types.h"
 #include "task_meta_defs.h"
 
 namespace HcclSim {
@@ -90,90 +97,100 @@ struct HalfRTTInfo {
 using ChannelsPerDie = std::map<uint32_t, RemoteDieInfo>;
 
 class StorageManager {
-public:
+  public:
     StorageManager() = default;
-    static StorageManager& GetInstance()
-    {
+    static StorageManager &GetInstance() {
         static StorageManager instance;
         return instance;
     }
     // 禁用拷贝构造和赋值
-    StorageManager(const StorageManager&) = delete;
-    StorageManager& operator=(const StorageManager&) = delete;
+    StorageManager(const StorageManager &) = delete;
+    StorageManager &operator=(const StorageManager &) = delete;
 
-    void SetDataId(const std::string& data_id)
-    {
+    void SetDataId(const std::string &data_id) {
         std::lock_guard<std::mutex> lock(m_mutex);
         m_data_id = data_id;
     }
 
-    std::string GetDataId() const
-    {
+    std::string GetDataId() const {
         std::lock_guard<std::mutex> lock(m_mutex);
         return m_data_id;
     }
 
-    CheckerParam GetCheckerParam() const
-    {
+    CheckerParam GetCheckerParam() const {
         std::lock_guard<std::mutex> lock(m_mutex);
         return m_checker_param;
     }
 
-    CheckerParam GetCheckerParam(TaskGraphGeneratorV3::OperatorId operatorId) const
-    {
+    CheckerParam
+    GetCheckerParam(TaskGraphGeneratorV3::OperatorId operatorId) const {
         std::lock_guard<std::mutex> lock(m_mutex);
         const auto it = m_checker_params.find(operatorId);
         return it == m_checker_params.end() ? m_checker_param : it->second;
     }
 
-    void SaveCheckerParam(TaskGraphGeneratorV3::OperatorId operatorId)
-    {
+    void SaveCheckerParam(TaskGraphGeneratorV3::OperatorId operatorId) {
         std::lock_guard<std::mutex> lock(m_mutex);
         m_checker_params[operatorId] = m_checker_param;
     }
 
     HcclResult LoadHcclVmSynthesisData(
-        DeviceId deviceId, CommId commId, const std::string& commName, uint64_t commHash, uint32_t opIter,
-        uint32_t rankId, sim::operation::OpMemInfoTab memInfo, std::vector<sim::operation::CcuChannelTab>& channels,
-        std::vector<sim::operation::HalfRTTTab>& halfRTT);
-    HcclResult LoadHcclVmInstrData(std::vector<sim::operation::CcuInstrResTab>& instrRes);
-    HcclResult LoadHcclVmTaskMetaData(std::vector<std::vector<sim::operation::OpTaskTab>>& allTasks);
-    HcclResult LoadDecodedHcclVmTaskMetaData(const std::vector<std::vector<HcclTaskMetaData>>& allTaskMetas);
+        DeviceId deviceId, CommId commId, const std::string &commName,
+        uint64_t commHash, uint32_t opIter, uint32_t rankId,
+        sim::OpMemInfoTab memInfo, std::vector<sim::CcuChannelTab> &channels,
+        std::vector<sim::HalfRTTTab> &halfRTT);
+    HcclResult LoadHcclVmInstrData(std::vector<sim::CcuInstrResTab> &instrRes);
+    HcclResult
+    LoadHcclVmTaskMetaData(std::vector<std::vector<sim::OpTaskTab>> &allTasks);
+    HcclResult LoadDecodedHcclVmTaskMetaData(
+        const std::vector<std::vector<HcclTaskMetaData>> &allTaskMetas);
     void Reset(bool clearMemLayout = true);
-    uint64_t GetBlockSize(
-        const std::string& commName, uint64_t commHash, uint32_t opIter, DeviceId deviceId, BufferType bufferType);
-    HcclResult GetSlice(
-        const std::string& commName, uint64_t commHash, uint32_t opIter, uint64_t addr, uint64_t len,
-        DataSlice& dataSlice, DeviceId* deviceId = nullptr);
+    uint64_t GetBlockSize(const std::string &commName, uint64_t commHash,
+                          uint32_t opIter, DeviceId deviceId,
+                          BufferType bufferType);
+    bool GetBufferBaseAddress(const std::string &commName, uint64_t commHash,
+                              uint32_t opIter, DeviceId deviceId,
+                              BufferType bufferType, uint64_t &baseAddr) const;
+    bool IsMemRangeRegistered(const std::string &commName, uint64_t commHash,
+                              uint32_t opIter, DeviceId deviceId, uint64_t addr,
+                              uint64_t len) const;
+    HcclResult GetSlice(const std::string &commName, uint64_t commHash,
+                        uint32_t opIter, uint64_t addr, uint64_t len,
+                        DataSlice &dataSlice, DeviceId *deviceId = nullptr);
     std::map<DeviceId, RankId> GetDeviceRankMappings() const;
     std::map<DeviceId, RankId> GetDeviceRankMappings(CommId commId) const;
-    bool GetDeviceIdByCommRank(CommId commId, RankId rankId, DeviceId& deviceId) const;
-    bool GetMainStreamId(DeviceId deviceId, TaskGraphGeneratorV3::StreamId& streamId) const;
+    bool GetDeviceIdByCommRank(CommId commId, RankId rankId,
+                               DeviceId &deviceId) const;
+    bool GetMainStreamId(DeviceId deviceId,
+                         TaskGraphGeneratorV3::StreamId &streamId) const;
     uint32_t GetRankSize() const;
 
-    HcclResult ReadHeader(FILE* fp, FileHeader& header);
-    HcclResult ChannelWrite(FILE* fp, const ChannelInfo& chInfo);
-    HcclResult ChannelRead(FILE* fp, ChannelInfo& chInfo);
+    HcclResult ReadHeader(FILE *fp, FileHeader &header);
+    HcclResult ChannelWrite(FILE *fp, const ChannelInfo &chInfo);
+    HcclResult ChannelRead(FILE *fp, ChannelInfo &chInfo);
 
     HcclVmInstrData GetHvmInstrData() const;
-    HcclResult Trans2CheckerParam(sim::operation::OpDetailTab& detailTab, ::OpDetails& detail);
+    HcclResult Trans2CheckerParam(sim::OpDetailTab &detailTab,
+                                  ::OpDetails &detail);
     HcclVmTaskMetaData GetHvmTaskMetaData() const;
-    void InitCcuInfo(DevType& devType, std::vector<uint64_t>& resourceBaseAddr);
-    void BeginOpGroup(const std::string& commName, uint64_t commHash, uint32_t opIter);
+    void InitCcuInfo(DevType &devType, std::vector<uint64_t> &resourceBaseAddr);
+    void BeginOpGroup(const std::string &commName, uint64_t commHash,
+                      uint32_t opIter);
     std::string GetCurrentCommName() const;
     uint64_t GetCurrentCommHash() const;
     uint32_t GetCurrentOpIter() const;
     HcclResult FinalizeOpGroup();
     void MergeAll2AllVSendCountMatrix();
 
-private:
+  private:
     std::string FindRootPath();
-    bool IsDirExists(const std::string& path);
+    bool IsDirExists(const std::string &path);
 
     std::string m_data_id;
     mutable std::mutex m_mutex;
 
-    using DeviceMemLayout = std::map<DeviceId, std::map<BufferType, std::map<uint64_t, MemBlock>>>;
+    using DeviceMemLayout =
+        std::map<DeviceId, std::map<BufferType, std::map<uint64_t, MemBlock>>>;
 
     // 算子 buffer 按通信域和 opIter 隔离保存。
     using CommIdentity = std::pair<std::string, uint64_t>;

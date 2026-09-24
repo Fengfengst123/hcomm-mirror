@@ -47,6 +47,8 @@ target_include_directories(hccl_proxy_level1 PRIVATE
         ${ASCEND_CANN_PACKAGE_PATH}/pkg_inc/asc/hccl/internal/hcomm/pkg_inc/hcomm/ccu
         ${ASCEND_CANN_PACKAGE_PATH}/pkg_inc/aicpu
         ${ASCEND_CANN_PACKAGE_PATH}/pkg_inc/aicpu/tsd
+        # CCU 北向桩依赖的 CANN 包 CCU 公共头(ccu_types.h/ccu_res.h/ccu_res_defs.h/ccu_launch.h)
+        ${ASCEND_CANN_PACKAGE_PATH}/include/hcomm/ccu
 
         # hccl_vm头文件
         ${HCOMM_VM_ROOT_PATH}/include
@@ -88,6 +90,15 @@ target_sources(hccl_proxy_level1 PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/data_local_op_stub.cc
         ${CMAKE_CURRENT_SOURCE_DIR}/data_comm_op_stub.cc
         ${CMAKE_CURRENT_SOURCE_DIR}/data_other_op_stub.cc
+        # CCU 北向劫持（全自研路线）
+        ${CMAKE_CURRENT_SOURCE_DIR}/ccu/ccu_resource_stub.cc
+        ${CMAKE_CURRENT_SOURCE_DIR}/ccu/ccu_control_stub.cc
+        ${CMAKE_CURRENT_SOURCE_DIR}/ccu/ccu_data_stub.cc
+        ${CMAKE_CURRENT_SOURCE_DIR}/ccu/ccu_kernel_sim.cc
+        ${CMAKE_CURRENT_SOURCE_DIR}/ccu/ccu_level1_res.cc
+        # ccu_level1_common.cc 暂不编入：与 ccu_kernel_sim.cc 存在同名符号
+        # 待后续从 ccu_kernel_sim.cc 迁出公共函数后启用
+        # ${CMAKE_CURRENT_SOURCE_DIR}/ccu/ccu_level1_common.cc
         # 其他接口
         ${CMAKE_CURRENT_SOURCE_DIR}/level1_other_stub.cc
         # DFX 诊断接口

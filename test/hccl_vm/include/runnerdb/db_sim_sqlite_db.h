@@ -1,11 +1,18 @@
 /**
  * Copyright (c) 2026 Huawei Technologies Co., Ltd.
- * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * CANN Open Software License Agreement Version 2.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
+ * This program is free software, you can redistribute it and/or modify it under
+ * the terms and conditions of CANN Open Software License Agreement Version 2.0
+ * (the "License"). Please refer to the License for details. You may not use
+ * this file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS
+ * FOR A PARTICULAR PURPOSE. See LICENSE in the root of the software repository
+ * for the full text of the License.
+ */
+
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License.
  */
 
 #ifndef SIM_SQLITE_DB_H
@@ -35,7 +42,7 @@ template <typename T>
 using TableValue = typename sim::SqliteTable<T>::ValueType;
 
 struct SimRunnerSqliteDB {
-private:
+  private:
     sim::SqliteDatabase m_db;
 
     sim::SqliteTable<sim::Server> m_serverTbl;
@@ -59,7 +66,6 @@ private:
     sim::SqliteTable<sim::EventSyncTask> m_eventSyncTaskTbl;
     sim::SqliteTable<sim::Port> m_portTbl;
     sim::SqliteTable<sim::Ccu> m_ccuTbl;
-    sim::SqliteTable<sim::CcuResource> m_ccuResTbl;
     sim::SqliteTable<sim::DeviceConnection> m_deviceConnTbl;
     sim::SqliteTable<sim::EndPointPair> m_endPointPairTbl;
     sim::SqliteTable<sim::EndPointPortMapping> m_endPointPortMappingTbl;
@@ -103,23 +109,22 @@ private:
     sim::SqliteTable<sim::Plugin> m_pluginTbl;
     sim::SqliteTable<sim::DpuPendingNotify> m_dpuPendingNotifyTbl;
     sim::SqliteTable<sim::DpuDeviceInfo> m_dpuDeviceInfoTbl;
+    sim::SqliteTable<sim::CcuSyncResTab> m_ccuSyncResTbl;
 
     std::mutex m_lazyMutex;
-    std::unordered_map<std::type_index, sim::TableBase*> m_tableMap;
+    std::unordered_map<std::type_index, sim::TableBase *> m_tableMap;
     std::vector<std::string> m_tableNames;
     std::vector<std::unique_ptr<sim::TableBase>> m_lazyTables;
 
     template <typename T>
-    void RegisterTable(sim::SqliteTable<T>& table, const std::string& name)
-    {
+    void RegisterTable(sim::SqliteTable<T> &table, const std::string &name) {
         m_tableMap[std::type_index(typeid(T))] = &table;
         m_tableNames.push_back(name);
     }
 
-public:
+  public:
     SimRunnerSqliteDB()
-        : m_serverTbl(m_db.GetDb(), "Server"),
-          m_hostTbl(m_db.GetDb(), "Host"),
+        : m_serverTbl(m_db.GetDb(), "Server"), m_hostTbl(m_db.GetDb(), "Host"),
           m_runnerTbl(m_db.GetDb(), "Runner"),
           m_communicatorTbl(m_db.GetDb(), "Communicator"),
           m_communicatorDestroySyncTbl(m_db.GetDb(), "CommunicatorDestroySync"),
@@ -137,9 +142,7 @@ public:
           m_fdMemWhiteListTbl(m_db.GetDb(), "FdMemWhiteList"),
           m_taskTbl(m_db.GetDb(), "Task"),
           m_eventSyncTaskTbl(m_db.GetDb(), "EventSyncTask"),
-          m_portTbl(m_db.GetDb(), "Port"),
-          m_ccuTbl(m_db.GetDb(), "Ccu"),
-          m_ccuResTbl(m_db.GetDb(), "CcuResource"),
+          m_portTbl(m_db.GetDb(), "Port"), m_ccuTbl(m_db.GetDb(), "Ccu"),
           m_deviceConnTbl(m_db.GetDb(), "DeviceConnection"),
           m_endPointTbl(m_db.GetDb(), "EndPoint"),
           m_endPointPairTbl(m_db.GetDb(), "EndPointPair"),
@@ -151,10 +154,8 @@ public:
           m_raSocketTbl(m_db.GetDb(), "RaSocket"),
           m_raSocketPairTbl(m_db.GetDb(), "RaSocketPair"),
           m_raDeviceTbl(m_db.GetDb(), "RaDevice"),
-          m_raQPTbl(m_db.GetDb(), "RaQP"),
-          m_raCQTbl(m_db.GetDb(), "RaCQ"),
-          m_raCQETbl(m_db.GetDb(), "RaCQE"),
-          m_raMRTbl(m_db.GetDb(), "RaMR"),
+          m_raQPTbl(m_db.GetDb(), "RaQP"), m_raCQTbl(m_db.GetDb(), "RaCQ"),
+          m_raCQETbl(m_db.GetDb(), "RaCQE"), m_raMRTbl(m_db.GetDb(), "RaMR"),
           m_memoryLayoutTbl(m_db.GetDb(), "MemoryLayout"),
           m_simModelDataTbl(m_db.GetDb(), "SimModelData"),
           m_ipcNotifyTbl(m_db.GetDb(), "IpcNotify"),
@@ -164,12 +165,10 @@ public:
           m_raContextTbl(m_db.GetDb(), "RaContext"),
           m_raChanTbl(m_db.GetDb(), "RaChan"),
           m_raTokenIdTbl(m_db.GetDb(), "RaTokenId"),
-          m_raTpTbl(m_db.GetDb(), "RaTp"),
-          m_raRmemTbl(m_db.GetDb(), "RaRmem"),
+          m_raTpTbl(m_db.GetDb(), "RaTp"), m_raRmemTbl(m_db.GetDb(), "RaRmem"),
           m_raLmemTbl(m_db.GetDb(), "RaLmem"),
           m_raJettyTbl(m_db.GetDb(), "RaJetty"),
-          m_raJfcTbl(m_db.GetDb(), "RaJfc"),
-          m_raCrTbl(m_db.GetDb(), "RaCr"),
+          m_raJfcTbl(m_db.GetDb(), "RaJfc"), m_raCrTbl(m_db.GetDb(), "RaCr"),
           m_raTlvTbl(m_db.GetDb(), "RaTlv"),
           m_runModeConfigTbl(m_db.GetDb(), "RunModeConfig"),
           m_hcclBufferTbl(m_db.GetDb(), "HcclBuffer"),
@@ -182,8 +181,8 @@ public:
           m_topoMetaConfigTbl(m_db.GetDb(), "TopoMetaConfig"),
           m_pluginTbl(m_db.GetDb(), "Plugin"),
           m_dpuPendingNotifyTbl(m_db.GetDb(), "DpuPendingNotify"),
-          m_dpuDeviceInfoTbl(m_db.GetDb(), "DpuDeviceInfo")
-    {
+          m_dpuDeviceInfoTbl(m_db.GetDb(), "DpuDeviceInfo"),
+          m_ccuSyncResTbl(m_db.GetDb(), "CcuSyncRes") {
         RegisterTable(m_serverTbl, "Server");
         RegisterTable(m_hostTbl, "Host");
         RegisterTable(m_runnerTbl, "Runner");
@@ -205,7 +204,6 @@ public:
         RegisterTable(m_eventSyncTaskTbl, "EventSyncTask");
         RegisterTable(m_portTbl, "Port");
         RegisterTable(m_ccuTbl, "Ccu");
-        RegisterTable(m_ccuResTbl, "CcuResource");
         RegisterTable(m_deviceConnTbl, "DeviceConnection");
         RegisterTable(m_endPointPairTbl, "EndPointPair");
         RegisterTable(m_endPointPortMappingTbl, "EndPointPortMapping");
@@ -249,17 +247,17 @@ public:
         RegisterTable(m_pluginTbl, "Plugin");
         RegisterTable(m_dpuPendingNotifyTbl, "DpuPendingNotify");
         RegisterTable(m_dpuDeviceInfoTbl, "DpuDeviceInfo");
+        RegisterTable(m_ccuSyncResTbl, "CcuSyncRes");
     }
 
-    SimRunnerSqliteDB(const SimRunnerSqliteDB&) = delete;
-    SimRunnerSqliteDB& operator=(const SimRunnerSqliteDB&) = delete;
-    SimRunnerSqliteDB(SimRunnerSqliteDB&&) = delete;
-    SimRunnerSqliteDB& operator=(SimRunnerSqliteDB&&) = delete;
+    SimRunnerSqliteDB(const SimRunnerSqliteDB &) = delete;
+    SimRunnerSqliteDB &operator=(const SimRunnerSqliteDB &) = delete;
+    SimRunnerSqliteDB(SimRunnerSqliteDB &&) = delete;
+    SimRunnerSqliteDB &operator=(SimRunnerSqliteDB &&) = delete;
 
-    static SimRunnerSqliteDB& Instance()
-    {
+    static SimRunnerSqliteDB &Instance() {
         static std::mutex s_mtx;
-        static SimRunnerSqliteDB* s_instance = nullptr;
+        static SimRunnerSqliteDB *s_instance = nullptr;
 
         std::lock_guard<std::mutex> lock(s_mtx);
         if (s_instance == nullptr) {
@@ -268,73 +266,62 @@ public:
         return *s_instance;
     }
 
-    template <typename T>
-    sim::SqliteTable<T>& GetTable()
-    {
+    template <typename T> sim::SqliteTable<T> &GetTable() {
         std::lock_guard<std::mutex> lock(m_lazyMutex);
         auto it = m_tableMap.find(std::type_index(typeid(T)));
         if (it != m_tableMap.end()) {
-            return *static_cast<sim::SqliteTable<T>*>(it->second);
+            return *static_cast<sim::SqliteTable<T> *>(it->second);
         }
         std::string name = std::string("Unregistered_") + typeid(T).name();
-        HCCL_VM_WARN(
-            "[SimRunnerSqliteDB::GetTable] Lazily registering "
-            "unregistered type: {}",
-            name.c_str());
+        HCCL_VM_WARN("[SimRunnerSqliteDB::GetTable] Lazily registering "
+                     "unregistered type: {}",
+                     name.c_str());
         auto table = std::make_unique<sim::SqliteTable<T>>(m_db.GetDb(), name);
-        auto* rawPtr = table.get();
+        auto *rawPtr = table.get();
         m_lazyTables.push_back(std::move(table));
         m_tableMap[std::type_index(typeid(T))] = rawPtr;
         m_tableNames.push_back(name);
         return *rawPtr;
     }
 
-    template <typename T>
-    std::optional<T> Find(TableKeyType<T> id)
-    {
+    template <typename T> std::optional<T> Find(TableKeyType<T> id) {
         return GetTable<T>().Find(id);
     }
 
     template <typename T>
-    std::pair<TableValue<T>, bool> Query(std::function<bool(const T&)> pred)
-    {
+    std::pair<TableValue<T>, bool> Query(std::function<bool(const T &)> pred) {
         return GetTable<T>().Query(pred);
     }
 
     template <typename T>
-    std::vector<TableValue<T>> QueryList(std::function<bool(const T&)> pred)
-    {
+    std::vector<TableValue<T>> QueryList(std::function<bool(const T &)> pred) {
         return GetTable<T>().QueryList(pred);
     }
 
-    template <typename T>
-    TableKeyType<T> Add(T rec)
-    {
+    template <typename T> TableKeyType<T> Add(T rec) {
         return GetTable<T>().Add(rec);
     }
 
     template <typename T>
-    bool Update(TableKeyType<T> id, std::function<void(T&)> updater)
-    {
+    std::vector<TableKeyType<T>> AddBatch(std::vector<T> &recs) {
+        return GetTable<T>().AddBatch(recs);
+    }
+
+    template <typename T>
+    bool Update(TableKeyType<T> id, std::function<void(T &)> updater) {
         return GetTable<T>().Update(id, updater);
     }
 
-    template <typename T>
-    bool Delete(TableKeyType<T> id)
-    {
+    template <typename T> bool Delete(TableKeyType<T> id) {
         return GetTable<T>().Delete(id);
     }
 
-    template <typename T>
-    bool DeleteAll()
-    {
-        return GetTable<T>().DeleteAll();
-    }
+    template <typename T> bool DeleteAll() { return GetTable<T>().DeleteAll(); }
 
     std::vector<std::string> GetAllTableName() const { return m_tableNames; }
 
     // 获取底层数据库连接对象(供批量写事务SqliteWriteTransaction使用)
-    sim::SqliteDatabase& GetDatabase() { return m_db; }
+    sim::SqliteDatabase &GetDatabase() { return m_db; }
 
     void ClearAll() { m_db.ClearAllTables(); }
 };
@@ -345,26 +332,25 @@ namespace sim {
 // 显式调用Commit()提交; 未提交即离开作用域(异常/提前返回)时自动回滚。
 // 注意: 事务期间应保证无其他线程并发写库。
 class SqliteWriteTransaction {
-public:
-    SqliteWriteTransaction() : db_(SimRunnerSqliteDB::Instance().GetDatabase()), began_(false), committed_(false)
-    {
+  public:
+    SqliteWriteTransaction()
+        : db_(SimRunnerSqliteDB::Instance().GetDatabase()), began_(false),
+          committed_(false) {
         began_ = db_.BeginTransaction();
     }
 
-    ~SqliteWriteTransaction()
-    {
+    ~SqliteWriteTransaction() {
         if (began_ && !committed_) {
             db_.RollbackTransaction();
         }
     }
 
-    SqliteWriteTransaction(const SqliteWriteTransaction&) = delete;
-    SqliteWriteTransaction& operator=(const SqliteWriteTransaction&) = delete;
-    SqliteWriteTransaction(SqliteWriteTransaction&&) = delete;
-    SqliteWriteTransaction& operator=(SqliteWriteTransaction&&) = delete;
+    SqliteWriteTransaction(const SqliteWriteTransaction &) = delete;
+    SqliteWriteTransaction &operator=(const SqliteWriteTransaction &) = delete;
+    SqliteWriteTransaction(SqliteWriteTransaction &&) = delete;
+    SqliteWriteTransaction &operator=(SqliteWriteTransaction &&) = delete;
 
-    bool Commit()
-    {
+    bool Commit() {
         if (!began_ || committed_) {
             return began_ && committed_;
         }
@@ -372,8 +358,8 @@ public:
         return committed_;
     }
 
-private:
-    SqliteDatabase& db_;
+  private:
+    SqliteDatabase &db_;
     bool began_;
     bool committed_;
 };

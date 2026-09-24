@@ -1,11 +1,18 @@
 /**
  * Copyright (c) 2026 Huawei Technologies Co., Ltd.
- * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * CANN Open Software License Agreement Version 2.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
+ * This program is free software, you can redistribute it and/or modify it under
+ * the terms and conditions of CANN Open Software License Agreement Version 2.0
+ * (the "License"). Please refer to the License for details. You may not use
+ * this file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS
+ * FOR A PARTICULAR PURPOSE. See LICENSE in the root of the software repository
+ * for the full text of the License.
+ */
+
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License.
  */
 
 #include <atomic>
@@ -14,17 +21,30 @@
 #include <string>
 #include <unistd.h>
 
+#include "db_sim_op_db_ops.h"
 #include "hccl_device_pub.h"
-#include "operation_data/operation_data_ops.h"
 #include "sim_aicpu_pipe_handler.h"
 #include "sim_aicpu_pipe_msg.h"
 #include "sim_kernel_lib_mgr.h"
 #include "sim_log.h"
 #include "sim_pipe_io.h"
-#include "storage/storage_runtime.h"
 
-int main(int argc, char* argv[])
-{
+// argv[1] 是当前 device 子进程的 rankId (每个 rank 一个子进程).
+//
+// 各启动路径的现状:
+//   - proxy/level1 ctrl_comm_resource_stub.cc 传的是真实 rank
+//     (sim::GetCurrRankId() -> Communicator.rank_id).
+//   - proxy/level2 aclrt_kernel_stub.cc 的 LaunchAICPUKernelFunc 目前把
+//     GetCurrDeviceId() (即 deviceId) 传给了这个 rankId 形参.
+//   - aclInit (aclrt_device_stub.cc) 传 0 作为占位.
+//
+// level2 场景下 argv[1] 只是初始占位值: g_rankId 会在运行期被
+// PIPE_CMD_SET_DEV_ID 覆盖 (HandlePipeCmdSetDevId ->
+// SetCurRankId(req->rankId)), 其中 req->rankId 是 aclrtSetDevice 从
+// OMPI_COMM_WORLD_RANK / PMI_RANK 解析出的 真实 rank. 因此 level2 需等
+// SET_DEV_ID 之后 GetCurRankId() 才返回真实 rank; 而 level1 的 argv[1]
+// 启动时直接就是真实 rank, 不依赖 SET_DEV_ID 覆盖.
+int main(int argc, char *argv[]) {
     LogConfig config = LoadLogConfig("device_aarch64");
     InitLogger(config);
 
@@ -33,17 +53,9 @@ int main(int argc, char* argv[])
     HCCL_VM_INFO("[device] main process start.");
 
     if (argc < 5) {
-        HCCL_VM_ERROR(
-            "[device] Usage: {} <rankId> <deviceKey> <h2d_read_fd> "
-            "<d2h_write_fd>",
-            argv[0]);
-        return -1;
-    }
-
-    // LD_PRELOAD rank/device 进程必须在首次 Table<T>() 前按自身 PID
-    // 安装独立会话， 不复用 Host 父进程继承的 SQLite 连接。
-    if (sim::operation::EnsureProcessStorageSession() != 0) {
-        HCCL_VM_ERROR("[device] failed to initialize the process storage session");
+        HCCL_VM_ERROR("[device] Usage: {} <rankId> <deviceKey> <h2d_read_fd> "
+                      "<d2h_write_fd>",
+                      argv[0]);
         return -1;
     }
 
@@ -51,10 +63,9 @@ int main(int argc, char* argv[])
     uint32_t devKey = static_cast<uint32_t>(std::atoi(argv[2]));
     int h2dReadFd = std::atoi(argv[3]);
     int d2hWriteFd = std::atoi(argv[4]);
-    HCCL_VM_INFO(
-        "[device] parse input args: rankId={} devKey={} h2dReadFd={} "
-        "d2hWriteFd={}",
-        rankId, devKey, h2dReadFd, d2hWriteFd);
+    HCCL_VM_INFO("[device] parse input args: rankId={} devKey={} h2dReadFd={} "
+                 "d2hWriteFd={}",
+                 rankId, devKey, h2dReadFd, d2hWriteFd);
 
     SetCurRankId(rankId);
     SetCurDeviceKey(devKey);
@@ -62,41 +73,44 @@ int main(int argc, char* argv[])
     DeviceSendMsg(PIPE_RSP_READY, nullptr, 0);
 
     uint8_t cmd = 0;
-    static uint8_t payload[IPC_MSG_LEN_MAX] = {0}; // 定长接收缓冲，main 单线程安全
+    static uint8_t payload[IPC_MSG_LEN_MAX] = {
+        0}; // 定长接收缓冲，main 单线程安全
     uint32_t payloadLen = 0;
 
     while (true) {
         int rc = DeviceRecvMsg(cmd, payload, sizeof(payload), payloadLen);
         if (rc != 0) {
-            HCCL_VM_INFO("[device] DeviceRecvMsg failed (EOF or error), exiting loop.");
+            HCCL_VM_INFO(
+                "[device] DeviceRecvMsg failed (EOF or error), exiting loop.");
             break;
         }
 
         switch (cmd) {
-            case PIPE_CMD_SHUTDOWN:
-                HCCL_VM_INFO("[device] Received PIPE_CMD_SHUTDOWN, exiting gracefully.");
-                goto done;
-            case PIPE_CMD_SET_DEV_ID:
-                sim::HandlePipeCmdSetDevId(payload, payloadLen);
-                break;
-            case PIPE_CMD_GET_DEV_PTR:
-                sim::HandlePipeCmdGetDevPtr(payload, payloadLen);
-                break;
-            case PIPE_CMD_EXEC_KERNEL:
-                sim::HandlePipeCmdExecKernel(payload, payloadLen);
-                break;
-            case PIPE_CMD_FREE_DEV_PTR:
-                sim::HandlePipeCmdFreeDevPtr(payload, payloadLen);
-                break;
-            case PIPE_CMD_GET_WQE_PTR:
-                sim::HandlePipeCmdGetWqePtr(payload, payloadLen);
-                break;
-            case PIPE_CMD_FREE_WQE_PTR:
-                sim::HandlePipeCmdFreeWqePtr(payload, payloadLen);
-                break;
-            default:
-                HCCL_VM_ERROR("[device] Unknown command: 0x{:02x}", cmd);
-                break;
+        case PIPE_CMD_SHUTDOWN:
+            HCCL_VM_INFO(
+                "[device] Received PIPE_CMD_SHUTDOWN, exiting gracefully.");
+            goto done;
+        case PIPE_CMD_SET_DEV_ID:
+            sim::HandlePipeCmdSetDevId(payload, payloadLen);
+            break;
+        case PIPE_CMD_GET_DEV_PTR:
+            sim::HandlePipeCmdGetDevPtr(payload, payloadLen);
+            break;
+        case PIPE_CMD_EXEC_KERNEL:
+            sim::HandlePipeCmdExecKernel(payload, payloadLen);
+            break;
+        case PIPE_CMD_FREE_DEV_PTR:
+            sim::HandlePipeCmdFreeDevPtr(payload, payloadLen);
+            break;
+        case PIPE_CMD_GET_WQE_PTR:
+            sim::HandlePipeCmdGetWqePtr(payload, payloadLen);
+            break;
+        case PIPE_CMD_FREE_WQE_PTR:
+            sim::HandlePipeCmdFreeWqePtr(payload, payloadLen);
+            break;
+        default:
+            HCCL_VM_ERROR("[device] Unknown command: 0x{:02x}", cmd);
+            break;
         }
     }
 
@@ -108,9 +122,5 @@ done:
 
     sim::PipeClose(h2dReadFd);
     sim::PipeClose(d2hWriteFd);
-    auto closed = HcclSim::Storage::StorageRuntime::CloseProcessSession();
-    if (!closed.ok()) {
-        HCCL_VM_WARN("[device] storage session close failed: {}", closed.diagnostic);
-    }
     _exit(0);
 }

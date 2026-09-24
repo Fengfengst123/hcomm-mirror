@@ -4,10 +4,18 @@
 
 | 项目     | 内容                           |
 |----------|--------------------------------|
-| 版本     | v1.0                           |
-| 更新日期 | 2025-01-16                     |
+| 版本     | v2.0                           |
+| 更新日期 | 2026-09-17                     |
 | 适用场景 | HCCL VM 仿真数据导出与读取     |
 | 作者     | HCCL VM Team                   |
+
+> **v2.0 变更说明**：综合数据文件（`*_hcclvm_syn_data.bin`）**version 保持 1，文件头不做版本变更**
+> （本特性不做新旧文件兼容性区分）。`ChannelData` 二进制布局与历史版本**一致（未新增字段，176 字节）**，
+> 但 AICPU 模式 dump **语义**变更以支持多 channel（`HCCL_UB_MULTI_CHANNEL_NUM`）特性：
+> jetty 精确归属到（本端 eid, 对端 eid）链路 + **每 eid 对一条聚合记录**
+> （`jettyNum` 为该 eid 对的 jetty 个数，`jettyId[0..jettyNum)` 携带全部本端 jetty，
+> 读取方需在数组内查找 `task.jettyId`，不能再假定 `jettyNum` 恒为 1 或直接取 `jettyId[0]`）。
+> 任务/微码/flag 文件格式不变。
 
 ---
 
@@ -34,7 +42,7 @@
 | 偏移量 | 字节数 | 类型    | 字段名      | 说明                       |
 |:------:|:------:|---------|-------------|----------------------------|
 |   0    |   4    | uint32  | magic       | 魔数，标识文件类型         |
-|   4    |   2    | uint16  | version     | 版本号（当前为 1）         |
+|   4    |   2    | uint16  | version     | 版本号（当前为 1）            |
 |   6    |   2    | uint16  | header_size | 文件头大小（20 字节）      |
 |   8    |   4    | uint32  | flags       | 标志位（保留）             |
 |   12   |   4    | uint32  | count       | 数据条目数量               |
@@ -65,7 +73,7 @@ struct FileHeader {
 |:----:|----------------------------------|----------|----------------------------------------------|
 |  1   | FileHeader                       | 20 Bytes | 文件头                                       |
 |  2   | ModelInfo                        | 变长     | 模型信息（含 ModelInfoCommInner、VDataDesTag、All2AllDataDesTag） |
-|  3   | ChannelInfo 或 JettyInfo         | 变长     | 二选一，由 `op_expansion_mode` 决定          |
+|  3   | ChannelInfo（CCU/AICPU 共用）    | 变长     | AIV 模式无此数据块                           |
 |  4   | MemLayoutInfo                    | 变长     | 内存布局信息                                 |
 
 **op_expansion_mode 取值说明：**
@@ -73,7 +81,7 @@ struct FileHeader {
 | 值 | 模式    | 使用的数据结构 |
 |:--:|---------|----------------|
 |  0 | CCU     | ChannelInfo    |
-|  1 | AICPU   | JettyInfo      |
+|  1 | AICPU   | ChannelInfo（多 channel 语义见 3.3.3） |
 
 ### 3.2 ModelInfo 结构
 
@@ -126,7 +134,7 @@ struct FileHeader {
 
 ### 3.3 ChannelInfo 结构
 
-**适用条件**：`op_expansion_mode = 0`（CCU 模式）
+**适用条件**：`op_expansion_mode = 0`（CCU 模式）或 `1`（AICPU 模式）——两种模式均使用 ChannelData 定长结构；AIV 模式不写。
 
 #### 3.3.1 ChannelInfo 头部
 
@@ -137,24 +145,40 @@ struct FileHeader {
 
 #### 3.3.2 ChannelData
 
-**大小**：152 字节。
+**大小**：176 字节（布局与历史版本一致）。
 
-| 偏移量 | 字节数 | 类型       | 字段名    | 说明          |
+| 偏移量 | 字节数 | 类型       | 字段名       | 说明          |
 |:------:|:------:|------------|-----------|---------------|
-|   0    |   2    | uint16     | channelId | 通道 ID       |
+|   0    |   2    | uint16     | channelId | CCU 模式: 通道 ID；AICPU 模式: EndPointPair 主键（eid 对标识） |
 |   2    |   1    | uint8      | srcDieId  | 源 Die ID     |
 |   3    |   1    | uint8      | dstDieId  | 目标 Die ID   |
 |   4    |   4    | uint32     | srcRank   | 源 Rank ID    |
 |   8    |   4    | uint32     | dstRank   | 目标 Rank ID  |
-|   12   |  16    | uint8[16]  | leid      | 本端 EID      |
-|   28   |  16    | uint8[16]  | reid      | 远端 EID      |
+|   12   |   16   | uint8[16]  | leid      | 本端 EID      |
+|   28   |   16   | uint8[16]  | reid      | 远端 EID      |
 |   44   |   2    | uint16     | protocol  | 协议类型      |
 |   46   |   2    | uint16     | jettyNum  | Jetty 数量    |
-|   48   |  128   | uint32[32] | jettyId   | Jetty ID 数组 |
+|   48   |   128  | uint32[32] | jettyId   | Jetty ID 数组 |
 
-### 3.4 JettyInfo 结构
+#### 3.3.3 多 channel 语义（AICPU 模式）
 
-**适用条件**：`op_expansion_mode = 1`（AICPU 模式）
+`HCCL_UB_MULTI_CHANNEL_NUM=N` 特性下，同一对 rank（同一对 eid）之间存在 N 条并行 channel，
+AICPU 模式 dump 规则：
+
+1. **每 eid 对一条聚合 ChannelData 记录**：同一 `channelId`（eid 对）的 N 条 channel 输出 **1 条**记录，
+   `jettyNum=N`，`jettyId[0..jettyNum)` 为该 eid 对上**全部本端（发送侧）jetty**，
+   按**本端 jetty 创建序**排列（数组下标即 pair 内 channel 序号）；
+2. 读取方将任务元数据中的 `task.jettyId` 在 `jettyId[0..jettyNum)` **数组内查找**，
+   即得任务经由哪个 jetty 从本端哪个 eid（`leid`）发往对端哪个 eid（`reid`）；
+3. `jettyId[0..jettyNum)` **精确归属**到该 eid 对（由 RA 层 `RaCtxQpImport` 回填归属信息），
+   不含该本端 eid 上通往其它对端的 jetty。
+
+CCU 模式维持"每 channel 一条记录、`jettyId[]` 携带该 channel 的 jetty 列表"的既有语义。
+
+### 3.4 JettyInfo 结构（未使用，保留历史说明）
+
+`JettyData` 为早期设计中 AICPU 模式的独立结构，**当前实现未使用**：AICPU 模式实际同样写
+ChannelData（见 3.3）。本节保留仅作历史格式参考，读取方不应按 JettyData 解析 AICPU 数据。
 
 #### 3.4.1 JettyInfo 头部
 
@@ -346,7 +370,7 @@ struct FileHeader {
 | 值 | 名称                            | 说明                      |
 |:--:|---------------------------------|---------------------------|
 |  0 | SIM_OP_EXPANSION_MODE_CCU       | CCU 模式，使用 ChannelInfo |
-|  1 | SIM_OP_EXPANSION_MODE_AICPU     | AICPU 模式，使用 JettyInfo |
+|  1 | SIM_OP_EXPANSION_MODE_AICPU     | AICPU 模式，使用 ChannelInfo |
 
 ---
 
@@ -392,10 +416,10 @@ struct ModelInfoCommInner {
 };
 
 // ============================================================================
-// 通道数据 (CCU 模式)
+// 通道数据 (CCU / AICPU 模式共用)
 // ============================================================================
 struct ChannelData {
-    uint16_t channelId;
+    uint16_t channelId;      // CCU: 通道ID; AICPU: EndPointPair主键(eid对标识)
     uint8_t  srcDieId;
     uint8_t  dstDieId;
     uint32_t srcRank;
@@ -403,12 +427,12 @@ struct ChannelData {
     uint8_t  leid[16];
     uint8_t  reid[16];
     uint16_t protocol;
-    uint16_t jettyNum;
-    uint32_t jettyId[32];
+    uint16_t jettyNum;       // AICPU: 该eid对的本端jetty个数(多channel时可大于1); CCU: 该channel的jetty个数
+    uint32_t jettyId[32];    // AICPU: 该eid对全部本端(发送)jetty, 按创建序排列, task.jettyId在数组内查找
 };
 
 // ============================================================================
-// Jetty 数据 (AICPU 模式)
+// Jetty 数据（未使用的历史结构；AICPU 实际使用 ChannelData，见上方）
 // ============================================================================
 struct JettyData {
     uint32_t jettyId;
@@ -572,9 +596,8 @@ bool ReadSynthesisData(const char* filename) {
         std::cout << "\n[All2All] Matrix Count: " << matrixCount << std::endl;
     }
 
-    // ===== Step 5: 根据 op_expansion_mode 读取通道或 Jetty 信息 =====
-    if (modelComm.op_expansion_mode == 0) {
-        // CCU 模式 - 读取 ChannelInfo
+    // ===== Step 5: 读取 ChannelInfo（CCU 与 AICPU 模式均为 ChannelData 定长结构；AIV 模式无此段） =====
+    if (modelComm.op_expansion_mode != 2) {
         uint32_t channelCount;
         fread(&channelCount, sizeof(uint32_t), 1, fp);
         
@@ -585,21 +608,12 @@ bool ReadSynthesisData(const char* filename) {
         for (size_t i = 0; i < channels.size() && i < 3; ++i) {
             std::cout << "  Channel[" << i << "]: ID=" << channels[i].channelId
                       << ", srcRank=" << channels[i].srcRank
-                      << ", dstRank=" << channels[i].dstRank << std::endl;
-        }
-    } else {
-        // AICPU 模式 - 读取 JettyInfo
-        uint32_t jettyCount;
-        fread(&jettyCount, sizeof(uint32_t), 1, fp);
-        
-        std::vector<JettyData> jetties(jettyCount);
-        fread(jetties.data(), sizeof(JettyData), jettyCount, fp);
-        
-        std::cout << "\n[JettyInfo] Count: " << jettyCount << std::endl;
-        for (size_t i = 0; i < jetties.size() && i < 3; ++i) {
-            std::cout << "  Jetty[" << i << "]: ID=" << jetties[i].jettyId
-                      << ", srcRank=" << jetties[i].srcRank
-                      << ", dstRank=" << jetties[i].dstRank << std::endl;
+                      << ", dstRank=" << channels[i].dstRank
+                      << ", jettyNum=" << channels[i].jettyNum;
+            for (uint16_t j = 0; j < channels[i].jettyNum; ++j) {
+                std::cout << ", jetty[" << j << "]=" << channels[i].jettyId[j];
+            }
+            std::cout << std::endl;
         }
     }
 
@@ -704,7 +718,7 @@ bool ReadTaskMetaData(const char* filename) {
 |  1   | 字节序            | 所有多字节字段均采用**小端序**（Little-Endian）                 |
 |  2   | 内存对齐          | 结构体使用 `#pragma pack(1)` 进行 **1 字节对齐**                |
 |  3   | 变长字段读取      | 先读取 `count` 字段，再根据 count 值读取相应数量的数据          |
-|  4   | 模式判断          | 根据 `op_expansion_mode` 判断读取 ChannelInfo 还是 JettyInfo    |
+|  4   | 模式判断          | CCU 与 AICPU 模式均读取 ChannelInfo（ChannelData 定长结构）；AIV 模式无此段；JettyData 为未使用的历史结构 |
 |  5   | 联合体解析        | 任务元数据中的 `taskData` 需根据 `taskType` 选择正确的结构体    |
 |  6   | 魔数验证          | 读取文件时务必先验证魔数，确保文件类型正确                      |
 

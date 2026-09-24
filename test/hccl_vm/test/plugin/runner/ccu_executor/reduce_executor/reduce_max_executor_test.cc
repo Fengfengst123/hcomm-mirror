@@ -1,11 +1,13 @@
 /**
  * Copyright (c) 2026 Huawei Technologies Co., Ltd.
- * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * CANN Open Software License Agreement Version 2.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
+ * This program is free software, you can redistribute it and/or modify it under
+ * the terms and conditions of CANN Open Software License Agreement Version 2.0
+ * (the "License"). Please refer to the License for details. You may not use
+ * this file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS
+ * FOR A PARTICULAR PURPOSE. See LICENSE in the root of the software repository
+ * for the full text of the License.
  */
 
 /**
@@ -25,17 +27,18 @@
 using namespace hcomm::CcuRep;
 
 class ReduceMaxExecutorTest : public testing::Test {
-protected:
+  protected:
     void SetUp() override {}
     void TearDown() override {}
 };
 
 // Test: ReduceMaxExecutor struct size check
-TEST_F(ReduceMaxExecutorTest, StructSize) { EXPECT_GT(sizeof(ReduceMaxExecutor), 0); }
+TEST_F(ReduceMaxExecutorTest, StructSize) {
+    EXPECT_GT(sizeof(ReduceMaxExecutor), 0);
+}
 
 // Test: ReduceMaxExecutor default constructor
-TEST_F(ReduceMaxExecutorTest, DefaultConstructor)
-{
+TEST_F(ReduceMaxExecutorTest, DefaultConstructor) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     ReduceMaxExecutor executor(0, 0, 0, instr, nullptr);
@@ -44,8 +47,7 @@ TEST_F(ReduceMaxExecutorTest, DefaultConstructor)
 }
 
 // Test: ReduceMaxExecutor parameterized constructor
-TEST_F(ReduceMaxExecutorTest, ParameterizedConstructor)
-{
+TEST_F(ReduceMaxExecutorTest, ParameterizedConstructor) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
 
@@ -55,8 +57,7 @@ TEST_F(ReduceMaxExecutorTest, ParameterizedConstructor)
 }
 
 // Test: ReduceMaxExecutor Parser with zero values
-TEST_F(ReduceMaxExecutorTest, ParserZeroValues)
-{
+TEST_F(ReduceMaxExecutorTest, ParserZeroValues) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
 
@@ -67,8 +68,7 @@ TEST_F(ReduceMaxExecutorTest, ParserZeroValues)
 }
 
 // Test: ReduceMaxExecutor Parser with max values
-TEST_F(ReduceMaxExecutorTest, ParserMaxValues)
-{
+TEST_F(ReduceMaxExecutorTest, ParserMaxValues) {
     CcuInstr instr;
     memset(&instr, 0xFF, sizeof(instr));
 
@@ -79,8 +79,7 @@ TEST_F(ReduceMaxExecutorTest, ParserMaxValues)
 }
 
 // Test: ReduceMaxExecutor Parser with specific parameters
-TEST_F(ReduceMaxExecutorTest, ParserSpecificParameters)
-{
+TEST_F(ReduceMaxExecutorTest, ParserSpecificParameters) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
 
@@ -100,8 +99,7 @@ TEST_F(ReduceMaxExecutorTest, ParserSpecificParameters)
 }
 
 // Test: ReduceMaxExecutor with different data types
-TEST_F(ReduceMaxExecutorTest, DifferentDataTypes)
-{
+TEST_F(ReduceMaxExecutorTest, DifferentDataTypes) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
 
@@ -115,8 +113,7 @@ TEST_F(ReduceMaxExecutorTest, DifferentDataTypes)
 }
 
 // Test: ReduceMaxExecutor with different count values
-TEST_F(ReduceMaxExecutorTest, DifferentCountValues)
-{
+TEST_F(ReduceMaxExecutorTest, DifferentCountValues) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
 
@@ -132,8 +129,7 @@ TEST_F(ReduceMaxExecutorTest, DifferentCountValues)
 }
 
 // Test: ReduceMaxExecutor Describe contains expected keywords
-TEST_F(ReduceMaxExecutorTest, DescribeContent)
-{
+TEST_F(ReduceMaxExecutorTest, DescribeContent) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
     instr.v1.max.count = 2;
@@ -148,20 +144,18 @@ TEST_F(ReduceMaxExecutorTest, DescribeContent)
 }
 
 // Test: ReduceMaxExecutor inheritance check
-TEST_F(ReduceMaxExecutorTest, InheritanceCheck)
-{
+TEST_F(ReduceMaxExecutorTest, InheritanceCheck) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
 
     ReduceMaxExecutor executor(0, 0, 0, instr, nullptr);
     executor.SetVersion(RunnerCcuVersion::CCU_V1);
-    CcuExecutorBase* base = &executor;
+    CcuExecutorBase *base = &executor;
     EXPECT_NE(base, nullptr);
 }
 
 // Test: ReduceMaxExecutor with various MS IDs
-TEST_F(ReduceMaxExecutorTest, VariousMsIds)
-{
+TEST_F(ReduceMaxExecutorTest, VariousMsIds) {
     CcuInstr instr;
     memset(&instr, 0, sizeof(instr));
 

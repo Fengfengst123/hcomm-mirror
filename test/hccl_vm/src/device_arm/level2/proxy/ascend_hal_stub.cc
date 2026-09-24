@@ -1,11 +1,18 @@
 /**
  * Copyright (c) 2026 Huawei Technologies Co., Ltd.
- * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * CANN Open Software License Agreement Version 2.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
+ * This program is free software, you can redistribute it and/or modify it under
+ * the terms and conditions of CANN Open Software License Agreement Version 2.0
+ * (the "License"). Please refer to the License for details. You may not use
+ * this file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS
+ * FOR A PARTICULAR PURPOSE. See LICENSE in the root of the software repository
+ * for the full text of the License.
+ */
+
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License.
  */
 
 // 日志染色: 模块 tag (须在 include sim_log.h 之前)
@@ -30,22 +37,20 @@ using namespace HcclSim;
 extern "C" {
 #endif // __cplusplus
 
-drvError_t halEschedAttachDevice(unsigned int devId)
-{
+drvError_t halEschedAttachDevice(unsigned int devId) {
     (void)devId;
     HCCL_VM_INFO("AttachDevice is empty.");
     return DRV_ERROR_NONE;
 }
 
-drvError_t halEschedDettachDevice(unsigned int devId)
-{
+drvError_t halEschedDettachDevice(unsigned int devId) {
     (void)devId;
     HCCL_VM_INFO("DettachDevice is empty.");
     return DRV_ERROR_NONE;
 }
 
-drvError_t halEschedCreateGrpEx(uint32_t devId, struct esched_grp_para* grpPara, unsigned int* grpId)
-{
+drvError_t halEschedCreateGrpEx(uint32_t devId, struct esched_grp_para *grpPara,
+                                unsigned int *grpId) {
     (void)devId;
     (void)grpPara;
     (void)grpId;
@@ -53,9 +58,9 @@ drvError_t halEschedCreateGrpEx(uint32_t devId, struct esched_grp_para* grpPara,
     return DRV_ERROR_NONE;
 }
 
-drvError_t
-halEschedSubscribeEvent(unsigned int devId, unsigned int grpId, unsigned int threadId, unsigned long long eventBitmap)
-{
+drvError_t halEschedSubscribeEvent(unsigned int devId, unsigned int grpId,
+                                   unsigned int threadId,
+                                   unsigned long long eventBitmap) {
     (void)devId;
     (void)grpId;
     (void)threadId;
@@ -64,9 +69,9 @@ halEschedSubscribeEvent(unsigned int devId, unsigned int grpId, unsigned int thr
     return DRV_ERROR_NONE;
 }
 
-drvError_t halEschedQueryInfo(
-    unsigned int devId, ESCHED_QUERY_TYPE type, struct esched_input_info* inPut, struct esched_output_info* outPut)
-{
+drvError_t halEschedQueryInfo(unsigned int devId, ESCHED_QUERY_TYPE type,
+                              struct esched_input_info *inPut,
+                              struct esched_output_info *outPut) {
     (void)devId;
     (void)type;
     (void)inPut;
@@ -75,9 +80,9 @@ drvError_t halEschedQueryInfo(
     return DRV_ERROR_NONE;
 }
 
-drvError_t
-halEschedWaitEvent(unsigned int devId, unsigned int grpId, unsigned int threadId, int timeout, struct event_info* event)
-{
+drvError_t halEschedWaitEvent(unsigned int devId, unsigned int grpId,
+                              unsigned int threadId, int timeout,
+                              struct event_info *event) {
     (void)devId;
     (void)grpId;
     (void)threadId;
@@ -87,10 +92,11 @@ halEschedWaitEvent(unsigned int devId, unsigned int grpId, unsigned int threadId
     return DRV_ERROR_NONE;
 }
 
-drvError_t halEschedRegisterAckFunc(
-    unsigned int grpId, EVENT_ID eventId,
-    void (*ackFunc)(unsigned int devId, unsigned int subevent_id, char* msg, unsigned int msgLen))
-{
+drvError_t halEschedRegisterAckFunc(unsigned int grpId, EVENT_ID eventId,
+                                    void (*ackFunc)(unsigned int devId,
+                                                    unsigned int subevent_id,
+                                                    char *msg,
+                                                    unsigned int msgLen)) {
     (void)grpId;
     (void)eventId;
     (void)ackFunc;
@@ -98,27 +104,26 @@ drvError_t halEschedRegisterAckFunc(
     return DRV_ERROR_NONE;
 }
 
-drvError_t drvGetDevNum(uint32_t* num_dev)
-{
+drvError_t drvGetDevNum(uint32_t *num_dev) {
     *num_dev = 1;
     HCCL_VM_INFO("drvGetDevNum:{}", *num_dev);
     return DRV_ERROR_NONE;
 }
 
-drvError_t halGetChipInfo(unsigned int devId, halChipInfo* chipInfo)
-{
+drvError_t halGetChipInfo(unsigned int devId, halChipInfo *chipInfo) {
     sim::Device locDevice{};
     if (sim::GetDeviceByPhysicalId(devId, locDevice) != ACL_SUCCESS) {
-        HCCL_VM_ERROR("halGetChipInfo get device by physic id {} failed.", devId);
+        HCCL_VM_ERROR("halGetChipInfo get device by physic id {} failed.",
+                      devId);
         return DRV_ERROR_INNER_ERR;
     }
-    strncpy((char*)chipInfo->name, locDevice.soc_version, MAX_CHIP_NAME - 1);
+    strncpy((char *)chipInfo->name, locDevice.soc_version, MAX_CHIP_NAME - 1);
     HCCL_VM_INFO("GetChipInfo is empty.");
     return DRV_ERROR_NONE;
 }
 
-drvError_t halHostRegister(void* src_ptr, UINT64 size, UINT32 flag, UINT32 devid, void** dst_ptr)
-{
+drvError_t halHostRegister(void *src_ptr, UINT64 size, UINT32 flag,
+                           UINT32 devid, void **dst_ptr) {
     (void)src_ptr;
     (void)size;
     (void)flag;
@@ -128,16 +133,15 @@ drvError_t halHostRegister(void* src_ptr, UINT64 size, UINT32 flag, UINT32 devid
     return DRV_ERROR_NONE;
 }
 
-drvError_t halHostUnregister(void* src_ptr, UINT32 devid)
-{
+drvError_t halHostUnregister(void *src_ptr, UINT32 devid) {
     (void)src_ptr;
     (void)devid;
     HCCL_VM_INFO("HostUnregister is empty.");
     return DRV_ERROR_NONE;
 }
 
-drvError_t halMemCtl(int type, void* param_value, size_t param_value_size, void* out_value, size_t* out_size_ret)
-{
+drvError_t halMemCtl(int type, void *param_value, size_t param_value_size,
+                     void *out_value, size_t *out_size_ret) {
     (void)type;
     (void)param_value;
     (void)param_value_size;
@@ -147,16 +151,15 @@ drvError_t halMemCtl(int type, void* param_value, size_t param_value_size, void*
     return DRV_ERROR_NONE;
 }
 
-drvError_t drvGetPlatformInfo(uint32_t* info)
-{
+drvError_t drvGetPlatformInfo(uint32_t *info) {
     *info = 1;
     HCCL_VM_INFO("drvGetPlatformInfo:{}", *info);
     return DRV_ERROR_NONE;
 }
 
-drvError_t drvQueryProcessHostPid(
-    int pid, unsigned int* chip_id, unsigned int* vfid, unsigned int* host_pid, unsigned int* cp_type)
-{
+drvError_t drvQueryProcessHostPid(int pid, unsigned int *chip_id,
+                                  unsigned int *vfid, unsigned int *host_pid,
+                                  unsigned int *cp_type) {
     (void)pid;
     (void)chip_id;
     (void)vfid;
@@ -166,44 +169,52 @@ drvError_t drvQueryProcessHostPid(
     return DRV_ERROR_NONE;
 }
 
-drvError_t halGetDeviceInfo(uint32_t devId, int32_t moduleType, int32_t infoType, int64_t* value)
-{
+drvError_t halGetDeviceInfo(uint32_t devId, int32_t moduleType,
+                            int32_t infoType, int64_t *value) {
     (void)devId;
-    if (moduleType == (int32_t)MODULE_TYPE_SYSTEM && infoType == (int32_t)INFO_TYPE_VERSION) {
+    if (moduleType == (int32_t)MODULE_TYPE_SYSTEM &&
+        infoType == (int32_t)INFO_TYPE_VERSION) {
         int64_t hardwareVersion = 0xf00;
-    } else if ((moduleType == (int32_t)MODULE_TYPE_SYSTEM) && (infoType == (int32_t)INFO_TYPE_CORE_NUM)) {
+        // *value = hardwareVersion;
+    } else if ((moduleType == (int32_t)MODULE_TYPE_SYSTEM) &&
+               (infoType == (int32_t)INFO_TYPE_CORE_NUM)) {
         *value = 1;
+    } else if ((moduleType == (int32_t)MODULE_TYPE_AICORE) &&
+               (infoType == (int32_t)INFO_TYPE_CORE_NUM)) {
+        // 模拟昇腾 AI CORE 数量
+        *value = 16;
+    } else if ((moduleType == (int32_t)MODULE_TYPE_VECTOR_CORE) &&
+               (infoType == (int32_t)INFO_TYPE_CORE_NUM)) {
+        // 模拟昇腾 VECTOR CORE 数量
+        *value = 16;
     } else {
         *value = 0;
     }
-    // *value = hardwareVersion;
     return DRV_ERROR_NONE;
 }
 
-drvError_t halEschedSubmitEvent(unsigned int devId, struct event_summary* event)
-{
+drvError_t halEschedSubmitEvent(unsigned int devId,
+                                struct event_summary *event) {
     (void)devId;
     (void)event;
     HCCL_VM_INFO("SubmitEvent is empty.");
     return DRV_ERROR_NONE;
 }
 
-drvError_t halBindCgroup(BIND_CGROUP_TYPE bindType)
-{
+drvError_t halBindCgroup(BIND_CGROUP_TYPE bindType) {
     (void)bindType;
     HCCL_VM_INFO("BindCgroup is empty.");
     return DRV_ERROR_NONE;
 }
 
-drvError_t halGetAPIVersion(int* halAPIVersion)
-{
+drvError_t halGetAPIVersion(int *halAPIVersion) {
     (void)halAPIVersion;
     HCCL_VM_INFO("GetAPIVersion is empty.");
     return DRV_ERROR_NONE;
 }
 
-drvError_t halSensorNodeRegister(uint32_t devId, struct halSensorNodeCfg* cfg, uint64_t* handle)
-{
+drvError_t halSensorNodeRegister(uint32_t devId, struct halSensorNodeCfg *cfg,
+                                 uint64_t *handle) {
     (void)devId;
     (void)cfg;
     (void)handle;
@@ -211,16 +222,15 @@ drvError_t halSensorNodeRegister(uint32_t devId, struct halSensorNodeCfg* cfg, u
     return DRV_ERROR_NONE;
 }
 
-drvError_t halSensorNodeUnregister(uint32_t devId, uint64_t handle)
-{
+drvError_t halSensorNodeUnregister(uint32_t devId, uint64_t handle) {
     (void)devId;
     (void)handle;
     HCCL_VM_INFO("UnregisterSensorNode is empty.");
     return DRV_ERROR_NONE;
 }
 
-drvError_t halSensorNodeUpdateState(uint32_t devId, uint64_t handle, int val, halGeneralEventType_t assertion)
-{
+drvError_t halSensorNodeUpdateState(uint32_t devId, uint64_t handle, int val,
+                                    halGeneralEventType_t assertion) {
     (void)devId;
     (void)handle;
     (void)val;
@@ -229,15 +239,14 @@ drvError_t halSensorNodeUpdateState(uint32_t devId, uint64_t handle, int val, ha
     return DRV_ERROR_NONE;
 }
 
-drvError_t drvDeviceGetPhyIdByIndex(uint32_t devIndex, uint32_t* phyId)
-{
+drvError_t drvDeviceGetPhyIdByIndex(uint32_t devIndex, uint32_t *phyId) {
     (void)devIndex;
     (void)phyId;
     return DRV_ERROR_NONE;
 }
 
-drvError_t drvMemcpy(DVdeviceptr dst, size_t dest_max, DVdeviceptr src, size_t byte_count)
-{
+drvError_t drvMemcpy(DVdeviceptr dst, size_t dest_max, DVdeviceptr src,
+                     size_t byte_count) {
     (void)dst;
     (void)dest_max;
     (void)src;
@@ -245,8 +254,8 @@ drvError_t drvMemcpy(DVdeviceptr dst, size_t dest_max, DVdeviceptr src, size_t b
     return DRV_ERROR_NONE;
 }
 
-int halGrpQuery(GroupQueryCmdType cmd, void* inBuff, unsigned int inLen, void* outBuff, unsigned int* outLen)
-{
+int halGrpQuery(GroupQueryCmdType cmd, void *inBuff, unsigned int inLen,
+                void *outBuff, unsigned int *outLen) {
     (void)cmd;
     (void)inBuff;
     (void)inLen;
@@ -256,22 +265,19 @@ int halGrpQuery(GroupQueryCmdType cmd, void* inBuff, unsigned int inLen, void* o
     return 0;
 }
 
-pid_t drvDeviceGetBareTgid(void)
-{
+pid_t drvDeviceGetBareTgid(void) {
     pid_t pid = getpid();
     HCCL_VM_INFO("drvDeviceGetBareTgid] pid:{}", pid);
     return pid;
 }
 
-drvError_t halResourceIdCheck(struct drvResIdKey* info)
-{
+drvError_t halResourceIdCheck(struct drvResIdKey *info) {
     (void)info;
     HCCL_VM_INFO("ResourceIdCheck is empty.");
     return DRV_ERROR_NONE;
 }
 
-drvError_t halSqCqQuery(uint32_t devId, struct halSqCqQueryInfo* info)
-{
+drvError_t halSqCqQuery(uint32_t devId, struct halSqCqQueryInfo *info) {
     (void)devId;
     HCCL_VM_INFO("SqCqQuery is empty.");
     if (info == nullptr) {
@@ -281,32 +287,31 @@ drvError_t halSqCqQuery(uint32_t devId, struct halSqCqQueryInfo* info)
     SetLastQuerySqId(info->sqId);
     int head = GetSqTail(info->sqId);
     switch (info->prop) {
-        case DRV_SQCQ_PROP_SQ_HEAD: {
-            info->value[0] = head;
-            return DRV_ERROR_NONE;
-        }
-        case DRV_SQCQ_PROP_SQ_DEPTH: {
-            info->value[0] = HCCL_SQE_MAX_CNT; // 2048
-            return DRV_ERROR_NONE;
-        }
-        case DRV_SQCQ_PROP_SQ_TAIL: {
-            info->value[0] = head; // 代表sqBuffer一直为空
-            return DRV_ERROR_NONE;
-        };
-        case DRV_SQCQ_PROP_SQ_BASE: {
-            uint8_t* buffer = nullptr;
-            GetSqBufferAddr(&buffer);
-            info->value[0] = reinterpret_cast<uintptr_t>(buffer) & 0xFFFFFFFF;
-            info->value[1] = reinterpret_cast<uintptr_t>(buffer) >> 32;
-        }
-        default:
-            return DRV_ERROR_NONE;
+    case DRV_SQCQ_PROP_SQ_HEAD: {
+        info->value[0] = head;
+        return DRV_ERROR_NONE;
+    }
+    case DRV_SQCQ_PROP_SQ_DEPTH: {
+        info->value[0] = HCCL_SQE_MAX_CNT; // 2048
+        return DRV_ERROR_NONE;
+    }
+    case DRV_SQCQ_PROP_SQ_TAIL: {
+        info->value[0] = head; // 代表sqBuffer一直为空
+        return DRV_ERROR_NONE;
+    };
+    case DRV_SQCQ_PROP_SQ_BASE: {
+        uint8_t *buffer = nullptr;
+        GetSqBufferAddr(&buffer);
+        info->value[0] = reinterpret_cast<uintptr_t>(buffer) & 0xFFFFFFFF;
+        info->value[1] = reinterpret_cast<uintptr_t>(buffer) >> 32;
+    }
+    default:
+        return DRV_ERROR_NONE;
     }
     return DRV_ERROR_NONE;
 }
 
-drvError_t halSqCqConfig(uint32_t devId, struct halSqCqConfigInfo* info)
-{
+drvError_t halSqCqConfig(uint32_t devId, struct halSqCqConfigInfo *info) {
     HCCL_VM_INFO("devId[{}] is empty.", devId);
     if (info->prop == DRV_SQCQ_PROP_SQ_TAIL) {
         ParseA5SqeFromSqBuffer(devId, info);
@@ -314,16 +319,15 @@ drvError_t halSqCqConfig(uint32_t devId, struct halSqCqConfigInfo* info)
     return DRV_ERROR_NONE;
 }
 
-drvError_t halShrIdInfoGet(const char* name, struct shrIdGetInfo* info)
-{
+drvError_t halShrIdInfoGet(const char *name, struct shrIdGetInfo *info) {
     (void)name;
     (void)info;
     HCCL_VM_INFO("is empty.");
     return DRV_ERROR_NONE;
 }
 
-drvError_t halTsdrvCtl(uint32_t devId, int cmd, void* param, size_t paramSize, void* out, size_t* outSize)
-{
+drvError_t halTsdrvCtl(uint32_t devId, int cmd, void *param, size_t paramSize,
+                       void *out, size_t *outSize) {
     (void)devId;
     (void)cmd;
     (void)param;
@@ -334,15 +338,14 @@ drvError_t halTsdrvCtl(uint32_t devId, int cmd, void* param, size_t paramSize, v
     return DRV_ERROR_NONE;
 }
 
-drvError_t halResourceIdRestore(struct drvResIdKey* info)
-{
+drvError_t halResourceIdRestore(struct drvResIdKey *info) {
     (void)info;
     HCCL_VM_INFO("is empty.");
     return DRV_ERROR_NONE;
 }
 
-drvError_t drvGetLocalDevIDByHostDevID(uint32_t host_dev_id, uint32_t* local_dev_id)
-{
+drvError_t drvGetLocalDevIDByHostDevID(uint32_t host_dev_id,
+                                       uint32_t *local_dev_id) {
     *local_dev_id = host_dev_id;
     HCCL_VM_INFO("host_dev_id:{}, local_dev_id:{}", host_dev_id, *local_dev_id);
     return DRV_ERROR_NONE;

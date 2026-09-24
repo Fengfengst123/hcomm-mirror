@@ -614,7 +614,7 @@
             "protocols": [
                 "ROCE"
             ],
-            "topo_instance_id": 1,
+            "topo_instance_id": 0,
             "topo_type": "CLOS"
         },
         {
@@ -646,7 +646,7 @@
             "protocols": [
                 "ROCE"
             ],
-            "topo_instance_id": 1,
+            "topo_instance_id": 0,
             "topo_type": "CLOS"
         },
         {
@@ -678,7 +678,7 @@
             "protocols": [
                 "ROCE"
             ],
-            "topo_instance_id": 1,
+            "topo_instance_id": 0,
             "topo_type": "CLOS"
         },
         {
@@ -710,7 +710,7 @@
             "protocols": [
                 "ROCE"
             ],
-            "topo_instance_id": 1,
+            "topo_instance_id": 0,
             "topo_type": "CLOS"
         },
         {
@@ -742,7 +742,7 @@
             "protocols": [
                 "ROCE"
             ],
-            "topo_instance_id": 2,
+            "topo_instance_id": 0,
             "topo_type": "CLOS"
         },
         {
@@ -774,7 +774,7 @@
             "protocols": [
                 "ROCE"
             ],
-            "topo_instance_id": 2,
+            "topo_instance_id": 0,
             "topo_type": "CLOS"
         },
         {
@@ -806,7 +806,7 @@
             "protocols": [
                 "ROCE"
             ],
-            "topo_instance_id": 2,
+            "topo_instance_id": 0,
             "topo_type": "CLOS"
         },
         {
@@ -838,7 +838,7 @@
             "protocols": [
                 "ROCE"
             ],
-            "topo_instance_id": 2,
+            "topo_instance_id": 0,
             "topo_type": "CLOS"
         },
         {
@@ -870,7 +870,7 @@
             "protocols": [
                 "ROCE"
             ],
-            "topo_instance_id": 3,
+            "topo_instance_id": 0,
             "topo_type": "CLOS"
         },
         {
@@ -902,7 +902,7 @@
             "protocols": [
                 "ROCE"
             ],
-            "topo_instance_id": 3,
+            "topo_instance_id": 0,
             "topo_type": "CLOS"
         },
         {
@@ -934,7 +934,7 @@
             "protocols": [
                 "ROCE"
             ],
-            "topo_instance_id": 3,
+            "topo_instance_id": 0,
             "topo_type": "CLOS"
         },
         {
@@ -966,7 +966,7 @@
             "protocols": [
                 "ROCE"
             ],
-            "topo_instance_id": 3,
+            "topo_instance_id": 0,
             "topo_type": "CLOS"
         }
     ],

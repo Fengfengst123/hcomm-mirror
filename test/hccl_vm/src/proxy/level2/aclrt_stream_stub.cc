@@ -1,11 +1,18 @@
 /**
  * Copyright (c) 2026 Huawei Technologies Co., Ltd.
- * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * CANN Open Software License Agreement Version 2.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
+ * This program is free software, you can redistribute it and/or modify it under
+ * the terms and conditions of CANN Open Software License Agreement Version 2.0
+ * (the "License"). Please refer to the License for details. You may not use
+ * this file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS
+ * FOR A PARTICULAR PURPOSE. See LICENSE in the root of the software repository
+ * for the full text of the License.
+ */
+
+/**
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * for the full text of the License.
  */
 
 // 日志染色: 模块 tag (须在 include sim_log.h 之前)
@@ -14,6 +21,7 @@
 #define HCCL_VM_MODULE "STREAM_STUB"
 
 #include <cstdint>
+#include <cstdlib>
 #include <ctime>
 #include <fcntl.h>
 #include <iostream>
@@ -35,8 +43,8 @@
 extern "C" {
 #endif // __cplusplus
 
-aclError aclrtCreateStreamWithConfig(aclrtStream* stream, uint32_t priority, uint32_t flag)
-{
+aclError aclrtCreateStreamWithConfig(aclrtStream *stream, uint32_t priority,
+                                     uint32_t flag) {
     (void)flag;
     (void)priority;
     auto serverId = sim::GetCurServerId();
@@ -57,7 +65,7 @@ aclError aclrtCreateStreamWithConfig(aclrtStream* stream, uint32_t priority, uin
         return ACL_ERROR_INVALID_PARAM;
     }
 
-    auto& currCtxId = currCtx->id;
+    auto &currCtxId = currCtx->id;
 
     sim::Stream streamTmp{};
     streamTmp.ctx_id = currCtxId;
@@ -73,10 +81,11 @@ aclError aclrtCreateStreamWithConfig(aclrtStream* stream, uint32_t priority, uin
     return ACL_SUCCESS;
 }
 
-aclError aclrtCreateStream(aclrtStream* stream) { return aclrtCreateStreamWithConfig(stream, 0, 0); }
+aclError aclrtCreateStream(aclrtStream *stream) {
+    return aclrtCreateStreamWithConfig(stream, 0, 0);
+}
 
-aclError aclrtDestroyStream(aclrtStream stream)
-{
+aclError aclrtDestroyStream(aclrtStream stream) {
     uint64_t streamId = (uint64_t)(uintptr_t)stream;
     HCCL_VM_DEBUG("id:{:d}", streamId);
     RunnerDB::Delete<sim::Stream>(streamId);
@@ -84,16 +93,16 @@ aclError aclrtDestroyStream(aclrtStream stream)
     return ACL_SUCCESS;
 }
 
-aclError aclrtDestroyStreamForce(aclrtStream stream) { return aclrtDestroyStream(stream); }
+aclError aclrtDestroyStreamForce(aclrtStream stream) {
+    return aclrtDestroyStream(stream);
+}
 
-aclError aclrtActiveStream(aclrtStream activeStream, aclrtStream stream)
-{
+aclError aclrtActiveStream(aclrtStream activeStream, aclrtStream stream) {
     (void)stream;
     uint64_t activStreamId = (uint64_t)(uintptr_t)activeStream;
     HCCL_VM_DEBUG("id:{:d}", activStreamId);
-    auto res = RunnerDB::Update<sim::Stream>(activStreamId, [](sim::Stream& stm) {
-        stm.activated = 1;
-    });
+    auto res = RunnerDB::Update<sim::Stream>(
+        activStreamId, [](sim::Stream &stm) { stm.activated = 1; });
     if (!res) {
         HCCL_VM_ERROR("stream not found:{:d}", activStreamId);
         return ACL_ERROR_INVALID_PARAM;
@@ -101,19 +110,18 @@ aclError aclrtActiveStream(aclrtStream activeStream, aclrtStream stream)
     return ACL_SUCCESS;
 }
 
-aclError aclrtSetStreamFailureMode(aclrtStream stream, uint64_t mode)
-{
+aclError aclrtSetStreamFailureMode(aclrtStream stream, uint64_t mode) {
     uint64_t streamId = (uint64_t)(uintptr_t)stream;
     HCCL_VM_DEBUG("id:{:d} mode:{:d}", streamId, mode);
-    RunnerDB::Update<sim::Stream>(streamId, [streamId, mode](sim::Stream& stm) {
+    RunnerDB::Update<sim::Stream>(streamId, [streamId, mode](sim::Stream &stm) {
         stm.failure_mode = mode;
     });
 
     return ACL_SUCCESS;
 }
 
-aclError aclrtSynchronizeStreamWithTimeout(aclrtStream stream, int32_t timeout)
-{
+aclError aclrtSynchronizeStreamWithTimeout(aclrtStream stream,
+                                           int32_t timeout) {
     (void)timeout;
     uint64_t streamId = (uint64_t)(uintptr_t)stream;
     // GetMode();
@@ -123,8 +131,7 @@ aclError aclrtSynchronizeStreamWithTimeout(aclrtStream stream, int32_t timeout)
     return ACL_SUCCESS;
 }
 
-aclError aclrtSynchronizeStream(aclrtStream stream)
-{
+aclError aclrtSynchronizeStream(aclrtStream stream) {
     uint64_t streamId = (uint64_t)(uintptr_t)stream;
     uint64_t syncIdx{UINT64_MAX};
     if (!sim::NextStreamSyncIdx(streamId, syncIdx)) {
@@ -146,7 +153,30 @@ aclError aclrtSynchronizeStream(aclrtStream stream)
         HCCL_VM_ERROR("InsertTaskToCollection fail");
         return ACL_ERROR_INTERNAL_ERROR;
     }
-    HCCL_VM_DEBUG("Add SYNC_STREAM task, streamId={:d}, syncIdx={:d}", streamId, syncIdx);
+    HCCL_VM_DEBUG("Add SYNC_STREAM task, streamId={:d}, syncIdx={:d}", streamId,
+                  syncIdx);
+
+    //  把 aclrtSynchronizeStream 入参流作为当前 opdetail
+    //  记录的真实主流，幂等更新
+    // （图模式下 opdetail.streamId 采集期记的是
+    // master_stream，此处修正为重放触发流 resources_str.stream）
+    sim::OpDetailTab latestOpDetail{};
+    if (sim::QueryLatestOpDetailByDeviceId(taskMetaData.deviceId,
+                                           latestOpDetail) == 0) {
+        if (latestOpDetail.streamId != streamId) {
+            if (sim::UpdateOpDetailMainStream(latestOpDetail.id, streamId) !=
+                0) {
+                HCCL_VM_ERROR("UpdateOpDetailMainStream fail, opDetailId={}, "
+                              "streamId={}->{}",
+                              latestOpDetail.id, latestOpDetail.streamId,
+                              streamId);
+                return ACL_ERROR_INTERNAL_ERROR;
+            }
+            HCCL_VM_INFO(
+                "update real main stream, opDetailId={}, streamId={} -> {}",
+                latestOpDetail.id, latestOpDetail.streamId, streamId);
+        }
+    }
 
     // 记录 synchronize_strategy：aclrtSynchronizeStream 是 DeviceStatus
     // 的写入源， 查到对应 device 的记录就 Update，查不到就 Add。
@@ -155,37 +185,54 @@ aclError aclrtSynchronizeStream(aclrtStream stream)
         HCCL_VM_ERROR("stream not found:{:d}", streamId);
         return ACL_ERROR_INVALID_PARAM;
     }
+    // dump 未开启时不维护 DeviceStatus（其唯一消费者是 RunnerListen 的 dump
+    // 触发）， 同时跳过 DeviceStatus 所需的 stream/context/device 查询链路.
+    const char *enableDumpData = std::getenv("HCCLVM_ENABLE_DUMP_DATA");
+    const bool dumpEnabled =
+        (enableDumpData != nullptr && !std::string(enableDumpData).empty() &&
+         std::string(enableDumpData) != "0");
+    if (dumpEnabled) {
+        // 记录 synchronize_strategy：aclrtSynchronizeStream 是 DeviceStatus
+        // 的写入源， 查到对应 device 的记录就 Update，查不到就 Add。
+        auto streamRecord = RunnerDB::GetById<sim::Stream>(streamId);
+        if (!streamRecord.has_value()) {
+            HCCL_VM_ERROR("stream not found:{:d}", streamId);
+            return ACL_ERROR_INVALID_PARAM;
+        }
 
-    auto context = RunnerDB::GetById<sim::Context>(streamRecord->ctx_id);
-    if (!context.has_value()) {
-        HCCL_VM_ERROR("context not found:{:d}", streamRecord->ctx_id);
-        return ACL_ERROR_INVALID_PARAM;
+        auto context = RunnerDB::GetById<sim::Context>(streamRecord->ctx_id);
+        if (!context.has_value()) {
+            HCCL_VM_ERROR("context not found:{:d}", streamRecord->ctx_id);
+            return ACL_ERROR_INVALID_PARAM;
+        }
+
+        auto device = RunnerDB::GetById<sim::Device>(context->device_id);
+        if (!device.has_value()) {
+            HCCL_VM_ERROR("device not found:{:d}", context->device_id);
+            return ACL_ERROR_INVALID_PARAM;
+        }
+
+        auto deviceStatus = RunnerDB::GetOneByPred<sim::DeviceStatus>(
+            [deviceId = device->id](const sim::DeviceStatus &status) {
+                return status.device_id == deviceId;
+            });
+        if (deviceStatus.second) {
+            RunnerDB::Update<sim::DeviceStatus>(
+                deviceStatus.first.id, [](sim::DeviceStatus &status) {
+                    status.synchronize_strategy = 1;
+                });
+        } else {
+            sim::DeviceStatus newStatus{};
+            newStatus.device_id = device->id;
+            newStatus.synchronize_strategy = 1;
+            RunnerDB::Add<sim::DeviceStatus>(newStatus);
+        }
     }
 
-    auto device = RunnerDB::GetById<sim::Device>(context->device_id);
-    if (!device.has_value()) {
-        HCCL_VM_ERROR("device not found:{:d}", context->device_id);
-        return ACL_ERROR_INVALID_PARAM;
-    }
-
-    auto deviceStatus
-        = RunnerDB::GetOneByPred<sim::DeviceStatus>([deviceId = device->id](const sim::DeviceStatus& status) {
-              return status.device_id == deviceId;
-          });
-    if (deviceStatus.second) {
-        RunnerDB::Update<sim::DeviceStatus>(deviceStatus.first.id, [](sim::DeviceStatus& status) {
-            status.synchronize_strategy = 1;
+    auto pluginRows =
+        RunnerDB::GetByPred<sim::Plugin>([](const sim::Plugin &plugin) {
+            return std::string(plugin.tag) == "runner";
         });
-    } else {
-        sim::DeviceStatus newStatus{};
-        newStatus.device_id = device->id;
-        newStatus.synchronize_strategy = 1;
-        RunnerDB::Add<sim::DeviceStatus>(newStatus);
-    }
-
-    auto pluginRows = RunnerDB::GetByPred<sim::Plugin>([](const sim::Plugin& plugin) {
-        return std::string(plugin.tag) == "runner";
-    });
     if (pluginRows.empty()) { // Runner 未启动
         return ACL_SUCCESS;
     }
@@ -198,13 +245,14 @@ aclError aclrtSynchronizeStream(aclrtStream stream)
             return ACL_ERROR_INTERNAL_ERROR;
         }
         uint64_t isDoneNum = 0;
-        for (const auto& task : tasks) {
+        for (const auto &task : tasks) {
             if (task.isDone) {
                 isDoneNum++;
             }
         }
 
-        HCCL_VM_INFO("Waiting for stream[{:d}]... {:d}/{:d}", streamId, isDoneNum, tasks.size());
+        HCCL_VM_INFO("Waiting for stream[{:d}]... {:d}/{:d}", streamId,
+                     isDoneNum, tasks.size());
 
         if (isDoneNum == tasks.size()) {
             break;
@@ -215,19 +263,16 @@ aclError aclrtSynchronizeStream(aclrtStream stream)
     return ACL_SUCCESS;
 }
 
-aclError aclrtStreamAbort(aclrtStream stream)
-{
+aclError aclrtStreamAbort(aclrtStream stream) {
     uint64_t streamId = (uint64_t)(uintptr_t)stream;
     HCCL_VM_DEBUG("id:{:d}", streamId);
-    RunnerDB::Update<sim::Stream>(streamId, [streamId](sim::Stream& stm) {
-        stm.activated = 0;
-    });
+    RunnerDB::Update<sim::Stream>(
+        streamId, [streamId](sim::Stream &stm) { stm.activated = 0; });
 
     return ACL_SUCCESS;
 }
 
-aclError aclrtStreamQuery(aclrtStream stream, aclrtStreamStatus* status)
-{
+aclError aclrtStreamQuery(aclrtStream stream, aclrtStreamStatus *status) {
     uint64_t streamId = (uint64_t)(uintptr_t)stream;
     HCCL_VM_DEBUG("id:{:d}", streamId);
     auto res = RunnerDB::GetById<sim::Stream>(streamId);
@@ -239,8 +284,7 @@ aclError aclrtStreamQuery(aclrtStream stream, aclrtStreamStatus* status)
     return ACL_SUCCESS;
 }
 
-aclError aclrtGetStreamAvailableNum(uint32_t* streamCount)
-{
+aclError aclrtGetStreamAvailableNum(uint32_t *streamCount) {
     (void)streamCount;
     auto serverId = sim::GetCurServerId();
     if (serverId == 0) {
@@ -260,7 +304,7 @@ aclError aclrtGetStreamAvailableNum(uint32_t* streamCount)
         return ACL_ERROR_INVALID_PARAM;
     }
 
-    auto& devId = currCtx->device_id;
+    auto &devId = currCtx->device_id;
 
     auto device = RunnerDB::GetById<sim::Device>(devId);
     if (!device.has_value()) {
@@ -268,18 +312,18 @@ aclError aclrtGetStreamAvailableNum(uint32_t* streamCount)
         return ACL_ERROR_INVALID_PARAM;
     }
 
-    auto currCtxs = RunnerDB::GetByPred<sim::Context>([devId](const sim::Context& ctx) {
-        return ctx.device_id == devId;
-    });
+    auto currCtxs = RunnerDB::GetByPred<sim::Context>(
+        [devId](const sim::Context &ctx) { return ctx.device_id == devId; });
 
-    auto currStreams = RunnerDB::GetByPred<sim::Stream>([currCtxs](const sim::Stream& stm) {
-        for (auto& ctx : currCtxs) {
-            if (ctx.id == stm.ctx_id) {
-                return true;
+    auto currStreams =
+        RunnerDB::GetByPred<sim::Stream>([currCtxs](const sim::Stream &stm) {
+            for (auto &ctx : currCtxs) {
+                if (ctx.id == stm.ctx_id) {
+                    return true;
+                }
             }
-        }
-        return false;
-    });
+            return false;
+        });
 
     if (memcmp(device->soc_version, "A3", strlen("A3") == 0)) {
         *streamCount = 1984 - currStreams.size();
@@ -288,25 +332,22 @@ aclError aclrtGetStreamAvailableNum(uint32_t* streamCount)
     return ACL_SUCCESS;
 }
 
-aclError aclrtStreamGetId(aclrtStream stream, int32_t* streamId)
-{
+aclError aclrtStreamGetId(aclrtStream stream, int32_t *streamId) {
     *streamId = (uint32_t)(uintptr_t)stream;
     HCCL_VM_DEBUG("id:{:d}", *streamId);
     return ACL_SUCCESS;
 }
 
-aclError aclrtSetStreamOverflowSwitch(aclrtStream stream, uint32_t flag)
-{
+aclError aclrtSetStreamOverflowSwitch(aclrtStream stream, uint32_t flag) {
     uint64_t streamId = (uint64_t)(uintptr_t)stream;
     HCCL_VM_DEBUG("id:{:d} flag:{:d}", streamId, flag);
-    RunnerDB::Update<sim::Stream>(streamId, [streamId, flag](sim::Stream& stm) {
+    RunnerDB::Update<sim::Stream>(streamId, [streamId, flag](sim::Stream &stm) {
         stm.overflow_switch = flag;
     });
     return ACL_SUCCESS;
 }
 
-aclError aclrtGetStreamOverflowSwitch(aclrtStream stream, uint32_t* flag)
-{
+aclError aclrtGetStreamOverflowSwitch(aclrtStream stream, uint32_t *flag) {
     uint64_t streamId = (uint64_t)(uintptr_t)stream;
     HCCL_VM_DEBUG("id:{:d}", streamId);
     auto res = RunnerDB::GetById<sim::Stream>(streamId);
@@ -318,8 +359,9 @@ aclError aclrtGetStreamOverflowSwitch(aclrtStream stream, uint32_t* flag)
     return ACL_SUCCESS;
 }
 
-aclError aclrtSetStreamAttribute(aclrtStream stream, aclrtStreamAttr stmAttrType, aclrtStreamAttrValue* value)
-{
+aclError aclrtSetStreamAttribute(aclrtStream stream,
+                                 aclrtStreamAttr stmAttrType,
+                                 aclrtStreamAttrValue *value) {
     uint64_t streamId = (uint64_t)(uintptr_t)stream;
     HCCL_VM_DEBUG("id:{:d}", streamId);
     auto res = RunnerDB::GetById<sim::Stream>(streamId);
@@ -329,21 +371,23 @@ aclError aclrtSetStreamAttribute(aclrtStream stream, aclrtStreamAttr stmAttrType
     }
 
     aclrtStreamAttrValue tmp = *value;
-    RunnerDB::Update<sim::Stream>(streamId, [streamId, stmAttrType, tmp](sim::Stream& stm) {
-        if (stmAttrType == ACL_STREAM_ATTR_FAILURE_MODE) {
-            stm.failure_mode = tmp.failureMode;
-        } else if (stmAttrType == ACL_STREAM_ATTR_FLOAT_OVERFLOW_CHECK) {
-            stm.overflow_switch = tmp.overflowSwitch;
-        } else if (stmAttrType == ACL_STREAM_ATTR_USER_CUSTOM_TAG) {
-            stm.user_tag = tmp.userCustomTag;
-        }
-    });
+    RunnerDB::Update<sim::Stream>(
+        streamId, [streamId, stmAttrType, tmp](sim::Stream &stm) {
+            if (stmAttrType == ACL_STREAM_ATTR_FAILURE_MODE) {
+                stm.failure_mode = tmp.failureMode;
+            } else if (stmAttrType == ACL_STREAM_ATTR_FLOAT_OVERFLOW_CHECK) {
+                stm.overflow_switch = tmp.overflowSwitch;
+            } else if (stmAttrType == ACL_STREAM_ATTR_USER_CUSTOM_TAG) {
+                stm.user_tag = tmp.userCustomTag;
+            }
+        });
 
     return ACL_SUCCESS;
 }
 
-aclError aclrtGetStreamAttribute(aclrtStream stream, aclrtStreamAttr stmAttrType, aclrtStreamAttrValue* value)
-{
+aclError aclrtGetStreamAttribute(aclrtStream stream,
+                                 aclrtStreamAttr stmAttrType,
+                                 aclrtStreamAttrValue *value) {
     uint64_t streamId = (uint64_t)(uintptr_t)stream;
     HCCL_VM_DEBUG("id:{:d}", streamId);
     auto res = RunnerDB::GetById<sim::Stream>(streamId);
@@ -362,34 +406,30 @@ aclError aclrtGetStreamAttribute(aclrtStream stream, aclrtStreamAttr stmAttrType
     return ACL_SUCCESS;
 }
 
-aclError aclrtStreamStop(aclrtStream stream)
-{
+aclError aclrtStreamStop(aclrtStream stream) {
     (void)stream;
     return ACL_SUCCESS;
 }
 
-rtError_t rtStreamSynchronize(rtStream_t stream)
-{
+rtError_t rtStreamSynchronize(rtStream_t stream) {
     uint64_t streamId = (uint64_t)(uintptr_t)stream;
     HCCL_VM_DEBUG("id:{:d}", streamId);
     return aclrtSynchronizeStream((aclrtStream)stream);
 }
 
-rtError_t rtStreamCreateWithFlags(rtStream_t* stm, int32_t priority, uint32_t flags)
-{
-    return aclrtCreateStreamWithConfig((aclrtStream*)stm, priority, flags);
+rtError_t rtStreamCreateWithFlags(rtStream_t *stm, int32_t priority,
+                                  uint32_t flags) {
+    return aclrtCreateStreamWithConfig((aclrtStream *)stm, priority, flags);
 }
 
-rtError_t rtStreamGetSqid(const rtStream_t stream, uint32_t* sqId)
-{
+rtError_t rtStreamGetSqid(const rtStream_t stream, uint32_t *sqId) {
     uint64_t streamId = (uint64_t)(uintptr_t)stream;
     *sqId = streamId;
     HCCL_VM_DEBUG("id:{:d}", streamId);
     return ACL_SUCCESS;
 }
 
-rtError_t rtGetTaskIdAndStreamID(uint32_t* taskId, uint32_t* streamId)
-{
+rtError_t rtGetTaskIdAndStreamID(uint32_t *taskId, uint32_t *streamId) {
     *streamId = (uint32_t)sim::GetLastStreamIdTls();
     *taskId = (uint32_t)sim::GetLastTaskIdTls();
     return ACL_SUCCESS;

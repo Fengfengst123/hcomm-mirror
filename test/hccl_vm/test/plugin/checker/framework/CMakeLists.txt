@@ -8,14 +8,6 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
-# You may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-# http://www.apache.org/licenses/LICENSE-2.0
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and limitations under the License.
-
 cmake_minimum_required(VERSION 3.14)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -33,6 +25,7 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/src/plugin/runner/runner_utils
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/include/store
+    ${CMAKE_SOURCE_DIR}/include/runnerdb
     ${CMAKE_SOURCE_DIR}/third_party/CLI11
     ${YAMLCPP_INCLUDE_DIR}
     ${CMAKE_SOURCE_DIR}/third_party/nlohmann_json
@@ -48,6 +41,9 @@ set(CHECKER_LIBC_SEC ${ASCEND_CANN_PACKAGE_PATH}/${CANN_ARCH_DIR}/lib64/libc_sec
 set(CHECKER_OUTPUT_DIR ${CMAKE_BINARY_DIR}/output/bin)
 set(CHECKER_DUMP_UTILS_SRC
     ${CMAKE_SOURCE_DIR}/src/plugin/checker/src/utils/dump/dump_json_utils.cc
+)
+set(CHECKER_UTILS_SRC
+    ${CMAKE_SOURCE_DIR}/src/plugin/checker/src/utils/check_utils.cc
 )
 
 link_libraries(
@@ -86,6 +82,7 @@ foreach(TEST_NAME IN LISTS CHECKER_SEMANTICS_TESTS)
     add_executable(test_${TEST_NAME} semantics_check/${TEST_NAME}_test.cc main.cc)
     target_sources(test_${TEST_NAME} PRIVATE
         ${CMAKE_SOURCE_DIR}/src/plugin/checker/src/framework/semantics_check/${TEST_NAME}.cc
+        ${CHECKER_UTILS_SRC}
         ${CHECKER_LOG_SRC}
     )
     if(TEST_NAME IN_LIST CHECKER_SEMANTICS_DUMP_TESTS)
