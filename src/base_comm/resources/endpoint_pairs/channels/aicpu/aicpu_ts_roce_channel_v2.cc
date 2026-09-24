@@ -527,6 +527,14 @@ HcclResult AicpuTsRoceChannelV2::ExchangeData()
         "[AicpuTsRoceChannelV2::%s] Receive size[%llu] of data success. [%llu] bytes received.", __func__, recvSize,
         sizeof(recvSize));
 
+    // 对端声明的数据长度不可信，为0或超过上限时拒绝分配，防止超大内存申请导致OOM
+    CHK_PRT_RET(
+        recvSize == 0 || recvSize > MAX_EXCHANGE_DATA_SIZE,
+        HCCL_ERROR(
+            "[AicpuTsRoceChannelV2::%s] recvSize[%llu] is invalid, limit[%llu]", __func__, recvSize,
+            MAX_EXCHANGE_DATA_SIZE),
+        HCCL_E_PARA);
+
     // 同步发送数据
     CHK_PRT_RET(
         !socket_->Send(static_cast<void*>(sendData.data()), sendSize),
@@ -615,6 +623,12 @@ HcclResult AicpuTsRoceChannelV2::RmtBufferVecUnpackProc(Hccl::BinaryStream& bina
     binaryStream >> rmtNum;
 
     HCCL_INFO("[AicpuTsRoceChannelV2::%s] bufferNum_=%u, rmtNum=%u", __func__, bufferNum_, rmtNum);
+
+    // 对端声明的buffer数量不可信，超过上限时拒绝，防止直接resize导致超大内存申请
+    CHK_PRT_RET(
+        rmtNum > MAX_BUFFER_NUM,
+        HCCL_ERROR("[AicpuTsRoceChannelV2::%s] rmtNum[%u] exceeds maxNum[%u]", __func__, rmtNum, MAX_BUFFER_NUM),
+        HCCL_E_PARA);
 
     rmtRmaBuffers_.resize(rmtNum);
     for (u32 i = 0; i < rmtNum; i++) {

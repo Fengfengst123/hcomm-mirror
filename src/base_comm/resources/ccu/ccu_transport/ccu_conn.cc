@@ -349,6 +349,14 @@ HcclResult CcuConnection::Deserialize(const std::vector<char>& dtoData)
     uint32_t remoteJettySize{0};
     dtoStream >> remoteJettySize;
 
+    // 对端声明的jetty数量需与本地一致，防止直接resize导致超大内存申请
+    CHK_PRT_RET(
+        remoteJettySize != jettyNum_,
+        HCCL_ERROR(
+            "[CcuConnection][%s] remoteJettySize[%u] is not equal to local jettyNum[%u].", __func__, remoteJettySize,
+            jettyNum_),
+        HcclResult::HCCL_E_PARA);
+
     importJettyCtxs_.clear();
     importJettyCtxs_.resize(remoteJettySize);
     HCCL_INFO("[CcuConnection][%s], remoteJettySize[%u].", __func__, remoteJettySize);

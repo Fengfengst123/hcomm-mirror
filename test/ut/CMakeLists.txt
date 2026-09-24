@@ -235,6 +235,8 @@ set(UT_COMMON_INCLUDE_LIST
     ${HCCL_CODE_ROOT}/src/legacy/ascend950/unified_platform/
     ${HCCL_CODE_ROOT}/src/legacy/ascend950/unified_platform/resource/task/
     ${HCCL_CODE_ROOT}/src/legacy/ascend950/unified_platform/resource/notify/
+    ${HCCL_CODE_ROOT}/src/legacy/ascend950/unified_platform/resource/mem/
+    ${HCCL_CODE_ROOT}/src/legacy/ascend950/unified_platform/pub_inc/resource/transport/
 
     # tbe头文件 (legacy/ascend910)
     ${HCCL_CODE_ROOT}/src/legacy/ascend910/platform/legacy/hccl_tbe_task/

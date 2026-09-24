@@ -701,6 +701,14 @@ HcclResult AicpuTsUboeUbRtpChannelHelper::UpdateMemInfo(HcommMemHandle* memHandl
     CHK_RET(CheckSocketStatus("RecvDataSize"));
     HCCL_INFO("[AicpuTsUboeUbRtpChannelHelper][%s] Recv size[%u] of data.", __func__, recvSize);
 
+    // 对端声明的数据长度不可信，为0或超过上限时拒绝分配，防止超大内存申请导致OOM
+    CHK_PRT_RET(
+        recvSize == 0 || recvSize > MAX_EXCHANGE_DATA_SIZE,
+        HCCL_ERROR(
+            "[AicpuTsUboeUbRtpChannelHelper][%s] recvSize[%u] is invalid, limit[%llu]", __func__, recvSize,
+            MAX_EXCHANGE_DATA_SIZE),
+        HCCL_E_PARA);
+
     socket_->SendAsync(localSendData.data(), localSendData.size());
     HCCL_INFO("[AicpuTsUboeUbRtpChannelHelper][%s] Send data, size[%zu].", __func__, localSendData.size());
     CHK_RET(CheckSocketStatus("SendExchangeData"));

@@ -168,6 +168,11 @@ protected:
 
     HcommNicChannelOps* nicOps_{nullptr};
     void* nicCtx_{nullptr};
+
+    // ------------------ 建链交换数据校验 ------------------
+    // 建链握手阶段交换数据的最大长度，对端声明长度为0或超过该值视为异常，防止超大内存申请导致OOM
+    // 取值依据：buffer条数上限MAX_BUFFER_NUM(30000)，单条DTO(addr/size/rkey/memInfo)百字节量级，正常仅数MB，64MB预留约一个数量级余量
+    static constexpr uint64_t MAX_EXCHANGE_DATA_SIZE = 64ULL * 1024 * 1024; // 64MB
 };
 
 } // namespace hcomm

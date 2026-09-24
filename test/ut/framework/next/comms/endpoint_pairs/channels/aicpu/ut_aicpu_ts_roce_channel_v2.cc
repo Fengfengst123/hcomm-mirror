@@ -30,6 +30,7 @@
 #include "aicpu_res_package_helper.h"
 #include "exchange_rdma_buffer_dto.h"
 #include "channels/host/exchange_rdma_conn_dto.h"
+#include "user_remote_mem_getter.h"
 #include "acl/acl_rt.h"
 
 #define private public
@@ -135,6 +136,8 @@ TEST_F(AicpuTsRoceChannelV2Test, Ut_When_Normal_Init_Expect_HCCL_SUCCESS)
         .stubs()
         .with(mockcpp::any())
         .will(returnValue(HCCL_SUCCESS));
+    // 本用例只验证状态机流转，数据交换细节由独立用例覆盖，与host侧用例保持一致mock掉ExchangeData
+    MOCKER_CPP(&AicpuTsRoceChannelV2::ExchangeData).stubs().will(returnValue(HCCL_SUCCESS));
 
     // construct
     void* memHandle = static_cast<void*>(localRdmaRmaBuffer.get());
@@ -926,4 +929,63 @@ TEST_F(AicpuTsRoceChannelV2Test, Ut_FillDevChannelEntity_When_PreAllocatedAndRea
     ASSERT_EQ(channel->PreAllocDevChannelEntity(&devChannelEntityPtr), HCCL_SUCCESS);
     EXPECT_EQ(channel->FillDevChannelEntity(), HCCL_SUCCESS);
     channel->FreeDeviceMemories();
+}
+
+// ==================== 对端声明长度/数量校验（防超大内存申请） ====================
+
+static bool RecvExchangeSizeZeroStub(Hccl::Socket* socket, void* buf, uint32_t size)
+{
+    (void)socket;
+    if (buf != nullptr && size >= sizeof(uint64_t)) {
+        uint64_t sizeZero = 0;
+        memcpy_s(buf, size, &sizeZero, sizeof(sizeZero));
+    }
+    return true;
+}
+
+TEST_F(AicpuTsRoceChannelV2Test, Ut_ExchangeData_When_RecvSizeZero_Expect_E_PARA)
+{
+    auto channel = std::make_unique<AicpuTsRoceChannelV2>(endpointHandle, channelDesc, CommEngine::COMM_ENGINE_AICPU);
+    channel->socket_ = fakeSocket;
+    MOCKER_CPP(&AicpuTsRoceChannelV2::NotifyVecPack).stubs().with(mockcpp::any()).will(returnValue(HCCL_SUCCESS));
+    MOCKER_CPP(&AicpuTsRoceChannelV2::BufferVecPack).stubs().with(mockcpp::any()).will(returnValue(HCCL_SUCCESS));
+    MOCKER_CPP(&AicpuTsRoceChannelV2::ConnVecPack).stubs().with(mockcpp::any()).will(returnValue(HCCL_SUCCESS));
+    MOCKER_CPP(&Hccl::Socket::Send).stubs().will(returnValue(true));
+    MOCKER_CPP(&Hccl::Socket::Recv).stubs().will(invoke(RecvExchangeSizeZeroStub));
+
+    EXPECT_EQ(channel->ExchangeData(), HCCL_E_PARA);
+}
+
+TEST_F(AicpuTsRoceChannelV2Test, Ut_RmtBufferVecUnpackProc_When_RmtNumExceedMax_Expect_E_PARA)
+{
+    auto channel = std::make_unique<AicpuTsRoceChannelV2>(endpointHandle, channelDesc, CommEngine::COMM_ENGINE_AICPU);
+
+    Hccl::BinaryStream binaryStream;
+    u32 rmtNum = MAX_BUFFER_NUM + 1;
+    binaryStream << rmtNum;
+    std::vector<char> data{};
+    binaryStream.Dump(data);
+    Hccl::BinaryStream recvStream(data);
+
+    EXPECT_EQ(channel->RmtBufferVecUnpackProc(recvStream), HCCL_E_PARA);
+}
+
+TEST_F(AicpuTsRoceChannelV2Test, Ut_RmtBufferVecUnpackProc_When_RmtNumNormal_Expect_SUCCESS)
+{
+    auto channel = std::make_unique<AicpuTsRoceChannelV2>(endpointHandle, channelDesc, CommEngine::COMM_ENGINE_AICPU);
+    channel->bufferNum_ = 1;
+
+    Hccl::BinaryStream binaryStream;
+    u32 rmtNum = 1;
+    u32 pos = 0;
+    binaryStream << rmtNum;
+    binaryStream << pos;
+    Hccl::ExchangeRdmaBufferDto dto;
+    dto.Serialize(binaryStream);
+    std::vector<char> data{};
+    binaryStream.Dump(data);
+    Hccl::BinaryStream recvStream(data);
+
+    EXPECT_EQ(channel->RmtBufferVecUnpackProc(recvStream), HCCL_SUCCESS);
+    EXPECT_EQ(channel->rmtRmaBuffers_.size(), 1U);
 }

@@ -32,6 +32,7 @@
 #include "hcomm_res.h"
 #include "hcomm_c_adpt.h"
 #include "exchange_rdma_buffer_dto.h"
+#include "user_remote_mem_getter.h"
 
 #include "env_config/env_config_v2.h"
 #include "env_config/env_func.h"
@@ -81,7 +82,8 @@ static bool RecvWithInvalidVersionStub(Hccl::Socket* socket, void* buf, uint32_t
 
 static HcclResult ExchangeCapabilityHybridStub(HostCpuRoceChannel* channel)
 {
-    (void)channel;
+    // 模拟ExchangeCapability解析到对端为hybrid模式，置位后QP_CREATED阶段走ExchangeDataHybird
+    channel->isHybridMode_ = true;
     return HCCL_SUCCESS;
 }
 
@@ -2292,4 +2294,61 @@ TEST_F(HostCpuRoceChannelTest, Ut_BuildConnection_When_ExchangeAllMemsTrue_Expec
     EXPECT_EQ(impl->connections_[1]->qpInfo_.udpSport, 0u);
 
     portMap.clear();
+}
+
+static bool RecvExchangeSizeZeroStub(Hccl::Socket* socket, void* buf, uint32_t size)
+{
+    (void)socket;
+    if (buf != nullptr && size >= sizeof(uint64_t)) {
+        uint64_t sizeZero = 0;
+        memcpy_s(buf, size, &sizeZero, sizeof(sizeZero));
+    }
+    return true;
+}
+
+TEST_F(HostCpuRoceChannelTest, Ut_ExchangeData_When_RecvSizeZero_Expect_E_PARA)
+{
+    auto impl_ = std::make_unique<hcomm::HostCpuRoceChannel>(endpointHandle, channelDesc);
+    impl_->socket_ = fakeSocket;
+    MOCKER_CPP(&HostCpuRoceChannel::NotifyVecPack).stubs().with(mockcpp::any()).will(returnValue(HCCL_SUCCESS));
+    MOCKER_CPP(&HostCpuRoceChannel::BufferVecPack).stubs().with(mockcpp::any()).will(returnValue(HCCL_SUCCESS));
+    MOCKER_CPP(&HostCpuRoceChannel::ConnVecPack).stubs().with(mockcpp::any()).will(returnValue(HCCL_SUCCESS));
+    MOCKER_CPP(&Hccl::Socket::Send).stubs().will(returnValue(true));
+    MOCKER_CPP(&Hccl::Socket::Recv).stubs().will(invoke(RecvExchangeSizeZeroStub));
+
+    EXPECT_EQ(impl_->ExchangeData(), HCCL_E_PARA);
+}
+
+TEST_F(HostCpuRoceChannelTest, Ut_RmtBufferVecUnpackProc_When_RmtNumExceedMax_Expect_E_PARA)
+{
+    auto impl_ = std::make_unique<hcomm::HostCpuRoceChannel>(endpointHandle, channelDesc);
+
+    Hccl::BinaryStream binaryStream;
+    u32 rmtNum = MAX_BUFFER_NUM + 1;
+    binaryStream << rmtNum;
+    std::vector<char> data{};
+    binaryStream.Dump(data);
+    Hccl::BinaryStream recvStream(data);
+
+    EXPECT_EQ(impl_->RmtBufferVecUnpackProc(recvStream), HCCL_E_PARA);
+}
+
+TEST_F(HostCpuRoceChannelTest, Ut_RmtBufferVecUnpackProc_When_RmtNumNormal_Expect_SUCCESS)
+{
+    auto impl_ = std::make_unique<hcomm::HostCpuRoceChannel>(endpointHandle, channelDesc);
+    impl_->bufferNum_ = 1;
+
+    Hccl::BinaryStream binaryStream;
+    u32 rmtNum = 1;
+    u32 pos = 0;
+    binaryStream << rmtNum;
+    binaryStream << pos;
+    Hccl::ExchangeRdmaBufferDto dto;
+    dto.Serialize(binaryStream);
+    std::vector<char> data{};
+    binaryStream.Dump(data);
+    Hccl::BinaryStream recvStream(data);
+
+    EXPECT_EQ(impl_->RmtBufferVecUnpackProc(recvStream), HCCL_SUCCESS);
+    EXPECT_EQ(impl_->rmtRmaBuffers_.size(), 1U);
 }

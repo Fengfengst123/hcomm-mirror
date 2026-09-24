@@ -333,3 +333,41 @@ TEST_F(CcuConnTest, Ut_MakeGetTpInfoParam_When_QosAboveSeven_Expect_ClampsToDefa
 
     GlobalMockObject::verify();
 }
+
+// ==================== 对端声明jetty数量校验（防超大内存申请） ====================
+
+TEST_F(CcuConnTest, Ut_Deserialize_When_JettySizeMismatch_Expect_E_PARA)
+{
+    auto resPair = MockMakeCcuConnection(hcomm::TpProtocol::RTP);
+    auto connection = resPair.first.get();
+    connection->status_ = hcomm::CcuConnStatus::EXCHANGEABLE;
+
+    // 本地jettyNum_为2，对端声明数量写为3，Deserialize应在校验处直接拒绝
+    Hccl::BinaryStream dtoStream;
+    dtoStream << connection->ccuBufAddr_;
+    dtoStream << connection->ccuBufTokenId_;
+    dtoStream << connection->ccuBufTokenValue_;
+    uint32_t wrongJettySize = 3;
+    dtoStream << wrongJettySize;
+    std::vector<char> dtoData{};
+    dtoStream.Dump(dtoData);
+
+    EXPECT_EQ(connection->Deserialize(dtoData), HcclResult::HCCL_E_PARA);
+    EXPECT_TRUE(connection->importJettyCtxs_.empty());
+}
+
+TEST_F(CcuConnTest, Ut_Deserialize_When_JettySizeEqual_Expect_SUCCESS)
+{
+    auto resPair = MockMakeCcuConnection(hcomm::TpProtocol::RTP);
+    auto connection = resPair.first.get();
+    connection->status_ = hcomm::CcuConnStatus::EXCHANGEABLE;
+
+    // 本端序列化的jetty数量与本地jettyNum_一致，Deserialize应正常解包
+    std::vector<char> dtoData{};
+    ASSERT_EQ(connection->Serialize(dtoData), HcclResult::HCCL_SUCCESS);
+    EXPECT_EQ(connection->Deserialize(dtoData), HcclResult::HCCL_SUCCESS);
+    EXPECT_EQ(connection->rmtCcuBufAddr_, connection->ccuBufAddr_);
+    EXPECT_EQ(connection->rmtCcuBufTokenId_, connection->ccuBufTokenId_);
+    EXPECT_EQ(connection->rmtCcuBufTokenValue_, connection->ccuBufTokenValue_);
+    EXPECT_EQ(connection->importJettyCtxs_.size(), connection->jettyNum_);
+}

@@ -785,3 +785,48 @@ TEST_F(AicpuTsUboeChannelTest, UT_UpdateMemInfo_When_Normal_Expect_AppendBuffers
     delete fakeSock;
     ch.socket_ = nullptr;
 }
+
+// ==================== 对端声明长度校验（防超大内存申请） ====================
+
+static void stub_Socket_RecvAsyncFillZero(Hccl::Socket* self, u8* recvBuf, u32 size)
+{
+    (void)self;
+    if (recvBuf != nullptr && size > 0) {
+        memset(recvBuf, 0, size);
+    }
+}
+
+TEST_F(AicpuTsUboeChannelTest, UT_UpdateMemInfo_When_RecvSizeZero_Expect_ReturnHCCL_E_PARA)
+{
+    HcommChannelDesc desc{};
+    EndpointHandle ep = reinterpret_cast<EndpointHandle>(0x1);
+    AicpuTsUboeChannel ch(ep, desc);
+
+    auto fakeSock = new FakeSocket(Hccl::SocketStatus::OK);
+    ch.socket_ = reinterpret_cast<Hccl::Socket*>(fakeSock);
+
+    MOCKER_CPP(&Hccl::Socket::SendAsync, void(Hccl::Socket::*)(const void*, u32))
+        .stubs()
+        .with(mockcpp::any(), mockcpp::any())
+        .will(invoke(stub_Socket_SendAsync));
+    MOCKER_CPP(&Hccl::Socket::RecvAsync, void(Hccl::Socket::*)(u8*, u32))
+        .stubs()
+        .with(mockcpp::any(), mockcpp::any())
+        .will(invoke(stub_Socket_RecvAsyncFillZero));
+    MOCKER_CPP(
+        &AicpuTsUboeUbRtpChannelHelper::CheckSocketStatus,
+        HcclResult(AicpuTsUboeUbRtpChannelHelper::*)(const std::string&))
+        .stubs()
+        .will(returnValue(HCCL_SUCCESS));
+
+    auto localBuffer = MakeUboeExchangeLocalBuffer(0x570000U, 0x1000U, "uboe_update_recv_zero");
+    HcommMemHandle handles[1] = {reinterpret_cast<HcommMemHandle>(localBuffer.get())};
+    HcclResult ret = ch.UpdateMemInfo(handles, 1);
+    EXPECT_EQ(ret, HCCL_E_PARA);
+    EXPECT_EQ(ch.commonRes_.bufferVec.size(), 0U);
+    EXPECT_EQ(ch.rmtBufferVec_.size(), 0U);
+
+    GlobalMockObject::verify();
+    delete fakeSock;
+    ch.socket_ = nullptr;
+}
