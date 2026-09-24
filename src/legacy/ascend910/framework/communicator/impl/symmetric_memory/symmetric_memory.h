@@ -180,7 +180,6 @@ private:
         ACL_HBM_MEM_HUGE,
         {0, ACL_MEM_LOCATION_TYPE_DEVICE},
         0};
-    size_t targetStartTB = 40ULL * 1024ULL * 1024ULL * 1024ULL * 1024ULL; //  从40TB处预留虚拟内存
     std::unordered_map<void*, aclrtDrvMemHandle> importAddrs_{}; // 记录虚拟内存映射的物理内存，用于资源释放。
     bool isSingleRank_{false};
 };

@@ -14,6 +14,8 @@
 #include <exception>
 #include <list> // for SimpleVaAllocator
 
+#include "hccl_common.h"
+
 namespace hccl {
 /**
  * @brief (内部) 简单的VA空间分配器
@@ -291,7 +293,7 @@ HcclResult SymmetricMemory::Init()
         HCCL_E_PARA);
 
     size_t totalHeapSize = static_cast<size_t>(stride_ * rankSize_);
-    void* hintPtr = reinterpret_cast<void*>(targetStartTB);
+    void* hintPtr = reinterpret_cast<void*>(SYMMETRIC_MEMORY_VA_HINT);
 
     // 每个rank都预留一个总大小为 totalHeapSize 的VA空间。
     if (aclrtReserveMemAddressNoUCMemory(&heapBase_, totalHeapSize, 0, hintPtr, 0) != ACL_SUCCESS) {

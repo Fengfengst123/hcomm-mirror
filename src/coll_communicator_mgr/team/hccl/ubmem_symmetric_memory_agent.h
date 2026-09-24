@@ -11,8 +11,14 @@
 #ifndef UBMEM_SYMMETRIC_MEMORY_AGENT_H
 #define UBMEM_SYMMETRIC_MEMORY_AGENT_H
 
+#include <atomic>
+#include <condition_variable>
 #include <cstdint>
+#include <memory>
+#include <mutex>
+#include <queue>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "hccl_comm_socket_c_adpt.h"
@@ -37,14 +43,14 @@ struct UbmemPacket {
 class UbMemSymmetricMemoryAgent {
 public:
     UbMemSymmetricMemoryAgent(
-        RankGraph* rankGraph, uint32_t selfRank, const std::vector<uint32_t>& worldRankIds, uint32_t netLayer,
-        const std::string& commId);
+        RankGraph* rankGraph, int32_t deviceLogicId, uint32_t selfRank, const std::vector<uint32_t>& worldRankIds,
+        uint32_t netLayer, const std::string& commId);
     ~UbMemSymmetricMemoryAgent();
 
     HcclResult CheckNeighborLinks();
     HcclResult Init();
     void Finalize();
-    HcclResult ExchangeInfo(void* inputPtr, void* outputPtr, uint64_t inputSize) const;
+    HcclResult ExchangeInfo(void* inputPtr, void* outputPtr, uint64_t inputSize);
 
     uint32_t GetNetLayer() const { return netLayer_; }
 
@@ -53,12 +59,16 @@ private:
     HcclResult GetLink(uint32_t peerRank, CommLink& link) const;
     HcclResult CreateNeighborSocket(uint32_t peerRank, const CommLink& link, SocketHandler& socket);
     HcclResult WaitSocketReady(SocketHandler socket) const;
-    HcclResult TransferBuffer(
-        const uint8_t* sendBuffer, uint8_t* recvBuffer, size_t size, SocketHandler sendSocket,
-        SocketHandler recvSocket) const;
+    HcclResult InitRecvThread();
+    HcclResult WaitForCollectionComplete();
+    HcclResult ProcessReceivedPacket(const UbmemPacket& packet);
+    void DealWithRequest();
+    void CompleteTask(HcclResult result);
+    void ClearRequestQueue();
     std::string BuildSocketTag(uint32_t peerRank) const;
 
     RankGraph* rankGraph_{nullptr};
+    int32_t deviceLogicId_{0};
     uint32_t selfRank_{0};
     uint32_t selfMember_{0};
     uint32_t lsaTeamSize_{0};
@@ -71,7 +81,34 @@ private:
     SocketHandler leftSocket_{nullptr};
     SocketHandler rightSocket_{nullptr};
     bool neighborLinksChecked_{false};
-    bool initialized_{false};
+    std::atomic<bool> isExchangeInfo_{false};
+
+    // 接收线程及当前信息交换任务的运行状态。
+    std::unique_ptr<std::thread> recvThread_;
+    std::atomic<bool> threadRun_{false};
+    std::atomic<bool> isProcessingTask_{false};
+
+    // 保存本地待发送Packet及从左邻居收到的待转发Packet。
+    std::queue<UbmemPacket> requestQueue_;
+    std::mutex queueMutex_;
+
+    // 用于ExchangeInfo等待后台线程完成本轮信息交换。
+    std::mutex completionMutex_;
+    std::condition_variable completionCv_;
+
+    // 当前信息交换的输出缓冲区及单个成员数据长度。
+    uint8_t* outputDataPtr_{nullptr};
+    uint64_t currentInputSize_{0};
+    // 本轮已收集的LSA成员数量，包含本地成员。
+    std::atomic<uint32_t> collectedCount_{0};
+
+    // A5使用非阻塞Socket，记录当前Packet以及已经完成收发的字节数。
+    UbmemPacket recvPacket_{};
+    uint64_t receivedPacketSize_{0};
+    uint64_t sentPacketSize_{0};
+
+    // 后台线程执行本轮信息交换的结果。
+    HcclResult exchangeResult_{HCCL_SUCCESS};
 };
 
 } // namespace hccl

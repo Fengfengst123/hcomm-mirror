@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstring>
+#include <functional>
 #include <thread>
 
 #include "env_config/env_config_v2.h"
@@ -22,6 +23,8 @@
 namespace hccl {
 namespace {
     constexpr const char* UB_MEM_SYMMETRIC_SOCKET_TAG_PREFIX = "ub_mem_sym";
+    // Ring通信至少需要两个LSA成员。
+    constexpr uint32_t RING_RANK_SIZE_MIN = 2U;
 
     uint64_t HashCommId(const std::string& commId)
     {
@@ -39,9 +42,10 @@ namespace {
 static_assert(sizeof(UbmemPacket) == UBMEM_PACKET_TOTAL_LEN, "UB Memory exchange packet layout is invalid");
 
 UbMemSymmetricMemoryAgent::UbMemSymmetricMemoryAgent(
-    RankGraph* rankGraph, uint32_t selfRank, const std::vector<uint32_t>& worldRankIds, uint32_t netLayer,
-    const std::string& commId)
+    RankGraph* rankGraph, int32_t deviceLogicId, uint32_t selfRank, const std::vector<uint32_t>& worldRankIds,
+    uint32_t netLayer, const std::string& commId)
     : rankGraph_(rankGraph),
+      deviceLogicId_(deviceLogicId),
       selfRank_(selfRank),
       lsaTeamSize_(static_cast<uint32_t>(worldRankIds.size())),
       worldRankIds_(worldRankIds),
@@ -50,7 +54,7 @@ UbMemSymmetricMemoryAgent::UbMemSymmetricMemoryAgent(
       netLayer_(netLayer)
 {
     auto selfIter = std::find(worldRankIds_.begin(), worldRankIds_.end(), selfRank_);
-    if (selfIter != worldRankIds_.end()) {
+    if (lsaTeamSize_ >= RING_RANK_SIZE_MIN && selfIter != worldRankIds_.end()) {
         selfMember_ = static_cast<uint32_t>(selfIter - worldRankIds_.begin());
         leftRank_ = worldRankIds_[(selfMember_ + lsaTeamSize_ - 1U) % lsaTeamSize_];
         rightRank_ = worldRankIds_[(selfMember_ + 1U) % lsaTeamSize_];
@@ -84,9 +88,6 @@ HcclResult UbMemSymmetricMemoryAgent::GetLink(uint32_t peerRank, CommLink& link)
 
 HcclResult UbMemSymmetricMemoryAgent::CheckNeighborLinksAvailable() const
 {
-    if (lsaTeamSize_ <= 1U) {
-        return HCCL_SUCCESS;
-    }
     CommLink leftLink{};
     CommLink rightLink{};
     CHK_RET(GetLink(leftRank_, leftLink));
@@ -98,12 +99,17 @@ HcclResult UbMemSymmetricMemoryAgent::CheckNeighborLinksAvailable() const
 
 HcclResult UbMemSymmetricMemoryAgent::CheckNeighborLinks()
 {
+    CHK_PRT_RET(
+        lsaTeamSize_ < RING_RANK_SIZE_MIN,
+        HCCL_ERROR(
+            "[%s] UB Memory LSA team size[%u] is less than minimum[%u]", __func__, lsaTeamSize_, RING_RANK_SIZE_MIN),
+        HCCL_E_PARA);
     if (neighborLinksChecked_) {
         return HCCL_SUCCESS;
     }
     CHK_PTR_NULL(rankGraph_);
     CHK_PRT_RET(
-        lsaTeamSize_ == 0 || selfMember_ >= lsaTeamSize_ || worldRankIds_[selfMember_] != selfRank_,
+        selfMember_ >= lsaTeamSize_ || worldRankIds_[selfMember_] != selfRank_,
         HCCL_ERROR("[%s] self rank[%u] is not in UB Memory LSA team", __func__, selfRank_), HCCL_E_PARA);
     CHK_RET(CheckNeighborLinksAvailable());
     neighborLinksChecked_ = true;
@@ -158,13 +164,22 @@ HcclResult UbMemSymmetricMemoryAgent::WaitSocketReady(SocketHandler socket) cons
     return HCCL_E_TIMEOUT;
 }
 
+HcclResult UbMemSymmetricMemoryAgent::InitRecvThread()
+{
+    threadRun_ = true;
+    EXCEPTION_CATCH(
+        recvThread_ = std::make_unique<std::thread>(&UbMemSymmetricMemoryAgent::DealWithRequest, std::ref(*this)),
+        return HCCL_E_MEMORY);
+    CHK_SMART_PTR_NULL(recvThread_);
+    return HCCL_SUCCESS;
+}
+
 HcclResult UbMemSymmetricMemoryAgent::Init()
 {
-    CHK_RET(CheckNeighborLinks());
-    if (initialized_ || lsaTeamSize_ <= 1U) {
-        initialized_ = true;
+    if (isExchangeInfo_) {
         return HCCL_SUCCESS;
     }
+    CHK_RET(CheckNeighborLinks());
 
     CommLink leftLink{};
     CHK_RET(GetLink(leftRank_, leftLink));
@@ -209,7 +224,13 @@ HcclResult UbMemSymmetricMemoryAgent::Init()
         Finalize();
         return ret;
     }
-    initialized_ = true;
+    ret = InitRecvThread();
+    if (ret != HCCL_SUCCESS) {
+        HCCL_ERROR("[%s] initialize UB Memory receive thread failed, ret[%d]", __func__, ret);
+        Finalize();
+        return ret;
+    }
+    isExchangeInfo_ = true;
     HCCL_RUN_INFO(
         "[%s] UB Memory LSA ring ready, comm[%s], rank[%u], left[%u], right[%u], layer[%u]", __func__, commId_.c_str(),
         selfRank_, leftRank_, rightRank_, netLayer_);
@@ -218,6 +239,20 @@ HcclResult UbMemSymmetricMemoryAgent::Init()
 
 void UbMemSymmetricMemoryAgent::Finalize()
 {
+    isExchangeInfo_ = false;
+    threadRun_ = false;
+    {
+        std::lock_guard<std::mutex> lock(completionMutex_);
+        isProcessingTask_ = false;
+        exchangeResult_ = HCCL_E_UNAVAIL;
+    }
+    completionCv_.notify_all();
+    if (recvThread_ != nullptr && recvThread_->joinable()) {
+        recvThread_->join();
+    }
+    recvThread_.reset();
+    ClearRequestQueue();
+
     if (rightSocket_ != nullptr && rightSocket_ != leftSocket_) {
         CHK_PRT(SocketDestroy(rightSocket_));
     }
@@ -226,62 +261,167 @@ void UbMemSymmetricMemoryAgent::Finalize()
     }
     rightSocket_ = nullptr;
     leftSocket_ = nullptr;
-    initialized_ = false;
 }
 
-HcclResult UbMemSymmetricMemoryAgent::TransferBuffer(
-    const uint8_t* sendBuffer, uint8_t* recvBuffer, size_t size, SocketHandler sendSocket,
-    SocketHandler recvSocket) const
+void UbMemSymmetricMemoryAgent::ClearRequestQueue()
 {
-    uint64_t sentSize = 0;
-    uint64_t receivedSize = 0;
-    auto transferTimeout = std::chrono::seconds(Hccl::EnvConfig::GetInstance().GetSocketConfig().GetLinkTimeOut());
-    auto deadline = std::chrono::steady_clock::now() + transferTimeout;
-    while ((sentSize < size || receivedSize < size) && std::chrono::steady_clock::now() < deadline) {
-        bool progressed = false;
-        if (sentSize < size) {
-            uint64_t completedSize = 0;
-            CHK_RET(
-                SocketSendNb(sendSocket, const_cast<uint8_t*>(sendBuffer) + sentSize, size - sentSize, &completedSize));
-            CHK_PRT_RET(
-                completedSize > size - sentSize,
-                HCCL_ERROR(
-                    "[%s] invalid socket send completion[%llu]", __func__,
-                    static_cast<unsigned long long>(completedSize)),
-                HCCL_E_INTERNAL);
-            sentSize += completedSize;
-            progressed = progressed || completedSize > 0;
+    std::lock_guard<std::mutex> lock(queueMutex_);
+    std::queue<UbmemPacket> emptyQueue;
+    requestQueue_.swap(emptyQueue);
+}
+
+void UbMemSymmetricMemoryAgent::CompleteTask(HcclResult result)
+{
+    {
+        std::lock_guard<std::mutex> lock(completionMutex_);
+        if (!isProcessingTask_) {
+            return;
         }
-        if (receivedSize < size) {
-            uint64_t completedSize = 0;
-            CHK_RET(SocketRecvNb(recvSocket, recvBuffer + receivedSize, size - receivedSize, &completedSize));
-            CHK_PRT_RET(
-                completedSize > size - receivedSize,
-                HCCL_ERROR(
-                    "[%s] invalid socket receive completion[%llu]", __func__,
-                    static_cast<unsigned long long>(completedSize)),
-                HCCL_E_INTERNAL);
-            receivedSize += completedSize;
-            progressed = progressed || completedSize > 0;
-        }
-        if (!progressed) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        }
+        exchangeResult_ = result;
+        isProcessingTask_ = false;
     }
+    completionCv_.notify_all();
+}
+
+HcclResult UbMemSymmetricMemoryAgent::ProcessReceivedPacket(const UbmemPacket& packet)
+{
     CHK_PRT_RET(
-        sentSize != size || receivedSize != size,
+        packet.type != UbmemPacketType::DATA || packet.memberId >= lsaTeamSize_,
         HCCL_ERROR(
-            "[%s] ring transfer timeout, sent[%llu/%zu], received[%llu/%zu]", __func__,
-            static_cast<unsigned long long>(sentSize), size, static_cast<unsigned long long>(receivedSize), size),
-        HCCL_E_TIMEOUT);
+            "[%s] invalid packet, type[%u], memberId[%u]", __func__, static_cast<uint32_t>(packet.type),
+            packet.memberId),
+        HCCL_E_PARA);
+    if (packet.memberId != selfMember_) {
+        CHK_PTR_NULL(outputDataPtr_);
+        uint8_t* dest = outputDataPtr_ + packet.memberId * currentInputSize_;
+        CHK_SAFETY_FUNC_RET(memcpy_s(dest, currentInputSize_, packet.data, currentInputSize_));
+        ++collectedCount_;
+    }
+    HCCL_INFO(
+        "[%s] received member[%u], collected[%u/%u]", __func__, packet.memberId, collectedCount_.load(), lsaTeamSize_);
+    if (packet.memberId != selfMember_ && worldRankIds_[packet.memberId] != rightRank_) {
+        std::lock_guard<std::mutex> lock(queueMutex_);
+        EXCEPTION_CATCH(requestQueue_.push(packet), return HCCL_E_MEMORY);
+    }
     return HCCL_SUCCESS;
 }
 
-HcclResult UbMemSymmetricMemoryAgent::ExchangeInfo(void* inputPtr, void* outputPtr, uint64_t inputSize) const
+void UbMemSymmetricMemoryAgent::DealWithRequest()
+{
+    if (hrtSetDevice(deviceLogicId_) != HCCL_SUCCESS) {
+        return;
+    }
+
+    while (threadRun_) {
+        HcclResult taskProgressResult = HCCL_SUCCESS;
+        bool taskComplete = false;
+        {
+            // 保护本轮信息交换状态；涉及发送队列时始终先锁completionMutex_、再锁queueMutex_。
+            std::lock_guard<std::mutex> taskStateLock(completionMutex_);
+            if (isProcessingTask_) {
+                if (collectedCount_ < lsaTeamSize_) {
+                    uint64_t completedSize = 0;
+                    HcclResult recvResult = SocketRecvNb(
+                        leftSocket_, reinterpret_cast<uint8_t*>(&recvPacket_) + receivedPacketSize_,
+                        sizeof(UbmemPacket) - receivedPacketSize_, &completedSize);
+                    if (recvResult == HCCL_SUCCESS) {
+                        if (completedSize > sizeof(UbmemPacket) - receivedPacketSize_) {
+                            HCCL_ERROR(
+                                "[%s] invalid socket receive completion[%llu]", __func__,
+                                static_cast<unsigned long long>(completedSize));
+                            taskProgressResult = HCCL_E_INTERNAL;
+                        } else {
+                            receivedPacketSize_ += completedSize;
+                            if (receivedPacketSize_ == sizeof(UbmemPacket)) {
+                                taskProgressResult = ProcessReceivedPacket(recvPacket_);
+                                recvPacket_ = {};
+                                receivedPacketSize_ = 0;
+                            }
+                        }
+                    } else if (recvResult != HCCL_E_AGAIN) {
+                        // 与A3一致：接收异常只记录并等待后续重试，不阻塞本轮发送。
+                        HCCL_ERROR(
+                            "[%s] receive UB Memory information failed, ret[%d], remoteRank[%u], receivedSize[%zu]",
+                            __func__, recvResult, leftRank_, receivedPacketSize_);
+                    }
+                }
+
+                std::lock_guard<std::mutex> queueLock(queueMutex_);
+                if (!requestQueue_.empty()) {
+                    UbmemPacket& packet = requestQueue_.front();
+                    uint64_t completedSize = 0;
+                    HcclResult sendResult = SocketSendNb(
+                        rightSocket_, reinterpret_cast<uint8_t*>(&packet) + sentPacketSize_,
+                        sizeof(UbmemPacket) - sentPacketSize_, &completedSize);
+                    if (sendResult == HCCL_SUCCESS) {
+                        if (completedSize > sizeof(UbmemPacket) - sentPacketSize_) {
+                            HCCL_ERROR(
+                                "[%s] invalid socket send completion[%llu]", __func__,
+                                static_cast<unsigned long long>(completedSize));
+                            taskProgressResult = HCCL_E_INTERNAL;
+                        } else {
+                            sentPacketSize_ += completedSize;
+                            if (sentPacketSize_ == sizeof(UbmemPacket)) {
+                                requestQueue_.pop();
+                                sentPacketSize_ = 0;
+                            }
+                        }
+                    } else if (sendResult != HCCL_E_AGAIN) {
+                        // 发送异常时保留队首Packet，与A3一致在后续循环中继续重试。
+                        HCCL_ERROR(
+                            "[%s] send UB Memory information failed, ret[%d], memberId[%u], remoteRank[%u], "
+                            "sentSize[%zu]",
+                            __func__, sendResult, packet.memberId, rightRank_, sentPacketSize_);
+                    }
+                }
+                taskComplete = requestQueue_.empty() && collectedCount_ == lsaTeamSize_;
+            }
+        }
+
+        if (taskProgressResult != HCCL_SUCCESS) {
+            HCCL_ERROR("[%s] progress UB Memory information exchange failed, ret[%d]", __func__, taskProgressResult);
+            CompleteTask(taskProgressResult);
+        } else if (taskComplete) {
+            CompleteTask(HCCL_SUCCESS);
+        }
+        // 每轮固定休眠1 ms，避免后台线程持续轮询占用CPU。
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+
+    hrtResetDevice(deviceLogicId_);
+}
+
+HcclResult UbMemSymmetricMemoryAgent::WaitForCollectionComplete()
+{
+    std::unique_lock<std::mutex> lock(completionMutex_);
+    auto timeout = std::chrono::seconds(Hccl::EnvConfig::GetInstance().GetSocketConfig().GetLinkTimeOut());
+    bool completed = completionCv_.wait_for(lock, timeout, [this]() {
+        return !isProcessingTask_.load();
+    });
+    if (!completed) {
+        HCCL_ERROR(
+            "[%s] information exchange timeout, collected[%u/%u]", __func__, collectedCount_.load(), lsaTeamSize_);
+        exchangeResult_ = HCCL_E_TIMEOUT;
+        isProcessingTask_ = false;
+        outputDataPtr_ = nullptr;
+        currentInputSize_ = 0;
+        recvPacket_ = {};
+        receivedPacketSize_ = 0;
+        sentPacketSize_ = 0;
+    }
+    HcclResult result = exchangeResult_;
+    lock.unlock();
+    if (!completed) {
+        ClearRequestQueue();
+    }
+    return result;
+}
+
+HcclResult UbMemSymmetricMemoryAgent::ExchangeInfo(void* inputPtr, void* outputPtr, uint64_t inputSize)
 {
     CHK_PTR_NULL(inputPtr);
     CHK_PTR_NULL(outputPtr);
-    CHK_PRT_RET(!initialized_, HCCL_ERROR("[%s] UB Memory LSA ring is not initialized", __func__), HCCL_E_UNAVAIL);
+    CHK_PRT_RET(!isExchangeInfo_, HCCL_ERROR("[%s] UB Memory LSA ring is not initialized", __func__), HCCL_E_UNAVAIL);
     CHK_PRT_RET(inputSize == 0, HCCL_ERROR("[%s] input size is zero", __func__), HCCL_E_PARA);
     CHK_PRT_RET(
         inputSize > UBMEM_PACKET_DATA_MAX_LEN,
@@ -290,34 +430,32 @@ HcclResult UbMemSymmetricMemoryAgent::ExchangeInfo(void* inputPtr, void* outputP
             UBMEM_PACKET_DATA_MAX_LEN),
         HCCL_E_PARA);
 
-    auto* output = static_cast<uint8_t*>(outputPtr);
-    CHK_SAFETY_FUNC_RET(memcpy_s(output + selfMember_ * inputSize, inputSize, inputPtr, inputSize));
-    if (lsaTeamSize_ <= 1U) {
-        return HCCL_SUCCESS;
+    uint8_t* output = static_cast<uint8_t*>(outputPtr);
+    {
+        std::lock_guard<std::mutex> taskStateLock(completionMutex_);
+        outputDataPtr_ = output;
+        currentInputSize_ = inputSize;
+        collectedCount_ = 0U;
+        exchangeResult_ = HCCL_SUCCESS;
+        recvPacket_ = {};
+        receivedPacketSize_ = 0;
+        sentPacketSize_ = 0;
     }
+    uint8_t* selfOutput = output + selfMember_ * inputSize;
+    CHK_SAFETY_FUNC_RET(memcpy_s(selfOutput, inputSize, inputPtr, inputSize));
+    ++collectedCount_;
 
     UbmemPacket sendPacket{};
     sendPacket.type = UbmemPacketType::DATA;
     sendPacket.memberId = selfMember_;
     CHK_SAFETY_FUNC_RET(memcpy_s(sendPacket.data, sizeof(sendPacket.data), inputPtr, inputSize));
-    // 对齐A3的Ring AllGather语义；A5 UB_MEM在当前线程执行固定轮次交换，以适配SocketSendNb/SocketRecvNb接口。
-    // 每轮把左邻居收到的数据继续发往右邻居，完成后输出数组包含全部LSA成员的信息。
-    for (uint32_t round = 0; round < lsaTeamSize_ - 1U; ++round) {
-        UbmemPacket recvPacket{};
-        uint8_t sendBuf[sizeof(UbmemPacket)]{};
-        uint8_t recvBuf[sizeof(UbmemPacket)]{};
-        CHK_SAFETY_FUNC_RET(memcpy_s(sendBuf, sizeof(sendBuf), &sendPacket, sizeof(UbmemPacket)));
-        CHK_RET(TransferBuffer(sendBuf, recvBuf, sizeof(UbmemPacket), rightSocket_, leftSocket_));
-        CHK_SAFETY_FUNC_RET(memcpy_s(&recvPacket, sizeof(recvPacket), recvBuf, sizeof(UbmemPacket)));
-        CHK_PRT_RET(
-            recvPacket.type != UbmemPacketType::DATA || recvPacket.memberId >= lsaTeamSize_,
-            HCCL_ERROR(
-                "[%s] invalid packet, type[%u], memberId[%u]", __func__, static_cast<uint32_t>(recvPacket.type),
-                recvPacket.memberId),
-            HCCL_E_PARA);
-        CHK_SAFETY_FUNC_RET(memcpy_s(output + recvPacket.memberId * inputSize, inputSize, recvPacket.data, inputSize));
-        sendPacket = recvPacket;
+    ClearRequestQueue();
+    {
+        std::lock_guard<std::mutex> queueLock(queueMutex_);
+        EXCEPTION_CATCH(requestQueue_.push(sendPacket), return HCCL_E_MEMORY);
     }
+    isProcessingTask_ = true;
+    CHK_RET(WaitForCollectionComplete());
     HCCL_INFO("[%s] exchanged information for[%u] LSA members", __func__, lsaTeamSize_);
     return HCCL_SUCCESS;
 }

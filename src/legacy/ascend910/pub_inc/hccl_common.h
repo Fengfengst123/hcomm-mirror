@@ -156,6 +156,8 @@ constexpr u32 HOST_PORT_MAX = 65520;
 
 // 内存相关
 constexpr u64 LARGE_PAGE_MEMORY_MIN_SIZE = 2 * 1024 * 1024; // 申请内存用于MR注册时需要申请大页内存（最小2*1024*1024）
+// 对称VA空间从40 TB地址处开始预留，A3 HCCS与A5 UB_MEM使用相同的VA布局基准。
+constexpr uintptr_t SYMMETRIC_MEMORY_VA_HINT = 40ULL * 1024ULL * 1024ULL * 1024ULL * 1024ULL;
 
 /* 公共模块函数返回值定义,跟业务层同步  */
 const std::map<HcclDataType, std::string> HCOM_DATA_TYPE_STR_MAP{

@@ -21,7 +21,6 @@
 #include "adapter_rts_common.h"
 #include "coll_comm.h"
 #include "hccl_common.h"
-#include "hccl_team_mgr.h"
 #include "hcomm_team.h"
 #include "log.h"
 
@@ -171,10 +170,6 @@ private:
     size_t totalSize_{0};
 };
 
-namespace {
-    constexpr uintptr_t UB_SYMMETRIC_VA_HINT = 40ULL * 1024ULL * 1024ULL * 1024ULL * 1024ULL;
-} // namespace
-
 static_assert(
     sizeof(UbmemShareableInfo) <= UBMEM_PACKET_DATA_MAX_LEN,
     "UB Memory shareable information exceeds the Agent packet payload");
@@ -213,32 +208,14 @@ HcclResult UbMemSymmetricMemory::Init()
     selfMember_ = static_cast<uint32_t>(selfIter - worldRankIds_.begin());
 
     EXCEPTION_CATCH(
-        agent_ = std::make_unique<UbMemSymmetricMemoryAgent>(rankGraph_, selfRank_, worldRankIds_, netLayer_, commId_),
+        agent_ = std::make_unique<UbMemSymmetricMemoryAgent>(
+            rankGraph_, collComm_->GetDeviceLogicId(), selfRank_, worldRankIds_, netLayer_, commId_),
         return HCCL_E_MEMORY);
     CHK_SMART_PTR_NULL(agent_);
-    return CheckPrebuiltLsaTeam();
-}
-
-HcclResult UbMemSymmetricMemory::CheckPrebuiltLsaTeam()
-{
-    CHK_PRT_RET(
-        lsaTeam_ == nullptr, HCCL_ERROR("[%s] prebuilt UB Memory LSA team not found, layer[%u]", __func__, netLayer_),
-        HCCL_E_NOT_FOUND);
-    std::vector<uint32_t> registeredRanks;
-    EXCEPTION_CATCH(
-        registeredRanks
-        = HcclTeamMgr::GetInstance().GetPrebuiltWorldTeamRanks(collComm_, COMM_PROTOCOL_UB_MEM, netLayer_),
-        return HCCL_E_MEMORY);
-    CHK_PRT_RET(
-        registeredRanks != worldRankIds_, HCCL_ERROR("[%s] UB Memory LSA team membership changed", __func__),
-        HCCL_E_INTERNAL);
-    HCCL_RUN_INFO(
-        "[%s] UB Memory LSA team ready, comm[%s], team[%p], selfRank[%u], lsaTeamSize[%u], layer[%u]", __func__,
-        commId_.c_str(), lsaTeam_, selfRank_, lsaTeamSize_, netLayer_);
     return HCCL_SUCCESS;
 }
 
-HcclResult UbMemSymmetricMemory::EnsureRuntime()
+HcclResult UbMemSymmetricMemory::EnsureInit()
 {
     CHK_PTR_NULL(collComm_);
     CHK_SMART_PTR_NULL(agent_);
@@ -259,7 +236,6 @@ HcclResult UbMemSymmetricMemory::EnsureRuntime()
         runtimeInitResult_ = GetAllMemberPids();
         if (runtimeInitResult_ != HCCL_SUCCESS) {
             HCCL_ERROR("[%s] exchange UB Memory LSA member pids failed, ret[%d]", __func__, runtimeInitResult_);
-            broken_ = true; // pid 交换已进入集合阶段，失败后重试会导致成员间失步。
             agent_->Finalize();
             FinalizeSymmetricVa();
         }
@@ -269,30 +245,40 @@ HcclResult UbMemSymmetricMemory::EnsureRuntime()
 
 HcclResult UbMemSymmetricMemory::GetAllMemberPids()
 {
+    // 交换各LSA成员的bare TGID，用于为Fabric Shareable Handle配置跨进程访问权限。
     int32_t localPid = 0;
     aclError ret = aclrtDeviceGetBareTgid(&localPid);
     CHK_PRT_RET(
         ret != ACL_SUCCESS || localPid <= 0,
         HCCL_ERROR("[%s] get local bare tgid failed, ret[%d], pid[%d]", __func__, ret, localPid), HCCL_E_RUNTIME);
+    HCCL_INFO("[%s] local bare tgid[%d]", __func__, localPid);
     EXCEPTION_CATCH(memberPids_.resize(lsaTeamSize_), return HCCL_E_MEMORY);
     CHK_RET(agent_->ExchangeInfo(&localPid, memberPids_.data(), sizeof(localPid)));
+
+    std::string memberPidInfo;
+    for (int32_t memberPid : memberPids_) {
+        memberPidInfo += std::to_string(memberPid);
+        memberPidInfo += "; ";
+    }
+    HCCL_INFO("[%s] member pids[%s]", __func__, memberPidInfo.c_str());
     return HCCL_SUCCESS;
 }
 
 HcclResult UbMemSymmetricMemory::InitSymmetricVa()
 {
-    if (arenaBase_ != nullptr) {
+    if (heapBase_ != nullptr) {
         return HCCL_SUCCESS;
     }
     CHK_PTR_NULL(collComm_);
-    uint64_t strideGb = collComm_->GetCommConfig().GetConfigSymmetricMemoryStride();
+    CHK_SMART_PTR_NULL(vaAllocator_);
+    uint64_t strideGB = collComm_->GetCommConfig().GetConfigSymmetricMemoryStride();
     CHK_PRT_RET(
-        lsaTeamSize_ == 0 || selfMember_ >= lsaTeamSize_ || strideGb == 0,
+        lsaTeamSize_ == 0 || selfMember_ >= lsaTeamSize_ || strideGB == 0,
         HCCL_ERROR("[%s] invalid symmetric VA configuration", __func__), HCCL_E_PARA);
     CHK_PRT_RET(
-        strideGb > std::numeric_limits<uint64_t>::max() / BYTES_PER_GB,
-        HCCL_ERROR("[%s] stride[%llu]GB overflows", __func__, static_cast<unsigned long long>(strideGb)), HCCL_E_PARA);
-    stride_ = strideGb * BYTES_PER_GB;
+        strideGB > std::numeric_limits<size_t>::max() / BYTES_PER_GB,
+        HCCL_ERROR("[%s] stride[%llu]GB overflows", __func__, static_cast<unsigned long long>(strideGB)), HCCL_E_PARA);
+    stride_ = static_cast<size_t>(strideGB * BYTES_PER_GB);
 
     size_t freeHbmSize = 0;
     size_t totalHbmSize = 0;
@@ -302,13 +288,10 @@ HcclResult UbMemSymmetricMemory::InitSymmetricVa()
         HCCL_E_INTERNAL);
     CHK_PRT_RET(
         stride_ > totalHbmSize,
-        HCCL_ERROR(
-            "[%s] stride[%llu] exceeds total HBM size[%zu]", __func__, static_cast<unsigned long long>(stride_),
-            totalHbmSize),
-        HCCL_E_PARA);
+        HCCL_ERROR("[%s] stride[%zu] exceeds total HBM size[%zu]", __func__, stride_, totalHbmSize), HCCL_E_PARA);
     CHK_RET(InitGranularity());
-    CHK_RET(ReserveArena());
-    HcclResult allocatorRet = InitWindowOffsetAllocator();
+    CHK_RET(ReserveSymmetricVa());
+    HcclResult allocatorRet = vaAllocator_->Init(stride_);
     if (allocatorRet != HCCL_SUCCESS) {
         HCCL_ERROR("[%s] initialize Window offset allocator failed, ret[%d]", __func__, allocatorRet);
         FinalizeSymmetricVa();
@@ -331,53 +314,39 @@ HcclResult UbMemSymmetricMemory::InitGranularity()
     aclError ret = aclrtMemGetAllocationGranularity(&property, ACL_RT_MEM_ALLOC_GRANULARITY_RECOMMENDED, &granularity_);
     CHK_PRT_RET(
         ret != ACL_SUCCESS || granularity_ == 0,
-        HCCL_ERROR("[%s] get allocation granularity failed, ret[%d], granularity[%zu]", __func__, ret, granularity_),
+        HCCL_ERROR("[%s] get memory granularity failed, ret[%d], granularity[%zu]", __func__, ret, granularity_),
         HCCL_E_RUNTIME);
     CHK_PRT_RET(
         stride_ % granularity_ != 0,
-        HCCL_ERROR(
-            "[%s] stride[%llu] is not aligned to[%zu]", __func__, static_cast<unsigned long long>(stride_),
-            granularity_),
-        HCCL_E_PARA);
+        HCCL_ERROR("[%s] stride[%zu] is not aligned to[%zu]", __func__, stride_, granularity_), HCCL_E_PARA);
     return HCCL_SUCCESS;
 }
 
-HcclResult UbMemSymmetricMemory::ReserveArena()
+HcclResult UbMemSymmetricMemory::ReserveSymmetricVa()
 {
     CHK_PRT_RET(lsaTeamSize_ == 0, HCCL_ERROR("[%s] LSA team size is zero", __func__), HCCL_E_PARA);
     CHK_PRT_RET(
         stride_ > std::numeric_limits<size_t>::max() / lsaTeamSize_,
-        HCCL_ERROR("[%s] total arena size overflows", __func__), HCCL_E_PARA);
-    size_t arenaSize = static_cast<size_t>(stride_ * lsaTeamSize_);
-    void* hint = reinterpret_cast<void*>(UB_SYMMETRIC_VA_HINT);
-    aclError ret = aclrtReserveMemAddressNoUCMemory(&arenaBase_, arenaSize, 0, hint, 0);
+        HCCL_ERROR("[%s] total symmetric VA size overflows", __func__), HCCL_E_PARA);
+    size_t totalHeapSize = stride_ * lsaTeamSize_;
+    void* hint = reinterpret_cast<void*>(SYMMETRIC_MEMORY_VA_HINT);
+    aclError ret = aclrtReserveMemAddressNoUCMemory(&heapBase_, totalHeapSize, 0, hint, 0);
     if (ret != ACL_SUCCESS) {
-        HCCL_ERROR("[%s] reserve UB Memory symmetric VA failed, size[%zu], ret[%d]", __func__, arenaSize, ret);
-        arenaBase_ = nullptr;
+        HCCL_ERROR("[%s] reserve UB Memory symmetric VA failed, size[%zu], ret[%d]", __func__, totalHeapSize, ret);
+        heapBase_ = nullptr;
         return HCCL_E_RUNTIME;
     }
-    uintptr_t base = reinterpret_cast<uintptr_t>(arenaBase_);
-    if (arenaSize > std::numeric_limits<uintptr_t>::max() - base) {
+    uintptr_t base = reinterpret_cast<uintptr_t>(heapBase_);
+    if (totalHeapSize > std::numeric_limits<uintptr_t>::max() - base) {
         HCCL_ERROR("[%s] reserved UB Memory symmetric VA range overflows", __func__);
-        (void)aclrtReleaseMemAddress(arenaBase_);
-        arenaBase_ = nullptr;
+        (void)aclrtReleaseMemAddress(heapBase_);
+        heapBase_ = nullptr;
         return HCCL_E_RUNTIME;
     }
     HCCL_RUN_INFO(
-        "[%s] UB Memory symmetric VA ready, base[%p], stride[%llu], lsaTeamSize[%u]", __func__, arenaBase_,
-        static_cast<unsigned long long>(stride_), lsaTeamSize_);
+        "[%s] UB Memory symmetric VA ready, base[%p], stride[%zu], lsaTeamSize[%u]", __func__, heapBase_, stride_,
+        lsaTeamSize_);
     return HCCL_SUCCESS;
-}
-
-HcclResult UbMemSymmetricMemory::InitWindowOffsetAllocator()
-{
-    CHK_SMART_PTR_NULL(vaAllocator_);
-    size_t allocatorSize = static_cast<size_t>(stride_);
-    CHK_PRT_RET(
-        static_cast<uint64_t>(allocatorSize) != stride_,
-        HCCL_ERROR("[%s] stride[%llu] exceeds size_t range", __func__, static_cast<unsigned long long>(stride_)),
-        HCCL_E_PARA);
-    return vaAllocator_->Init(allocatorSize);
 }
 
 void UbMemSymmetricMemory::FinalizeSymmetricVa()
@@ -386,17 +355,17 @@ void UbMemSymmetricMemory::FinalizeSymmetricVa()
         HCCL_ERROR("[%s] refuse to release symmetric VA with[%zu] active mappings", __func__, activeMappingCount_);
         return;
     }
-    if (arenaBase_ != nullptr) {
-        aclError ret = aclrtReleaseMemAddress(arenaBase_);
+    if (heapBase_ != nullptr) {
+        aclError ret = aclrtReleaseMemAddress(heapBase_);
         if (ret != ACL_SUCCESS) {
-            HCCL_ERROR("[%s] release symmetric VA[%p] failed, ret[%d]", __func__, arenaBase_, ret);
+            HCCL_ERROR("[%s] release symmetric VA[%p] failed, ret[%d]", __func__, heapBase_, ret);
             return;
         }
     }
     if (vaAllocator_ != nullptr) {
         vaAllocator_->Destroy();
     }
-    arenaBase_ = nullptr;
+    heapBase_ = nullptr;
     stride_ = 0;
     granularity_ = 0;
 }
@@ -410,58 +379,55 @@ HcclResult UbMemSymmetricMemory::ValidateRegisterRange(void* ptr, size_t size) c
     return HCCL_SUCCESS;
 }
 
-HcclResult UbMemSymmetricMemory::GetMemoryInfo(void* ptr, size_t size, VaMappingInfo& mapping) const
+HcclResult UbMemSymmetricMemory::GetMemoryInfo(
+    void* ptr, size_t size, void*& baseUserVa, size_t& baseVaSize, aclrtDrvMemHandle& paHandle,
+    size_t& offsetInBaseVa) const
 {
     CHK_RET(ValidateRegisterRange(ptr, size));
-    CHK_PRT_RET(arenaBase_ == nullptr, HCCL_ERROR("[%s] symmetric VA is not initialized", __func__), HCCL_E_UNAVAIL);
-    void* allocationBase = nullptr;
-    size_t allocationSize = 0;
-    aclError ret = aclrtMemGetAddressRange(ptr, &allocationBase, &allocationSize);
+    CHK_PRT_RET(heapBase_ == nullptr, HCCL_ERROR("[%s] symmetric VA is not initialized", __func__), HCCL_E_UNAVAIL);
+    HCCL_INFO("[%s] get memory info, ptr[%p], size[%zu], granularity[%zu]", __func__, ptr, size, granularity_);
+    aclError ret = aclrtMemGetAddressRange(ptr, &baseUserVa, &baseVaSize);
     CHK_PRT_RET(
-        ret != ACL_SUCCESS || allocationBase == nullptr || allocationSize == 0,
-        HCCL_ERROR("[%s] get allocation range failed, ptr[%p], ret[%d]", __func__, ptr, ret), HCCL_E_PARA);
-    uintptr_t request = reinterpret_cast<uintptr_t>(ptr);
-    uintptr_t base = reinterpret_cast<uintptr_t>(allocationBase);
+        ret != ACL_SUCCESS || baseUserVa == nullptr || baseVaSize == 0,
+        HCCL_ERROR("[%s] get base memory range failed, ptr[%p], ret[%d]", __func__, ptr, ret), HCCL_E_PARA);
     CHK_PRT_RET(
-        request < base || request - base > allocationSize || size > allocationSize - (request - base),
-        HCCL_ERROR("[%s] requested range is outside allocation", __func__), HCCL_E_PARA);
+        reinterpret_cast<uintptr_t>(ptr) < reinterpret_cast<uintptr_t>(baseUserVa),
+        HCCL_ERROR("[%s] requested address is before baseUserVa", __func__), HCCL_E_PARA);
     CHK_PRT_RET(
-        granularity_ == 0 || allocationSize % granularity_ != 0,
-        HCCL_ERROR("[%s] allocation size[%zu] is not aligned to[%zu]", __func__, allocationSize, granularity_),
-        HCCL_E_PARA);
+        size > baseVaSize
+            || reinterpret_cast<uintptr_t>(ptr) - reinterpret_cast<uintptr_t>(baseUserVa) > baseVaSize - size,
+        HCCL_ERROR("[%s] requested range exceeds base memory range", __func__), HCCL_E_PARA);
+    CHK_PRT_RET(
+        granularity_ == 0 || baseVaSize % granularity_ != 0,
+        HCCL_ERROR("[%s] baseVaSize[%zu] is not aligned to[%zu]", __func__, baseVaSize, granularity_), HCCL_E_PARA);
+    offsetInBaseVa = static_cast<size_t>(reinterpret_cast<uintptr_t>(ptr) - reinterpret_cast<uintptr_t>(baseUserVa));
 
-    mapping.allocationBase = allocationBase;
-    mapping.allocationSize = allocationSize;
-    mapping.userOffset = static_cast<uint64_t>(request - base);
-    ret = aclrtMemRetainAllocationHandle(allocationBase, &mapping.localHandle);
+    ret = aclrtMemRetainAllocationHandle(baseUserVa, &paHandle);
     CHK_PRT_RET(
-        ret != ACL_SUCCESS || mapping.localHandle == nullptr,
+        ret != ACL_SUCCESS || paHandle == nullptr,
         HCCL_ERROR("[%s] retain local physical handle failed, ret[%d]", __func__, ret), HCCL_E_RUNTIME);
     HCCL_INFO(
-        "[%s] retained PA handle[%p], allocationBase[%p], allocationSize[%zu]", __func__, mapping.localHandle,
-        mapping.allocationBase, mapping.allocationSize);
+        "[%s] retained PA handle[%p], baseUserVa[%p], baseVaSize[%zu]", __func__, paHandle, baseUserVa, baseVaSize);
     return HCCL_SUCCESS;
 }
 
-HcclResult UbMemSymmetricMemory::ExportLocalMapping(VaMappingInfo& mapping, std::vector<uint8_t>& shareableDesc) const
+HcclResult UbMemSymmetricMemory::ExportLocalMapping(PaMappingInfo& mapping) const
 {
-    CHK_PTR_NULL(mapping.localHandle);
+    CHK_PTR_NULL(mapping.paHandle);
     aclError ret = aclrtMemExportToShareableHandleV2(
-        mapping.localHandle, 0, ACL_MEM_SHARE_HANDLE_TYPE_FABRIC, static_cast<void*>(&mapping.shareableHandle));
+        mapping.paHandle, 0, ACL_MEM_SHARE_HANDLE_TYPE_FABRIC, static_cast<void*>(&mapping.shareableHandle));
     CHK_PRT_RET(
         ret != ACL_SUCCESS, HCCL_ERROR("[%s] export local physical handle failed, ret[%d]", __func__, ret),
         HCCL_E_RUNTIME);
-    const auto* begin = reinterpret_cast<const uint8_t*>(&mapping.shareableHandle);
-    HcclResult descResult = HCCL_SUCCESS;
-    EXCEPTION_CATCH(shareableDesc.assign(begin, begin + sizeof(mapping.shareableHandle)), descResult = HCCL_E_MEMORY);
-    return descResult;
+    return HCCL_SUCCESS;
 }
 
-HcclResult UbMemSymmetricMemory::GrantLocalMemory(const VaMappingInfo& mapping)
+HcclResult UbMemSymmetricMemory::GrantLocalMemory(const PaMappingInfo& mapping)
 {
     CHK_PRT_RET(
-        memberPids_.size() != lsaTeamSize_ || mapping.localHandle == nullptr,
+        memberPids_.size() != lsaTeamSize_ || mapping.paHandle == nullptr,
         HCCL_ERROR("[%s] invalid local grant parameters", __func__), HCCL_E_PARA);
+    // 将本地Shareable Handle授权给全部LSA成员进程，供远端Import和Map。
     aclrtMemFabricHandle shareableHandle = mapping.shareableHandle;
     aclError ret = aclrtMemSetPidToShareableHandleV2(
         static_cast<void*>(&shareableHandle), ACL_MEM_SHARE_HANDLE_TYPE_FABRIC, memberPids_.data(), memberPids_.size());
@@ -470,29 +436,13 @@ HcclResult UbMemSymmetricMemory::GrantLocalMemory(const VaMappingInfo& mapping)
     return HCCL_SUCCESS;
 }
 
-HcclResult UbMemSymmetricMemory::SynchronizeMemberResult(HcclResult localResult, HcclResult& globalResult)
-{
-    std::vector<int32_t> memberResults;
-    EXCEPTION_CATCH(memberResults.resize(lsaTeamSize_), return HCCL_E_MEMORY);
-    int32_t result = static_cast<int32_t>(localResult);
-    CHK_RET(agent_->ExchangeInfo(&result, memberResults.data(), sizeof(result)));
-    globalResult = HCCL_SUCCESS;
-    for (uint32_t member = 0; member < lsaTeamSize_; ++member) {
-        if (memberResults[member] != static_cast<int32_t>(HCCL_SUCCESS)) {
-            globalResult = static_cast<HcclResult>(memberResults[member]);
-            break;
-        }
-    }
-    return HCCL_SUCCESS;
-}
-
 HcclResult UbMemSymmetricMemory::ValidateMappingRange(uint64_t windowOffset, size_t mapSize) const
 {
     CHK_PRT_RET(
-        arenaBase_ == nullptr || windowOffset > stride_ || mapSize > stride_ - windowOffset,
+        heapBase_ == nullptr || windowOffset > stride_ || mapSize > stride_ - windowOffset,
         HCCL_ERROR(
-            "[%s] mapping exceeds stride, offset[%llu], size[%zu], stride[%llu]", __func__,
-            static_cast<unsigned long long>(windowOffset), mapSize, static_cast<unsigned long long>(stride_)),
+            "[%s] mapping exceeds stride, offset[%llu], size[%zu], stride[%zu]", __func__,
+            static_cast<unsigned long long>(windowOffset), mapSize, stride_),
         HCCL_E_PARA);
     CHK_PRT_RET(
         granularity_ == 0 || windowOffset % granularity_ != 0 || mapSize % granularity_ != 0,
@@ -501,11 +451,11 @@ HcclResult UbMemSymmetricMemory::ValidateMappingRange(uint64_t windowOffset, siz
 }
 
 HcclResult UbMemSymmetricMemory::ImportMemberHandle(
-    uint32_t member, const std::vector<uint8_t>& shareableDesc, const VaMappingInfo& mapping, aclrtDrvMemHandle& handle,
+    uint32_t member, const std::vector<uint8_t>& shareableDesc, const PaMappingInfo& mapping, aclrtDrvMemHandle& handle,
     bool& ownsHandle) const
 {
     if (member == selfMember_) {
-        handle = mapping.localHandle;
+        handle = mapping.paHandle;
         ownsHandle = false;
         CHK_PRT_RET(handle == nullptr, HCCL_ERROR("[%s] local physical handle is null", __func__), HCCL_E_PTR);
         return HCCL_SUCCESS;
@@ -528,44 +478,41 @@ HcclResult UbMemSymmetricMemory::ImportMemberHandle(
 }
 
 HcclResult UbMemSymmetricMemory::MapAllMembers(
-    uint64_t windowOffset, const std::vector<std::vector<uint8_t>>& shareableDescs, VaMappingInfo& mapping,
-    size_t windowSize, std::vector<CommMem>& memberMems)
+    uint64_t windowOffset, const std::vector<std::vector<uint8_t>>& shareableDescs, PaMappingInfo& mapping,
+    std::vector<CommMem>& memberMems)
 {
-    CHK_RET(ValidateMappingRange(windowOffset, mapping.allocationSize));
-    CHK_PRT_RET(
-        mapping.userOffset > mapping.allocationSize || windowSize > mapping.allocationSize - mapping.userOffset,
-        HCCL_ERROR("[%s] logical window exceeds mapped allocation", __func__), HCCL_E_PARA);
+    CHK_RET(ValidateMappingRange(windowOffset, mapping.baseVaSize));
     CHK_PRT_RET(
         shareableDescs.size() != lsaTeamSize_, HCCL_ERROR("[%s] member descriptor count mismatch", __func__),
         HCCL_E_PARA);
-    EXCEPTION_CATCH(mapping.peers.assign(lsaTeamSize_, PeerMappingInfo{}), return HCCL_E_MEMORY);
+    EXCEPTION_CATCH(mapping.peerMappings.assign(lsaTeamSize_, PeerMappingInfo{}), return HCCL_E_MEMORY);
     EXCEPTION_CATCH(memberMems.assign(lsaTeamSize_, CommMem{}), return HCCL_E_MEMORY);
     for (uint32_t member = 0; member < lsaTeamSize_; ++member) {
-        PeerMappingInfo& peer = mapping.peers[member];
+        PeerMappingInfo& peer = mapping.peerMappings[member];
         HcclResult ret = ImportMemberHandle(member, shareableDescs[member], mapping, peer.handle, peer.ownsHandle);
         if (ret != HCCL_SUCCESS) {
             return CleanupPartialMapping(mapping, ret);
         }
-        uintptr_t base = reinterpret_cast<uintptr_t>(arenaBase_);
+        uintptr_t base = reinterpret_cast<uintptr_t>(heapBase_);
         uint64_t memberOffset = static_cast<uint64_t>(member) * stride_ + windowOffset;
         peer.address = reinterpret_cast<void*>(base + memberOffset);
-        aclError aclRet = aclrtMapMem(peer.address, mapping.allocationSize, 0, peer.handle, 0);
+        aclError aclRet = aclrtMapMem(peer.address, mapping.baseVaSize, 0, peer.handle, 0);
         if (aclRet != ACL_SUCCESS) {
             HCCL_ERROR("[%s] map member[%u] at[%p] failed, ret[%d]", __func__, member, peer.address, aclRet);
             return CleanupPartialMapping(mapping, HCCL_E_RUNTIME);
         }
         peer.mapped = true;
         ++activeMappingCount_;
-        memberMems[member].addr = static_cast<uint8_t*>(peer.address) + mapping.userOffset;
-        memberMems[member].size = windowSize;
+        memberMems[member].addr = peer.address;
+        memberMems[member].size = mapping.baseVaSize;
         memberMems[member].type = COMM_MEM_TYPE_DEVICE;
     }
     return HCCL_SUCCESS;
 }
 
-HcclResult UbMemSymmetricMemory::CleanupPartialMapping(VaMappingInfo& mapping, HcclResult originalResult)
+HcclResult UbMemSymmetricMemory::CleanupPartialMapping(PaMappingInfo& mapping, HcclResult originalResult)
 {
-    HcclResult cleanupResult = UnmapAllMembers(mapping);
+    HcclResult cleanupResult = ReleaseMemberMappings(mapping);
     if (cleanupResult != HCCL_SUCCESS) {
         HCCL_ERROR(
             "[%s] cleanup partial mapping failed, original[%d], cleanup[%d]", __func__, originalResult, cleanupResult);
@@ -595,168 +542,108 @@ HcclResult UbMemSymmetricMemory::ReleasePeerMapping(PeerMappingInfo& peer)
     return HCCL_SUCCESS;
 }
 
-HcclResult UbMemSymmetricMemory::UnmapAllMembers(VaMappingInfo& mapping)
+HcclResult UbMemSymmetricMemory::ReleaseMemberMappings(PaMappingInfo& mapping)
 {
+    // 解除各LSA成员的VA映射并释放导入的远端物理Handle；本地物理内存由申请者释放。
     HcclResult firstError = HCCL_SUCCESS;
-    for (PeerMappingInfo& peer : mapping.peers) {
+    for (PeerMappingInfo& peer : mapping.peerMappings) {
         HcclResult ret = ReleasePeerMapping(peer);
         if (ret != HCCL_SUCCESS && firstError == HCCL_SUCCESS) {
             firstError = ret;
         }
     }
-    // localHandle标识用户持有的本地物理allocation，本模块仅释放Import得到的远端Handle。
-    mapping.localHandle = nullptr;
-    const bool allReleased = std::all_of(mapping.peers.begin(), mapping.peers.end(), [](const PeerMappingInfo& peer) {
-        return !peer.mapped && peer.handle == nullptr;
-    });
+    const bool allReleased
+        = std::all_of(mapping.peerMappings.begin(), mapping.peerMappings.end(), [](const PeerMappingInfo& peer) {
+              return !peer.mapped && peer.handle == nullptr;
+          });
     if (allReleased) {
-        mapping.peers.clear();
+        mapping.peerMappings.clear();
     }
     return firstError;
 }
 
-HcclResult UbMemSymmetricMemory::AllocateWindowOffset(size_t size, uint64_t& offset)
-{
-    CHK_PRT_RET(
-        granularity_ == 0 || size == 0 || size % granularity_ != 0,
-        HCCL_ERROR("[%s] invalid mapping size[%zu], granularity[%zu]", __func__, size, granularity_), HCCL_E_PARA);
-    CHK_PRT_RET(
-        size > stride_,
-        HCCL_ERROR(
-            "[%s] window size[%zu] exceeds stride[%llu]", __func__, size, static_cast<unsigned long long>(stride_)),
-        HCCL_E_MEMORY);
-    CHK_SMART_PTR_NULL(vaAllocator_);
-    size_t allocatedOffset = 0;
-    CHK_RET(vaAllocator_->Reserve(size, granularity_, allocatedOffset));
-    offset = static_cast<uint64_t>(allocatedOffset);
-    return HCCL_SUCCESS;
-}
-
-HcclResult UbMemSymmetricMemory::ReleaseWindowOffset(uint64_t offset, size_t size)
-{
-    CHK_SMART_PTR_NULL(vaAllocator_);
-    size_t releasedOffset = static_cast<size_t>(offset);
-    CHK_PRT_RET(
-        static_cast<uint64_t>(releasedOffset) != offset,
-        HCCL_ERROR("[%s] offset[%llu] exceeds size_t range", __func__, static_cast<unsigned long long>(offset)),
-        HCCL_E_PARA);
-    return vaAllocator_->Release(releasedOffset, size);
-}
-
-HcclResult UbMemSymmetricMemory::BreakFailed(HcclResult result)
-{
-    broken_ = true;
-    HCCL_ERROR(
-        "[%s] UB Memory collective registration is broken, ret[%d]; deregister remaining windows and destroy the "
-        "communicator",
-        __func__, result);
-    return result;
-}
-
 HcclResult UbMemSymmetricMemory::RegisterInternal(PaMappingInfo& paMapping)
 {
-    // 同一PA Handle仅在首次注册时执行Export、Grant和Map，重叠注册复用已有映射。
-    bool firstRegistration = paMapping.refCount == 1U;
-    HcclResult localExportResult = HCCL_SUCCESS;
-    if (firstRegistration) {
-        localExportResult = ExportLocalMapping(paMapping.vaMapping, paMapping.shareableDesc);
+    // 与A3不同，A5 Fabric Handle完成Export后不能再次Export；
+    // 同一内存重新注册时复用首次Export及授权信息。
+    if (!paMapping.shareableHandleReady) {
+        CHK_RET(ExportLocalMapping(paMapping));
+        paMapping.shareableHandleReady = true;
     }
-    HcclResult globalExportResult = HCCL_SUCCESS;
-    HcclResult exportSyncResult = SynchronizeMemberResult(localExportResult, globalExportResult);
-    CHK_PRT_RET(
-        exportSyncResult != HCCL_SUCCESS,
-        HCCL_ERROR("[%s] synchronize export result failed, ret[%d]", __func__, exportSyncResult),
-        BreakFailed(exportSyncResult));
-    CHK_PRT_RET(
-        globalExportResult != HCCL_SUCCESS,
-        HCCL_ERROR(
-            "[%s] export LSA member memory failed, localResult[%d], globalResult[%d]", __func__, localExportResult,
-            globalExportResult),
-        globalExportResult);
+    if (!paMapping.memberAccessGranted) {
+        CHK_RET(GrantLocalMemory(paMapping));
+        paMapping.memberAccessGranted = true;
+    }
 
+    // Shareable Handle完成PID授权后，再交换给其他LSA成员执行Import和Map。
     UbmemShareableInfo localInfo{
-        paMapping.heapBaseOffset, paMapping.vaMapping.allocationSize, paMapping.vaMapping.shareableHandle};
+        static_cast<uint64_t>(paMapping.heapBaseOffset), static_cast<uint64_t>(paMapping.baseVaSize),
+        paMapping.shareableHandle};
     std::vector<UbmemShareableInfo> memberInfos;
-    EXCEPTION_CATCH(memberInfos.resize(lsaTeamSize_), return BreakFailed(HCCL_E_MEMORY));
+    EXCEPTION_CATCH(memberInfos.resize(lsaTeamSize_), return HCCL_E_MEMORY);
     HcclResult exchangeResult = agent_->ExchangeInfo(&localInfo, memberInfos.data(), sizeof(localInfo));
     CHK_PRT_RET(
         exchangeResult != HCCL_SUCCESS,
-        HCCL_ERROR("[%s] exchange UB Memory shareable info failed, ret[%d]", __func__, exchangeResult),
-        BreakFailed(exchangeResult));
+        HCCL_ERROR("[%s] exchange UB Memory shareable info failed, ret[%d]", __func__, exchangeResult), exchangeResult);
     for (uint32_t member = 0; member < lsaTeamSize_; ++member) {
         CHK_PRT_RET(
-            memberInfos[member].offset != paMapping.heapBaseOffset
-                || memberInfos[member].size != paMapping.vaMapping.allocationSize,
+            memberInfos[member].offset != static_cast<uint64_t>(paMapping.heapBaseOffset)
+                || memberInfos[member].size != static_cast<uint64_t>(paMapping.baseVaSize),
             HCCL_ERROR(
                 "[%s] member[%u] layout[offset:%llu,size:%llu] differs from local[offset:%llu,size:%zu]; "
                 "ensure every LSA member invokes registration in the same order",
                 __func__, member, static_cast<unsigned long long>(memberInfos[member].offset),
                 static_cast<unsigned long long>(memberInfos[member].size),
-                static_cast<unsigned long long>(paMapping.heapBaseOffset), paMapping.vaMapping.allocationSize),
-            BreakFailed(HCCL_E_PARA));
+                static_cast<unsigned long long>(paMapping.heapBaseOffset), paMapping.baseVaSize),
+            HCCL_E_PARA);
     }
 
-    // A5 UB Memory在全部成员完成Handle导出与交换后配置decoder，再同步授权结果后执行远端映射。
-    HcclResult localGrantResult = firstRegistration ? GrantLocalMemory(paMapping.vaMapping) : HCCL_SUCCESS;
-    HcclResult globalGrantResult = HCCL_SUCCESS;
-    HcclResult grantSyncResult = SynchronizeMemberResult(localGrantResult, globalGrantResult);
-    CHK_PRT_RET(
-        grantSyncResult != HCCL_SUCCESS,
-        HCCL_ERROR("[%s] synchronize grant result failed, ret[%d]", __func__, grantSyncResult),
-        BreakFailed(grantSyncResult));
-    CHK_PRT_RET(
-        globalGrantResult != HCCL_SUCCESS,
-        HCCL_ERROR(
-            "[%s] grant LSA member memory failed, localResult[%d], globalResult[%d]", __func__, localGrantResult,
-            globalGrantResult),
-        globalGrantResult);
-    if (!firstRegistration) {
+    // 重叠Window直接共享已有映射；全部注销后peerMappings为空，再注册时需重建映射。
+    if (!paMapping.peerMappings.empty()) {
         return HCCL_SUCCESS;
     }
 
     std::vector<std::vector<uint8_t>> shareableDescs;
-    EXCEPTION_CATCH(shareableDescs.resize(lsaTeamSize_), return BreakFailed(HCCL_E_MEMORY));
+    EXCEPTION_CATCH(shareableDescs.resize(lsaTeamSize_), return HCCL_E_MEMORY);
     for (uint32_t member = 0; member < lsaTeamSize_; ++member) {
         const auto* begin = reinterpret_cast<const uint8_t*>(&memberInfos[member].handle);
         EXCEPTION_CATCH(
-            shareableDescs[member].assign(begin, begin + sizeof(memberInfos[member].handle)),
-            return BreakFailed(HCCL_E_MEMORY));
+            shareableDescs[member].assign(begin, begin + sizeof(memberInfos[member].handle)), return HCCL_E_MEMORY);
     }
-    HcclResult mapResult = MapAllMembers(
-        paMapping.heapBaseOffset, shareableDescs, paMapping.vaMapping, paMapping.vaMapping.allocationSize,
-        paMapping.memberMems);
+    HcclResult mapResult = MapAllMembers(paMapping.heapBaseOffset, shareableDescs, paMapping, paMapping.memberMems);
     CHK_PRT_RET(
         mapResult != HCCL_SUCCESS, HCCL_ERROR("[%s] map LSA member memory failed, ret[%d]", __func__, mapResult),
-        BreakFailed(mapResult));
+        mapResult);
     return HCCL_SUCCESS;
 }
 
 HcclResult UbMemSymmetricMemory::PublishWindow(WindowRecord& record)
 {
-    CHK_SMART_PTR_NULL(record.paMapping);
-    CHK_PTR_NULL(record.deviceWindow);
+    CHK_SMART_PTR_NULL(record.paMapInfo);
+    CHK_PTR_NULL(record.devWin);
+    // 底层共享完整内存块映射，发布Window时再定位到用户注册的子区间。
     std::vector<CommMem> userMemberMems;
-    EXCEPTION_CATCH(userMemberMems = record.paMapping->memberMems, return HCCL_E_MEMORY);
+    EXCEPTION_CATCH(userMemberMems = record.paMapInfo->memberMems, return HCCL_E_MEMORY);
     for (CommMem& memberMem : userMemberMems) {
-        memberMem.addr = static_cast<uint8_t*>(memberMem.addr) + record.userOffset;
+        memberMem.addr = static_cast<uint8_t*>(memberMem.addr) + record.offsetInBaseVa;
         memberMem.size = record.userSize;
     }
-    void* baseVa = static_cast<uint8_t*>(arenaBase_) + record.paMapping->heapBaseOffset + record.userOffset;
+    void* baseVa = static_cast<uint8_t*>(heapBase_) + record.paMapInfo->heapBaseOffset + record.offsetInBaseVa;
     HcommResult ret = HcommTeamBindUbSymmetricWindow(
-        record.deviceWindow, lsaTeam_, agent_->GetNetLayer(), userMemberMems.data(), lsaTeamSize_, baseVa, stride_,
+        record.devWin, lsaTeam_, agent_->GetNetLayer(), userMemberMems.data(), lsaTeamSize_, baseVa, stride_,
         record.userSize);
     CHK_PRT_RET(
         ret != HCOMM_SUCCESS,
-        HCCL_ERROR(
-            "[%s] fill HcommWindow LSA information failed, window[%p], ret[%d]", __func__, record.deviceWindow, ret),
+        HCCL_ERROR("[%s] fill HcommWindow LSA information failed, window[%p], ret[%d]", __func__, record.devWin, ret),
         static_cast<HcclResult>(ret));
     return HCCL_SUCCESS;
 }
 
 HcclResult UbMemSymmetricMemory::AddWindowRecord(std::unique_ptr<WindowRecord>& record, HcclComm comm)
 {
-    uintptr_t userAddress = reinterpret_cast<uintptr_t>(record->userBase);
-    HcclCommSymWindow handle = record->deviceWindow;
+    // windowsByAddress_持有Window所有权，windowsByHandle_提供句柄索引；任一步失败时回滚已插入记录。
+    uintptr_t userAddress = reinterpret_cast<uintptr_t>(record->userVa);
+    HcclCommSymWindow handle = record->devWin;
     WindowRecord* recordPtr = record.get();
     decltype(windowsByAddress_)::iterator addressIter;
     HcclResult ret = HCCL_SUCCESS;
@@ -783,30 +670,32 @@ HcclResult UbMemSymmetricMemory::AddWindowRecord(std::unique_ptr<WindowRecord>& 
         windowsByAddress_.erase(addressIter);
         return ret;
     }
-    recordPtr->state = WindowState::ACTIVE;
     return HCCL_SUCCESS;
 }
 
 HcclResult UbMemSymmetricMemory::ReleasePaMapping(WindowRecord& record)
 {
-    if (!record.mappingRefHeld || record.paMapping == nullptr) {
+    if (record.paMapInfo == nullptr) {
         return HCCL_SUCCESS;
     }
-    std::shared_ptr<PaMappingInfo> paMapping = record.paMapping;
+    std::shared_ptr<PaMappingInfo> paMapping = record.paMapInfo;
     CHK_PRT_RET(paMapping->refCount == 0, HCCL_ERROR("[%s] invalid PA mapping reference", __func__), HCCL_E_INTERNAL);
     if (paMapping->refCount > 1U) {
+        // 仍有Window复用当前PA映射时仅减少引用。
         --paMapping->refCount;
     } else {
-        HcclResult ret = UnmapAllMembers(paMapping->vaMapping);
-        CHK_PRT_RET(ret != HCCL_SUCCESS, HCCL_ERROR("[%s] unmap member memory failed, ret[%d]", __func__, ret), ret);
-        CHK_RET(ReleaseWindowOffset(paMapping->heapBaseOffset, paMapping->vaMapping.allocationSize));
-        auto iter = paMappingMap_.find(paMapping->paHandle);
-        if (iter != paMappingMap_.end() && iter->second.get() == paMapping.get()) {
-            paMappingMap_.erase(iter);
-        }
+        HcclResult ret = ReleaseMemberMappings(*paMapping);
+        CHK_PRT_RET(
+            ret != HCCL_SUCCESS, HCCL_ERROR("[%s] release member mappings failed, ret[%d]", __func__, ret), ret);
+        paMapping->memberMems.clear();
+        ret = vaAllocator_->Release(paMapping->heapBaseOffset, paMapping->baseVaSize);
+        CHK_PRT_RET(ret != HCCL_SUCCESS, HCCL_ERROR("[%s] release VA offset failed, ret[%d]", __func__, ret), ret);
+        paMapping->vaOffsetReserved = false;
+        // 与A3不同，A5不能在释放后重新Export同一Fabric Handle；
+        // 最后一个Window注销后仍保留Fabric信息，供同一内存重新注册。
         paMapping->refCount = 0;
     }
-    record.mappingRefHeld = false;
+    record.paMapInfo.reset();
     return HCCL_SUCCESS;
 }
 
@@ -822,76 +711,79 @@ HcclResult UbMemSymmetricMemory::RegisterWindow(void* ptr, size_t size, HcclComm
     CHK_PTR_NULL(comm);
     std::lock_guard<std::mutex> lock(mutex_);
     CHK_PRT_RET(finalized_, HCCL_ERROR("[%s] symmetric memory manager is finalized", __func__), HCCL_E_UNAVAIL);
-    CHK_PRT_RET(
-        broken_,
-        HCCL_ERROR(
-            "[%s] UB Memory symmetric memory is broken after a failed collective registration; deregister "
-            "remaining windows and destroy the communicator",
-            __func__),
-        HCCL_E_UNAVAIL);
-    CHK_RET(EnsureRuntime());
+    CHK_RET(EnsureInit());
 
-    VaMappingInfo localMapping;
-    CHK_RET(GetMemoryInfo(ptr, size, localMapping));
-    const uint64_t userOffset = localMapping.userOffset;
-    // 底层仍按完整allocation建立共享映射；各外层Window发布时再叠加用户注册地址偏移。
-    localMapping.userOffset = 0;
+    void* baseUserVa = nullptr;
+    size_t baseVaSize = 0;
+    aclrtDrvMemHandle paHandle = nullptr;
+    size_t offsetInBaseVa = 0;
+    CHK_RET(GetMemoryInfo(ptr, size, baseUserVa, baseVaSize, paHandle, offsetInBaseVa));
     std::unique_ptr<WindowRecord> window;
     HcclResult ret = HCCL_SUCCESS;
     EXCEPTION_CATCH(window = std::make_unique<WindowRecord>(), ret = HCCL_E_MEMORY);
     if (ret != HCCL_SUCCESS) {
-        (void)UnmapAllMembers(localMapping);
         return ret;
     }
 
     std::shared_ptr<PaMappingInfo> paMapping;
-    auto mappingIter = paMappingMap_.find(localMapping.localHandle);
+    auto mappingIter = paMappingMap_.find(paHandle);
     if (mappingIter != paMappingMap_.end()) {
         paMapping = mappingIter->second;
-        if (paMapping == nullptr || paMapping->vaMapping.allocationBase != localMapping.allocationBase
-            || paMapping->vaMapping.allocationSize != localMapping.allocationSize) {
-            HCCL_ERROR("[%s] PA handle is associated with a different allocation", __func__);
-            (void)UnmapAllMembers(localMapping);
+        if (paMapping == nullptr || paMapping->baseUserVa != baseUserVa || paMapping->baseVaSize != baseVaSize) {
+            HCCL_ERROR("[%s] PA handle is associated with a different base memory range", __func__);
             return HCCL_E_INTERNAL;
         }
-        CHK_RET(UnmapAllMembers(localMapping));
+        if (paMapping->refCount == 0 && !paMapping->vaOffsetReserved) {
+            size_t heapBaseOffset = 0;
+            ret = vaAllocator_->Reserve(baseVaSize, granularity_, heapBaseOffset);
+            if (ret != HCCL_SUCCESS) {
+                HCCL_ERROR(
+                    "[%s] reserve VA space for cached PA mapping failed, size[%zu], alignment[%zu], stride[%zu]",
+                    __func__, baseVaSize, granularity_, stride_);
+                return ret;
+            }
+            paMapping->heapBaseOffset = heapBaseOffset;
+            paMapping->vaOffsetReserved = true;
+        }
         CHK_PRT_RET(
             paMapping->refCount == std::numeric_limits<uint32_t>::max(),
             HCCL_ERROR("[%s] PA mapping reference is exhausted", __func__), HCCL_E_UNAVAIL);
         ++paMapping->refCount;
         HCCL_INFO("[%s] reuse PA handle[%p], refCount[%u]", __func__, paMapping->paHandle, paMapping->refCount);
     } else {
-        uint64_t heapBaseOffset = 0;
-        ret = AllocateWindowOffset(localMapping.allocationSize, heapBaseOffset);
+        size_t heapBaseOffset = 0;
+        ret = vaAllocator_->Reserve(baseVaSize, granularity_, heapBaseOffset);
         if (ret != HCCL_SUCCESS) {
-            (void)UnmapAllMembers(localMapping);
+            HCCL_ERROR(
+                "[%s] reserve VA space failed, size[%zu], alignment[%zu], stride[%zu]", __func__, baseVaSize,
+                granularity_, stride_);
             return ret;
         }
         EXCEPTION_CATCH(paMapping = std::make_shared<PaMappingInfo>(), ret = HCCL_E_MEMORY);
         if (ret != HCCL_SUCCESS) {
-            (void)ReleaseWindowOffset(heapBaseOffset, localMapping.allocationSize);
-            (void)UnmapAllMembers(localMapping);
+            (void)vaAllocator_->Release(heapBaseOffset, baseVaSize);
             return ret;
         }
-        paMapping->paHandle = localMapping.localHandle;
-        paMapping->vaMapping = std::move(localMapping);
+        paMapping->baseUserVa = baseUserVa;
+        paMapping->baseVaSize = baseVaSize;
+        paMapping->paHandle = paHandle;
         paMapping->heapBaseOffset = heapBaseOffset;
+        paMapping->vaOffsetReserved = true;
         paMapping->refCount = 1U;
         bool inserted = false;
         EXCEPTION_CATCH(inserted = paMappingMap_.emplace(paMapping->paHandle, paMapping).second, ret = HCCL_E_MEMORY);
         if (ret != HCCL_SUCCESS || !inserted) {
-            (void)ReleaseWindowOffset(heapBaseOffset, paMapping->vaMapping.allocationSize);
-            (void)UnmapAllMembers(paMapping->vaMapping);
+            (void)vaAllocator_->Release(heapBaseOffset, paMapping->baseVaSize);
+            (void)ReleaseMemberMappings(*paMapping);
             return ret != HCCL_SUCCESS ? ret : HCCL_E_INTERNAL;
         }
     }
 
-    window->userBase = ptr;
+    window->userVa = ptr;
     window->userSize = size;
-    window->userOffset = userOffset;
-    window->deviceWindow = winHandle;
-    window->paMapping = paMapping;
-    window->mappingRefHeld = true;
+    window->offsetInBaseVa = offsetInBaseVa;
+    window->devWin = winHandle;
+    window->paMapInfo = paMapping;
 
     ret = RegisterInternal(*paMapping);
     if (ret != HCCL_SUCCESS) {
@@ -902,20 +794,19 @@ HcclResult UbMemSymmetricMemory::RegisterWindow(void* ptr, size_t size, HcclComm
     ret = PublishWindow(*window);
     if (ret != HCCL_SUCCESS) {
         (void)CleanupWindow(*window);
-        return BreakFailed(ret);
+        return ret;
     }
     ret = AddWindowRecord(window, comm);
     if (ret != HCCL_SUCCESS) {
         if (window != nullptr) {
             (void)CleanupWindow(*window);
         }
-        return BreakFailed(ret);
+        return ret;
     }
     HCCL_RUN_INFO(
-        "[%s] A5 UB Memory symmetric window registered, comm[%s], userBase[%p], userSize[%zu], "
-        "allocationBase[%p], allocationSize[%zu], userOffset[%llu], window[%p]",
-        __func__, commId_.c_str(), ptr, size, paMapping->vaMapping.allocationBase, paMapping->vaMapping.allocationSize,
-        static_cast<unsigned long long>(userOffset), winHandle);
+        "[%s] A5 UB Memory symmetric window registered, comm[%s], userVa[%p], userSize[%zu], "
+        "baseUserVa[%p], baseVaSize[%zu], offsetInBaseVa[%zu], window[%p]",
+        __func__, commId_.c_str(), ptr, size, paMapping->baseUserVa, paMapping->baseVaSize, offsetInBaseVa, winHandle);
     return HCCL_SUCCESS;
 }
 
@@ -941,11 +832,9 @@ HcclResult UbMemSymmetricMemory::DeregisterWindow(HcclCommSymWindow winHandle)
         HCCL_E_NOT_FOUND);
     WindowRecord* record = handleIter->second;
     CHK_PTR_NULL(record);
-    uintptr_t userAddress = reinterpret_cast<uintptr_t>(record->userBase);
-    record->state = WindowState::RETIRING;
+    uintptr_t userAddress = reinterpret_cast<uintptr_t>(record->userVa);
     HcclResult ret = CleanupWindow(*record);
     if (ret != HCCL_SUCCESS) {
-        record->state = WindowState::ACTIVE;
         return ret;
     }
     windowsByHandle_.erase(handleIter);
@@ -963,20 +852,29 @@ void UbMemSymmetricMemory::Finalize()
         WindowRecord& record = *iter->second;
         HcclResult ret = CleanupWindow(record);
         if (ret != HCCL_SUCCESS) {
-            HCCL_ERROR("[%s] cleanup window[%p] failed, ret[%d]", __func__, record.deviceWindow, ret);
+            HCCL_ERROR("[%s] cleanup window[%p] failed, ret[%d]", __func__, record.devWin, ret);
             ++iter;
             continue;
         }
-        EraseHcommWindowOwner(record.deviceWindow);
-        windowsByHandle_.erase(record.deviceWindow);
+        EraseHcommWindowOwner(record.devWin);
+        windowsByHandle_.erase(record.devWin);
         iter = windowsByAddress_.erase(iter);
     }
-    if (!windowsByAddress_.empty() || !paMappingMap_.empty()) {
-        HCCL_ERROR(
-            "[%s] UB Memory still has windows[%zu] or PA mappings[%zu]", __func__, windowsByAddress_.size(),
-            paMappingMap_.size());
+    if (!windowsByAddress_.empty()) {
+        HCCL_ERROR("[%s] UB Memory still has windows[%zu]", __func__, windowsByAddress_.size());
         return;
     }
+    // refCount归零后PA记录会保留以支持同一内存重新注册，通信域销毁时再统一清理。
+    for (const auto& entry : paMappingMap_) {
+        const std::shared_ptr<PaMappingInfo>& paMapping = entry.second;
+        if (paMapping == nullptr || paMapping->refCount != 0 || !paMapping->peerMappings.empty()
+            || paMapping->vaOffsetReserved) {
+            HCCL_ERROR("[%s] invalid cached PA mapping", __func__);
+            return;
+        }
+    }
+    // VA offset由FinalizeSymmetricVa销毁allocator时整体回收，无需逐条Release。
+    paMappingMap_.clear();
     windowsByHandle_.clear();
     if (agent_ != nullptr) {
         agent_->Finalize();

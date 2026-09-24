@@ -54,8 +54,6 @@ private:
 
     static constexpr uint64_t BYTES_PER_GB = 1024ULL * 1024ULL * 1024ULL;
 
-    enum class WindowState : uint8_t { REGISTERING, ACTIVE, RETIRING };
-
     struct PeerMappingInfo {
         void* address{nullptr};
         aclrtDrvMemHandle handle{nullptr};
@@ -63,63 +61,54 @@ private:
         bool ownsHandle{false};
     };
 
-    struct VaMappingInfo {
-        void* allocationBase{nullptr};
-        size_t allocationSize{0};
-        uint64_t userOffset{0};
-        aclrtDrvMemHandle localHandle{nullptr};
-        aclrtMemFabricHandle shareableHandle{};
-        std::vector<PeerMappingInfo> peers;
-    };
-
-    // 一个物理allocation只建立一套LSA对称VA映射，多个外层Window通过refCount共享。
+    // 一个物理内存块复用同一份Fabric共享信息，活跃Window通过refCount共享成员映射。
     struct PaMappingInfo {
+        void* baseUserVa{nullptr};
+        size_t baseVaSize{0};
         aclrtDrvMemHandle paHandle{nullptr};
-        VaMappingInfo vaMapping;
-        std::vector<uint8_t> shareableDesc;
-        std::vector<CommMem> memberMems;
-        uint64_t heapBaseOffset{0};
-        uint32_t refCount{0};
+        aclrtMemFabricHandle shareableHandle{};
+        bool shareableHandleReady{false};          // 本地PA Handle已完成Fabric Export
+        bool memberAccessGranted{false};           // Shareable Handle已授权给全部LSA成员进程
+        std::vector<PeerMappingInfo> peerMappings; // 各LSA成员的VA映射及导入Handle释放信息
+        std::vector<CommMem> memberMems;           // 发布到HcommWindow的完整内存块信息
+        size_t heapBaseOffset{0};                  // 当前内存块在单个成员对称VA空间内的偏移
+        bool vaOffsetReserved{false};              // heapBaseOffset是否已从对称VA空间中分配
+        uint32_t refCount{0};                      // 复用当前物理内存映射的Window数量
     };
 
     struct WindowRecord {
-        void* userBase{nullptr};
-        size_t userSize{0};
-        uint64_t userOffset{0}; // 用户注册地址相对完整allocation基址的偏移
-        HcclCommSymWindow deviceWindow{nullptr};
-        std::shared_ptr<PaMappingInfo> paMapping;
-        bool mappingRefHeld{false};
-        WindowState state{WindowState::REGISTERING};
+        void* userVa{nullptr}; // 本次Window注册的用户内存范围起始地址
+        size_t userSize{0};    // 本次Window注册的用户内存范围大小
+        // 用户注册地址相对完整内存块基址baseUserVa的偏移，
+        // 用于将底层完整映射转换为当前用户子区间Window。
+        size_t offsetInBaseVa{0};
+        HcclCommSymWindow devWin{nullptr};
+        std::shared_ptr<PaMappingInfo> paMapInfo;
     };
 
-    HcclResult CheckPrebuiltLsaTeam();
-    HcclResult EnsureRuntime();
+    HcclResult EnsureInit();
     HcclResult GetAllMemberPids();
     HcclResult ValidateRegisterRange(void* ptr, size_t size) const;
     HcclResult InitSymmetricVa();
     HcclResult InitGranularity();
-    HcclResult ReserveArena();
-    HcclResult InitWindowOffsetAllocator();
+    HcclResult ReserveSymmetricVa();
     void FinalizeSymmetricVa();
-    HcclResult GetMemoryInfo(void* ptr, size_t size, VaMappingInfo& mapping) const;
-    HcclResult ExportLocalMapping(VaMappingInfo& mapping, std::vector<uint8_t>& shareableDesc) const;
-    HcclResult GrantLocalMemory(const VaMappingInfo& mapping);
-    HcclResult SynchronizeMemberResult(HcclResult localResult, HcclResult& globalResult);
+    HcclResult GetMemoryInfo(
+        void* ptr, size_t size, void*& baseUserVa, size_t& baseVaSize, aclrtDrvMemHandle& paHandle,
+        size_t& offsetInBaseVa) const;
+    HcclResult ExportLocalMapping(PaMappingInfo& mapping) const;
+    HcclResult GrantLocalMemory(const PaMappingInfo& mapping);
     HcclResult ValidateMappingRange(uint64_t windowOffset, size_t mapSize) const;
     HcclResult ImportMemberHandle(
-        uint32_t member, const std::vector<uint8_t>& shareableDesc, const VaMappingInfo& mapping,
+        uint32_t member, const std::vector<uint8_t>& shareableDesc, const PaMappingInfo& mapping,
         aclrtDrvMemHandle& handle, bool& ownsHandle) const;
     HcclResult MapAllMembers(
-        uint64_t windowOffset, const std::vector<std::vector<uint8_t>>& shareableDescs, VaMappingInfo& mapping,
-        size_t windowSize, std::vector<CommMem>& memberMems);
-    HcclResult CleanupPartialMapping(VaMappingInfo& mapping, HcclResult originalResult);
+        uint64_t windowOffset, const std::vector<std::vector<uint8_t>>& shareableDescs, PaMappingInfo& mapping,
+        std::vector<CommMem>& memberMems);
+    HcclResult CleanupPartialMapping(PaMappingInfo& mapping, HcclResult originalResult);
     HcclResult ReleasePeerMapping(PeerMappingInfo& peer);
-    HcclResult UnmapAllMembers(VaMappingInfo& mapping);
-    HcclResult AllocateWindowOffset(size_t size, uint64_t& offset);
-    HcclResult ReleaseWindowOffset(uint64_t offset, size_t size);
+    HcclResult ReleaseMemberMappings(PaMappingInfo& mapping);
     HcclResult RegisterInternal(PaMappingInfo& paMapping);
-    // 集合注册中 ring 交换完成后任一本成员局部失败都会使组内成员失步，不可安全重试，置永久失败。
-    HcclResult BreakFailed(HcclResult result);
     HcclResult PublishWindow(WindowRecord& record);
     HcclResult AddWindowRecord(std::unique_ptr<WindowRecord>& record, HcclComm comm);
     HcclResult ReleasePaMapping(WindowRecord& record);
@@ -129,27 +118,26 @@ private:
     CollComm* collComm_{nullptr};
     RankGraph* rankGraph_{nullptr};
     uint32_t selfRank_{0};
-    uint32_t selfMember_{0};
+    uint32_t selfMember_{0}; // 当前Rank在LSA成员列表中的下标
     uint32_t lsaTeamSize_{0};
     uint32_t netLayer_{0};
     std::string commId_;
     std::vector<uint32_t> worldRankIds_;
     HcommTeamHandle lsaTeam_{nullptr};
     std::unique_ptr<UbMemSymmetricMemoryAgent> agent_;
-    void* arenaBase_{nullptr};
-    uint64_t stride_{0};
+    void* heapBase_{nullptr};
+    size_t stride_{0};
     size_t granularity_{0};
-    size_t activeMappingCount_{0};
+    size_t activeMappingCount_{0}; // 当前已建立的成员VA映射数量
     std::once_flag runtimeInitFlag_;
     HcclResult runtimeInitResult_{HCCL_E_INTERNAL};
-    std::vector<int32_t> memberPids_;
+    std::vector<int32_t> memberPids_; // 用于授权Fabric Shareable Handle的LSA成员bare TGID
     std::unique_ptr<SimpleVaAllocator> vaAllocator_;
     std::multimap<uintptr_t, std::unique_ptr<WindowRecord>> windowsByAddress_;
-    std::unordered_map<HcclCommSymWindow, WindowRecord*> windowsByHandle_;
+    std::unordered_map<HcclCommSymWindow, WindowRecord*> windowsByHandle_; // Window由windowsByAddress_持有
     std::unordered_map<aclrtDrvMemHandle, std::shared_ptr<PaMappingInfo>> paMappingMap_;
     mutable std::mutex mutex_;
     bool finalized_{false};
-    bool broken_{false}; // 集合注册失步后置true，拒绝后续注册，需销毁重建通信域
 };
 
 } // namespace hccl
