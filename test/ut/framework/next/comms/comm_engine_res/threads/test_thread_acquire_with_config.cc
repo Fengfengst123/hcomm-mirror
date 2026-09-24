@@ -199,6 +199,9 @@ TEST_F(TestHcclThreadAcquireWithConfig, Ut_When_V2_CpuEngine_Expect_HCCL_SUCCESS
     MOCKER_CPP(&CommEngineResMgr::HcclThreadAcquireV2).stubs().will(returnValue(HCCL_SUCCESS));
     MOCKER(HcommThreadRegisterDfx).stubs().will(returnValue(0));
 
+    // A plain CPU TS allocation must not publish or consume MC2 stream relations.
+    MOCKER_CPP(&HcclCommDfx::ReportMc2CommInfo).expects(never());
+
     auto hcclCommPtr = CreateV2Comm();
     ThreadConfig threadConfig;
     InitValidConfig(&threadConfig, 1);
@@ -214,7 +217,8 @@ TEST_F(TestHcclThreadAcquireWithConfig, Ut_When_V2_AicpuEngine_Expect_HCCL_SUCCE
     bool isDeviceSide{false};
     MOCKER(GetRunSideIsDevice).stubs().with(outBound(isDeviceSide)).will(returnValue(HCCL_SUCCESS));
     MOCKER_CPP(&CommEngineResMgr::HcclThreadAcquireV2).stubs().will(returnValue(HCCL_SUCCESS));
-    MOCKER_CPP(&HcclCommDfx::ReportMc2CommInfo).stubs();
+    // Preserve immediate HCOMM reporting without waiting for an unfold stream query.
+    MOCKER_CPP(&HcclCommDfx::ReportMc2CommInfo).expects(once());
     MOCKER_CPP(&HcclCommDfx::ReportKernel).stubs().will(returnValue(HCCL_SUCCESS));
     MOCKER_CPP(&CollComm::GetMyRankId).stubs().will(returnValue(0u));
 

@@ -10,6 +10,7 @@
 
 #include <thread>
 #include <vector>
+#include <memory>
 #include <algorithm>
 
 #include "gtest/gtest.h"
@@ -26,6 +27,8 @@
 #include "drv_api_exception.h"
 #include "rtsq_base.h"
 #include "internal_exception.h"
+#include "aicpu_ts_thread.h"
+#include "stream_lite.h"
 #include "sqe_build_a5.h"
 #include "adapter_rts_common.h"
 #undef protected
@@ -68,6 +71,17 @@ protected:
     u32 fakeSqId = 2;
     u8 mockSq[AC_SQE_SIZE * AC_SQE_MAX_CNT]{0};
 };
+
+TEST_F(RtsqA5Test, CCoreWithoutDfxStillSubmitsSqe)
+{
+    RtsqA5 rtsq(fakedevPhyId, fakeStreamId, fakeSqId, false);
+    rtsq.taskId_ = 0x80000400U;
+    rtsq.taskIdEnd_ = 0x80000800U;
+    const auto taskId = rtsq.GetTaskId();
+    rtsq.CCoreNotifyWait(0x1000, 0x2000, false);
+    rtsq.CCoreNotifyRecord(0x3000, 0x2000);
+    EXPECT_EQ(rtsq.GetTaskId(), taskId + 2);
+}
 
 class IsRtsqQueueSpaceSufficientTest : public RtsqA5Test {
 protected:

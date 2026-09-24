@@ -12,6 +12,7 @@
 #include "res_pub.h"
 #include "log.h"
 #include "prof_sal_lite.h"
+#include <algorithm>
 #include <limits>
 #include <map>
 
@@ -73,6 +74,8 @@ static const std::map<TaskParamTypeVal, std::string> TASK_PARAM_TYPE_NAME_MAP = 
     {TaskParamTypeVal::TASK_DPU_INLINE_WRITE, "Dpu_Notify_Record"},
     {TaskParamTypeVal::TASK_DPU_NOTIFY_WAIT, "Dpu_Notify_Wait"},
     {TaskParamTypeVal::TASK_DPU_WRITE_WITH_NOTIFY, "Dpu_Write_With_Notify"},
+    {TaskParamTypeVal::TASK_CCORE_NOTIFY_WAIT, "CCore_Wait"},
+    {TaskParamTypeVal::TASK_CCORE_NOTIFY_RECORD, "CCore_Record"},
 };
 
 static const std::map<AlgTypeVal, std::string> ALG_TYPE_NAME_MAP = {
@@ -413,6 +416,37 @@ void DfxProfilingHandlerLite::ReportStreamTaskDetailsLog(TaskInfoCircularQueue& 
 
 void DfxProfilingHandlerLite::ReportStreamTaskDetails(TaskInfoCircularQueue& taskQueue, const DfxCommContext& ctx) const
 {
+    if (taskQueue.IsEmpty()) {
+        return;
+    }
+
+    if (CanUseCompactReport(taskQueue, ctx)) {
+        ReportStreamTaskDetailsCompact(taskQueue, ctx);
+    } else {
+        ReportStreamTaskDetailsLegacy(taskQueue, ctx);
+    }
+}
+
+bool DfxProfilingHandlerLite::CanUseCompactReport(
+    const TaskInfoCircularQueue& taskQueue, const DfxCommContext& ctx) const
+{
+    if (ctx.compactReportOpInfo == nullptr || taskQueue.IsEmpty()) {
+        return false;
+    }
+    const u64 opInfo = reinterpret_cast<u64>(ctx.compactReportOpInfo);
+    for (u16 idx = taskQueue.GetBegin(), i = 0; i < taskQueue.GetCount();
+         idx = (idx + 1) % taskQueue.GetCapacity(), ++i) {
+        const DfxTaskInfo* task = taskQueue.GetSlot(idx);
+        if (task == nullptr || task->dfxOpInfo != opInfo) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void DfxProfilingHandlerLite::ReportStreamTaskDetailsLegacy(
+    TaskInfoCircularQueue& taskQueue, const DfxCommContext& ctx) const
+{
     u16 begin = taskQueue.GetBegin();
     u16 count = taskQueue.GetCount();
     if (taskQueue.IsEmpty()) {
@@ -448,6 +482,71 @@ void DfxProfilingHandlerLite::ReportStreamTaskDetails(TaskInfoCircularQueue& tas
                 if (!ReportBatchAddInfo(
                         batchId, taskInfos, addInfoVec, addInfoIndx, MAX_BATCH_REPORT_NUM,
                         reportedTasks == totalTasks)) {
+                    return;
+                }
+            }
+            batchId = 0;
+            memset_s(taskInfos, sizeof(taskInfos), 0, sizeof(taskInfos));
+        }
+    }
+}
+
+void DfxProfilingHandlerLite::ReportStreamTaskDetailsCompact(
+    TaskInfoCircularQueue& taskQueue, const DfxCommContext& ctx) const
+{
+    ReportStreamTaskDetailsLog(taskQueue);
+
+    if (reportBatchAdditionalInfo_ == nullptr) {
+        ReportStreamTaskDetailsWithBuffer(taskQueue, ctx, nullptr, 0);
+        return;
+    }
+
+    constexpr uint32_t SMALL_BATCH_REPORT_NUM = 16;
+    constexpr uint32_t MAX_BATCH_REPORT_NUM = 512;
+    const uint32_t batchCount = (taskQueue.GetCount() + HCCLINFO_REPORT_BATCH_NUM - 1) / HCCLINFO_REPORT_BATCH_NUM;
+    // Small per-stream reports must not initialize the full 128 KiB batch buffer.
+    if (batchCount <= SMALL_BATCH_REPORT_NUM) {
+        MsprofAdditionalInfo addInfoVec[SMALL_BATCH_REPORT_NUM] = {};
+        ReportStreamTaskDetailsWithBuffer(taskQueue, ctx, addInfoVec, SMALL_BATCH_REPORT_NUM);
+        return;
+    }
+    const uint32_t maxBatchNum = std::min(batchCount, MAX_BATCH_REPORT_NUM);
+    std::vector<MsprofAdditionalInfo> addInfoVec(maxBatchNum);
+    ReportStreamTaskDetailsWithBuffer(taskQueue, ctx, addInfoVec.data(), maxBatchNum);
+}
+
+void DfxProfilingHandlerLite::ReportStreamTaskDetailsWithBuffer(
+    TaskInfoCircularQueue& taskQueue, const DfxCommContext& ctx, MsprofAdditionalInfo* addInfoVec,
+    uint32_t maxBatchNum) const
+{
+    u16 begin = taskQueue.GetBegin();
+    u16 count = taskQueue.GetCount();
+    MsprofAicpuHcclTaskInfo taskInfos[HCCLINFO_REPORT_BATCH_NUM] = {};
+    bool isSupportBatchReport = (addInfoVec != nullptr);
+    uint32_t addInfoIndx = 0;
+    uint32_t batchId = 0;
+    u32 totalTasks = count;
+    u32 reportedTasks = 0;
+
+    for (u16 idx = begin, i = 0; i < count; idx = (idx + 1) % taskQueue.GetCapacity(), i++) {
+        DfxTaskInfo* ptr = taskQueue.GetSlot(idx);
+        if (ptr == nullptr) {
+            continue;
+        }
+        GetTaskDetailInfosFromDfxTaskInfo(ptr, taskInfos[batchId++], ctx);
+        reportedTasks++;
+        if (batchId == HCCLINFO_REPORT_BATCH_NUM || reportedTasks == totalTasks) {
+            if (!isSupportBatchReport) {
+                MsprofAdditionalInfo reporterData{};
+                if (!FillBatchReporterData(batchId, taskInfos, reporterData)) {
+                    return;
+                }
+                ReportAdditionInfo(reporterData);
+            } else {
+                // Compact buffers are reused across batches; do not retain unused payload bytes.
+                addInfoVec[addInfoIndx] = {};
+                if (!ReportBatchAddInfo(
+                        batchId, taskInfos, addInfoVec, addInfoIndx, maxBatchNum, reportedTasks == totalTasks)) {
                     return;
                 }
             }

@@ -55,6 +55,7 @@ HcclResult HcclCommDfxLite::Init(u32 deviceId, const std::string& commTag, u32 r
 // HcclCommDfxLite接口实现 - 修改为返回HcclResult类型
 HcclResult HcclCommDfxLite::SetCurrDfxOpInfo(const Hccl::DfxDfxOpInfo* newDfxOpInfo)
 {
+    compactReportOpInfo_ = nullptr;
     CHK_PTR_NULL(newDfxOpInfo);
     auto* queue = static_cast<Hccl::DfxOpInfoCircularQueue*>(opInfoQueue_);
     CHK_PTR_NULL(queue);
@@ -125,9 +126,16 @@ const void* HcclCommDfxLite::GetLatestDfxOpInfo() const
     return queue->GetSlot(latest);
 }
 
+void HcclCommDfxLite::MarkCompactReportOp(const Hccl::DfxDfxOpInfo* opInfo)
+{
+    if (opInfo != nullptr && opInfo == GetLatestDfxOpInfo()) {
+        compactReportOpInfo_ = opInfo;
+    }
+}
+
 Hccl::DfxCommContext HcclCommDfxLite::GetDfxCommContext() const
 {
-    return {&channelRemoteRankIdLite_, groupNameHash_, localRank_, rankSize_};
+    return {&channelRemoteRankIdLite_, groupNameHash_, localRank_, rankSize_, compactReportOpInfo_};
 }
 
 void HcclCommDfxLite::SetTaskExpDevMem(void* taskExpDevMem) { taskExpDevMem_ = taskExpDevMem; }

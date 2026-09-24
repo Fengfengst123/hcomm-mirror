@@ -163,6 +163,8 @@ private:
 
     void RefreshInfo();
 
+    void RecordCCoreDfxTask(bool isWait);
+
     void CopySqeBufToSq(u8* sqeBuf) const;
 
     void MakeSureAvailableSpace();

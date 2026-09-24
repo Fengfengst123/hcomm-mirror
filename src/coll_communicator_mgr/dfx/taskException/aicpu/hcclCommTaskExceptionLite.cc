@@ -358,6 +358,13 @@ void HcclCommTaskExceptionLite::GenerateTaskErrMsg(
 {
     auto taskType = static_cast<Hccl::TaskParamTypeVal>(taskInfo.taskType);
     switch (taskType) {
+        case Hccl::TaskParamTypeVal::TASK_CCORE_NOTIFY_WAIT:
+        case Hccl::TaskParamTypeVal::TASK_CCORE_NOTIFY_RECORD:
+            // CONDITION has no equivalent in the legacy host error-report task enum.
+            errMsgInfo.taskType = Hccl::TaskParamType::INVALID;
+            errMsgInfo.notifyId = INVALID_U32;
+            errMsgInfo.notifyValue = INVALID_U32;
+            break;
         case Hccl::TaskParamTypeVal::TASK_NOTIFY_WAIT:
         case Hccl::TaskParamTypeVal::TASK_NOTIFY_RECORD:
             FillNotifyErrMsg(taskInfo, errMsgInfo);

@@ -77,6 +77,22 @@ private:
     u32 tsId = 2;
 };
 
+TEST_F(hcclCommTaskExceptionLiteTest, Ut_CCoreError_DoesNotDecodeHardwareNotify)
+{
+    for (const auto type : {Hccl::TASK_CCORE_NOTIFY_WAIT, Hccl::TASK_CCORE_NOTIFY_RECORD}) {
+        Hccl::DfxTaskInfo task{};
+        task.taskType = type;
+        task.taskPara.Notify.notifyId = 1;
+        Hccl::ErrorMessageReport error{};
+        error.taskType = Hccl::TaskParamType(static_cast<Hccl::TaskParamType::Value>(task.taskType));
+        rtLogicCqReport_t report{};
+        HcclCommTaskExceptionLite::GetInstance().GenerateTaskErrMsg(task, error, report);
+        EXPECT_EQ(error.taskType, Hccl::TaskParamType::INVALID);
+        EXPECT_EQ(error.notifyId, INVALID_U32);
+        EXPECT_EQ(error.notifyValue, INVALID_U32);
+    }
+}
+
 TEST_F(hcclCommTaskExceptionLiteTest, Ut_SwitchUBCqeErrCodeToTsErrCode_When_Normal_Expect_ReturnIsCorrect)
 {
     uint16_t ret = HcclCommTaskExceptionLite::GetInstance().SwitchUBCqeErrCodeToTsErrCode(RT_UB_LOCAL_OPERATIOINERR);

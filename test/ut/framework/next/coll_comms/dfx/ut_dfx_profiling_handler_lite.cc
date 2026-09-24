@@ -12,6 +12,10 @@
 #include "mockcpp/mokc.h"
 #include <mockcpp/mockcpp.hpp>
 #include <string>
+#include <algorithm>
+#include <cstring>
+#include <cstddef>
+#include "prof_sal_lite.h"
 #define private public
 #define protected public
 #include "dfx_profiling_handler_lite.h"
@@ -60,6 +64,39 @@ static void PrepareHandlerInit(DfxProfilingHandlerLite& handler)
 }
 
 static DfxCommContext MakeDefaultCtx() { return {nullptr, DFX_INVALID_U64, INVALID_U32, 0}; }
+
+TEST_F(DfxProfilingHandlerLiteTest, Ut_CCoreDetails_PreserveIdsAndDoNotDecodeNotify)
+{
+    const auto savedHash = handler_.getProfHashId_;
+    handler_.getProfHashId_ = [](const char* name, size_t len) -> uint64_t {
+        const std::string type(name, len);
+        return type == "CCore_Wait" ? 101U : (type == "CCore_Record" ? 102U : 1U);
+    };
+    handler_.InitHashCaches();
+    handler_.getProfHashId_ = savedHash;
+    DfxDfxOpInfo opInfo{};
+    opInfo.dataType = 1;
+    for (const auto type : {TASK_CCORE_NOTIFY_WAIT, TASK_CCORE_NOTIFY_RECORD}) {
+        DfxTaskInfo task{};
+        task.taskType = type;
+        task.sqId = 7;
+        task.taskId = 0x80000400U;
+        task.dfxOpInfo = reinterpret_cast<u64>(&opInfo);
+        task.linkType = LINK_ONCHIP;
+        task.transportType = DFX_TRANSPORT_TYPE_LOCAL;
+        // A CONDITION must never inherit an unrelated hardware Notify ID.
+        task.taskPara.Notify.notifyId = 1;
+        ASSERT_TRUE(task.IsTaskTypeValid());
+        MsprofAicpuHcclTaskInfo detail{};
+        handler_.GetTaskDetailInfosFromDfxTaskInfo(&task, detail, MakeDefaultCtx());
+        EXPECT_EQ(detail.itemId, type == TASK_CCORE_NOTIFY_WAIT ? 101U : 102U);
+        EXPECT_EQ(detail.streamId, 7U);
+        EXPECT_EQ(detail.taskId, 0x80000400U);
+        EXPECT_EQ(detail.notifyID, DFX_INVALID_U64);
+        EXPECT_EQ(detail.dataSize, 0U);
+        EXPECT_EQ(detail.transportType, DFX_TRANSPORT_TYPE_LOCAL);
+    }
+}
 
 TEST_F(DfxProfilingHandlerLiteTest, Ut_GetInstance_Expect_ReturnSameInstance)
 {
@@ -442,6 +479,233 @@ TEST_F(DfxProfilingHandlerLiteTest, Ut_ReportStreamTaskDetails_When_BatchReport_
         }
     }
     EXPECT_NO_THROW(handler_.ReportStreamTaskDetails(queue, ctx));
+}
+
+namespace {
+std::vector<MsprofAdditionalInfo> capturedReports;
+std::vector<uint32_t> capturedReportLengths;
+uint32_t failReportCall = 0;
+
+int32_t CaptureTaskReports(uint32_t flag, const void* data, uint32_t length)
+{
+    EXPECT_EQ(flag, 1U);
+    EXPECT_EQ(length % sizeof(MsprofAdditionalInfo), 0U);
+    const auto* records = static_cast<const MsprofAdditionalInfo*>(data);
+    capturedReports.insert(capturedReports.end(), records, records + length / sizeof(MsprofAdditionalInfo));
+    capturedReportLengths.push_back(length);
+    return capturedReportLengths.size() == failReportCall ? 1 : 0;
+}
+} // namespace
+
+class DfxProfilingBatchBufferTest : public DfxProfilingHandlerLiteTest {
+protected:
+    void SetUp() override
+    {
+        DfxProfilingHandlerLiteTest::SetUp();
+        savedReport_ = handler_.reportAdditionalInfo_;
+        savedBatchReport_ = handler_.reportBatchAdditionalInfo_;
+        handler_.reportAdditionalInfo_ = CaptureTaskReports;
+        handler_.reportBatchAdditionalInfo_ = CaptureTaskReports;
+        ResetCapture();
+    }
+
+    void TearDown() override
+    {
+        handler_.reportAdditionalInfo_ = savedReport_;
+        handler_.reportBatchAdditionalInfo_ = savedBatchReport_;
+        ResetCapture();
+        DfxProfilingHandlerLiteTest::TearDown();
+    }
+
+    void ResetCapture()
+    {
+        capturedReports.clear();
+        capturedReportLengths.clear();
+        failReportCall = 0;
+    }
+
+    DfxCommContext CompactCtx() const
+    {
+        auto ctx = MakeDefaultCtx();
+        ctx.compactReportOpInfo = &opInfo_;
+        return ctx;
+    }
+
+    void FillQueue(TaskInfoCircularQueue& queue, uint32_t count, bool wrap)
+    {
+        if (wrap) {
+            for (uint32_t i = 0; i < queue.GetCapacity() - 1; ++i) {
+                queue.NextSlot();
+            }
+            queue.MarkAllRead();
+        }
+        for (uint32_t i = 0; i < count; ++i) {
+            auto* task = static_cast<DfxTaskInfo*>(queue.NextSlot());
+            *task = DfxTaskInfo{};
+            task->taskType
+                = (i % 3 == 0) ? TASK_CCORE_NOTIFY_WAIT : ((i % 3 == 1) ? TASK_UB : TASK_CCORE_NOTIFY_RECORD);
+            task->taskId = 0x80000400U + i;
+            task->sqId = 7U;
+            task->dfxOpInfo = reinterpret_cast<u64>(&opInfo_);
+            task->linkType = LINK_ONCHIP;
+            task->transportType = DFX_TRANSPORT_TYPE_LOCAL;
+            if (task->taskType == TASK_UB) {
+                task->taskPara.ubDma.srcAddr = 0x1000U + i;
+                task->taskPara.ubDma.dstAddr = 0x2000U + i;
+                task->taskPara.ubDma.size = 128U + i;
+            }
+        }
+    }
+
+    std::vector<MsprofAdditionalInfo> ExpectedReports(TaskInfoCircularQueue& queue)
+    {
+        std::vector<MsprofAdditionalInfo> expected;
+        for (uint32_t i = 0; i < queue.GetCount(); i += 2) {
+            MsprofAicpuHcclTaskInfo details[2] = {};
+            const uint32_t count = std::min(2U, static_cast<uint32_t>(queue.GetCount()) - i);
+            for (uint32_t j = 0; j < count; ++j) {
+                auto* task = queue.GetSlot((queue.GetBegin() + i + j) % queue.GetCapacity());
+                handler_.GetTaskDetailInfosFromDfxTaskInfo(task, details[j], MakeDefaultCtx());
+            }
+            MsprofAdditionalInfo record{};
+            record.level = MSPROF_REPORT_AICPU_LEVEL;
+            record.type = MSPROF_REPORT_AICPU_MC2_BATCH_HCCL_INFO;
+            record.threadId = SalGetTidLite();
+            record.dataLen = count * sizeof(MsprofAicpuHcclTaskInfo);
+            EXPECT_EQ(memcpy_s(record.data, sizeof(record.data), details, record.dataLen), 0);
+            expected.push_back(record);
+        }
+        return expected;
+    }
+
+    void ExpectSameReports(const std::vector<MsprofAdditionalInfo>& expected, bool compact = true)
+    {
+        ASSERT_EQ(capturedReports.size(), expected.size());
+        for (size_t i = 0; i < expected.size(); ++i) {
+            // Legacy buffers may retain bytes outside dataLen after a full batch; these are not task data.
+            const size_t length
+                = compact ? sizeof(MsprofAdditionalInfo) : offsetof(MsprofAdditionalInfo, data) + expected[i].dataLen;
+            EXPECT_EQ(std::memcmp(&capturedReports[i], &expected[i], length), 0) << "report index " << i;
+        }
+    }
+
+    DfxProfilingHandlerLite::ReportAdditionalInfoHandle savedReport_ = nullptr;
+    DfxProfilingHandlerLite::ReportBatchAdditionalInfoHandle savedBatchReport_ = nullptr;
+    DfxDfxOpInfo opInfo_{};
+};
+
+TEST_F(DfxProfilingBatchBufferTest, BatchSizesPreservePacketsAndCallCounts)
+{
+    for (const bool compact : {false, true}) {
+        for (const uint32_t count : {0U, 1U, 2U, 31U, 32U, 33U, 1023U, 1024U, 1025U, 2048U, 2176U}) {
+            SCOPED_TRACE(count);
+            TaskInfoCircularQueue queue;
+            FillQueue(queue, count, false);
+            const auto expected = ExpectedReports(queue);
+            ResetCapture();
+            const auto ctx = compact ? CompactCtx() : MakeDefaultCtx();
+            EXPECT_EQ(handler_.CanUseCompactReport(queue, ctx), compact && count != 0);
+            handler_.ReportStreamTaskDetails(queue, ctx);
+            ExpectSameReports(expected, compact);
+            ASSERT_EQ(capturedReportLengths.size(), (expected.size() + 511) / 512);
+            for (size_t i = 0; i < capturedReportLengths.size(); ++i) {
+                EXPECT_EQ(
+                    capturedReportLengths[i],
+                    std::min(size_t{512}, expected.size() - i * 512) * sizeof(MsprofAdditionalInfo));
+            }
+            EXPECT_EQ(queue.GetCount(), count);
+        }
+    }
+}
+
+TEST_F(DfxProfilingBatchBufferTest, WrappedQueueAndRepeatedReportsPreserveOrder)
+{
+    TaskInfoCircularQueue queue;
+    FillQueue(queue, 33, true);
+    const auto expected = ExpectedReports(queue);
+    handler_.ReportStreamTaskDetails(queue, CompactCtx());
+    ExpectSameReports(expected);
+    ResetCapture();
+    handler_.ReportStreamTaskDetails(queue, CompactCtx());
+    ExpectSameReports(expected);
+}
+
+TEST_F(DfxProfilingBatchBufferTest, SingleReportFallbackPreservesPackets)
+{
+    handler_.reportBatchAdditionalInfo_ = nullptr;
+    for (const bool compact : {false, true}) {
+        for (const uint32_t count : {0U, 1U, 2U, 31U, 32U, 33U, 1025U}) {
+            SCOPED_TRACE(count);
+            TaskInfoCircularQueue queue;
+            FillQueue(queue, count, false);
+            const auto expected = ExpectedReports(queue);
+            ResetCapture();
+            handler_.ReportStreamTaskDetails(queue, compact ? CompactCtx() : MakeDefaultCtx());
+            ExpectSameReports(expected);
+            EXPECT_EQ(capturedReportLengths.size(), expected.size());
+            for (const auto length : capturedReportLengths) {
+                EXPECT_EQ(length, sizeof(MsprofAdditionalInfo));
+            }
+        }
+    }
+}
+
+TEST_F(DfxProfilingBatchBufferTest, BatchReportFailureStopsAtFailedBatch)
+{
+    TaskInfoCircularQueue queue;
+    FillQueue(queue, 1025, false);
+    auto expected = ExpectedReports(queue);
+    expected.resize(512);
+    failReportCall = 1;
+    handler_.ReportStreamTaskDetails(queue, CompactCtx());
+    ExpectSameReports(expected);
+    EXPECT_EQ(capturedReportLengths.size(), 1U);
+    EXPECT_EQ(queue.GetCount(), 1025U);
+}
+
+TEST_F(DfxProfilingBatchBufferTest, SingleReportFailureRetainsExistingContinueBehavior)
+{
+    handler_.reportBatchAdditionalInfo_ = nullptr;
+    TaskInfoCircularQueue queue;
+    FillQueue(queue, 3, false);
+    const auto expected = ExpectedReports(queue);
+    failReportCall = 1;
+    handler_.ReportStreamTaskDetails(queue, CompactCtx());
+    ExpectSameReports(expected);
+    EXPECT_EQ(capturedReportLengths.size(), 2U);
+}
+
+TEST_F(DfxProfilingBatchBufferTest, OnlyCurrentOperationUsesCompactBuffers)
+{
+    TaskInfoCircularQueue queue;
+    FillQueue(queue, 3, true);
+    const auto ctx = CompactCtx();
+    EXPECT_TRUE(handler_.CanUseCompactReport(queue, ctx));
+    EXPECT_FALSE(handler_.CanUseCompactReport(queue, MakeDefaultCtx()));
+    auto* task = queue.GetSlot((queue.GetBegin() + 1) % queue.GetCapacity());
+    DfxDfxOpInfo otherOp{};
+    task->dfxOpInfo = reinterpret_cast<u64>(&otherOp);
+    EXPECT_FALSE(handler_.CanUseCompactReport(queue, ctx));
+    task->dfxOpInfo = 0;
+    EXPECT_FALSE(handler_.CanUseCompactReport(queue, ctx));
+    task->dfxOpInfo = reinterpret_cast<u64>(&opInfo_);
+    // A sub-thread does not need a CONDITION of its own.
+    for (u16 i = 0; i < queue.GetCount(); ++i) {
+        queue.GetSlot((queue.GetBegin() + i) % queue.GetCapacity())->taskType = TASK_UB;
+    }
+    EXPECT_TRUE(handler_.CanUseCompactReport(queue, ctx));
+}
+
+TEST_F(DfxProfilingBatchBufferTest, DispatcherSelectsLegacyOrCompactImplementation)
+{
+    TaskInfoCircularQueue queue;
+    FillQueue(queue, 2, false);
+    MOCKER_CPP(&DfxProfilingHandlerLite::ReportStreamTaskDetailsLegacy).expects(exactly(2));
+    MOCKER_CPP(&DfxProfilingHandlerLite::ReportStreamTaskDetailsCompact).expects(once());
+    handler_.ReportStreamTaskDetails(queue, MakeDefaultCtx());
+    handler_.ReportStreamTaskDetails(queue, CompactCtx());
+    queue.GetSlot(queue.GetBegin())->dfxOpInfo = 0;
+    handler_.ReportStreamTaskDetails(queue, CompactCtx());
 }
 
 TEST_F(DfxProfilingHandlerLiteTest, Ut_FillReduceInlineDetail_When_CalledViaGetDetail_Expect_NoThrow)

@@ -48,6 +48,7 @@ struct DfxCommContext {
     u64 groupName{DFX_INVALID_U64};
     u32 localRank{INVALID_U32};
     u32 rankSize{0};
+    const DfxDfxOpInfo* compactReportOpInfo{nullptr};
 };
 
 class DfxProfilingHandlerLite {
@@ -75,6 +76,13 @@ private:
     void BindProfilingHandles();
     void InitHashCaches();
     void ReportAdditionInfo(const MsprofAdditionalInfo& reporterData) const;
+    bool CanUseCompactReport(const TaskInfoCircularQueue& taskQueue, const DfxCommContext& ctx) const;
+    __attribute__((noinline)) void
+    ReportStreamTaskDetailsLegacy(TaskInfoCircularQueue& taskQueue, const DfxCommContext& ctx) const;
+    void ReportStreamTaskDetailsCompact(TaskInfoCircularQueue& taskQueue, const DfxCommContext& ctx) const;
+    void ReportStreamTaskDetailsWithBuffer(
+        TaskInfoCircularQueue& taskQueue, const DfxCommContext& ctx, MsprofAdditionalInfo* addInfoVec,
+        uint32_t maxBatchNum) const;
 
     bool IsProfOn(uint64_t feature) const;
     bool IsProfSwitchOn(DfxProfilingLevel level);

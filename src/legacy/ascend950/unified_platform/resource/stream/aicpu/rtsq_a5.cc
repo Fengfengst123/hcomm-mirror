@@ -20,8 +20,11 @@
 #include "ub_conn_lite_mgr.h"
 #ifdef CCL_KERNEL_AICPU
 #include "aicpu_ts_primitives_c_adpt.h"
+#include "hcclCommDfxLite.h"
 #endif
 #include "aicpu_task_utils.h"
+#include "aicpu_ts_thread.h"
+#include "stream_lite.h"
 
 namespace Hccl {
 using namespace std;
@@ -519,12 +522,47 @@ void RtsqA5::RdmaDbSend(const uint64_t& dbAddr, const uint64_t& dbValue)
     RefreshInfo();
 }
 
+void RtsqA5::RecordCCoreDfxTask(bool isWait)
+{
+    if (aicpuTsThreadPtr_ == nullptr) {
+        return;
+    }
+    auto* stream = static_cast<StreamLite*>(aicpuTsThreadPtr_->GetStreamLitePtr());
+    if (stream == nullptr || !stream->HasReportStreamTaskCallback()) {
+        return;
+    }
+    const void* opInfo = stream->GetLatestDfxOpInfo();
+    if (opInfo == nullptr) {
+        return;
+    }
+
+#ifdef CCL_KERNEL_AICPU
+    // This source is also linked into libhcomm, which has no device DFX implementation.
+    const auto* dfxOpInfo = static_cast<const DfxDfxOpInfo*>(opInfo);
+    if (dfxOpInfo->hcclCommDfxLite != nullptr) {
+        // NextTaskSlot may report a full queue before adding this CONDITION.
+        static_cast<hccl::HcclCommDfxLite*>(dfxOpInfo->hcclCommDfxLite)->MarkCompactReportOp(dfxOpInfo);
+    }
+#endif
+
+    // Capture the full task ID before RefreshInfo advances it or launches the SQEs.
+    auto* slot = stream->NextTaskSlot();
+    *slot = DfxTaskInfo{};
+    slot->taskType = isWait ? TASK_CCORE_NOTIFY_WAIT : TASK_CCORE_NOTIFY_RECORD;
+    slot->sqId = stream->GetSqId();
+    slot->taskId = taskId_;
+    slot->dfxOpInfo = reinterpret_cast<u64>(opInfo);
+    slot->linkType = LINK_ONCHIP;
+    slot->transportType = DFX_TRANSPORT_TYPE_LOCAL;
+}
+
 HcclResult RtsqA5::CCoreNotifyWait(u64 waitAddr, u64 curTurnCntAddr, bool last)
 {
     BuildA5SqeCCoreNotifyWait(streamId_, taskId_, waitAddr, curTurnCntAddr, last, GetCurrSqeBuffer());
     HCCL_INFO(
         "RtsqA5::CCoreNotifyWait: streamId %u, taskId %u, waitAddr %llu, curTurnCntAddr %llu, last %d", streamId_,
         taskId_, waitAddr, curTurnCntAddr, last);
+    RecordCCoreDfxTask(true);
     RefreshInfo();
     return HcclResult::HCCL_SUCCESS;
 }
@@ -535,6 +573,7 @@ HcclResult RtsqA5::CCoreNotifyRecord(u64 recordAddr, u64 curTurnCntAddr)
     HCCL_INFO(
         "RtsqA5::CCoreNotifyRecord: streamId %u, taskId %u, recordAddr %llu, curTurnCntAddr %llu", streamId_, taskId_,
         recordAddr, curTurnCntAddr);
+    RecordCCoreDfxTask(false);
     RefreshInfo();
     return HcclResult::HCCL_SUCCESS;
 }

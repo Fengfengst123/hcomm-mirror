@@ -219,6 +219,27 @@ add_dependencies(hccl_utest_test_next_resource hccl_llt)
 enable_testing()
 add_test(NAME hccl_utest_test_next_resource COMMAND hccl_utest_test_next_resource)
 
+# Test real CONDITION task recording, not the StreamLite/reporter no-op stubs in hccl_llt.
+add_executable(hccl_utest_ccore_profiling
+    main.cc
+    hccl_api_base_test.cc
+    comms/comm_engine_res/threads/test_ccore_profiling.cc
+    ${HCCL_CODE_ROOT}/src/legacy/ascend950/unified_platform/resource/stream/aicpu/rtsq_base.cc
+    ${HCCL_CODE_ROOT}/src/legacy/ascend950/unified_platform/resource/stream/aicpu/rtsq_a5.cc
+    ${HCCL_CODE_ROOT}/src/legacy/ascend950/unified_platform/resource/stream/aicpu/stream_lite.cc
+    ${HCCL_CODE_ROOT}/src/coll_communicator_mgr/dfx/profiling/aicpu/dfx_profiling_reporter_lite.cc
+)
+target_include_directories(hccl_utest_ccore_profiling PRIVATE
+    $<TARGET_GENEX_EVAL:hccl_utest_test_next_resource,$<TARGET_PROPERTY:hccl_utest_test_next_resource,INCLUDE_DIRECTORIES>>)
+target_compile_definitions(hccl_utest_ccore_profiling PRIVATE
+    CCL_KERNEL_AICPU
+    $<TARGET_GENEX_EVAL:hccl_utest_test_next_resource,$<TARGET_PROPERTY:hccl_utest_test_next_resource,COMPILE_DEFINITIONS>>)
+target_compile_options(hccl_utest_ccore_profiling PRIVATE
+    $<TARGET_GENEX_EVAL:hccl_utest_test_next_resource,$<TARGET_PROPERTY:hccl_utest_test_next_resource,COMPILE_OPTIONS>>)
+target_link_libraries(hccl_utest_ccore_profiling PRIVATE
+    $<TARGET_GENEX_EVAL:hccl_utest_test_next_resource,$<TARGET_PROPERTY:hccl_utest_test_next_resource,LINK_LIBRARIES>>)
+add_test(NAME hccl_utest_ccore_profiling COMMAND hccl_utest_ccore_profiling)
+
 set(src_to_a3_test_list
     main.cc
     hccl_api_base_test.cc
