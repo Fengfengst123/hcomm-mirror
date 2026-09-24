@@ -9,12 +9,6 @@
  * FOR A PARTICULAR PURPOSE. See LICENSE in the root of the software repository
  * for the full text of the License.
  */
-
-/**
- * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * for the full text of the License.
- */
-
 // 日志染色: 模块 tag (须在 include sim_log.h 之前)
 #define HCCL_VM_MODULE "KERNEL_STUB"
 
@@ -61,6 +55,20 @@
 #include "store_sim_store_pub.h"
 
 namespace fs = std::filesystem;
+
+// 首参类型随 CANN 版本变化(9.3 起由 aclrtFuncHandle 改为 const
+// void*)，按头文件声明自身推导以兼容新旧
+namespace {
+template <typename F> struct AclFuncHandleArg;
+template <typename R, typename A0, typename... Rest>
+struct AclFuncHandleArg<R (*)(A0, Rest...)> {
+    using Type = A0;
+};
+using AclrtGetFunctionAddrArg =
+    AclFuncHandleArg<decltype(&aclrtGetFunctionAddr)>::Type;
+using AclrtGetFunctionNameArg =
+    AclFuncHandleArg<decltype(&aclrtGetFunctionName)>::Type;
+} // namespace
 
 #ifdef __cplusplus
 extern "C" {
@@ -314,8 +322,8 @@ aclError aclrtBinaryGetFunctionByEntry(aclrtBinHandle binHandle,
     return ACL_SUCCESS;
 }
 
-aclError aclrtGetFunctionAddr(aclrtFuncHandle funcHandle, void **aicAddr,
-                              void **aivAddr) {
+aclError aclrtGetFunctionAddr(AclrtGetFunctionAddrArg funcHandle,
+                              void **aicAddr, void **aivAddr) {
     (void)funcHandle;
     (void)aicAddr;
     (void)aivAddr;
@@ -323,10 +331,11 @@ aclError aclrtGetFunctionAddr(aclrtFuncHandle funcHandle, void **aicAddr,
     return ACL_SUCCESS;
 }
 
-aclError aclrtGetFunctionName(aclrtFuncHandle funcHandle, uint32_t maxLen,
-                              char *name) {
+aclError aclrtGetFunctionName(AclrtGetFunctionNameArg funcHandle,
+                              uint32_t maxLen, char *name) {
     (void)maxLen;
-    sim::FuncHandle *funcHandlePtr = (sim::FuncHandle *)(uintptr_t)funcHandle;
+    const sim::FuncHandle *funcHandlePtr =
+        (const sim::FuncHandle *)(uintptr_t)funcHandle;
 
     memcpy(name, funcHandlePtr->funcName.data(),
            funcHandlePtr->funcName.length());
@@ -1627,7 +1636,7 @@ static OpMemInfoLookupStatus LookupOpMemInfoByVirtualAddr(
     return OpMemInfoLookupStatus::RESOLVED;
 }
 
-static void ResolveVirtualAivBufferSizes(
+static bool ResolveVirtualAivBufferSizes(
     const std::string &kernelName, ResolvedKernelLaunchArgs &resolvedArgs,
     uint64_t commId, uint32_t deviceId, uint64_t &inputSize,
     uint64_t &outputSize, uint64_t &inputGlobalOffsetBase,
@@ -1647,6 +1656,24 @@ static void ResolveVirtualAivBufferSizes(
         HCCL_VM_ERROR("failed to query current opMemInfo for kernel {}, "
                       "rank={}, commId={}, deviceId={}",
                       kernelName, resolvedArgs.args.rank, commId, deviceId);
+    }
+
+    // 三种 buffer（input/output/CCL）任一 size 为 0，等同 count=0 的空算子：
+    // 打警告后直接跳过 AIV 执行，不再走后续 baseAddr 匹配与 insert task。
+    // 图模式（replayOpDetailId != 0）与普通模式（== 0）都在此处统一短路。
+    if (hasOpMemInfo && (opMemInfo.inputSize == 0 ||
+                         opMemInfo.outputSize == 0 || opMemInfo.cclSize == 0)) {
+        HCCL_VM_WARN("skip AIV kernel execution: zero-size buffer recorded, "
+                     "kernel={}, rank={}, commId={}, deviceId={}, "
+                     "opDetailId={}, inputAddr=0x{:x}, inputSize={}, "
+                     "outputAddr=0x{:x}, outputSize={}, cclAddr=0x{:x}, "
+                     "cclSize={} (equivalent to count=0)",
+                     kernelName, resolvedArgs.args.rank, commId, deviceId,
+                     opMemInfo.opDetailId, opMemInfo.inputAddr,
+                     opMemInfo.inputSize, opMemInfo.outputAddr,
+                     opMemInfo.outputSize, opMemInfo.cclAddr,
+                     opMemInfo.cclSize);
+        return true;
     }
 
     const uint64_t inputAddr = resolvedArgs.args.input;
@@ -1711,7 +1738,7 @@ static void ResolveVirtualAivBufferSizes(
 
     if (!hasOpMemInfo) {
         cclBufferSize = INVALID_MEMORY_LAYOUT_SIZE;
-        return;
+        return false;
     }
     if (opMemInfo.cclAddr == 0 || opMemInfo.cclSize == 0) {
         HCCL_VM_ERROR("current opMemInfo has invalid CCL buffer, kernel={}, "
@@ -1721,9 +1748,10 @@ static void ResolveVirtualAivBufferSizes(
                       opMemInfo.id, opMemInfo.opDetailId, opMemInfo.cclAddr,
                       opMemInfo.cclSize);
         cclBufferSize = INVALID_MEMORY_LAYOUT_SIZE;
-        return;
+        return false;
     }
     cclBufferSize = opMemInfo.cclSize;
+    return false;
 }
 
 static void DumpVirtualKernelExtraArgsWithSource(std::ostringstream &oss,
@@ -1963,10 +1991,13 @@ class VirtualAivLibraryManager {
     VirtualAivLibrary library_{};
 };
 
-static aclError VirtualExecuteAivKernel(
-    const std::string &kernelName, const std::string &soName,
-    uint32_t numBlocks, const AivHostLaunchArgs &rawArgs, uint32_t launchIndex,
-    uint64_t commId, uint32_t deviceId, uint32_t replayOpDetailId = 0) {
+static aclError
+VirtualExecuteAivKernel(const std::string &kernelName,
+                        const std::string &soName, uint32_t numBlocks,
+                        const AivHostLaunchArgs &rawArgs, uint32_t launchIndex,
+                        uint64_t commId, uint32_t deviceId,
+                        uint32_t replayOpDetailId, bool &isNoop) {
+    isNoop = false;
     // The function-local singleton loads the AIV DSO on the first launch and
     // keeps it alive for all later launches in the same simulator lifecycle.
     auto *lib =
@@ -1998,10 +2029,17 @@ static aclError VirtualExecuteAivKernel(
     uint64_t outputGlobalOffsetBase = 0;
     uint64_t cclBufferSize = 0;
     uint64_t aivCommInfoSize = 0;
-    ResolveVirtualAivBufferSizes(kernelName, resolvedArgs, commId, deviceId,
-                                 inputSize, outputSize, inputGlobalOffsetBase,
-                                 outputGlobalOffsetBase, cclBufferSize,
-                                 aivCommInfoSize, replayOpDetailId);
+    if (ResolveVirtualAivBufferSizes(
+            kernelName, resolvedArgs, commId, deviceId, inputSize, outputSize,
+            inputGlobalOffsetBase, outputGlobalOffsetBase, cclBufferSize,
+            aivCommInfoSize, replayOpDetailId)) {
+        // 三种 buffer 任一 size=0（等同 count=0 空算子）：已在
+        // ResolveVirtualAivBufferSizes 内打出警告；isNoop=true 通知调用方跳过
+        // insert task。
+        ReleaseHostPtr(resolvedArgs.buffersInHandle);
+        isNoop = true;
+        return ACL_SUCCESS;
+    }
     DumpVirtualKernelFuncArgs(kernelName, numBlocks, rawArgs, resolvedArgs);
     if (inputSize == INVALID_MEMORY_LAYOUT_SIZE ||
         outputSize == INVALID_MEMORY_LAYOUT_SIZE ||
@@ -2353,13 +2391,20 @@ extern "C" aclError aclrtLaunchKernelWithHostArgs(
     taskMetaData.streamId = reinterpret_cast<uint64_t>(stream);
     taskMetaData.taskData.aiv.launchIdx = static_cast<uint64_t>(launchIndex);
 
+    bool isNoop = false; // 处理算子入口数据量为0的场景
     aclError ret = ops_hccl::VirtualExecuteAivKernel(
         kernelName, soName, numBlocks, parsedHostArgs, launchIndex,
-        g_cur_comm_key, static_cast<uint32_t>(g_cur_device_key));
+        g_cur_comm_key, static_cast<uint32_t>(g_cur_device_key), 0, isNoop);
     if (ret != ACL_SUCCESS) {
         HCCL_VM_INFO("VirtualExecuteAivKernel failed, ret = {}",
                      static_cast<int>(ret));
         return ACL_ERROR_INTERNAL_ERROR;
+    }
+    if (isNoop) {
+        HCCL_VM_WARN("AIV kernel {} is a no-op (zero-size buffer), skip task "
+                     "insert, deviceId={}, launchIndex={}",
+                     kernelName, taskMetaData.deviceId, launchIndex);
+        return ACL_SUCCESS;
     }
 
     uint32_t unusedIndex = 0;
@@ -2408,13 +2453,20 @@ extern "C" void LaunchAivKernelRaw(const char *kernelName, const char *soName,
     const std::string replayKernelName =
         kernelName == nullptr ? "" : kernelName;
     const std::string replaySoName = soName == nullptr ? "" : soName;
+    bool isNoop = false;
     aclError ret = ops_hccl::VirtualExecuteAivKernel(
         replayKernelName, replaySoName, numBlocks, rawArgs, launchIndex, commId,
-        static_cast<uint32_t>(sim::GetCurrDeviceId()), opDetailId);
+        static_cast<uint32_t>(sim::GetCurrDeviceId()), opDetailId, isNoop);
     if (ret != ACL_SUCCESS) {
         HCCL_VM_ERROR(
             "replay VirtualExecuteAivKernel failed, kernel[{}], ret={}",
             replayKernelName, static_cast<int>(ret));
+        return;
+    }
+    if (isNoop) {
+        HCCL_VM_INFO("replay AIV kernel {} is a no-op (zero-size buffer), skip "
+                     "task insert, launchIndex={}",
+                     replayKernelName, launchIndex);
         return;
     }
 
