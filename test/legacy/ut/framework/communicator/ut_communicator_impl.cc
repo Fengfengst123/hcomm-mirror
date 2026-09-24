@@ -205,7 +205,7 @@ protected:
         peer0->AddConnInterface(0, connInterface);
         fakeComm.rankGraph->AddPeer(peer0);
         fakeComm.localRmaBufManager = std::make_unique<LocalRmaBufManager>(fakeComm);
-        fakeComm.trace = std::make_unique<Trace>();
+        (void)fakeComm.InitTraceManager();
 
         fakeComm.InitCollService();
         fakeComm.CollAlgComponentInit();
@@ -1244,7 +1244,7 @@ TEST_F(CommunicatorImplTest, should_no_throw_exception_when_only_ccu_enabled)
     peer0->AddConnInterface(0, connInterface);
     comm.rankGraph->AddPeer(peer0);
     comm.localRmaBufManager = std::make_unique<LocalRmaBufManager>(comm);
-    comm.trace = std::make_unique<Trace>();
+    (void)comm.InitTraceManager();
     comm.opExecuteConfig.accState = AcceleratorState::CCU_MS;
 
     EXPECT_NO_THROW(comm.InitCollService());
@@ -1389,7 +1389,7 @@ TEST_F(CommunicatorImplTest, should_trace_success_when_comm_params_valid)
     comm.collService = &collService;
     MOCKER_CPP(&CommunicatorImpl::ExecAlgSelect).stubs().will(ignoreReturnValue());
     comm.SetCommStatus(CommStatus::COMM_READY);
-    comm.trace = std::make_unique<Trace>();
+    (void)comm.InitTraceManager();
     MOCKER(HrtMemAsyncCopy).stubs();
 
     // 执行步骤

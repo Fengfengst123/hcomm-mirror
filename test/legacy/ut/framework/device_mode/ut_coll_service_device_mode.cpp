@@ -136,7 +136,7 @@ protected:
         peer0->AddConnInterface(0, connInterface);
         fakeComm.rankGraph->AddPeer(peer0);
         fakeComm.localRmaBufManager = std::make_unique<LocalRmaBufManager>(fakeComm);
-        fakeComm.trace = std::make_unique<Trace>();
+        (void)fakeComm.InitTraceManager();
 
         fakeComm.InitCollService();
         fakeComm.CollAlgComponentInit();
@@ -558,7 +558,7 @@ TEST_F(CollServiceDeviceModeTest, test_coll_service_device_mode_resume)
     peer0->AddConnInterface(0, connInterface);
     comm.rankGraph->AddPeer(peer0);
     comm.localRmaBufManager = std::make_unique<LocalRmaBufManager>(comm);
-    comm.trace = std::make_unique<Trace>();
+    (void)comm.InitTraceManager();
     comm.opExecuteConfig.accState = AcceleratorState::CCU_MS;
 
     CollServiceDeviceMode service(&comm);
@@ -618,7 +618,7 @@ TEST_F(CollServiceDeviceModeTest, test_coll_service_device_mode_resume_when_link
     peer0->AddConnInterface(0, connInterface);
     comm.rankGraph->AddPeer(peer0);
     comm.localRmaBufManager = std::make_unique<LocalRmaBufManager>(comm);
-    comm.trace = std::make_unique<Trace>();
+    (void)comm.InitTraceManager();
     comm.opExecuteConfig.accState = AcceleratorState::CCU_MS;
 
     CollServiceDeviceMode service(&comm);

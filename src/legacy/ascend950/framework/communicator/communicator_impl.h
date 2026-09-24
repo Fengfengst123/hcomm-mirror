@@ -14,6 +14,7 @@
 #include <set>
 #include <vector>
 #include <unordered_map>
+#include <mutex>
 #include <string>
 #include <atomic>
 #include "types.h"
@@ -398,7 +399,12 @@ private:
     unique_ptr<CollOperator> currentCollOperator;
     void* notifyFixedValue{nullptr}; // 2MB内存，用于临时解决性能问题，实际该内存未使用
     unique_ptr<HostDeviceSyncNotifyManager> hostDeviceSyncNotifyManager;
-    unique_ptr<Trace> trace;
+
+    static std::mutex traceMapMutex_;
+    static std::unordered_map<std::string, std::pair<std::unique_ptr<Trace>, uint32_t>> traceMap_;
+    std::string traceKey_{};
+    Trace* tracePtr_{nullptr};
+
     unique_ptr<MemTransportManager> memTransportManager{};
     unique_ptr<MirrorTaskManager> mirrorTaskManager;
     unique_ptr<UbMemoryTransportMgr> ubMemoryTransportMgr{};

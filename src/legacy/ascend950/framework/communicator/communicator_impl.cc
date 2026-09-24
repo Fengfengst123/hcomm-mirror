@@ -60,6 +60,8 @@ constexpr u64 HCCL_AIV_OFFLOAD_TAG_BUFFER_SIZE = (4 * 1024 * 1024);     // 指�
 constexpr u64 HCCL_MC2_ON_AICPU_FIXED_CALC_BUFFER_SIZE
     = 1 * HCCL_CCL_COMM_FIXED_CALC_BUFFER_SIZE; // MC2适配AICPU，额外需要1M
 std::atomic<u32> Hccl::CommunicatorImpl::globalIndex(0);
+std::mutex CommunicatorImpl::traceMapMutex_;
+std::unordered_map<std::string, std::pair<std::unique_ptr<Trace>, uint32_t>> CommunicatorImpl::traceMap_;
 constexpr u64 HCCL_CCL_AIV_TAG_BUFFER_SIZE = 2;   // 指定存放aiv tag的大小为2M
 constexpr u32 HCCL_CCL_AIV_CLEAR_STEP_MAX = 1000; // aiv tag算子下发时++，大于1000置位
 constexpr u32 BASE_BIT = 1;                       // 用于左移设置二进制数的特定位
@@ -1569,15 +1571,25 @@ void CommunicatorImpl::InitCollService()
 HcclResult CommunicatorImpl::InitTraceManager()
 {
     /* 申请trace资源信息 */
-    std::string logInfo = "HCCL_";
-    logInfo.append(std::to_string(SalGetTid()));
-    logInfo.append("_");
-    logInfo.append(std::to_string(GetDeviceLogicId()));
-    logInfo.append("_");
-    logInfo.append(std::to_string(idIndex));
-    trace = std::make_unique<Trace>();
-    CHK_PTR_NULL(trace);
-    CHK_RET(trace->Init(logInfo));
+    traceKey_ = "HCCL_";
+    traceKey_.append(std::to_string(SalGetTid()));
+    traceKey_.append("_");
+    traceKey_.append(std::to_string(GetDeviceLogicId()));
+
+    std::lock_guard<std::mutex> _lock(traceMapMutex_);
+    auto keyIter = traceMap_.find(traceKey_);
+    if (keyIter != traceMap_.end()) {
+        auto& tracePair = keyIter->second;
+        tracePair.second += 1;
+        tracePtr_ = tracePair.first.get();
+        return HcclResult::HCCL_SUCCESS;
+    }
+
+    std::unique_ptr<Trace> trace = std::make_unique<Trace>();
+    CHK_RET(trace->Init(traceKey_));
+
+    traceMap_[traceKey_] = {std::move(trace), 1};
+    tracePtr_ = traceMap_[traceKey_].first.get();
     return HCCL_SUCCESS;
 }
 
@@ -1904,7 +1916,7 @@ HostDeviceSyncNotifyManager& CommunicatorImpl::GetHostDeviceSyncNotifyManager() 
     return *hostDeviceSyncNotifyManager;
 }
 
-Trace& CommunicatorImpl::GetTrace() const { return *trace; }
+Trace& CommunicatorImpl::GetTrace() const { return *tracePtr_; }
 
 HDCommunicate& CommunicatorImpl::GetKfcControlTransferH2D() const { return *kfcControlTransferH2D; }
 
@@ -2509,6 +2521,20 @@ void CommunicatorImpl::DestroyImpl()
     if (notifyFixedValue != nullptr) {
         HrtFree(notifyFixedValue);
         notifyFixedValue = nullptr;
+    }
+
+    {
+        std::lock_guard<std::mutex> _lock(traceMapMutex_);
+        auto keyIter = traceMap_.find(traceKey_);
+        if (keyIter != traceMap_.end()) {
+            auto& tracePair = keyIter->second;
+            if (tracePair.second == 1) {
+                traceMap_.erase(traceKey_);
+                tracePtr_ = nullptr;
+            } else {
+                tracePair.second -= 1;
+            }
+        }
     }
 }
 

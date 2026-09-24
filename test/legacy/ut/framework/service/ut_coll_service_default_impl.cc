@@ -328,7 +328,7 @@ TEST_F(CollServiceDefaultImplTest, coll_service_default_impl_orchestrate_with_in
     comm.streamManager = make_unique<StreamManager>(&comm);
     comm.streamManager->opbase = make_unique<OpbaseStreamManager>(&comm);
     comm.socketManager = std::make_unique<SocketManager>(comm, 1, 1, 1);
-    comm.trace = std::make_unique<Trace>();
+    (void)comm.InitTraceManager();
     comm.memTransportManager = make_unique<MemTransportManager>(comm);
     comm.cclBuffer = DevBuffer::Create(0x100, 200);
 
