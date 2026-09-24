@@ -18,6 +18,7 @@ constexpr uint32_t SL_MAX = 7u;              // sl范围的最大值，sl即serv
 constexpr uint32_t TC_DEFAULT = 0xFFFFFFFFu; // TC的默认值（不区分芯片类型）
 constexpr uint32_t SL_DEFAULT = 0xFFFFFFFFu; // SL的默认值（不区分芯片类型）
 constexpr uint32_t HCCL_COMM_CONFIG_QOS_VERSION = 10U;
+constexpr uint32_t HCCL_DETERMINISTIC_MAX = 2U;
 
 static HcclResult GetHcclCommConfigVersion(const HcclCommConfig* config, uint32_t& version)
 {
@@ -109,9 +110,37 @@ static HcclResult ApplyTrafficClassAndServiceLevel(const HcclCommConfig* hcclCom
     return HCCL_SUCCESS;
 }
 
-HcclResult ApplyHcclCommConfig(const HcclCommConfig* hcclCommConfig, CommConfig& commConfig, uint32_t& opExpansionMode)
+static HcclResult
+ApplyHcclDeterministic(const HcclCommConfig* hcclCommConfig, CommConfig& commConfig, int32_t processDeterministic)
+{
+    uint32_t deterministic = HCCL_COMM_DETERMINISTIC_CONFIG_NOT_SET;
+    if (hcclCommConfig != nullptr) {
+        deterministic = hcclCommConfig->hcclDeterministic;
+    }
+
+    if (deterministic == HCCL_COMM_DETERMINISTIC_CONFIG_NOT_SET) {
+        CHK_PRT_RET(
+            processDeterministic < 0,
+            HCCL_ERROR("[ApplyHcclDeterministic] invalid process deterministic[%d].", processDeterministic),
+            HCCL_E_PARA);
+        deterministic = static_cast<uint32_t>(processDeterministic);
+    }
+
+    CHK_PRT_RET(
+        deterministic > HCCL_DETERMINISTIC_MAX,
+        HCCL_ERROR("[ApplyHcclDeterministic] invalid hcclDeterministic[%u], which should be 0, 1 or 2.", deterministic),
+        HCCL_E_PARA);
+    CHK_RET(commConfig.SetConfigDeterministic(static_cast<u8>(deterministic)));
+    HCCL_INFO("[ApplyHcclDeterministic] hcclDeterministic[%u].", deterministic);
+    return HCCL_SUCCESS;
+}
+
+HcclResult ApplyHcclCommConfig(
+    const HcclCommConfig* hcclCommConfig, CommConfig& commConfig, uint32_t& opExpansionMode,
+    int32_t processDeterministic)
 {
     opExpansionMode = 0;
+    CHK_RET(ApplyHcclDeterministic(hcclCommConfig, commConfig, processDeterministic));
     if (hcclCommConfig == nullptr) {
         return HCCL_SUCCESS;
     }

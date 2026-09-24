@@ -128,6 +128,65 @@ TEST_F(EnvConfigTest, parse_env_config)
     EnvConfig::GetInstance().GetDetourConfig();
 }
 
+TEST_F(EnvConfigTest, Ut_CastDeterministic_WhenEnvValueIsValidOrInvalid_ExpectMappedOrThrow)
+{
+    EXPECT_EQ(CastDeterministic("false"), 0U);
+    EXPECT_EQ(CastDeterministic("true"), 1U);
+    EXPECT_EQ(CastDeterministic("TRUE"), 1U);
+    EXPECT_EQ(CastDeterministic("strict"), 2U);
+    EXPECT_EQ(CastDeterministic("StRiCt"), 2U);
+    EXPECT_THROW(CastDeterministic("invalid"), InvalidParamsException);
+}
+
+TEST_F(EnvConfigTest, Ut_EnvAlgoConfigParse_WhenDeterministicSetByEnv_ExpectEnvironmentSource)
+{
+    MOCKER(getenv).stubs().with(mockcpp::any()).will(invoke(getenv_stub));
+    struct TestCase {
+        const char* environmentValue;
+        u8 expectedValue;
+        bool expectedFromEnvironment;
+    };
+    const TestCase testCases[] = {
+        {nullptr, 1U, false}, {"EmptyString", 1U, false}, {"false", 0U, true}, {"TRUE", 1U, true}, {"StRiCt", 2U, true},
+    };
+
+    for (const auto& testCase : testCases) {
+        envCfgMap.clear();
+        if (testCase.environmentValue != nullptr) {
+            envCfgMap["HCCL_DETERMINISTIC"] = testCase.environmentValue;
+        }
+        EnvAlgoConfig algoConfig;
+        algoConfig.Parse();
+
+        EXPECT_EQ(algoConfig.GetDeterministic(), testCase.expectedValue);
+        EXPECT_EQ(algoConfig.IsDeterministicSetByEnvironment(), testCase.expectedFromEnvironment);
+    }
+}
+
+TEST_F(EnvConfigTest, Ut_EnvAlgoConfigParse_WhenDeterministicInvalid_ExpectThrow)
+{
+    MOCKER(getenv).stubs().with(mockcpp::any()).will(invoke(getenv_stub));
+    envCfgMap = {};
+    envCfgMap["HCCL_DETERMINISTIC"] = "invalid";
+    EnvAlgoConfig algoConfig;
+
+    EXPECT_THROW(algoConfig.Parse(), InvalidParamsException);
+}
+
+TEST_F(EnvConfigTest, Ut_EnvAlgoConfigSet_WhenDeterministicUnset_ExpectDefaultThenUpdated)
+{
+    MOCKER(getenv).stubs().with(mockcpp::any()).will(invoke(getenv_stub));
+    envCfgMap = {};
+    EnvAlgoConfig algoConfig;
+    algoConfig.Parse();
+
+    EXPECT_EQ(algoConfig.GetDeterministic(), 1U);
+    EXPECT_FALSE(algoConfig.IsDeterministicSetByEnvironment());
+
+    algoConfig.SetDeterministic(static_cast<u8>(2));
+    EXPECT_EQ(algoConfig.GetDeterministic(), 2U);
+}
+
 TEST_F(EnvConfigTest, parse_env_config_should_success)
 {
     ResetEnvCfgMap();
@@ -153,6 +212,7 @@ TEST_F(EnvConfigTest, parse_env_config_should_success)
         std::map<OpType, std::vector<HcclAlgoType>> algoMap = {};
         EXPECT_EQ(envCfg.GetAlgoConfig().GetAlgoConfig(), algoMap);
         EXPECT_EQ(envCfg.GetAlgoConfig().GetBuffSize(), 200 * 1024 * 1024);
+        EXPECT_EQ(envCfg.GetAlgoConfig().GetDeterministic(), 0U);
         EXPECT_EQ(envCfg.GetLogConfig().GetEntryLogEnable(), true);
         EXPECT_EQ(envCfg.GetLogConfig().GetCannVersion(), "");
         EXPECT_EQ(envCfg.GetDetourConfig().GetDetourType(), HcclDetourType::HCCL_DETOUR_ENABLE_2P);

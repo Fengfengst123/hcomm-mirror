@@ -66,7 +66,7 @@ HcclCommConfig config;
 HcclCommConfigInit(&config);
 // 按需修改通信域配置
 config.hcclBufferSize = 1024;  // 共享数据的缓存区大小，单位为：MB，取值需 >= 1，默认值为：200
-config.hcclDeterministic = 1;  // 开启归约类通信算子的确定性计算，默认值为：0，表示关闭确定性计算功能
+config.hcclDeterministic = 1;  // 开启归约类通信算子的确定性计算
 std::strcpy(config.hcclCommName, "comm_1");
 // 初始化集合通信域
 HcclComm hcclComm;

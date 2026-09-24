@@ -13,6 +13,7 @@
 #include <arpa/inet.h>
 #include <fstream>
 #include <unistd.h>
+#include <hccl/hccl_comm.h>
 #include <hccl/hccl_types.h>
 #include "hccl_communicator.h"
 #include "hccl_comm_pub.h"
@@ -365,8 +366,14 @@ HcclResult hcclComm::InitCollComm(
     EXCEPTION_CATCH(
         collComm_ = std::make_unique<CollComm>(commV2, userRank, commName, callbacks, initMode), return HCCL_E_PTR);
 
+    HcclConfigValue processDeterministicConfig{};
+    if (config == nullptr || config->hcclDeterministic == HCCL_COMM_DETERMINISTIC_CONFIG_NOT_SET) {
+        CHK_RET(HcclGetConfig(HCCL_DETERMINISTIC, &processDeterministicConfig));
+    }
+
     uint32_t configOpExpansionMode = 0;
-    CHK_RET(ApplyHcclCommConfig(config, collComm_->GetCommConfig(), configOpExpansionMode));
+    CHK_RET(ApplyHcclCommConfig(
+        config, collComm_->GetCommConfig(), configOpExpansionMode, processDeterministicConfig.value));
     CHK_RET(collComm_->Init(rankGraph, binHandle_, cclBuffer, configOpExpansionMode));
     if (initMode == CollCommInitMode::simpleMode) { /* hccl::CommunicatorV1支持CollComm简易流程 */
         return HCCL_SUCCESS;

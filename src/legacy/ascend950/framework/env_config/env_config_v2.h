@@ -26,6 +26,7 @@ constexpr u32 UB_SCQ_DEPTH_NOT_SET = 0xFFFFFFFFU;
 class EnvConfig {
 public:
     static EnvConfig& GetInstance();
+    void SetDeterministic(u8 deterministic);
 
     const EnvHostNicConfig& GetHostNicConfig();
 

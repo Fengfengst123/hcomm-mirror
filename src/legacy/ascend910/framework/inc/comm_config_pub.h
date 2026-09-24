@@ -114,6 +114,7 @@ public:
     HcclResult SetConfigHcclAlgoStr(const std::string& hcclAlgo);
     const std::string& GetConfigHcclAlgoStr() const;
     HcclResult SetConfigSqDepth(u32 sqDepth);
+    HcclResult SetConfigDeterministic(u8 deterministic);
 
 private:
     void InitAlgoConfig();

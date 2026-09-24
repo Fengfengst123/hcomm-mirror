@@ -119,13 +119,21 @@ std::map<HcclReduceOp, ReduceOp> HCCL_OP_REDUCE_MAP
        {HCCL_REDUCE_MIN, ReduceOp::MIN}};
 }
 
-static void CheckHcclDeterministic(uint32_t hcclDeterministic)
+static HcclResult GetEffectiveHcclDeterministic(uint32_t configuredDeterministic, uint32_t& effectiveDeterministic)
 {
-    if (hcclDeterministic == 0) {
-        HCCL_WARNING("[HcclCommInitClusterInfoConfig] hcclDeterministic[%u] is not support.", hcclDeterministic);
-    } else if (hcclDeterministic != HCCL_COMM_DETERMINISTIC_CONFIG_NOT_SET && hcclDeterministic != 1) {
-        HCCL_WARNING("[HcclCommInitClusterInfoConfig] hcclDeterministic[%u] is invalid.", hcclDeterministic);
+    if (configuredDeterministic == HCCL_COMM_DETERMINISTIC_CONFIG_NOT_SET) {
+        effectiveDeterministic = EnvConfig::GetInstance().GetAlgoConfig().GetDeterministic();
+        return HCCL_SUCCESS;
     }
+
+    CHK_PRT_RET(
+        configuredDeterministic > HCCL_DETERMINISTIC_STRICT,
+        HCCL_ERROR(
+            "[GetEffectiveHcclDeterministic] invalid hcclDeterministic[%u], which should be 0, 1 or 2.",
+            configuredDeterministic),
+        HCCL_E_PARA);
+    effectiveDeterministic = configuredDeterministic;
+    return HCCL_SUCCESS;
 }
 
 HcclResult CreateCommConfig(uint32_t rank, HcclCommConfig* config, HcclComm* comm, std::string& ranktableM)
@@ -161,9 +169,7 @@ HcclResult CreateCommConfig(uint32_t rank, HcclCommConfig* config, HcclComm* com
         hcclConf->hcclBufferSize = 0;
         HCCL_INFO("[HcclCommInitClusterInfoConfig] set default HCCL BUFFER");
     }
-    CheckHcclDeterministic(config->hcclDeterministic);
-    // 默认全都开启确定性计算
-    hcclConf->hcclDeterministic = 1;
+    CHK_RET(GetEffectiveHcclDeterministic(config->hcclDeterministic, hcclConf->hcclDeterministic));
 
     CHK_SAFETY_FUNC_RET(memcpy_s(
         hcclConf->hcclCommName, sizeof(hcclConf->hcclCommName), config->hcclCommName, sizeof(config->hcclCommName)));
@@ -255,9 +261,7 @@ HcclResult CreateCommConfigRootInfo(
         hcclConf->hcclBufferSize = 0;
         HCCL_INFO("[HcclCommInitRootInfoConfigV2] set default HCCL BUFFER");
     }
-    CheckHcclDeterministic(config->hcclDeterministic);
-    // 默认全都开启确定性计算
-    hcclConf->hcclDeterministic = 1;
+    CHK_RET(GetEffectiveHcclDeterministic(config->hcclDeterministic, hcclConf->hcclDeterministic));
 
     CHK_SAFETY_FUNC_RET(memcpy_s(
         hcclConf->hcclCommName, sizeof(hcclConf->hcclCommName), config->hcclCommName, sizeof(config->hcclCommName)));
@@ -1056,11 +1060,8 @@ HcclResult HcclCreateSubCommConfigV2(
         subCommIdStr, static_cast<Hccl::RankId>(subCommRankId), rankNum, static_cast<Hccl::RankId>(parentRank),
         opbasedCommInfoV2.commParams.devType};
     commParams.commDepth = parentDepth + 1;
-    CheckHcclDeterministic(hcclConf->hcclDeterministic);
-    // 默认全都开启确定性计算
-    hcclConf->hcclDeterministic = 1;
-    std::shared_ptr<Hccl::HcclCommunicator> subCommunicator
-        = make_shared<Hccl::HcclCommunicator>(commParams, hcclConf.get());
+    CHK_RET(GetEffectiveHcclDeterministic(hcclConf->hcclDeterministic, hcclConf->hcclDeterministic));
+    std::shared_ptr<Hccl::HcclCommunicator> subCommunicator;
 
     std::vector<u32> rankIdsVec(rankNum);
     for (uint32_t i = 0; i < rankNum; ++i) {
@@ -3069,17 +3070,34 @@ HcclResult HcclGetCommAsyncErrorV2() { return HCCL_SUCCESS; }
 
 HcclResult HcclSetConfigV2(HcclConfig config, HcclConfigValue configValue)
 {
-    (void)(config);
-    (void)(configValue);
-    HCCL_WARNING("DETERMINISTIC_ENABLE is default option in 950! Can not set.");
+    if (config == HCCL_DETERMINISTIC) {
+        EnvConfig& envConfig = EnvConfig::GetInstance();
+        if (envConfig.GetAlgoConfig().IsDeterministicSetByEnvironment()) {
+            HCCL_WARNING(
+                "[HcclSetConfigV2] HCCL_DETERMINISTIC has been set by environment and will not be overwritten.");
+            return HCCL_SUCCESS;
+        }
+
+        CHK_PRT_RET(
+            configValue.value != HCCL_DETERMINISTIC_DISABLE && configValue.value != HCCL_DETERMINISTIC_ENABLE
+                && configValue.value != HCCL_DETERMINISTIC_STRICT,
+            HCCL_ERROR("[HcclSetConfigV2] HCCL_DETERMINISTIC only supports 0, 1 or 2, value[%d].", configValue.value),
+            HCCL_E_PARA);
+
+        envConfig.SetDeterministic(static_cast<u8>(configValue.value));
+        HCCL_INFO("[HcclSetConfigV2] Set HCCL_DETERMINISTIC to [%d].", configValue.value);
+    }
     return HCCL_SUCCESS;
 }
 HcclResult HcclGetConfigV2(HcclConfig config, HcclConfigValue* configValue)
 {
-    (void)(config);
-    constexpr int32_t DETERMINISTIC_ENABLE = 1; // A5支持确定性，不需要配置
-    (*configValue).value = DETERMINISTIC_ENABLE;
-    HCCL_WARNING("DETERMINISTIC_ENABLE is default option in 950!");
+    CHK_PTR_NULL(configValue);
+    CHK_PRT_RET(
+        config != HCCL_DETERMINISTIC,
+        HCCL_ERROR("[HcclGetConfigV2] unsupported config type[%d].", static_cast<int32_t>(config)), HCCL_E_PARA);
+
+    configValue->value = static_cast<int32_t>(EnvConfig::GetInstance().GetAlgoConfig().GetDeterministic());
+    HCCL_INFO("[HcclGetConfigV2] HCCL_DETERMINISTIC is [%d].", configValue->value);
     return HCCL_SUCCESS;
 }
 

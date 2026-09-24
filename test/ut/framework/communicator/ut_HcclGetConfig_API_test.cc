@@ -26,6 +26,12 @@ TEST_F(HcclGetConfigTest, Ut_HcclGetConfig_WhenConfigValueIsNull_Expect_ReturnIs
     EXPECT_EQ(ret, HCCL_E_PTR);
 }
 
+TEST_F(HcclGetConfigTest, Ut_HcclGetConfig_When_ConfigTypeUnsupported_Expect_ReturnIsHCCL_E_PARA)
+{
+    HcclConfigValue configValue{};
+    EXPECT_EQ(HcclGetConfig(HCCL_CONFIG_RESERVED, &configValue), HCCL_E_PARA);
+}
+
 TEST_F(HcclGetConfigTest, Ut_HcclGetConfig_When_Normal_Expect_ReturnValueIsVaild)
 {
     union HcclConfigValue hcclConfigValue;

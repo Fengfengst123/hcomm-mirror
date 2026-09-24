@@ -17,7 +17,9 @@
 namespace hccl {
 constexpr uint32_t HCCL_COMM_CONFIG_SQ_DEPTH_VERSION = 11U;
 
-HcclResult ApplyHcclCommConfig(const HcclCommConfig* hcclCommConfig, CommConfig& commConfig, uint32_t& opExpansionMode);
+HcclResult ApplyHcclCommConfig(
+    const HcclCommConfig* hcclCommConfig, CommConfig& commConfig, uint32_t& opExpansionMode,
+    int32_t processDeterministic);
 } // namespace hccl
 
 #endif /* COLL_COMM_CONFIG_H */

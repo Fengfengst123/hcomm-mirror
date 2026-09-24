@@ -1943,6 +1943,16 @@ HcclResult HcommFlushV2() { return HCCL_SUCCESS; }
 
 HcclResult HcclGetCommNameV2(HcclComm commHandle, char* commName) { return HCCL_SUCCESS; }
 
+HcclResult HcclGetConfigV2(HcclConfig config, HcclConfigValue* configValue)
+{
+    CHK_PTR_NULL(configValue);
+    CHK_PRT_RET(
+        config != HCCL_DETERMINISTIC, HCCL_ERROR("Unsupported config type[%d].", static_cast<int32_t>(config)),
+        HCCL_E_PARA);
+    configValue->value = static_cast<int32_t>(Hccl::EnvConfig::GetInstance().GetAlgoConfig().GetDeterministic());
+    return HCCL_SUCCESS;
+}
+
 HcclResult
 HcclGetCclBuffer(HcclComm comm, uintptr_t& cclBufferAddr, size_t& cclBufferSize, HcclMemType& cclBufferMemType)
 {

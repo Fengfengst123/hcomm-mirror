@@ -227,7 +227,7 @@ TEST_F(HcclCommunicatorTest, should_return_success_when_calling_communicator_cre
     CommParams subCommParams;
     std::shared_ptr<HcclCommunicator> subHcclComm;
     std::vector<u32> rankIds;
-    HcclCommConfig subConfig;
+    HcclCommConfig subConfig{};
 
     auto res = comm->CreateSubComm(subCommParams, rankIds, subHcclComm, subConfig);
     EXPECT_EQ(HCCL_SUCCESS, res);

@@ -382,7 +382,15 @@ void EnvAlgoConfig::Parse()
     HCCL_RUN_INFO(
         "[HCCL_ENV] HCCL_OP_EXPANSION_MODE set by %s to [%s]", hcclAccelerator_.GetSource(),
         GetHcclAccelerator().Describe().c_str());
+
+    hcclDeterministic_.Parse();
+    // 初始化进程级有效值；运行期间统一通过deterministic_读写。
+    deterministic_ = hcclDeterministic_.Get();
+    HCCL_RUN_INFO(
+        "[HCCL_ENV] HCCL_DETERMINISTIC set by %s to [%u]", hcclDeterministic_.GetSource(), GetDeterministic());
 }
+
+void EnvAlgoConfig::SetDeterministic(u8 deterministic) { deterministic_ = deterministic; }
 
 const std::string& EnvAlgoConfig::GetPrimQueueGenName() const { return primQueueGenName.Get(); }
 
@@ -395,6 +403,10 @@ const std::map<OpType, std::vector<HcclAlgoType>> EnvAlgoConfig::GetAlgoConfig()
 u64 EnvAlgoConfig::GetBuffSize() const { return bufferSize.Get(); }
 
 HcclAccelerator EnvAlgoConfig::GetHcclAccelerator() const { return hcclAccelerator_.Get(); }
+
+u8 EnvAlgoConfig::GetDeterministic() const { return deterministic_; }
+
+bool EnvAlgoConfig::IsDeterministicSetByEnvironment() const { return hcclDeterministic_.IsSetByEnvironment(); }
 
 // EnvLogConfig
 void EnvLogConfig::Parse()

@@ -1343,7 +1343,18 @@ HcclResult hcclComm::GetCommUserMemSize(uint64_t& size)
 }
 HcclResult hcclComm::SetDeterministicConfig(const u8 deterministic)
 {
-    CHK_RET(communicator_->SetDeterministicConfig(deterministic));
+    bool updated = false;
+    if (communicator_ != nullptr) {
+        CHK_RET(communicator_->SetDeterministicConfig(deterministic));
+        updated = true;
+    }
+#if !defined(CCL_KERNEL_AICPU) && !defined(HCCD)
+    if (collComm_ != nullptr) {
+        CHK_RET(collComm_->GetCommConfig().SetConfigDeterministic(deterministic));
+        updated = true;
+    }
+#endif
+    CHK_PRT_RET(!updated, HCCL_ERROR("[%s] communicator is not initialized.", __func__), HCCL_E_PTR);
     return HCCL_SUCCESS;
 }
 

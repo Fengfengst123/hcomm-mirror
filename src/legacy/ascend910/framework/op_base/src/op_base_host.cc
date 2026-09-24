@@ -1166,37 +1166,45 @@ HcclResult InitCommRootInfo(
 HcclResult HcclSetConfig(HcclConfig config, HcclConfigValue configValue)
 {
     if (config == HCCL_DETERMINISTIC) {
-        HCCLV2_FUNC_RUN(HcclSetConfigV2(config, configValue));
+        bool isSupportV2 = false;
+        CHK_RET(hrtGetHcclV2Support(&isSupportV2));
         char* mmSysGetEnvValue = nullptr;
         MM_SYS_GET_ENV(MM_ENV_HCCL_DETERMINISTIC, mmSysGetEnvValue);
         std::string hcclDeterministicEnv = (mmSysGetEnvValue != nullptr) ? mmSysGetEnvValue : "EmptyString";
-        if (hcclDeterministicEnv == "EmptyString") {
-            if (configValue.value != DETERMINISTIC_STRICT && configValue.value != DETERMINISTIC_ENABLE
-                && configValue.value != DETERMINISTIC_DISABLE) {
-                HCCL_ERROR("[HcclSetConfig] HCCL_DETERMINISTIC is only support 0, 1 or 2");
-                return HCCL_E_PARA;
-            } else {
-                DevType devType;
-                CHK_RET(hrtGetDeviceType(devType));
-                if (configValue.value == DETERMINISTIC_STRICT && devType != DevType::DEV_TYPE_910B
-                    && devType != DevType::DEV_TYPE_910_93) {
-                    HCCL_ERROR(
-                        "[HcclSetConfig] configValue[%d], reduce order preservation is not supported for"
-                        " devType[%d]",
-                        configValue.value, devType);
-                    return HCCL_E_NOT_SUPPORT;
-                }
-                CHK_RET(SetDeterministic(configValue.value));
-                HCCL_INFO("[HcclSetConfig] Set HCCL_DETERMINISTIC to %u", configValue.value);
+        if (isSupportV2) {
+            CHK_RET(HcclSetConfigV2(config, configValue));
+            if (hcclDeterministicEnv != "EmptyString") {
+                return HCCL_SUCCESS;
             }
         } else {
-            HCCL_WARNING("[HcclSetConfig] HCCL_DETERMINISTIC has been set by Env, so will not be reset again");
-            return HCCL_SUCCESS;
+            if (hcclDeterministicEnv == "EmptyString") {
+                if (configValue.value != DETERMINISTIC_STRICT && configValue.value != DETERMINISTIC_ENABLE
+                    && configValue.value != DETERMINISTIC_DISABLE) {
+                    HCCL_ERROR("[HcclSetConfig] HCCL_DETERMINISTIC is only support 0, 1 or 2");
+                    return HCCL_E_PARA;
+                } else {
+                    DevType devType;
+                    CHK_RET(hrtGetDeviceType(devType));
+                    if (configValue.value == DETERMINISTIC_STRICT && devType != DevType::DEV_TYPE_910B
+                        && devType != DevType::DEV_TYPE_910_93) {
+                        HCCL_ERROR(
+                            "[HcclSetConfig] configValue[%d], reduce order preservation is not supported for"
+                            " devType[%d]",
+                            configValue.value, devType);
+                        return HCCL_E_NOT_SUPPORT;
+                    }
+                    CHK_RET(SetDeterministic(configValue.value));
+                    HCCL_INFO("[HcclSetConfig] Set HCCL_DETERMINISTIC to %u", configValue.value);
+                }
+            } else {
+                HCCL_WARNING("[HcclSetConfig] HCCL_DETERMINISTIC has been set by Env, so will not be reset again");
+                return HCCL_SUCCESS;
+            }
         }
         HcclOpInfoCtx& opBaseInfo = CollCommMgr::GetInstance().LegacyGetHcclOpInfoCtx();
         // 遍历所有的通信域设置其确定性计算配置参数
         for (auto it = opBaseInfo.opGroup2CommMap.begin(); it != opBaseInfo.opGroup2CommMap.end(); it++) {
-            CHK_RET(it->second->SetDeterministicConfig(configValue.value));
+            CHK_RET(it->second->SetDeterministicConfig(static_cast<u8>(configValue.value)));
         }
     }
     HCCL_RUN_INFO("Entry-HcclSetConfig successfully, config[%d], value[%u]", config, configValue.value);

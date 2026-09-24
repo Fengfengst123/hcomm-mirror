@@ -1680,13 +1680,14 @@ HcclResult HcclCommInitRootInfoScalable(
 HcclResult HcclGetConfig(HcclConfig config, HcclConfigValue* configValue)
 {
     CHK_PTR_NULL(configValue);
-    if (config == HCCL_DETERMINISTIC) {
+    CHK_PRT_RET(
+        config != HCCL_DETERMINISTIC,
+        HCCL_ERROR("[HcclGetConfig] unsupported config type[%d].", static_cast<int32_t>(config)), HCCL_E_PARA);
 #if (!defined(HCCD)) && (!defined(CCL_KERNEL_AICPU))
-        HCCLV2_FUNC_RUN(HcclGetConfigV2(config, configValue));
+    HCCLV2_FUNC_RUN(HcclGetConfigV2(config, configValue));
 #endif
-        configValue->value = static_cast<int32_t>(GetExternalInputHcclDeterministicV2());
-        HCCL_INFO("[HcclGetConfig] HCCL_DETERMINISTIC is [%d]", configValue->value);
-    }
+    configValue->value = static_cast<int32_t>(GetExternalInputHcclDeterministicV2());
+    HCCL_INFO("[HcclGetConfig] HCCL_DETERMINISTIC is [%d]", configValue->value);
     return HCCL_SUCCESS;
 }
 
@@ -2942,6 +2943,17 @@ static HcclResult GetUbMultiChannelNumConfig(uint32_t infoLen, void* info)
     *static_cast<uint32_t*>(info) = num;
     return HcclResult::HCCL_SUCCESS;
 }
+
+static HcclResult GetDeterministicConfig(hccl::CollComm* collComm, uint32_t infoLen, void* info)
+{
+    constexpr size_t infoExpectedLen = sizeof(uint32_t);
+    if (static_cast<size_t>(infoLen) != infoExpectedLen) {
+        HCCL_ERROR("[%s] infoLen[%u] not expected[%zu].", __func__, infoLen, infoExpectedLen);
+        return HcclResult::HCCL_E_PARA;
+    }
+    *static_cast<uint32_t*>(info) = static_cast<uint32_t>(collComm->GetCommConfig().GetConfigDeterministic());
+    return HcclResult::HCCL_SUCCESS;
+}
 #endif
 
 HcclResult HcclConfigGetInfo(
@@ -2961,6 +2973,8 @@ HcclResult HcclConfigGetInfo(
             return GetHcclAlgoConfig(collComm, infoLen, info);
         case HcclConfigType::HCCL_CONFIG_TYPE_UB_MULTI_CHANNEL_NUM:
             return GetUbMultiChannelNumConfig(infoLen, info);
+        case HcclConfigType::HCCL_CONFIG_TYPE_DETERMINISTIC:
+            return GetDeterministicConfig(collComm, infoLen, info);
         default:
             HCCL_ERROR("[%s] cfgType[%d] is invalid.", __func__, cfgType);
             return HcclResult::HCCL_E_PARA;

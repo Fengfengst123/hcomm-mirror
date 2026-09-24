@@ -59,6 +59,25 @@ bool CastBin2Bool(const std::string& s)
     return b;
 }
 
+u8 CastDeterministic(const std::string& s)
+{
+    std::string value = s;
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+        return static_cast<char>(std::toupper(c));
+    });
+    if (value == "FALSE") {
+        return HCCL_DETERMINISTIC_DISABLE;
+    }
+    if (value == "TRUE") {
+        return HCCL_DETERMINISTIC_ENABLE;
+    }
+    if (value == "STRICT") {
+        return HCCL_DETERMINISTIC_STRICT;
+    }
+    THROW<InvalidParamsException>(
+        StringFormat("Env config \"%s\" is not valid. Should be false, true or strict", s.c_str()));
+}
+
 u32 CastBin2UInt(const std::string& s)
 {
     u32 b = std::stoi(s);

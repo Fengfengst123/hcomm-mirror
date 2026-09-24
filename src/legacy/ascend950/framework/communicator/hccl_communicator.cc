@@ -63,9 +63,7 @@ HcclResult HcclCommunicator::CreateSubComm(
     const CommParams& subCommParams, const std::vector<u32>& rankIds, std::shared_ptr<HcclCommunicator>& subHcclComm,
     HcclCommConfig& subConfig)
 {
-    subHcclComm = std::make_shared<Hccl::HcclCommunicator>(subCommParams);
-    config.hcclBufferSize = 0;
-    config.hcclDeterministic = 0;
+    subHcclComm = std::make_shared<Hccl::HcclCommunicator>(subCommParams, &subConfig);
     return pimpl->CreateSubComm(subCommParams, rankIds, subHcclComm->GetCommImpl(), subConfig);
 }
 

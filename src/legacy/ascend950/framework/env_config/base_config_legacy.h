@@ -175,11 +175,13 @@ private:
 class EnvAlgoConfig : public BaseConfig {
 public:
     void Parse() override;
+    void SetDeterministic(u8 deterministic);
     const std::string& GetPrimQueueGenName() const;
     const std::map<OpType, std::vector<HcclAlgoType>> GetAlgoConfig() const;
     u64 GetBuffSize() const;
     HcclAccelerator GetHcclAccelerator() const;
-    bool GetDeterministic() const;
+    u8 GetDeterministic() const;
+    bool IsDeterministicSetByEnvironment() const;
 
 private:
     static constexpr u32 HCCL_CCL_COMM_DEFAULT_BUFFER_SIZE = 200;
@@ -209,6 +211,10 @@ private:
         }};
     CfgField<HcclAccelerator> hcclAccelerator_{
         "HCCL_OP_EXPANSION_MODE", HcclAccelerator::AICPU_TS, CastHcclAccelerator};
+    // 仅用于解析HCCL_DETERMINISTIC环境变量并记录配置来源。
+    CfgField<u8> hcclDeterministic_{"HCCL_DETERMINISTIC", HCCL_DETERMINISTIC_ENABLE, CastDeterministic};
+    // 进程级确定性配置的最终有效值：初始化时继承环境变量，未配置环境变量时可由HcclSetConfigV2更新。
+    u8 deterministic_{HCCL_DETERMINISTIC_ENABLE};
 };
 
 // 日志/DFX配置

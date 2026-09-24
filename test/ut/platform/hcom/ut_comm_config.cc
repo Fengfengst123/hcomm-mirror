@@ -485,7 +485,7 @@ TEST_F(CommConfigTest, ApplyHcclCommConfig_NullConfig_ReturnSuccess)
 
     CommConfig commConfig("comm_ID");
     uint32_t opExpansionMode = 999;
-    HcclResult ret = ApplyHcclCommConfig(nullptr, commConfig, opExpansionMode);
+    HcclResult ret = ApplyHcclCommConfig(nullptr, commConfig, opExpansionMode, 0);
     EXPECT_EQ(ret, HCCL_SUCCESS);
     EXPECT_EQ(opExpansionMode, 0u);
     GlobalMockObject::verify();
@@ -507,7 +507,7 @@ TEST_F(CommConfigTest, ApplyHcclCommConfig_ValidConfig_ReturnSuccess)
     config.hcclRdmaServiceLevel = 0xFFFFFFFF;
 
     uint32_t opExpansionMode = 0;
-    HcclResult ret = ApplyHcclCommConfig(&config, commConfig, opExpansionMode);
+    HcclResult ret = ApplyHcclCommConfig(&config, commConfig, opExpansionMode, 0);
     EXPECT_EQ(ret, HCCL_SUCCESS);
     EXPECT_EQ(opExpansionMode, 3u);
     GlobalMockObject::verify();
@@ -527,7 +527,7 @@ TEST_F(CommConfigTest, ApplyHcclCommConfig_InvalidTrafficClass_ReturnParaError)
     config.hcclRdmaTrafficClass = 3;
 
     uint32_t opExpansionMode = 0;
-    HcclResult ret = ApplyHcclCommConfig(&config, commConfig, opExpansionMode);
+    HcclResult ret = ApplyHcclCommConfig(&config, commConfig, opExpansionMode, 0);
     EXPECT_EQ(ret, HCCL_E_PARA);
     GlobalMockObject::verify();
 }
@@ -547,7 +547,7 @@ TEST_F(CommConfigTest, ApplyHcclCommConfig_InvalidServiceLevel_ReturnParaError)
     config.hcclRdmaServiceLevel = 8;
 
     uint32_t opExpansionMode = 0;
-    HcclResult ret = ApplyHcclCommConfig(&config, commConfig, opExpansionMode);
+    HcclResult ret = ApplyHcclCommConfig(&config, commConfig, opExpansionMode, 0);
     EXPECT_EQ(ret, HCCL_E_PARA);
     GlobalMockObject::verify();
 }
@@ -567,7 +567,7 @@ TEST_F(CommConfigTest, ApplyHcclCommConfig_ValidTrafficClassAndServiceLevel_Retu
     config.hcclRdmaServiceLevel = 3;
 
     uint32_t opExpansionMode = 0;
-    HcclResult ret = ApplyHcclCommConfig(&config, commConfig, opExpansionMode);
+    HcclResult ret = ApplyHcclCommConfig(&config, commConfig, opExpansionMode, 0);
     EXPECT_EQ(ret, HCCL_SUCCESS);
     EXPECT_EQ(commConfig.GetConfigTrafficClass(), 4u);
     EXPECT_EQ(commConfig.GetConfigServiceLevel(), 3u);
@@ -599,7 +599,7 @@ TEST_F(CommConfigTest, ApplyHcclCommConfig_InvalidQos_ReturnParaError)
     config.hcclQos = 8;
 
     uint32_t opExpansionMode = 0;
-    HcclResult ret = ApplyHcclCommConfig(&config, commConfig, opExpansionMode);
+    HcclResult ret = ApplyHcclCommConfig(&config, commConfig, opExpansionMode, 0);
     EXPECT_EQ(ret, HCCL_E_PARA);
     GlobalMockObject::verify();
 }
@@ -629,7 +629,7 @@ TEST_F(CommConfigTest, ApplyHcclCommConfig_ValidQos_ReturnSuccess)
     config.hcclQos = 5;
 
     uint32_t opExpansionMode = 0;
-    HcclResult ret = ApplyHcclCommConfig(&config, commConfig, opExpansionMode);
+    HcclResult ret = ApplyHcclCommConfig(&config, commConfig, opExpansionMode, 0);
     EXPECT_EQ(ret, HCCL_SUCCESS);
     EXPECT_EQ(commConfig.GetConfigHcclQos(), 5u);
     GlobalMockObject::verify();
@@ -660,7 +660,7 @@ TEST_F(CommConfigTest, ApplyHcclCommConfig_QosVersionBelow10_SkipQos)
     config.hcclQos = 5;
 
     uint32_t opExpansionMode = 0;
-    HcclResult ret = ApplyHcclCommConfig(&config, commConfig, opExpansionMode);
+    HcclResult ret = ApplyHcclCommConfig(&config, commConfig, opExpansionMode, 0);
     EXPECT_EQ(ret, HCCL_SUCCESS);
     GlobalMockObject::verify();
 }
@@ -680,7 +680,7 @@ TEST_F(CommConfigTest, ApplyHcclCommConfig_TcNotMultipleOf4_ReturnParaError)
     config.hcclRdmaServiceLevel = 0xFFFFFFFF;
 
     uint32_t opExpansionMode = 0;
-    HcclResult ret = ApplyHcclCommConfig(&config, commConfig, opExpansionMode);
+    HcclResult ret = ApplyHcclCommConfig(&config, commConfig, opExpansionMode, 0);
     EXPECT_EQ(ret, HCCL_E_PARA);
     GlobalMockObject::verify();
 }
@@ -710,7 +710,7 @@ TEST_F(CommConfigTest, ApplyHcclCommConfig_QosNotSetWithHighVersion_ReturnSucces
     config.hcclQos = HCCL_COMM_QOS_CONFIG_NOT_SET;
 
     uint32_t opExpansionMode = 0;
-    HcclResult ret = ApplyHcclCommConfig(&config, commConfig, opExpansionMode);
+    HcclResult ret = ApplyHcclCommConfig(&config, commConfig, opExpansionMode, 0);
     EXPECT_EQ(ret, HCCL_SUCCESS);
     GlobalMockObject::verify();
 }

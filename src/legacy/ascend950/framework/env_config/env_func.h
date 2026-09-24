@@ -46,6 +46,11 @@ constexpr u32 HCCL_CCU_CONTINUOUS_MS_ID_CONFIG_DIR_NUM = 2; // HCCL CCU MS ID配
 
 constexpr u32 HCCL_CCU_FLAG_NUM = 2; // HCCL NEW CCU 最大是2
 
+// A5确定性配置值与legacy DeterministicEnableLevel保持一致
+constexpr u8 HCCL_DETERMINISTIC_DISABLE = 0;
+constexpr u8 HCCL_DETERMINISTIC_ENABLE = 1;
+constexpr u8 HCCL_DETERMINISTIC_STRICT = 2;
+
 constexpr char HCCL_AUTO_PORT_CONFIG[] = "auto";
 constexpr u32 HCCL_SOCKET_PORT_RANGE_AUTO = 0;
 constexpr u32 MAX_PORT_NUMBER = 65535;
@@ -166,6 +171,8 @@ inline IpAddress Str2T<IpAddress>(const std::string& s)
 
 /*------------------ customized cast functions ------------------*/
 extern bool CastBin2Bool(const std::string& s);
+
+extern u8 CastDeterministic(const std::string& s);
 
 extern SocketIfName CastSocketIfName(const std::string& s);
 

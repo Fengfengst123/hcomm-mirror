@@ -31,12 +31,6 @@
 #include "my_rank.h"
 #include "coll_comm.h"
 
-class TestCollComm : public TestHcommCAdptBase {
-public:
-    void SetUp() override { TestHcommCAdptBase::SetUp(); }
-    void TearDown() override { TestHcommCAdptBase::TearDown(); }
-};
-
 namespace {
 std::unique_ptr<CollComm> PrepareSuspendingCollCommForResetNotify(HcclResult resetNotifyRet)
 {
@@ -56,6 +50,12 @@ std::unique_ptr<CollComm> PrepareSuspendingCollCommForResetNotify(HcclResult res
     return coll;
 }
 } // namespace
+
+class TestCollComm : public TestHcommCAdptBase {
+public:
+    void SetUp() override { TestHcommCAdptBase::SetUp(); }
+    void TearDown() override { TestHcommCAdptBase::TearDown(); }
+};
 
 HcclResult StubCollCommUrmaHrtMalloc(void** devPtr, u64 size, bool Level2Address)
 {
@@ -242,7 +242,7 @@ TEST_F(TestCollComm, Ut_ApplyHcclCommConfig_When_ValidConfig_Expect_Success)
     config.hcclQos = 5U;
     config.hcclChannelSqDepth = 128U;
     uint32_t opExpansionMode = 0U;
-    EXPECT_EQ(ApplyHcclCommConfig(&config, coll.GetCommConfig(), opExpansionMode), HCCL_SUCCESS);
+    EXPECT_EQ(ApplyHcclCommConfig(&config, coll.GetCommConfig(), opExpansionMode, 0), HCCL_SUCCESS);
     EXPECT_EQ(opExpansionMode, 2U);
     EXPECT_EQ(coll.GetCommConfig().GetConfigHcclQos(), 5U);
     EXPECT_EQ(coll.GetCommConfig().GetConfigTrafficClass(), 120U);
@@ -252,11 +252,77 @@ TEST_F(TestCollComm, Ut_ApplyHcclCommConfig_When_ValidConfig_Expect_Success)
 
 TEST_F(TestCollComm, Ut_ApplyHcclCommConfig_When_NullConfig_Expect_Success)
 {
-    hccl::CollComm coll(nullptr, 0, "ut_qos", hccl::ManagerCallbacks{});
-    uint32_t opExpansionMode = 9U;
-    EXPECT_EQ(ApplyHcclCommConfig(nullptr, coll.GetCommConfig(), opExpansionMode), HCCL_SUCCESS);
-    EXPECT_EQ(opExpansionMode, 0U);
-    EXPECT_EQ(coll.GetCommConfig().GetConfigSqDepth(), HCCL_COMM_SQ_DEPTH_CONFIG_NOT_SET);
+    for (const int32_t processValue : {0, 2}) {
+        hccl::CollComm coll(nullptr, 0, "ut_qos", hccl::ManagerCallbacks{});
+        uint32_t opExpansionMode = 9U;
+        EXPECT_EQ(ApplyHcclCommConfig(nullptr, coll.GetCommConfig(), opExpansionMode, processValue), HCCL_SUCCESS);
+        EXPECT_EQ(opExpansionMode, 0U);
+        EXPECT_EQ(coll.GetCommConfig().GetConfigDeterministic(), static_cast<u8>(processValue));
+        EXPECT_EQ(coll.GetCommConfig().GetConfigSqDepth(), HCCL_COMM_SQ_DEPTH_CONFIG_NOT_SET);
+    }
+}
+
+TEST_F(TestCollComm, Ut_ApplyHcclCommConfig_When_DeterministicConfigured_Expect_UseCommValueOrProcessDefault)
+{
+    struct TestCase {
+        uint32_t commValue;
+        int32_t processValue;
+        uint32_t expectedValue;
+    };
+    const TestCase testCases[] = {
+        {0U, 2, 0U},
+        {1U, 2, 1U},
+        {2U, 0, 2U},
+        {HCCL_COMM_DETERMINISTIC_CONFIG_NOT_SET, 0, 0U},
+        {HCCL_COMM_DETERMINISTIC_CONFIG_NOT_SET, 1, 1U},
+        {HCCL_COMM_DETERMINISTIC_CONFIG_NOT_SET, 2, 2U},
+    };
+
+    for (const auto& testCase : testCases) {
+        SCOPED_TRACE(testing::Message() << "commValue=" << testCase.commValue);
+        hccl::CollComm coll(nullptr, 0, "ut_deterministic", hccl::ManagerCallbacks{});
+        HcclCommConfig config{};
+        UtInitHcclCommConfig(config);
+        config.hcclDeterministic = testCase.commValue;
+        uint32_t opExpansionMode = 0U;
+
+        ASSERT_EQ(
+            ApplyHcclCommConfig(&config, coll.GetCommConfig(), opExpansionMode, testCase.processValue), HCCL_SUCCESS);
+        EXPECT_EQ(coll.GetCommConfig().GetConfigDeterministic(), testCase.expectedValue);
+    }
+}
+
+TEST_F(TestCollComm, Ut_ApplyHcclCommConfig_When_DeterministicInvalid_Expect_ReturnHCCL_E_PARA)
+{
+    hccl::CollComm coll(nullptr, 0, "ut_deterministic_invalid", hccl::ManagerCallbacks{});
+    HcclCommConfig config{};
+    UtInitHcclCommConfig(config);
+    config.hcclDeterministic = 3U;
+    uint32_t opExpansionMode = 0U;
+
+    EXPECT_EQ(ApplyHcclCommConfig(&config, coll.GetCommConfig(), opExpansionMode, 0), HCCL_E_PARA);
+
+    config.hcclDeterministic = HCCL_COMM_DETERMINISTIC_CONFIG_NOT_SET;
+    EXPECT_EQ(ApplyHcclCommConfig(&config, coll.GetCommConfig(), opExpansionMode, -1), HCCL_E_PARA);
+    EXPECT_EQ(ApplyHcclCommConfig(&config, coll.GetCommConfig(), opExpansionMode, 3), HCCL_E_PARA);
+}
+
+TEST_F(TestCollComm, Ut_ApplyHcclCommConfig_When_TwoCommsConfigured_Expect_KeepIndependentValues)
+{
+    hccl::CollComm first(nullptr, 0, "ut_deterministic_first", hccl::ManagerCallbacks{});
+    hccl::CollComm second(nullptr, 0, "ut_deterministic_second", hccl::ManagerCallbacks{});
+    HcclCommConfig firstConfig{};
+    HcclCommConfig secondConfig{};
+    UtInitHcclCommConfig(firstConfig);
+    UtInitHcclCommConfig(secondConfig);
+    firstConfig.hcclDeterministic = 0U;
+    secondConfig.hcclDeterministic = 2U;
+    uint32_t opExpansionMode = 0U;
+
+    ASSERT_EQ(ApplyHcclCommConfig(&firstConfig, first.GetCommConfig(), opExpansionMode, 0), HCCL_SUCCESS);
+    ASSERT_EQ(ApplyHcclCommConfig(&secondConfig, second.GetCommConfig(), opExpansionMode, 0), HCCL_SUCCESS);
+    EXPECT_EQ(first.GetCommConfig().GetConfigDeterministic(), 0U);
+    EXPECT_EQ(second.GetCommConfig().GetConfigDeterministic(), 2U);
 }
 
 TEST_F(TestCollComm, Ut_ApplyHcclCommConfig_When_SqDepthVaries_Expect_VersionRules)
@@ -286,7 +352,7 @@ TEST_F(TestCollComm, Ut_ApplyHcclCommConfig_When_SqDepthVaries_Expect_VersionRul
         config.hcclChannelSqDepth = testCase.sqDepth;
         uint32_t opExpansionMode = 0U;
 
-        EXPECT_EQ(ApplyHcclCommConfig(&config, coll.GetCommConfig(), opExpansionMode), testCase.expectedResult);
+        EXPECT_EQ(ApplyHcclCommConfig(&config, coll.GetCommConfig(), opExpansionMode, 0), testCase.expectedResult);
         EXPECT_EQ(coll.GetCommConfig().GetConfigSqDepth(), testCase.expectedSqDepth);
     }
 }
@@ -298,7 +364,7 @@ TEST_F(TestCollComm, Ut_ApplyHcclCommConfig_When_InvalidHcclQos_Expect_EPara)
     UtInitHcclCommConfig(config);
     config.hcclQos = 8U;
     uint32_t opExpansionMode = 0U;
-    EXPECT_EQ(ApplyHcclCommConfig(&config, coll.GetCommConfig(), opExpansionMode), HCCL_E_PARA);
+    EXPECT_EQ(ApplyHcclCommConfig(&config, coll.GetCommConfig(), opExpansionMode, 0), HCCL_E_PARA);
 }
 
 TEST_F(TestCollComm, Ut_ApplyHcclCommConfig_When_InvalidTrafficClass_Expect_EPara)
@@ -308,7 +374,7 @@ TEST_F(TestCollComm, Ut_ApplyHcclCommConfig_When_InvalidTrafficClass_Expect_EPar
     UtInitHcclCommConfig(config);
     config.hcclRdmaTrafficClass = 256U;
     uint32_t opExpansionMode = 0U;
-    EXPECT_EQ(ApplyHcclCommConfig(&config, coll.GetCommConfig(), opExpansionMode), HCCL_E_PARA);
+    EXPECT_EQ(ApplyHcclCommConfig(&config, coll.GetCommConfig(), opExpansionMode, 0), HCCL_E_PARA);
 }
 
 TEST_F(TestCollComm, Ut_ApplyHcclCommConfig_When_InvalidServiceLevel_Expect_EPara)
@@ -318,7 +384,7 @@ TEST_F(TestCollComm, Ut_ApplyHcclCommConfig_When_InvalidServiceLevel_Expect_EPar
     UtInitHcclCommConfig(config);
     config.hcclRdmaServiceLevel = 8U;
     uint32_t opExpansionMode = 0U;
-    EXPECT_EQ(ApplyHcclCommConfig(&config, coll.GetCommConfig(), opExpansionMode), HCCL_E_PARA);
+    EXPECT_EQ(ApplyHcclCommConfig(&config, coll.GetCommConfig(), opExpansionMode, 0), HCCL_E_PARA);
 }
 
 TEST_F(TestCollComm, Ut_RegisterPendingSymmetricMemHandles_When_PendingConsumed_Expect_RegisteredHandleRetained)
@@ -477,7 +543,7 @@ TEST_F(TestCollComm, Ut_ApplyHcclCommConfig_When_NullptrConfig_Expect_TcSlSkippe
     config.hcclRdmaServiceLevel = 0xFFFFFFFFu;
     config.hcclQos = 0xFFFFFFFFu;
     uint32_t opExpansionMode = 0U;
-    EXPECT_EQ(ApplyHcclCommConfig(&config, coll.GetCommConfig(), opExpansionMode), HCCL_SUCCESS);
+    EXPECT_EQ(ApplyHcclCommConfig(&config, coll.GetCommConfig(), opExpansionMode, 0), HCCL_SUCCESS);
     EXPECT_EQ(coll.GetCommConfig().GetConfigTrafficClass(), 0xFFFFFFFFu);
     EXPECT_EQ(coll.GetCommConfig().GetConfigServiceLevel(), 0xFFFFFFFFu);
 }
@@ -489,7 +555,7 @@ TEST_F(TestCollComm, Ut_ApplyHcclCommConfig_When_TcNotMultipleOf4_Expect_EPara)
     UtInitHcclCommConfig(config);
     config.hcclRdmaTrafficClass = 3U;
     uint32_t opExpansionMode = 0U;
-    EXPECT_EQ(ApplyHcclCommConfig(&config, coll.GetCommConfig(), opExpansionMode), HCCL_E_PARA);
+    EXPECT_EQ(ApplyHcclCommConfig(&config, coll.GetCommConfig(), opExpansionMode, 0), HCCL_E_PARA);
 }
 
 TEST_F(TestCollComm, Ut_ApplyHcclCommConfig_When_TcValidMultipleOf4_Expect_Success)
@@ -501,7 +567,7 @@ TEST_F(TestCollComm, Ut_ApplyHcclCommConfig_When_TcValidMultipleOf4_Expect_Succe
     config.hcclRdmaServiceLevel = 5U;
     config.hcclQos = 0xFFFFFFFFu;
     uint32_t opExpansionMode = 0U;
-    EXPECT_EQ(ApplyHcclCommConfig(&config, coll.GetCommConfig(), opExpansionMode), HCCL_SUCCESS);
+    EXPECT_EQ(ApplyHcclCommConfig(&config, coll.GetCommConfig(), opExpansionMode, 0), HCCL_SUCCESS);
     EXPECT_EQ(coll.GetCommConfig().GetConfigTrafficClass(), 4U);
     EXPECT_EQ(coll.GetCommConfig().GetConfigServiceLevel(), 5U);
 }
@@ -513,7 +579,7 @@ TEST_F(TestCollComm, Ut_ApplyHcclCommConfig_When_QosDefault_Expect_Success)
     UtInitHcclCommConfig(config);
     config.hcclQos = 0xFFFFFFFFu;
     uint32_t opExpansionMode = 0U;
-    EXPECT_EQ(ApplyHcclCommConfig(&config, coll.GetCommConfig(), opExpansionMode), HCCL_SUCCESS);
+    EXPECT_EQ(ApplyHcclCommConfig(&config, coll.GetCommConfig(), opExpansionMode, 0), HCCL_SUCCESS);
 }
 
 TEST_F(TestCollComm, Ut_ApplyHcclCommConfig_When_QosValid_Expect_Success)
@@ -525,7 +591,7 @@ TEST_F(TestCollComm, Ut_ApplyHcclCommConfig_When_QosValid_Expect_Success)
     config.hcclRdmaTrafficClass = 0xFFFFFFFFu;
     config.hcclRdmaServiceLevel = 0xFFFFFFFFu;
     uint32_t opExpansionMode = 0U;
-    EXPECT_EQ(ApplyHcclCommConfig(&config, coll.GetCommConfig(), opExpansionMode), HCCL_SUCCESS);
+    EXPECT_EQ(ApplyHcclCommConfig(&config, coll.GetCommConfig(), opExpansionMode, 0), HCCL_SUCCESS);
     EXPECT_EQ(coll.GetCommConfig().GetConfigHcclQos(), 7U);
 }
 
@@ -542,7 +608,7 @@ TEST_F(TestCollComm, Ut_ApplyHcclCommConfig_When_LowVersionQos_Expect_QosNotSet)
     errno_t sRet = memcpy_s(config.reserved, sizeof(config.reserved), &info, sizeof(info));
     ASSERT_EQ(sRet, EOK);
     uint32_t opExpansionMode = 0U;
-    EXPECT_EQ(ApplyHcclCommConfig(&config, coll.GetCommConfig(), opExpansionMode), HCCL_SUCCESS);
+    EXPECT_EQ(ApplyHcclCommConfig(&config, coll.GetCommConfig(), opExpansionMode, 0), HCCL_SUCCESS);
     EXPECT_EQ(coll.GetCommConfig().GetConfigHcclQos(), HCCL_COMM_QOS_CONFIG_NOT_SET);
 }
 
@@ -555,7 +621,7 @@ TEST_F(TestCollComm, Ut_ApplyHcclCommConfig_When_TcZero_Expect_Success)
     config.hcclRdmaServiceLevel = 0U;
     config.hcclQos = 0xFFFFFFFFu;
     uint32_t opExpansionMode = 0U;
-    EXPECT_EQ(ApplyHcclCommConfig(&config, coll.GetCommConfig(), opExpansionMode), HCCL_SUCCESS);
+    EXPECT_EQ(ApplyHcclCommConfig(&config, coll.GetCommConfig(), opExpansionMode, 0), HCCL_SUCCESS);
     EXPECT_EQ(coll.GetCommConfig().GetConfigTrafficClass(), 0U);
     EXPECT_EQ(coll.GetCommConfig().GetConfigServiceLevel(), 0U);
 }

@@ -22,7 +22,7 @@
 
 获取指定通信域的HCCL配置信息。
 
-根据配置项类型查询对应的配置信息，并写入调用者提供的缓冲区中，当前支持查询通信算子的展开模式、通信算法配置字符串及UB多channel数量。
+根据配置项类型查询对应的配置信息，并写入调用者提供的缓冲区中，当前支持查询通信算子的展开模式、通信算法配置字符串、UB多channel数量及确定性计算等级。
 
 ## 函数原型
 
@@ -36,7 +36,7 @@ HcclResult HcclConfigGetInfo(HcclComm comm, HcclConfigType cfgType, uint32_t inf
 | --- | --- | --- |
 | comm | 输入 | 通信域句柄。<br>HcclComm类型的定义可参见[HcclComm](./data_type_definition/HcclComm.md)。 |
 | cfgType | 输入 | 需要查询的配置项类型，HcclConfigType的定义可参见[HcclConfigType](./data_type_definition/HcclConfigType.md)。 |
-| infoLen | 输入 | 目标配置类型的大小（字节数），查询HCCL_CONFIG_TYPE_OP_EXPANSION_MODE时必须等于待查询配置类型的实际大小,查询HCCL_CONFIG_TYPE_HCCL_ALGO时必须不小于HCCL_COMM_ALGO_MAX_LENGTH字节数，查询HCCL_CONFIG_TYPE_UB_MULTI_CHANNEL_NUM时必须等于sizeof(uint32_t)。 |
+| infoLen | 输入 | 目标配置类型的大小（字节数）。查询HCCL_CONFIG_TYPE_OP_EXPANSION_MODE时必须等于待查询配置类型的实际大小；查询HCCL_CONFIG_TYPE_HCCL_ALGO时必须不小于HCCL_COMM_ALGO_MAX_LENGTH；查询HCCL_CONFIG_TYPE_UB_MULTI_CHANNEL_NUM或HCCL_CONFIG_TYPE_DETERMINISTIC时必须等于sizeof(uint32_t)。 |
 | info | 输出 | 配置信息输出缓冲区，必须按目标配置类型对齐且可写。 |
 
 ## 返回值
@@ -46,6 +46,7 @@ HcclResult HcclConfigGetInfo(HcclComm comm, HcclConfigType cfgType, uint32_t inf
 ## 约束说明
 
 - comm必须为有效的通信域句柄（由通信域创建接口获得，调用期间保持有效）。禁止传入空指针、野指针或已销毁的句柄。
+- 查询HCCL_CONFIG_TYPE_DETERMINISTIC时，返回指定通信域的有效配置：0或1表示普通确定性计算，2表示严格确定性计算，即保序功能。
 
 ## 调用示例
 
@@ -57,10 +58,15 @@ HcclResult ret = HcclConfigGetInfo(comm, HCCL_CONFIG_TYPE_OP_EXPANSION_MODE, siz
 // 查询通信算法字符串
 char algoInfo[HCCL_COMM_ALGO_MAX_LENGTH];
 uint32_t algoSize = HCCL_COMM_ALGO_MAX_LENGTH; // 必须不小于HCCL_COMM_ALGO_MAX_LENGTH
-HcclResult ret = HcclConfigGetInfo(comm, HCCL_CONFIG_TYPE_HCCL_ALGO, algoSize, algoInfo);
+ret = HcclConfigGetInfo(comm, HCCL_CONFIG_TYPE_HCCL_ALGO, algoSize, algoInfo);
 
 // 查询UB多channel数量
 uint32_t multiChannelNum = 0;
 uint32_t numSize = sizeof(uint32_t); // 必须等于目标类型大小
-HcclResult ret = HcclConfigGetInfo(comm, HCCL_CONFIG_TYPE_UB_MULTI_CHANNEL_NUM, numSize, &multiChannelNum);
+ret = HcclConfigGetInfo(comm, HCCL_CONFIG_TYPE_UB_MULTI_CHANNEL_NUM, numSize, &multiChannelNum);
+
+// 查询确定性计算等级
+uint32_t deterministic = 0;
+uint32_t deterministicSize = sizeof(uint32_t); // 必须等于目标类型大小
+ret = HcclConfigGetInfo(comm, HCCL_CONFIG_TYPE_DETERMINISTIC, deterministicSize, &deterministic);
 ```

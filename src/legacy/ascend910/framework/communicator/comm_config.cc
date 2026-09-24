@@ -706,6 +706,12 @@ HcclResult CommConfig::SetConfigSqDepth(u32 sqDepth)
     return HCCL_SUCCESS;
 }
 
+HcclResult CommConfig::SetConfigDeterministic(u8 deterministic)
+{
+    deterministic_ = deterministic;
+    return HCCL_SUCCESS;
+}
+
 HcclResult CommConfig::SetConfigExecTimeOut(s32 execTimeOut)
 {
     execTimeOut_ = execTimeOut;

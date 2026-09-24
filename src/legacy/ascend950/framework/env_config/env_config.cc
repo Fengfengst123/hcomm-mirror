@@ -31,6 +31,8 @@ void EnvConfig::Parse()
     detourCfg.Parse();
 }
 
+void EnvConfig::SetDeterministic(u8 deterministic) { algoCfg.SetDeterministic(deterministic); }
+
 const EnvHostNicConfig& EnvConfig::GetHostNicConfig() { return hostNicCfg; }
 
 const EnvSocketConfig& EnvConfig::GetSocketConfig() { return socketCfg; }

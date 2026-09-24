@@ -18,6 +18,11 @@
 #include <fstream>
 #include <string>
 #include <nlohmann/json.hpp>
+#define private public
+#include "cfg_field.h"
+#include "base_config_legacy.h"
+#include "env_config_v2.h"
+#undef private
 #include "hccl_params_pub.h"
 #include "hccl_common_v2.h"
 #include "param_check_v2.h"
@@ -87,6 +92,8 @@ protected:
         std::cout << "A Test case in OpbaseTestV2 SetUP" << std::endl;
         g_getRootInfoResult = HCCL_SUCCESS;
         g_detectRankTableResult = HCCL_SUCCESS;
+        unsetenv("HCCL_DETERMINISTIC");
+        SetDeterministicState(HCCL_DETERMINISTIC_ENABLE, false);
     }
 
     virtual void TearDown()
@@ -94,7 +101,66 @@ protected:
         std::cout << "A Test case in OpbaseTestV2 TearDown" << std::endl;
         GlobalMockObject::verify();
     }
+
+    void SetDeterministicState(u8 level, bool fromEnvironment)
+    {
+        EnvAlgoConfig& algoConfig = EnvConfig::GetInstance().algoCfg;
+        algoConfig.SetDeterministic(level);
+        algoConfig.hcclDeterministic_.isSetByEnvironment_ = fromEnvironment;
+    }
 };
+
+TEST_F(OpbaseTestV2, Ut_HcclSetAndGetConfigV2_WhenLevelIsValid_ExpectSameLevel)
+{
+    for (int32_t level = 0; level <= 2; ++level) {
+        HcclConfigValue input{};
+        input.value = level;
+        HcclConfigValue output{};
+        EXPECT_EQ(HcclSetConfigV2(HCCL_DETERMINISTIC, input), HCCL_SUCCESS);
+        EXPECT_EQ(HcclGetConfigV2(HCCL_DETERMINISTIC, &output), HCCL_SUCCESS);
+        EXPECT_EQ(output.value, level);
+    }
+}
+
+TEST_F(OpbaseTestV2, Ut_HcclSetConfigV2_WhenEnvironmentConfigured_ExpectEnvironmentValueKept)
+{
+    SetDeterministicState(2, true);
+    HcclConfigValue input{};
+    input.value = 1;
+    EXPECT_EQ(HcclSetConfigV2(HCCL_DETERMINISTIC, input), HCCL_SUCCESS);
+
+    HcclConfigValue output{};
+    ASSERT_EQ(HcclGetConfigV2(HCCL_DETERMINISTIC, &output), HCCL_SUCCESS);
+    EXPECT_EQ(output.value, 2);
+}
+
+TEST_F(OpbaseTestV2, Ut_HcclSetConfigV2_WhenLevelIsInvalid_ExpectErrorAndValueUnchanged)
+{
+    HcclConfigValue validValue{};
+    validValue.value = 1;
+    ASSERT_EQ(HcclSetConfigV2(HCCL_DETERMINISTIC, validValue), HCCL_SUCCESS);
+
+    for (const int32_t invalidLevel : {-1, 3}) {
+        HcclConfigValue invalidValue{};
+        invalidValue.value = invalidLevel;
+        EXPECT_EQ(HcclSetConfigV2(HCCL_DETERMINISTIC, invalidValue), HCCL_E_PARA);
+    }
+
+    HcclConfigValue output{};
+    ASSERT_EQ(HcclGetConfigV2(HCCL_DETERMINISTIC, &output), HCCL_SUCCESS);
+    EXPECT_EQ(output.value, validValue.value);
+}
+
+TEST_F(OpbaseTestV2, Ut_HcclGetConfigV2_WhenOutputIsNull_ExpectPointerError)
+{
+    EXPECT_EQ(HcclGetConfigV2(HCCL_DETERMINISTIC, nullptr), HCCL_E_PTR);
+}
+
+TEST_F(OpbaseTestV2, Ut_HcclGetConfigV2_WhenConfigTypeUnsupported_ExpectParameterError)
+{
+    HcclConfigValue output{};
+    EXPECT_EQ(HcclGetConfigV2(HCCL_CONFIG_RESERVED, &output), HCCL_E_PARA);
+}
 
 TEST_F(OpbaseTestV2, Ut_RankGraphBuilderBridgeAdoptRankGraph_WhenValid_ExpectSuccess)
 {
@@ -527,8 +593,8 @@ TEST_F(OpbaseTestV2, HcclCommInitClusterInfoConfigV2)
 
     HcclCommConfig config;
     string worldgroup = "hccl_world_group";
-    PrepareCommConfig(config, 200, worldgroup, 1, 0);
-    HcclComm comm;
+    PrepareCommConfig(config, 200, worldgroup, 2, 0);
+    HcclComm comm = nullptr;
 
     // 打桩GetCommInfoV2。
     CommManager::GetInstance(0).GetCommInfoV2().hcclGroupMap.clear();
@@ -539,8 +605,15 @@ TEST_F(OpbaseTestV2, HcclCommInitClusterInfoConfigV2)
         .with(mockcpp::any())
         .will(returnValue(HCCL_SUCCESS));
     MOCKER_CPP(&CommunicatorImpl::SetCommExecuteConfig).stubs().will(ignoreReturnValue());
+    config.hcclDeterministic = 3U;
+    EXPECT_EQ(HcclCommInitClusterInfoConfigV2(clusterInfo, rank, &config, &comm), HCCL_E_PARA);
+    EXPECT_EQ(comm, nullptr);
+
+    config.hcclDeterministic = 2U;
     auto ret = HcclCommInitClusterInfoConfigV2(clusterInfo, rank, &config, &comm);
     EXPECT_EQ(ret, HCCL_SUCCESS);
+    ASSERT_NE(comm, nullptr);
+    EXPECT_EQ(static_cast<HcclCommunicator*>(comm)->config.hcclDeterministic, 2U);
 }
 
 TEST_F(OpbaseTestV2, HcclCommInitClusterInfoConfigV2_CONFIGNOTSET)
@@ -566,7 +639,8 @@ TEST_F(OpbaseTestV2, HcclCommInitClusterInfoConfigV2_CONFIGNOTSET)
 
     HcclCommConfig config;
     string worldgroup = "hccl_world_group";
-    PrepareCommConfig(config, 0xffffffff, worldgroup, 1, 0);
+    PrepareCommConfig(config, HCCL_COMM_BUFFSIZE_CONFIG_NOT_SET, worldgroup, HCCL_COMM_DETERMINISTIC_CONFIG_NOT_SET, 0);
+    SetDeterministicState(2U, false);
     HcclComm comm;
 
     // 打桩GetCommInfoV2。
@@ -580,6 +654,8 @@ TEST_F(OpbaseTestV2, HcclCommInitClusterInfoConfigV2_CONFIGNOTSET)
     MOCKER_CPP(&CommunicatorImpl::SetCommExecuteConfig).stubs().will(ignoreReturnValue());
     auto ret = HcclCommInitClusterInfoConfigV2(clusterInfo, rank, &config, &comm);
     EXPECT_EQ(ret, HCCL_SUCCESS);
+    ASSERT_NE(comm, nullptr);
+    EXPECT_EQ(static_cast<HcclCommunicator*>(comm)->config.hcclDeterministic, 2U);
 }
 
 TEST_F(OpbaseTestV2, HcclGetRankIdV2)
@@ -1514,7 +1590,9 @@ TEST_F(OpbaseTestV2, HcclGetTopoDescV2)
 
 TEST_F(OpbaseTestV2, HcclCreateSubCommConfigV2)
 {
-    auto context = ConstructSubCommConfigV2TestContext(42, "hccl_world_group");
+    auto context = ConstructSubCommConfigV2TestContext(42, "hccl_world_group_1");
+    context.communicator->config.hcclDeterministic = 1U;
+    context.config.hcclDeterministic = 2U;
     HcclGroupParamsV2 groupParamsV2Tem;
 
     PrepareSubCommConfigV2WorldManagerState();
@@ -1525,6 +1603,49 @@ TEST_F(OpbaseTestV2, HcclCreateSubCommConfigV2)
         &context.comm, context.rankNum, &context.rankIds, context.subCommId, context.subCommRankId, &context.config,
         &context.subComm);
     EXPECT_EQ(ret, HCCL_SUCCESS);
+    EXPECT_EQ(context.communicator->config.hcclDeterministic, 1U);
+    ASSERT_NE(context.subComm, nullptr);
+    EXPECT_EQ(static_cast<HcclCommunicator*>(context.subComm)->config.hcclDeterministic, 2U);
+}
+
+TEST_F(OpbaseTestV2, HcclCreateSubCommConfigV2_DefaultDoesNotInheritParentDeterministic)
+{
+    auto context = ConstructSubCommConfigV2TestContext(43, "hccl_world_group_default_deterministic");
+    context.communicator->config.hcclDeterministic = 2U;
+    context.config.hcclDeterministic = HCCL_COMM_DETERMINISTIC_CONFIG_NOT_SET;
+    SetDeterministicState(0U, false);
+    HcclGroupParamsV2 groupParamsV2Tem;
+
+    PrepareSubCommConfigV2WorldManagerState();
+    MockSubCommConfigV2Dependencies(groupParamsV2Tem);
+    context.communicator->pimpl->id = "hccl_world_group";
+    context.communicator->pimpl->isWorldGroup = true;
+    HcclResult ret = HcclCreateSubCommConfigV2(
+        &context.comm, context.rankNum, &context.rankIds, context.subCommId, context.subCommRankId, &context.config,
+        &context.subComm);
+
+    EXPECT_EQ(ret, HCCL_SUCCESS);
+    EXPECT_EQ(context.communicator->config.hcclDeterministic, 2U);
+    ASSERT_NE(context.subComm, nullptr);
+    EXPECT_EQ(static_cast<HcclCommunicator*>(context.subComm)->config.hcclDeterministic, 0U);
+}
+
+TEST_F(OpbaseTestV2, HcclCreateSubCommConfigV2_DeterministicOtherThanZeroOneTwoReturnsParameterError)
+{
+    auto context = ConstructSubCommConfigV2TestContext(44, "hccl_world_group_invalid_deterministic");
+    context.config.hcclDeterministic = 3U;
+    HcclGroupParamsV2 groupParamsV2Tem;
+
+    PrepareSubCommConfigV2WorldManagerState();
+    MockSubCommConfigV2Dependencies(groupParamsV2Tem);
+    context.communicator.get()->pimpl.get()->id = "hccl_world_group";
+    context.communicator.get()->pimpl.get()->isWorldGroup = true;
+    HcclResult ret = HcclCreateSubCommConfigV2(
+        &context.comm, context.rankNum, &context.rankIds, context.subCommId, context.subCommRankId, &context.config,
+        &context.subComm);
+
+    EXPECT_EQ(ret, HCCL_E_PARA);
+    EXPECT_EQ(context.subComm, nullptr);
 }
 
 TEST_F(OpbaseTestV2, HcclCreateSubCommConfigV2_IDEL)
@@ -2464,8 +2585,15 @@ TEST_F(OpbaseTestV2, Ut_HcclCommInitRootInfoConfigV2_When_InputValue_Expect_Retu
     HcclComm comm{};
     HcclCommConfig config{};
     string worldgroup = "hccl_world_group_1";
-    PrepareCommConfig(config, 200, worldgroup, 1, 0);
+    PrepareCommConfig(config, 200, worldgroup, 2, 0);
+    config.hcclDeterministic = 3U;
+    EXPECT_EQ(HcclCommInitRootInfoConfigV2(nRanks, &rootInfo, rank, &config, &comm), HCCL_E_PARA);
+    EXPECT_EQ(comm, nullptr);
+
+    config.hcclDeterministic = 2U;
     EXPECT_EQ(HcclCommInitRootInfoConfigV2(nRanks, &rootInfo, rank, &config, &comm), HCCL_SUCCESS);
+    ASSERT_NE(comm, nullptr);
+    EXPECT_EQ(static_cast<HcclCommunicator*>(comm)->config.hcclDeterministic, 2U);
 }
 
 TEST_F(OpbaseTestV2, Ut_HcclCommInitRootInfoConfigV2_When_NotSetBufSize_Expect_Return_HCCL_SUCCESS)

@@ -3,7 +3,7 @@
 ## 产品支持情况
 
 <!-- npu="950" id1 -->
-- Ascend 950PR&950DT系列产品：不支持
+- Ascend 950PR&950DT系列产品：支持
 <!-- end id1 -->
 <!-- npu="A3" id2 -->
 - Atlas A3系列产品：支持
@@ -41,7 +41,7 @@ HcclResult HcclGetConfig(HcclConfig config, HcclConfigValue *configValue)
 
 ## 约束说明
 
-无
+本接口返回进程级确定性配置，不用于查询单个通信域的有效配置。如需查询指定通信域的有效配置，请调用[HcclConfigGetInfo](HcclConfigGetInfo.md)。
 
 ## 调用示例
 

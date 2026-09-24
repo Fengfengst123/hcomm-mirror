@@ -17,8 +17,8 @@ typedef enum {
 
 - HCCL_DETERMINISTIC：是否开启确定性计算。
 
-  - 0：不开启确定性计算。
+  - 0：不开启确定性计算。针对Ascend 950PR&950DT系列产品，归约类通信算子仍使用确定性计算。
   - 1：开启确定性计算。
-  - 2：开启保序功能（仅Atlas A2训练系列产品/Atlas A2推理系列产品支持）。
+  - 2：开启保序功能，支持Ascend 950PR&950DT系列产品、Atlas A2 训练系列产品/Atlas A2 推理系列产品和Atlas A3 训练系列产品/Atlas A3 推理系列产品。各产品支持的算子和使用约束请参见[HCCL_DETERMINISTIC](https://gitcode.com/cann/hccl/blob/master/docs/zh/user_guide/hccl_env/HCCL_DETERMINISTIC.md)。
 
 - HCCL_CONFIG_RESERVED：预留参数。

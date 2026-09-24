@@ -9,6 +9,22 @@
  */
 
 #include "hccl_api_base_test.h"
+#include "coll_comm_mgr.h"
+
+extern thread_local s32 g_hcclDeviceId;
+
+HcclResult HcclSetConfigV2(HcclConfig config, HcclConfigValue configValue)
+{
+    (void)config;
+    (void)configValue;
+    return HCCL_SUCCESS;
+}
+
+static HcclResult HrtGetHcclV2SupportForUt(bool* isSupport)
+{
+    *isSupport = true;
+    return HCCL_SUCCESS;
+}
 
 class OpBaseMiscTest : public BaseInit {
 public:
@@ -78,6 +94,87 @@ TEST_F(OpBaseMiscTest, Ut_HcclConfigGetInfo_When_CfgTypeIsOP_EXPANSION_MODE_Expe
         comm, HcclConfigType::HCCL_CONFIG_TYPE_OP_EXPANSION_MODE, sizeof(HcclOpExpansionMode), &opExpansionMode);
     EXPECT_EQ(ret, HCCL_SUCCESS);
     Ut_Comm_Destroy(comm);
+}
+
+TEST_F(OpBaseMiscTest, Ut_HcclConfigGetInfo_When_DeterministicIsZeroOneTwo_Expect_ReturnConfiguredValue)
+{
+    UT_COMM_CREATE_DEFAULT(comm);
+    CollComm collComm(nullptr, 0, "ut_comm", ManagerCallbacks{}, CollCommInitMode::simpleMode);
+    MOCKER_CPP(&hcclComm::GetCollComm).stubs().will(returnValue(&collComm));
+
+    for (uint32_t expected = 0U; expected <= 2U; ++expected) {
+        ASSERT_EQ(collComm.GetCommConfig().SetConfigDeterministic(static_cast<u8>(expected)), HCCL_SUCCESS);
+        uint32_t deterministic = 3U;
+        HcclResult ret = HcclConfigGetInfo(
+            comm, HcclConfigType::HCCL_CONFIG_TYPE_DETERMINISTIC, sizeof(deterministic), &deterministic);
+
+        EXPECT_EQ(ret, HCCL_SUCCESS);
+        EXPECT_EQ(deterministic, expected);
+    }
+    Ut_Comm_Destroy(comm);
+}
+
+TEST_F(OpBaseMiscTest, Ut_HcclConfigGetInfo_When_DeterministicArgumentsInvalid_Expect_ReturnErrorAndKeepOutput)
+{
+    UT_COMM_CREATE_DEFAULT(comm);
+    CollComm collComm(nullptr, 0, "ut_comm", ManagerCallbacks{}, CollCommInitMode::simpleMode);
+    ASSERT_EQ(collComm.GetCommConfig().SetConfigDeterministic(2U), HCCL_SUCCESS);
+    MOCKER_CPP(&hcclComm::GetCollComm).stubs().will(returnValue(&collComm));
+    uint32_t deterministic = 7U;
+
+    HcclResult ret
+        = HcclConfigGetInfo(comm, HcclConfigType::HCCL_CONFIG_TYPE_DETERMINISTIC, sizeof(uint16_t), &deterministic);
+
+    EXPECT_EQ(ret, HCCL_E_PARA);
+    EXPECT_EQ(deterministic, 7U);
+
+    EXPECT_EQ(
+        HcclConfigGetInfo(
+            nullptr, HcclConfigType::HCCL_CONFIG_TYPE_DETERMINISTIC, sizeof(deterministic), &deterministic),
+        HCCL_E_PTR);
+    EXPECT_EQ(deterministic, 7U);
+    EXPECT_EQ(
+        HcclConfigGetInfo(comm, HcclConfigType::HCCL_CONFIG_TYPE_DETERMINISTIC, sizeof(deterministic), nullptr),
+        HCCL_E_PTR);
+    Ut_Comm_Destroy(comm);
+}
+
+TEST_F(OpBaseMiscTest, Ut_HcclSetConfig_When_A5CommExists_Expect_UpdateUnlessEnvironmentConfigured)
+{
+    MOCKER(hrtGetHcclV2Support).stubs().will(invoke(HrtGetHcclV2SupportForUt));
+
+    g_hcclDeviceId = 0;
+    auto hcclCommPtr = std::make_shared<hcclComm>();
+    hcclCommPtr->collComm_
+        = std::make_unique<CollComm>(nullptr, 0, "ut_deterministic", ManagerCallbacks{}, CollCommInitMode::simpleMode);
+    HcclOpInfoCtx& opBaseInfo = CollCommMgr::GetInstance().LegacyGetHcclOpInfoCtx();
+    opBaseInfo.opGroup2CommMap.clear();
+    opBaseInfo.opGroup2CommMap.emplace("ut_deterministic", hcclCommPtr);
+
+    struct TestCase {
+        const char* environmentValue;
+        u8 expected;
+    };
+    const TestCase testCases[] = {
+        {nullptr, 0U},
+        {"strict", 2U},
+    };
+    for (const auto& testCase : testCases) {
+        if (testCase.environmentValue == nullptr) {
+            unsetenv("HCCL_DETERMINISTIC");
+        } else {
+            setenv("HCCL_DETERMINISTIC", testCase.environmentValue, 1);
+        }
+        EXPECT_EQ(hcclCommPtr->collComm_->GetCommConfig().SetConfigDeterministic(2U), HCCL_SUCCESS);
+        HcclConfigValue configValue{};
+        configValue.value = 0;
+
+        EXPECT_EQ(HcclSetConfig(HCCL_DETERMINISTIC, configValue), HCCL_SUCCESS);
+        EXPECT_EQ(hcclCommPtr->collComm_->GetCommConfig().GetConfigDeterministic(), testCase.expected);
+    }
+
+    unsetenv("HCCL_DETERMINISTIC");
+    opBaseInfo.opGroup2CommMap.clear();
 }
 
 TEST_F(OpBaseMiscTest, Ut_HcclCommSymWinGet_When_GetCommSymWinSucceeds_Expect_ReturnIsHCCL_SUCCESS)
