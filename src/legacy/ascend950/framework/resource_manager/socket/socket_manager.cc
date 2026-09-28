@@ -65,6 +65,18 @@ void SocketManager::BatchCreateSockets(const vector<LinkData>& links)
         return;
     }
 
+    // 从 RankGraph 查 ipIndex 并 Set 到 LinkData，供后续 SocketConfig 拼 hccpTag 使用
+    for (auto& link : pendingLinks) {
+        uint32_t localIpIndex = 0;
+        uint32_t remoteIpIndex = 0;
+        if (comm != nullptr && comm->GetRankGraph() != nullptr) {
+            comm->GetRankGraph()->GetIpIndex(link.GetLocalRankId(), link.GetLocalAddr(), localIpIndex);
+            comm->GetRankGraph()->GetIpIndex(link.GetRemoteRankId(), link.GetRemoteAddr(), remoteIpIndex);
+        }
+        link.SetLocalIpIndex(localIpIndex);
+        link.SetRemoteIpIndex(remoteIpIndex);
+    }
+
     // p2p使能等待已下沉到 P2PTransport::GetStatus 状态机，socket建链不再阻塞等待p2p使能
     BatchServerInit(pendingLinks);
     BatchAddWhiteList(pendingLinks);

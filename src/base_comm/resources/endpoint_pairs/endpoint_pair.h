@@ -117,6 +117,13 @@ public:
     // 反查 handle -> (engine, 真实槽位)
     bool FindChannelLoc(ChannelHandle handle, CommEngine& engine, u32& reuseIdx) const;
 
+    // 由 L2（MyRank）在查到 ipIndex 后注入，供 LinkData 构造时回填 hccpTag；默认 0 兼容未注入场景
+    void SetIpIndexPair(uint32_t localIpIndex, uint32_t remoteIpIndex)
+    {
+        localIpIndex_ = localIpIndex;
+        remoteIpIndex_ = remoteIpIndex;
+    }
+
 private:
     HcclResult EnsureSocketMgrCompat(const uint32_t myRank, const std::string& socketTag);
     Hccl::SocketConfig BuildSocketConfig(const Hccl::LinkData& linkData, const std::string& socketTag) const;
@@ -141,6 +148,8 @@ private:
     Hccl::RankIpPortMapPtr rankIpPortMap_;
     uint32_t devicePhyId_{};
     std::unique_ptr<SocketMgr> socketMgr_;
+    uint32_t localIpIndex_{0}; // 由 L2 注入，供 LinkData 构造时回填 hccpTag
+    uint32_t remoteIpIndex_{0};
 };
 
 } // namespace hcomm

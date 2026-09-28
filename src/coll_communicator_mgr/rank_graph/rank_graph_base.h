@@ -18,6 +18,7 @@
 #include "hccl_impl_pub.h"
 #include "hccl_rank_graph.h"
 #include "hccl_rankgraph.h"
+#include "ip_address.h"
 
 namespace hccl {
 class RankGraph {
@@ -61,6 +62,13 @@ public:
     virtual HcclResult GetEndpointInfo(
         uint32_t rankId, const EndpointDesc* endPointDesc, EndpointAttr endpointAttr, uint32_t infoLen, void* info)
         = 0;
+    // 按 addr 和 rankId 查询 ipIndex（打平所有 netLayer 去重排序后的下标）
+    virtual HcclResult GetIpIndex(
+        [[maybe_unused]] uint32_t rankId, [[maybe_unused]] const Hccl::IpAddress& ipAddr,
+        [[maybe_unused]] uint32_t& ipIndex) const
+    {
+        return HCCL_E_NOT_SUPPORT;
+    };
 };
 } // namespace hccl
 #endif
