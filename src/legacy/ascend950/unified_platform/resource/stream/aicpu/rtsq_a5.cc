@@ -297,6 +297,10 @@ void RtsqA5::LaunchNewTask(uint8_t* sqeArray, uint32_t sqeCount)
     // 确保 rtsq 有足够空间放pending SQE
     MakeSureAvailableSpace();
 
+    if (pendingSqeCnt == 0) {
+        return;
+    }
+
     // sqeArray拷贝到 RTSQ
     CopySqeBufToSq(sqeArray);
 
