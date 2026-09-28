@@ -15,6 +15,7 @@
 #include "endpoint_remote_reged_mem_mgr.h"
 #include "proc_reged_mem_mgr_cache.h"
 #include "adapter_rts_common.h"
+#include "dev_type_utils.h"
 #include "server_socket_manager.h"
 #include "rdma_handle_manager.h"
 #include "hccp_peer_manager.h"
@@ -90,6 +91,9 @@ HcclResult CpuUrmaEndpoint::ReleaseCache()
 HcclResult CpuUrmaEndpoint::Init()
 {
     HCCL_INFO("[%s] localEndpoint protocol[%d]", __func__, endpointDesc_.protocol);
+
+    CHK_RET(CheckDevTypeSupport(
+        {DevType::DEV_TYPE_950, DevType::DEV_TYPE_960}, endpointDesc_.protocol, endpointDesc_.loc.locType));
 
     Hccl::IpAddress ipAddr{};
     CHK_RET(CommAddrToIpAddress(endpointDesc_.commAddr, ipAddr));

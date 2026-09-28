@@ -11,6 +11,7 @@
 #include "hccl_mem_defs.h"
 #include "aicputs_hccs_endpoint.h"
 #include "log.h"
+#include "dev_type_utils.h"
 #include "net_dev/global_net_dev_manager.h"
 #include "hccs_reged_mem_mgr.h"
 
@@ -51,9 +52,14 @@ HcclResult AicpuTsHccsEndpoint::Init()
         endpointDesc_.loc.device.superDevId, endpointDesc_.loc.device.superPodIdx);
 
     if (endpointDesc_.loc.locType != ENDPOINT_LOC_TYPE_DEVICE) {
-        HCCL_INFO("[AicpuTsHccsEndpoint][%s] AicpuTsHccsEndpoint not support host", __func__);
+        HCCL_RUN_WARNING(
+            "[AicpuTsHccsEndpoint][%s] locType[%s] only support[%s]", __func__,
+            GetEndpointLocTypeStr(endpointDesc_.loc.locType), GetEndpointLocTypeStr(ENDPOINT_LOC_TYPE_DEVICE));
         return HCCL_E_NOT_SUPPORT;
     }
+
+    CHK_RET(CheckDevTypeSupport(
+        {DevType::DEV_TYPE_910B, DevType::DEV_TYPE_910_93}, endpointDesc_.protocol, endpointDesc_.loc.locType));
 
     serverSocketContext_.emplace(endpointDesc_.loc.device.devPhyId, serverPort_);
 

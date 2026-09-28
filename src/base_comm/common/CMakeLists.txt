@@ -17,6 +17,7 @@ set(src_list
     dlurma_function.cc
     hccl_dl.cc
     opbase_adpt.cc
+    dev_type_utils.cc
 )
 
 if(TARGET hcomm_base_obj)

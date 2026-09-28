@@ -18,6 +18,7 @@
 #include "proc_reged_mem_mgr_cache.h"
 #include "host_socket_handle_manager.h"
 #include "adapter_rts_common.h"
+#include "dev_type_utils.h"
 #include "hccp_peer_manager.h"
 #include "server_socket_manager.h"
 #include "rdma_handle_manager.h"
@@ -91,9 +92,15 @@ HcclResult CpuRoceEndpoint::Init()
     HCCL_INFO("[%s] localEndpoint protocol[%d]", __func__, endpointDesc_.protocol);
 
     if (endpointDesc_.loc.locType != ENDPOINT_LOC_TYPE_HOST) {
-        HCCL_INFO("[CpuRoceEndpoint][%s] CpuRoceEndpoint not support device", __func__);
+        HCCL_RUN_WARNING(
+            "[CpuRoceEndpoint][%s] locType[%s] only support[%s]", __func__,
+            GetEndpointLocTypeStr(endpointDesc_.loc.locType), GetEndpointLocTypeStr(ENDPOINT_LOC_TYPE_HOST));
         return HCCL_E_NOT_SUPPORT;
     }
+
+    CHK_RET(CheckDevTypeSupport(
+        {DevType::DEV_TYPE_950, DevType::DEV_TYPE_960}, endpointDesc_.protocol, endpointDesc_.loc.locType));
+
     Hccl::IpAddress ipAddr{};
     CHK_RET(CommAddrToIpAddress(endpointDesc_.commAddr, ipAddr));
     s32 devId = 0;

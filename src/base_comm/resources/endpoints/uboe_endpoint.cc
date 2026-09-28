@@ -19,6 +19,7 @@
 #include "mgr/endpoint_ctx_mgr.h"
 #include "hcomm_res_mgr.h"
 #include "../../common/orion_adpt_utils.h"
+#include "dev_type_utils.h"
 
 namespace hcomm {
 
@@ -81,6 +82,9 @@ HcclResult UboeEndpoint::ReleaseCache()
 HcclResult UboeEndpoint::Init()
 {
     HCCL_INFO("[%s] localEndpoint protocol[%d]", __func__, endpointDesc_.protocol);
+
+    CHK_RET(CheckDevTypeSupport(
+        {DevType::DEV_TYPE_950, DevType::DEV_TYPE_960}, endpointDesc_.protocol, endpointDesc_.loc.locType));
 
     Hccl::IpAddress ipAddr{};
     CHK_RET(CommAddrToIpAddress(endpointDesc_.commAddr, ipAddr));

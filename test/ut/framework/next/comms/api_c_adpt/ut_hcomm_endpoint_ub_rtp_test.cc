@@ -32,6 +32,7 @@ protected:
     virtual void TearDown()
     {
         GlobalMockObject::verify();
+        GlobalMockObject::reset();
         std::cout << "A Test case in AicpuUbRtpEndpointTest TearDown" << std::endl;
     }
 
@@ -67,6 +68,12 @@ static HcclResult stub_hrtGetDeviceType_950(DevType& devType)
     return HCCL_SUCCESS;
 }
 
+static HcclResult stub_hrtGetDeviceType_910B(DevType& devType)
+{
+    devType = DevType::DEV_TYPE_910B;
+    return HCCL_SUCCESS;
+}
+
 TEST_F(AicpuUbRtpEndpointTest, Ut_HcommEndpointCreate_When_UbRtp_Device_Expect_Return_SUCCESS)
 {
     MOCKER(hrtGetDeviceType).stubs().will(invoke(stub_hrtGetDeviceType_950));
@@ -77,6 +84,85 @@ TEST_F(AicpuUbRtpEndpointTest, Ut_HcommEndpointCreate_When_UbRtp_Device_Expect_R
 
     HcommResult ret = HcommEndpointCreate(&endpointDesc, &endpointHandle);
     EXPECT_EQ(ret, HCCL_SUCCESS);
+}
+
+TEST_F(AicpuUbRtpEndpointTest, Ut_HcommEndpointCreate_When_UbRtp_On_910B_Expect_Return_NOT_SUPPORT)
+{
+    MOCKER(hrtGetDeviceType).stubs().will(invoke(stub_hrtGetDeviceType_910B));
+
+    EndpointDesc endpointDesc;
+    CreateEndpointDesc(endpointDesc);
+    EndpointHandle endpointHandle;
+
+    HcommResult ret = HcommEndpointCreate(&endpointDesc, &endpointHandle);
+    EXPECT_EQ(ret, HCCL_E_NOT_SUPPORT);
+}
+
+TEST_F(AicpuUbRtpEndpointTest, Ut_HcommEndpointCreate_When_UbCtp_On_910B_Expect_Return_NOT_SUPPORT)
+{
+    MOCKER(hrtGetDeviceType).stubs().will(invoke(stub_hrtGetDeviceType_910B));
+
+    EndpointDesc endpointDesc;
+    CreateEndpointDesc(endpointDesc);
+    endpointDesc.protocol = COMM_PROTOCOL_UB_CTP;
+    EndpointHandle endpointHandle;
+
+    HcommResult ret = HcommEndpointCreate(&endpointDesc, &endpointHandle);
+    EXPECT_EQ(ret, HCCL_E_NOT_SUPPORT);
+}
+
+TEST_F(AicpuUbRtpEndpointTest, Ut_HcommEndpointCreate_When_Hccs_On_950_Expect_Return_NOT_SUPPORT)
+{
+    MOCKER(hrtGetDeviceType).stubs().will(invoke(stub_hrtGetDeviceType_950));
+
+    EndpointDesc endpointDesc;
+    CreateEndpointDesc(endpointDesc);
+    endpointDesc.protocol = COMM_PROTOCOL_HCCS;
+    EndpointHandle endpointHandle;
+
+    HcommResult ret = HcommEndpointCreate(&endpointDesc, &endpointHandle);
+    EXPECT_EQ(ret, HCCL_E_NOT_SUPPORT);
+}
+
+TEST_F(AicpuUbRtpEndpointTest, Ut_HcommEndpointCreate_When_Roce_Device_On_950_Expect_Return_NOT_SUPPORT)
+{
+    MOCKER(hrtGetDeviceType).stubs().will(invoke(stub_hrtGetDeviceType_950));
+
+    EndpointDesc endpointDesc;
+    CreateEndpointDesc(endpointDesc);
+    endpointDesc.protocol = COMM_PROTOCOL_ROCE;
+    EndpointHandle endpointHandle;
+
+    HcommResult ret = HcommEndpointCreate(&endpointDesc, &endpointHandle);
+    EXPECT_EQ(ret, HCCL_E_NOT_SUPPORT);
+}
+
+TEST_F(AicpuUbRtpEndpointTest, Ut_HcommEndpointCreate_When_Roce_Host_On_910B_Expect_Return_NOT_SUPPORT)
+{
+    MOCKER(hrtGetDeviceType).stubs().will(invoke(stub_hrtGetDeviceType_910B));
+
+    EndpointDesc endpointDesc;
+    CreateEndpointDesc(endpointDesc);
+    endpointDesc.protocol = COMM_PROTOCOL_ROCE;
+    endpointDesc.loc.locType = ENDPOINT_LOC_TYPE_HOST;
+    EndpointHandle endpointHandle;
+
+    HcommResult ret = HcommEndpointCreate(&endpointDesc, &endpointHandle);
+    EXPECT_EQ(ret, HCCL_E_NOT_SUPPORT);
+}
+
+TEST_F(AicpuUbRtpEndpointTest, Ut_HcommEndpointCreate_When_UbCtp_Host_On_910B_Expect_Return_NOT_SUPPORT)
+{
+    MOCKER(hrtGetDeviceType).stubs().will(invoke(stub_hrtGetDeviceType_910B));
+
+    EndpointDesc endpointDesc;
+    CreateEndpointDesc(endpointDesc);
+    endpointDesc.protocol = COMM_PROTOCOL_UB_CTP;
+    endpointDesc.loc.locType = ENDPOINT_LOC_TYPE_HOST;
+    EndpointHandle endpointHandle;
+
+    HcommResult ret = HcommEndpointCreate(&endpointDesc, &endpointHandle);
+    EXPECT_EQ(ret, HCCL_E_NOT_SUPPORT);
 }
 
 TEST_F(AicpuUbRtpEndpointTest, Ut_HcommEndpointCreate_When_UbRtp_Host_Expect_Return_ERROR)

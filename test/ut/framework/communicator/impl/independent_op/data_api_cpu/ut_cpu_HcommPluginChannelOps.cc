@@ -583,22 +583,21 @@ TEST_F(UtCpuHcommPluginChannelOps, Ut_PluginChannel_Expect_DispatchToPlugin_NotS
 
 TEST_F(UtCpuHcommPluginChannelOps, Ut_BuiltinChannel_Expect_DispatchToBuiltinOps)
 {
+    // mock hrtGetDevice / hrtGetDeviceType 需在 EndpointCreate 之前，Init 会校验芯片
+    MOCKER(hrtGetDevice).stubs().will(invoke(+[](s32* d) -> HcclResult {
+        *d = 0;
+        return HCCL_SUCCESS;
+    }));
+    MOCKER(hrtGetDeviceType).stubs().will(invoke(+[](DevType& t) -> HcclResult {
+        t = DevType::DEV_TYPE_950;
+        return HCCL_SUCCESS;
+    }));
+
     EndpointDesc epDesc{};
     epDesc.loc.locType = ENDPOINT_LOC_TYPE_HOST;
     epDesc.protocol = COMM_PROTOCOL_ROCE;
     EndpointHandle epHandle = nullptr;
     EXPECT_EQ(HcommEndpointCreate(&epDesc, &epHandle), HCCL_SUCCESS);
-
-    // mock hrtGetDevice，CreateChannelsLoop / ChannelGet / ChannelDestroy 链路中依赖该函数
-    MOCKER(hrtGetDevice).stubs().will(invoke(+[](s32* d) -> HcclResult {
-        *d = 0;
-        return HCCL_SUCCESS;
-    }));
-    // mock hrtGetDeviceType，Builtin* 系列函数需要 devType == DEV_TYPE_950 才走 Channel 虚函数路径
-    MOCKER(hrtGetDeviceType).stubs().will(invoke(+[](DevType& t) -> HcclResult {
-        t = DevType::DEV_TYPE_950;
-        return HCCL_SUCCESS;
-    }));
 
     // mock Channel::CreateChannel：跳过 HostCpuRoceChannel::Init() 避免真实硬件初始化
     MOCKER((hcomm::Channel::CreateChannel))

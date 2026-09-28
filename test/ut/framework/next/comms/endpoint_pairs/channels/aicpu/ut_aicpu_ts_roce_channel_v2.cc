@@ -49,6 +49,11 @@ protected:
         Hccl::DevType dev = Hccl::DevType::DEV_TYPE_950;
         MOCKER(Hccl::HrtGetDevice).stubs().will(returnValue(0));
         MOCKER(Hccl::HrtGetDeviceType).stubs().will(returnValue(dev));
+        // hrtGetDeviceType（全局符号，CheckDevTypeSupport 调用）mock 为 950
+        MOCKER(hrtGetDeviceType).stubs().will(invoke(+[](DevType& t) -> HcclResult {
+            t = DevType::DEV_TYPE_950;
+            return HCCL_SUCCESS;
+        }));
         MOCKER(Hccl::HrtGetDevicePhyIdByUserDevId)
             .stubs()
             .with(mockcpp::any())

@@ -21,6 +21,7 @@
 #include "buffer.h"
 #include "network_api_exception.h"
 #include "endpoint.h"
+#include "adapter_rts.h"
 
 class CpuRoceEndpointTest : public testing::Test {
 protected:
@@ -35,6 +36,10 @@ protected:
         Hccl::IpAddress remoteIp("2.0.0.0");
         fakeSocket = new Hccl::Socket(
             nullptr, localIp, listenPort, remoteIp, tag, Hccl::SocketRole::SERVER, Hccl::NicType::HOST_NIC_TYPE);
+        MOCKER(hrtGetDeviceType).stubs().will(invoke(+[](DevType& t) -> HcclResult {
+            t = DevType::DEV_TYPE_950;
+            return HCCL_SUCCESS;
+        }));
     }
 
     virtual void TearDown()

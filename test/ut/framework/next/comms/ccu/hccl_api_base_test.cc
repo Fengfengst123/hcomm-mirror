@@ -185,7 +185,9 @@ void Ut_MultiServer_MOCK_And_Clusterinfo_File_Create(const char* filename, nlohm
 
     MOCKER_CPP(&HcclCommunicator::ExecOp).stubs().with(mockcpp::any()).will(returnValue(HCCL_SUCCESS));
 
-    DevType deviceType = DevType::DEV_TYPE_910B;
+    // UB Endpoint Init 校验芯片；outBound 必须指向静态存储，避免栈变量生命周期结束导致写坏。
+    static DevType deviceType = DevType::DEV_TYPE_950;
+    deviceType = DevType::DEV_TYPE_950;
     MOCKER(hrtGetDeviceType).stubs().with(outBound(deviceType)).will(returnValue(HCCL_SUCCESS));
 
     MOCKER(hrtRaGetInterfaceVersion).stubs().will(returnValue(HCCL_SUCCESS));

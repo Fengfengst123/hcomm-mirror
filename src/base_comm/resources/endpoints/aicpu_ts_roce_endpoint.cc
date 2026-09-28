@@ -13,6 +13,7 @@
 #include "hccl_net_dev.h"
 #include "aicpu_ts_roce_reged_mem_mgr.h"
 #include "adapter_rts_common.h"
+#include "dev_type_utils.h"
 #include "hccl_network.h"
 #include "network_manager_pub.h"
 #include <exception>
@@ -182,9 +183,14 @@ HcclResult AicpuTsRoceEndpoint::Init()
     HCCL_INFO("[%s] localEndpoint protocol[%d]", __func__, endpointDesc_.protocol);
 
     if (endpointDesc_.loc.locType != ENDPOINT_LOC_TYPE_DEVICE) {
-        HCCL_INFO("[AicpuTsRoceEndpoint][%s] AicpuTsRoceEndpoint not support host", __func__);
+        HCCL_RUN_WARNING(
+            "[AicpuTsRoceEndpoint][%s] locType[%s] only support[%s]", __func__,
+            GetEndpointLocTypeStr(endpointDesc_.loc.locType), GetEndpointLocTypeStr(ENDPOINT_LOC_TYPE_DEVICE));
         return HCCL_E_NOT_SUPPORT;
     }
+
+    CHK_RET(CheckDevTypeSupport(
+        {DevType::DEV_TYPE_910B, DevType::DEV_TYPE_910_93}, endpointDesc_.protocol, endpointDesc_.loc.locType));
 
     s32 devId = 0;
     CHK_RET(hrtGetDevice(&devId));

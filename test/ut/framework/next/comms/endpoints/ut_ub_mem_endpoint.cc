@@ -27,7 +27,14 @@ protected:
 
     static void TearDownTestCase() { std::cout << "AivUbMemEndpointTest tests tear down." << std::endl; }
 
-    virtual void SetUp() { std::cout << "A Test case in AivUbMemEndpointTest SetUP" << std::endl; }
+    virtual void SetUp()
+    {
+        std::cout << "A Test case in AivUbMemEndpointTest SetUP" << std::endl;
+        MOCKER(hrtGetDeviceType).stubs().will(invoke(+[](DevType& t) -> HcclResult {
+            t = DevType::DEV_TYPE_950;
+            return HCCL_SUCCESS;
+        }));
+    }
 
     virtual void TearDown()
     {

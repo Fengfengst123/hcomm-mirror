@@ -18,6 +18,7 @@
 #include "mgr/endpoint_ctx_mgr.h"
 #include "hcomm_res_mgr.h"
 #include "../../common/orion_adpt_utils.h"
+#include "dev_type_utils.h"
 
 namespace hcomm {
 
@@ -58,14 +59,8 @@ HcclResult UbRtpEndpoint::Init()
 {
     HCCL_INFO("[%s] localEndpoint protocol[%d]", __func__, endpointDesc_.protocol);
 
-    DevType deviceType = DevType::DEV_TYPE_COUNT;
-    CHK_RET(hrtGetDeviceType(deviceType));
-    if (deviceType != DevType::DEV_TYPE_950 && deviceType != DevType::DEV_TYPE_960) {
-        HCCL_ERROR(
-            "[%s] UB_RTP protocol only supports DEV_TYPE_950/960, current deviceType=%d", __func__,
-            static_cast<int>(deviceType));
-        return HCCL_E_NOT_SUPPORT;
-    }
+    CHK_RET(CheckDevTypeSupport(
+        {DevType::DEV_TYPE_950, DevType::DEV_TYPE_960}, endpointDesc_.protocol, endpointDesc_.loc.locType));
 
     // UB_RTP 直接从 EID type CommAddr 获取地址，不做 IP→EID 转换
     Hccl::IpAddress eidAddr{};

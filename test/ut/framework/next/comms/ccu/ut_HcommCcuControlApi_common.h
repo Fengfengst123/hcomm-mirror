@@ -125,6 +125,11 @@ public:
     {
         GlobalMockObject::verify();
         BaseInit::SetUp();
+        // Endpoint Init 校验芯片，mock 为 950 以通过 CheckDevTypeSupport
+        MOCKER(hrtGetDeviceType).stubs().will(invoke(+[](DevType& t) -> HcclResult {
+            t = DevType::DEV_TYPE_950;
+            return HCCL_SUCCESS;
+        }));
         // 将enableEntryLog默认返回为true
         MOCKER(GetExternalInputHcclEnableEntryLog).stubs().with(mockcpp::any()).will(returnValue(true));
         MOCKER(hcomm::GetHcclVersionForCcuKernelMgr)

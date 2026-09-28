@@ -20,7 +20,7 @@
 #include "hccp.h"
 #include "endpoint.h"
 #include "ub_reged_mem_mgr.h"
-#include "adapter_rts_common.h"
+#include "adapter_rts.h"
 #include "server_socket_manager.h"
 #include "hccp_peer_manager.h"
 
@@ -66,6 +66,10 @@ protected:
             .stubs()
             .with(mockcpp::any(), outBound(devicePhyId))
             .will(returnValue(HCCL_SUCCESS));
+        MOCKER(hrtGetDeviceType).stubs().will(invoke(+[](DevType& t) -> HcclResult {
+            t = DevType::DEV_TYPE_950;
+            return HCCL_SUCCESS;
+        }));
         MOCKER(&Hccl::RdmaHandleManager::GetByAddr).stubs().will(returnValue(rdmaHandle));
         MOCKER(RaSocketSetWhiteListStatus).stubs().will(returnValue(0));
     }

@@ -12,6 +12,7 @@
 #include "log.h"
 #include "hccl/hccl_res.h"
 #include "adapter_rts_common.h"
+#include "dev_type_utils.h"
 #include "server_socket_mgr.h"
 #include "ub_mem_reged_mem_mgr.h"
 #include "proc_reged_mem_mgr_cache.h"
@@ -51,6 +52,9 @@ HcclResult UbMemEndpoint::ReleaseCache()
 
 HcclResult UbMemEndpoint::Init()
 {
+    CHK_RET(CheckDevTypeSupport(
+        {DevType::DEV_TYPE_950, DevType::DEV_TYPE_960}, endpointDesc_.protocol, endpointDesc_.loc.locType));
+
     Hccl::IpAddress ipAddr{};
     CHK_RET(CommAddrToIpAddress(endpointDesc_.commAddr, ipAddr));
 

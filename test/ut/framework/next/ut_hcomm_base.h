@@ -13,10 +13,19 @@
 
 #include "hccl_api_base_test.h"
 #include "hcomm_c_adpt.h"
+#include "adapter_rts.h"
 
 class TestHcommCAdptBase : public BaseInit {
 public:
-    void SetUp() override { BaseInit::SetUp(); }
+    void SetUp() override
+    {
+        BaseInit::SetUp();
+        // Endpoint Init 校验芯片，mock 为 950 以通过 CheckDevTypeSupport
+        MOCKER(hrtGetDeviceType).stubs().will(invoke(+[](DevType& t) -> HcclResult {
+            t = DevType::DEV_TYPE_950;
+            return HCCL_SUCCESS;
+        }));
+    }
     void TearDown() override
     {
         BaseInit::TearDown();

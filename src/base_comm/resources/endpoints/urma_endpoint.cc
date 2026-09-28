@@ -16,6 +16,7 @@
 #include "endpoint_remote_reged_mem_mgr.h"
 #include "proc_reged_mem_mgr_cache.h"
 #include "adapter_rts_common.h"
+#include "dev_type_utils.h"
 #include "server_socket_manager.h"
 #include "rdma_handle_manager.h"
 #include "ra_rs_comm.h"
@@ -95,10 +96,13 @@ HcclResult UrmaEndpoint::Init()
 
     if (endpointDesc_.loc.locType != ENDPOINT_LOC_TYPE_DEVICE) {
         HCCL_ERROR(
-            "[UrmaEndpoint][%s] endpointDesc.loc.locType[%d] only support ENDPOINT_LOC_TYPE_DEVICE", __func__,
-            endpointDesc_.loc.locType);
-        return HCCL_E_PARA;
+            "[UrmaEndpoint][%s] locType[%s] only support[%s]", __func__,
+            GetEndpointLocTypeStr(endpointDesc_.loc.locType), GetEndpointLocTypeStr(ENDPOINT_LOC_TYPE_DEVICE));
+        return HCCL_E_NOT_SUPPORT;
     }
+
+    CHK_RET(CheckDevTypeSupport(
+        {DevType::DEV_TYPE_950, DevType::DEV_TYPE_960}, endpointDesc_.protocol, endpointDesc_.loc.locType));
 
     Hccl::IpAddress ipAddr{};
     HcclResult ret = CommAddrToIpAddress(endpointDesc_.commAddr, ipAddr);

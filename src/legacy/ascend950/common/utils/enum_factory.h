@@ -30,7 +30,7 @@ namespace EnumNameDetail {
         return cursor;
     }
 
-    // "SDMA = 0" -> name is "SDMA"; stop at space or '='.
+    // "SDMA = 0" 取名字 "SDMA"；遇空格或 '=' 停止。
     inline const char* FindEnumeratorNameEnd(const char* cursor)
     {
         while ((*cursor != '\0') && (*cursor != ',') && (*cursor != ' ') && (*cursor != '=')) {
@@ -39,7 +39,7 @@ namespace EnumNameDetail {
         return cursor;
     }
 
-    // Skip the initializer ("= 0") up to the comma between enumerators.
+    // 跳过初值（"= 0"），直到枚举项之间的逗号。
     inline const char* SkipUntilComma(const char* cursor)
     {
         while ((*cursor != '\0') && (*cursor != ',')) {
@@ -48,7 +48,7 @@ namespace EnumNameDetail {
         return cursor;
     }
 
-    // Split the stringized enumerator list on commas. Pointers stay in that literal.
+    // 按逗号拆分字符串化的枚举列表；指针仍指向该字面量。
     inline unsigned int ParseNames(const char* enumeratorList, NameView* enumNames, unsigned int maxEnumCount)
     {
         unsigned int curEnumCount = 0;
@@ -99,7 +99,7 @@ namespace EnumNameDetail {
                                                                                                                      \
         std::string Describe() const                                                                                 \
         {                                                                                                            \
-            /* POD table: first call parses #__VA_ARGS__; views point at the literal, no heap. */                    \
+            /* POD 表：首次解析 #__VA_ARGS__；视图指向字面量，不分配堆内存。 */                \
             static ::Hccl::EnumNameDetail::NameView enumNames[__COUNT__];                                            \
             static const unsigned int enumCount                                                                      \
                 = ::Hccl::EnumNameDetail::ParseNames(#__VA_ARGS__, enumNames, static_cast<unsigned int>(__COUNT__)); \

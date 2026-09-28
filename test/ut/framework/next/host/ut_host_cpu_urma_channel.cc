@@ -73,6 +73,11 @@ protected:
         Hccl::IpAddress remoteIp("2.0.0.0");
 
         MOCKER(hrtGetDevice).stubs().will(returnValue(HCCL_SUCCESS));
+        // Endpoint Init 校验芯片，mock 为 950 以通过 CheckDevTypeSupport
+        MOCKER(hrtGetDeviceType).stubs().will(invoke(+[](DevType& t) -> HcclResult {
+            t = DevType::DEV_TYPE_950;
+            return HCCL_SUCCESS;
+        }));
         // 出参 devPhyId 需赋合法值：批次1后它作为 GetDeviceResMgr(devPhyId) 的设备数组下标
         unsigned int devicePhyId = 0U;
         MOCKER(hrtGetDevicePhyIdByIndex)

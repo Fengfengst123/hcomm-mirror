@@ -138,6 +138,10 @@ protected:
     {
         s_registerMemoryCalls.clear();
         std::cout << "A Test case in MyRankTest SetUP" << std::endl;
+        MOCKER(hrtGetDeviceType).stubs().will(invoke(+[](DevType& t) -> HcclResult {
+            t = DevType::DEV_TYPE_950;
+            return HCCL_SUCCESS;
+        }));
         rankIpPortMap = std::make_shared<std::unordered_map<u32, std::unordered_map<Hccl::IpAddress, u32>>>();
         (*rankIpPortMap)[0][Hccl::IpAddress("1.0.0.0")] = 16666;
         (*rankIpPortMap)[0][Hccl::IpAddress("2.0.0.0")] = 16666;

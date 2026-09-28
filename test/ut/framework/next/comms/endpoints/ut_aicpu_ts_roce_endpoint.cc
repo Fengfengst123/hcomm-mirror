@@ -124,6 +124,14 @@ HcclResult StubHcclNetDevCloseForEp(HcclNetDev /*netDev*/) { return HCCL_SUCCESS
 
 class AicpuTsRoceEndpointTest : public testing::Test {
 protected:
+    void SetUp() override
+    {
+        MOCKER(hrtGetDeviceType).stubs().will(invoke(+[](DevType& t) -> HcclResult {
+            t = DevType::DEV_TYPE_910B;
+            return HCCL_SUCCESS;
+        }));
+    }
+
     void TearDown() override
     {
         GlobalMockObject::verify();

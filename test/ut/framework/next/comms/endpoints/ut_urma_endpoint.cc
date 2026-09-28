@@ -60,6 +60,10 @@ protected:
 
         MOCKER(hrtGetDevice).stubs().will(returnValue(HCCL_SUCCESS));
         MOCKER(hrtGetDevicePhyIdByIndex).stubs().with(mockcpp::any(), mockcpp::any()).will(returnValue(HCCL_SUCCESS));
+        MOCKER(hrtGetDeviceType).stubs().will(invoke(+[](DevType& t) -> HcclResult {
+            t = DevType::DEV_TYPE_950;
+            return HCCL_SUCCESS;
+        }));
     }
 
     virtual void TearDown()
