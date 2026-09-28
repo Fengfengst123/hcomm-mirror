@@ -15,7 +15,8 @@ namespace Hccl {
 TokenInfo TokenInfoManager::GetTokenInfo(const BufferKey<uintptr_t, u64>& bufKey)
 {
     std::lock_guard<std::mutex> lock(tokenInfoMgrMutex_);
-
+    // UMMU(统一内存管理单元)约束：UMMU针对同一个TokenID传入第三次TokenValue,UMMU会直接报错
+    // 现状：相同或者相交的地址范围会重新申请TokenID, 不同的地址范围会复用TokenID
     BufKeyVecIndex index = GetBufferVecIndex(bufKey);
     if (!tokenRefMap_.has(index)) {
         TokenInfo tokenInfo = RaUbAllocTokenIdHandle(rdmahandle_);
