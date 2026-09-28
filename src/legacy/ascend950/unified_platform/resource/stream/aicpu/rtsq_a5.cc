@@ -602,7 +602,9 @@ HcclResult RtsqA5::GetLastStreamIdAndTaskId(uint16_t& streamId, uint16_t& taskId
     const u32 lastIdx = (sqTail_ + sqDepth_ - 1U) % sqDepth_;
     HCCL_INFO(
         "[%s] from rtsq, sqId[%u], sqTail[%u], sqDepth[%u], lastIdx[%u].", __func__, sqId_, sqTail_, sqDepth_, lastIdx);
-    return GetStreamIdAndTaskIdBySqIdx(lastIdx, streamId, taskId);
+    u8 sqeType = 0;
+    u32 notifyId = 0;
+    return GetSqeHeaderFieldsBySqIdx(lastIdx, streamId, taskId, sqeType, notifyId);
 }
 
 // 背景线程轮询SQ完成情况，将已完成的DbSend slot取出并上报给CiTracker

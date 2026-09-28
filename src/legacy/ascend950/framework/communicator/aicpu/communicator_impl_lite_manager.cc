@@ -14,6 +14,7 @@
 #include "ns_recovery_handler_func.h"
 #include "task_exception_func.h"
 #include "task_exception_handler_lite.h"
+
 namespace Hccl {
 
 CommunicatorImplLiteMgr::CommunicatorImplLiteMgr()

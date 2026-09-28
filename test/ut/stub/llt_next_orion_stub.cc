@@ -335,7 +335,8 @@ bool Socket::Recv(void* recvBuf, u32 size) const { return true; }
 RtsqBase::RtsqBase(u32 devPhyId, u32 streamId, u32 sqId) : devPhyId_(devPhyId), streamId_(streamId), sqId_(sqId) {}
 void RtsqBase::Reset(bool reset) { (void)reset; }
 
-HcclResult RtsqBase::GetStreamIdAndTaskIdBySqIdx(u32 sqIdx, uint16_t& streamId, uint16_t& taskId) const
+HcclResult
+RtsqBase::GetSqeHeaderFieldsBySqIdx(u32 sqIdx, uint16_t& streamId, uint16_t& taskId, u8& sqeType, u32& notifyId) const
 {
     return HCCL_SUCCESS;
 }

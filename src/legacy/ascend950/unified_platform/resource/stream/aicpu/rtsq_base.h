@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
  * CANN Open Software License Agreement Version 2.0 (the "License").
@@ -215,7 +215,10 @@ public:
 
     virtual bool GetPreStreamSyncStatus() { return false; }
 
-    HcclResult GetStreamIdAndTaskIdBySqIdx(u32 sqIdx, uint16_t& streamId, uint16_t& taskId) const;
+    // 按 sqIdx 一次读取 SQE header 的 streamId/taskId/sqeType；
+    // notifyId 仅当 sqeType 为 notify 类型时有效，调用方须先判断 sqeType 再使用
+    HcclResult
+    GetSqeHeaderFieldsBySqIdx(u32 sqIdx, uint16_t& streamId, uint16_t& taskId, u8& sqeType, u32& notifyId) const;
 
     virtual HcclResult GetLastStreamIdAndTaskId(uint16_t& streamId, uint16_t& taskId) const
     {

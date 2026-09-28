@@ -19,6 +19,10 @@
 #include "exception_handle.h"
 #include "hcomm/hcomm_exception.h"
 
+#define private public
+#include "stream_task_monitor.h"
+#undef private
+
 using namespace hcomm;
 
 /* ===================== halCqReportRecv stub for CQE tests ================== */
@@ -798,3 +802,169 @@ TEST_F(ExceptionMgrCAdptTest, RegisterUnregisterReregisterWorks)
     ExceptionCallbackMgr::GetInstance().NotifyAll(info2);
     EXPECT_EQ(called.load(), 1);
 }
+
+/* ======================= StreamTaskMonitor UT ============================= */
+/* 测试理由：
+ * StreamTaskMonitor 是本次新增的背景线程监控类，核心逻辑包括：
+ * 1. 阈值配置：interval=0 时关闭监控，>0 时使能
+ * 2. sqeId 变化时刷新基线，避免日志刷屏
+ * 3. 卡内 notify wait 跳过打印
+ * 4. GetSqeId 编码逻辑正确性
+ * 这些用例直接测试类的内部状态和判定逻辑，不依赖真实硬件 SQ 队列，
+ * 通过 #define private public 访问私有成员验证核心判定路径。
+ */
+
+class StreamTaskMonitorTest : public testing::Test {
+protected:
+    void SetUp() override
+    {
+        auto& mon = StreamTaskMonitor::GetInstance();
+        mon.stopCall_ = false;
+        mon.devId_ = 0;
+        mon.taskMonitorInterval_ = 0;
+        mon.streamTaskMonitor_.clear();
+    }
+    void TearDown() override
+    {
+        auto& mon = StreamTaskMonitor::GetInstance();
+        mon.stopCall_ = false;
+        mon.devId_ = INVALID_UINT;
+        mon.taskMonitorInterval_ = 0;
+        mon.streamTaskMonitor_.clear();
+    }
+};
+
+TEST_F(StreamTaskMonitorTest, GetInstanceReturnsSameInstance)
+{
+    auto& a = StreamTaskMonitor::GetInstance();
+    auto& b = StreamTaskMonitor::GetInstance();
+    EXPECT_EQ(&a, &b);
+}
+
+TEST_F(StreamTaskMonitorTest, SetIntervalSavesValue)
+{
+    auto& mon = StreamTaskMonitor::GetInstance();
+    mon.SetInterval(5000);
+    EXPECT_EQ(mon.taskMonitorInterval_, 5000u);
+}
+
+TEST_F(StreamTaskMonitorTest, SetIntervalZeroDisablesMonitor)
+{
+    auto& mon = StreamTaskMonitor::GetInstance();
+    mon.SetInterval(0);
+    EXPECT_TRUE(mon.IsNoNeedMonitor());
+}
+
+TEST_F(StreamTaskMonitorTest, SetIntervalNonZeroEnablesMonitor)
+{
+    auto& mon = StreamTaskMonitor::GetInstance();
+    mon.SetInterval(1000);
+    EXPECT_FALSE(mon.IsNoNeedMonitor());
+}
+
+TEST_F(StreamTaskMonitorTest, SetIntervalSavesDevId)
+{
+    auto& mon = StreamTaskMonitor::GetInstance();
+    mon.SetInterval(1000);
+    mon.Init(42);
+    EXPECT_EQ(mon.devId_, 42u);
+}
+
+TEST_F(StreamTaskMonitorTest, CallSkipsWhenIntervalZero)
+{
+    auto& mon = StreamTaskMonitor::GetInstance();
+    mon.SetInterval(0);
+    mon.Call();
+    EXPECT_FALSE(mon.stopCall_);
+}
+
+TEST_F(StreamTaskMonitorTest, GetSqeIdCombinesTaskIdAndStreamId)
+{
+    auto& mon = StreamTaskMonitor::GetInstance();
+    u32 sqeId = mon.GetSqeId(0x1234, 0x5678);
+    EXPECT_EQ(sqeId, 0x12345678u);
+}
+
+TEST_F(StreamTaskMonitorTest, GetSqeIdZeroValues)
+{
+    auto& mon = StreamTaskMonitor::GetInstance();
+    u32 sqeId = mon.GetSqeId(0, 0);
+    EXPECT_EQ(sqeId, 0u);
+}
+
+TEST_F(StreamTaskMonitorTest, GetSqeIdMaxValues)
+{
+    auto& mon = StreamTaskMonitor::GetInstance();
+    u32 sqeId = mon.GetSqeId(0xFFFF, 0xFFFF);
+    EXPECT_EQ(sqeId, 0xFFFFFFFFu);
+}
+
+TEST_F(StreamTaskMonitorTest, IsIntraCardNotifyWaitTrue)
+{
+    auto& mon = StreamTaskMonitor::GetInstance();
+    constexpr u8 NOTIFY_WAIT_TYPE = static_cast<u8>(Hccl::TaskParamTypeVal::TASK_NOTIFY_WAIT);
+    EXPECT_TRUE(mon.IsIntraCardNotifyWait(NOTIFY_WAIT_TYPE, INVALID_UINT));
+}
+
+TEST_F(StreamTaskMonitorTest, IsIntraCardNotifyWaitFalseRemoteRankValid)
+{
+    auto& mon = StreamTaskMonitor::GetInstance();
+    constexpr u8 NOTIFY_WAIT_TYPE = static_cast<u8>(Hccl::TaskParamTypeVal::TASK_NOTIFY_WAIT);
+    EXPECT_FALSE(mon.IsIntraCardNotifyWait(NOTIFY_WAIT_TYPE, 5));
+}
+
+TEST_F(StreamTaskMonitorTest, IsIntraCardNotifyWaitFalseWrongType)
+{
+    auto& mon = StreamTaskMonitor::GetInstance();
+    constexpr u8 WRITE_TYPE = static_cast<u8>(Hccl::TaskParamTypeVal::TASK_WRITE_WITH_NOTIFY);
+    EXPECT_FALSE(mon.IsIntraCardNotifyWait(WRITE_TYPE, INVALID_UINT));
+}
+
+TEST_F(StreamTaskMonitorTest, IsNeedRefreshMonitorDataTrueWhenSqeIdChanged)
+{
+    auto& mon = StreamTaskMonitor::GetInstance();
+    MonitorTaskInfo info{};
+    info.sqeId = 0x1234;
+    info.sqHead = 10;
+    info.sqeType = 1;
+    EXPECT_TRUE(mon.IsNeedRefreshMonitorData(info, 0x5678, 10, 1));
+}
+
+TEST_F(StreamTaskMonitorTest, IsNeedRefreshMonitorDataTrueWhenSqHeadChanged)
+{
+    auto& mon = StreamTaskMonitor::GetInstance();
+    MonitorTaskInfo info{};
+    info.sqeId = 0x1234;
+    info.sqHead = 10;
+    info.sqeType = 1;
+    EXPECT_TRUE(mon.IsNeedRefreshMonitorData(info, 0x1234, 11, 1));
+}
+
+TEST_F(StreamTaskMonitorTest, IsNeedRefreshMonitorDataFalseWhenAllSame)
+{
+    auto& mon = StreamTaskMonitor::GetInstance();
+    MonitorTaskInfo info{};
+    info.sqeId = 0x1234;
+    info.sqHead = 10;
+    info.sqeType = 1;
+    EXPECT_FALSE(mon.IsNeedRefreshMonitorData(info, 0x1234, 10, 1));
+}
+
+TEST_F(StreamTaskMonitorTest, IsNeedRefreshMonitorDataTrueWhenIntraCardNotifyWait)
+{
+    // IsNeedRefreshMonitorData 仅比较 sqeId/sqHead/sqeType 字段，不再对 intraCard notify_wait 特殊处理
+    // sqeType 从 1 变为 NOTIFY_WAIT(5)，字段不同 → 返回 true（需刷新基线）
+    auto& mon = StreamTaskMonitor::GetInstance();
+    MonitorTaskInfo info{};
+    info.sqeId = 0x1234;
+    info.sqHead = 10;
+    info.sqeType = 1;
+    constexpr u8 NOTIFY_WAIT_TYPE = static_cast<u8>(Hccl::TaskParamTypeVal::TASK_NOTIFY_WAIT);
+    EXPECT_TRUE(mon.IsNeedRefreshMonitorData(info, 0x1234, 10, NOTIFY_WAIT_TYPE));
+}
+
+/* MonitorStream/MonitorAllComms/Call 依赖驱动 API（QuerySqStatus）与硬件 SQ 队列，
+ * 需对 QuerySqStatus、RtsqBase::GetSqeHeaderFieldsBySqIdx 及 StreamLite/CollCommAicpu 打桩方可驱动，
+ * 当前 UT 未打桩，故不对 MonitorStream 实际执行路径做端到端覆盖。
+ * 上方用例仅验证 StreamTaskMonitor 可直接测试的判定逻辑（阈值开关、编码、字段比较、卡内 notify wait 判定）。
+ */

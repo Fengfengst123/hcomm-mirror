@@ -34,6 +34,11 @@ public:
     HcclResult PrintCommTaskException(CollCommAicpu* aicpuComm);
     HcclResult SendTaskExceptionByMBox(const u32 notifyId, const u32 tsId, const rtLogicCqReport_t& exceptionInfo);
 
+    Hccl::DfxTaskInfo* FindDfxTaskInfo(CollCommAicpu* aicpuComm, u32 sqId, u32 sqeId);
+    Hccl::DfxTaskInfo* FindDfxTaskInfoNoLock(CollCommAicpu* aicpuComm, u32 sqId, u32 sqeId);
+    u32 GetRemoteRankId(const Hccl::DfxTaskInfo& taskInfo);
+    std::string GetConciseTaskName(const Hccl::DfxTaskInfo& taskInfo);
+
 private:
     HcclCommTaskExceptionLite() = default;
     ~HcclCommTaskExceptionLite() override = default;
@@ -77,12 +82,11 @@ private:
     std::string GetGroupInfo(CollCommAicpu* aicpuComm);
     u32 GetSqeId(uint16_t taskId, uint16_t streamId);
 
-    Hccl::DfxTaskInfo* FindDfxTaskInfo(CollCommAicpu* aicpuComm, u32 sqId, u32 sqeId);
     Hccl::DfxCircularQueue<Hccl::DfxTaskInfo, Hccl::DFX_TASK_INFO_QUEUE_CAPACITY>*
     GetTaskQueueBySqId(CollCommAicpu* aicpuComm, u32 sqId);
+    Hccl::DfxCircularQueue<Hccl::DfxTaskInfo, Hccl::DFX_TASK_INFO_QUEUE_CAPACITY>*
+    GetTaskQueueBySqIdNoLock(CollCommAicpu* aicpuComm, u32 sqId);
     void GetEidFromChannelHandle(const Hccl::DfxTaskInfo& taskInfo, Hccl::Eid& locEid, Hccl::Eid& rmtEid);
-    u32 GetRemoteRankId(const Hccl::DfxTaskInfo& taskInfo);
-    std::string GetConciseTaskName(const Hccl::DfxTaskInfo& taskInfo);
     std::string GetNotifyInfo(const Hccl::DfxTaskInfo& taskInfo);
     u32 GetOpIndex(const Hccl::DfxTaskInfo* taskInfo);
     void PrintOpDataInfo(const Hccl::DfxTaskInfo* taskInfo);

@@ -520,6 +520,8 @@ target_include_directories(hccl_llt  PRIVATE
     ${HCCL_CODE_ROOT}/src/coll_communicator_mgr/dfx/taskException
     ${HCCL_CODE_ROOT}/src/coll_communicator_mgr/dfx/taskException/aicpu
     ${HCCL_CODE_ROOT}/src/coll_communicator_mgr/dfx/taskException/host
+    ${HCCL_CODE_ROOT}/src/coll_communicator_mgr/dfx/streamTaskMonitor
+    ${HCCL_CODE_ROOT}/src/coll_communicator_mgr/dfx/streamTaskMonitor/aicpu
     ${HCCL_CODE_ROOT}/src/coll_communicator_mgr/resource_mgr/local/my_rank/endpoints
     ${HCCL_CODE_ROOT}/src/coll_communicator_mgr/resource_mgr/local/my_rank/comm_engine/engine_ctxs
     ${HCCL_CODE_ROOT}/src/legacy/ascend910/framework/device/framework

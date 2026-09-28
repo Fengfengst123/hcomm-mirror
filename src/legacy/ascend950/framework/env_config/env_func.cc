@@ -888,14 +888,40 @@ void CastDfsConfigParseRankConsistentState(int32_t& rankConsistentState, const s
     }
 }
 
+void CastDfsConfigParseTaskMonitorInterval(uint32_t& taskMonitorInterval, const std::string& configValue)
+{
+    constexpr uint32_t TASK_MONITOR_INTERVAL_MAX = 7200000; // 最大值7200000ms(2小时)
+    if (configValue.empty()) {
+        HCCL_ERROR("[CastDfsConfigParseTaskMonitorInterval] configValue is empty.");
+        THROW<InvalidParamsException>("parser task_monitor_interval fail: empty value.");
+    }
+    bool isAllDigits = std::all_of(configValue.begin(), configValue.end(), [](unsigned char c) {
+        return std::isdigit(c);
+    });
+    CHK_PRT_THROW(
+        !isAllDigits,
+        HCCL_ERROR("[CastDfsConfigParseTaskMonitorInterval] str[%s] is not all digit.", configValue.c_str()),
+        InvalidParamsException, "parser task_monitor_interval fail.");
+    u32 val = 0;
+    auto ret = SalStrToULong(configValue.c_str(), HCCL_BASE_DECIMAL, val);
+    CHK_PRT_THROW(
+        ret != HCCL_SUCCESS,
+        HCCL_ERROR("[CastDfsConfigParseTaskMonitorInterval] str[%s] is a invalid number.", configValue.c_str()),
+        InvalidParamsException, "parser task_monitor_interval fail.");
+    CheckRange<uint32_t>(val, 0, TASK_MONITOR_INTERVAL_MAX);
+    taskMonitorInterval = val;
+    HCCL_INFO("env[HCCL_DFS_CONFIG] task_monitor_interval was configed to [%u ms]", val);
+}
+
 DfsConfig CastDfsConfig(const std::string& dfsConfigEnv)
 {
-    constexpr std::size_t DFS_CONFIG_ITEM_NUM = 3;
+    constexpr std::size_t DFS_CONFIG_ITEM_NUM = 4;
     const std::array<std::string, DFS_CONFIG_ITEM_NUM> dfsItemName
-        = {"task_exception", "cluster_heartbeat", "inconsistent_check"};
+        = {"task_exception", "cluster_heartbeat", "inconsistent_check", "task_monitor_interval"};
     bool taskExceptionEnable = true;
     bool clusterHeartBeatEnable = true;
     int32_t rankConsistentState = 0;
+    uint32_t taskMonitorInterval = 0;
     std::string dfsConfigEnvCopy = dfsConfigEnv;
     dfsConfigEnvCopy.erase(std::remove(dfsConfigEnvCopy.begin(), dfsConfigEnvCopy.end(), ' '), dfsConfigEnvCopy.end());
     auto items = SplitDfsConfig(dfsConfigEnvCopy, ',');
@@ -914,11 +940,11 @@ DfsConfig CastDfsConfig(const std::string& dfsConfigEnv)
             CastDfsConfigParseClusterHeartBeatEnable(clusterHeartBeatEnable, itemPair[1]);
         } else if (itemPair[0] == dfsItemName[2]) {
             CastDfsConfigParseRankConsistentState(rankConsistentState, itemPair[1]);
+        } else if (itemPair[0] == dfsItemName[3]) {
+            CastDfsConfigParseTaskMonitorInterval(taskMonitorInterval, itemPair[1]);
         }
     }
-    DfsConfig config{taskExceptionEnable, clusterHeartBeatEnable, rankConsistentState};
-
-    return config;
+    return DfsConfig{taskExceptionEnable, clusterHeartBeatEnable, rankConsistentState, taskMonitorInterval};
 }
 
 /*----------------------------- validate functions -------------------------*/

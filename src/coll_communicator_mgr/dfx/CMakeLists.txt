@@ -25,6 +25,8 @@ if(TARGET hcomm)
         ${CMAKE_CURRENT_SOURCE_DIR}/taskException
         ${CMAKE_CURRENT_SOURCE_DIR}/taskException/aicpu
         ${CMAKE_CURRENT_SOURCE_DIR}/taskException/common
+        ${CMAKE_CURRENT_SOURCE_DIR}/streamTaskMonitor
+        ${CMAKE_CURRENT_SOURCE_DIR}/streamTaskMonitor/aicpu
         ${HCOMM_DIR}/src/base_comm/resources/comm_engine_res/threads
     )
 endif()
@@ -42,12 +44,15 @@ if(TARGET ccl_kernel)
         ${CMAKE_CURRENT_SOURCE_DIR}/profiling/aicpu
         ${CMAKE_CURRENT_SOURCE_DIR}/profiling/aicpu/common
         ${CMAKE_CURRENT_SOURCE_DIR}/taskException/common
+        ${CMAKE_CURRENT_SOURCE_DIR}/streamTaskMonitor
+        ${CMAKE_CURRENT_SOURCE_DIR}/streamTaskMonitor/aicpu
         ${HCOMM_DIR}/src/base_comm/resources/comm_engine_res/threads
     )
 endif()
 
 add_subdirectory(profiling)
 add_subdirectory(taskException)
+add_subdirectory(streamTaskMonitor)
 add_subdirectory(cluster_monitor)
 add_subdirectory(ns_recovery)
 add_subdirectory(rtsq_poll)

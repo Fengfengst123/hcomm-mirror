@@ -10,6 +10,7 @@
 
 #include "coll_comm_aicpu_destroy_func.h"
 #include "coll_comm_aicpu_mgr.h"
+#include "stream_task_monitor.h"
 #include <shared_mutex>
 #include "kernel_entrance.h"
 
@@ -57,6 +58,9 @@ HcclResult CollCommAicpuDestroyFunc::Process()
             }
             destroyComm.push_back(aicpuComm->GetIdentifier());
             CHK_RET(aicpuComm->BackGroundSetStatus(Hccl::KfcStatus::DESTROY_AICPU_COMM_DONE));
+
+            // 销毁前清理 StreamTaskMonitor 中该通信域的流监控数据，防止 map 无限增长
+            hcomm::StreamTaskMonitor::GetInstance().OnCommDestroy(aicpuComm);
 
             EraseTaskExpDevMem(aicpuComm->GetIdentifier()); // 清理dpu taskexception共享内存
 

@@ -136,17 +136,24 @@ void RtsqBase::ConfigDisableToEnable(u32 value) const
     ConfigSqStatusByType(drvSqCqPropType_t::DRV_SQCQ_PROP_SQ_DISABLE_TO_ENABLE, value);
 }
 
-HcclResult RtsqBase::GetStreamIdAndTaskIdBySqIdx(u32 sqIdx, uint16_t& streamId, uint16_t& taskId) const
+HcclResult
+RtsqBase::GetSqeHeaderFieldsBySqIdx(u32 sqIdx, uint16_t& streamId, uint16_t& taskId, u8& sqeType, u32& notifyId) const
 {
     if (sqBaseAddr_ == 0 || sqIdx >= sqDepth_) {
         HCCL_ERROR("[%s]fail, sqBaseAddr_[0x%llu], sqIdx[%u]", __func__, sqBaseAddr_, sqIdx);
         return HCCL_E_PARA;
     }
-
-    Rt91095StarsNotifySqe* sqe = reinterpret_cast<Rt91095StarsNotifySqe*>(sqBaseAddr_ + sqIdx * RTSQ_SQE_SIZE);
+    auto* sqe = reinterpret_cast<const Rt91095StarsNotifySqe*>(sqBaseAddr_ + sqIdx * RTSQ_SQE_SIZE);
     streamId = sqe->header.rtStreamId;
     taskId = sqe->header.taskId;
-    HCCL_INFO("[%s]sqId:%u, streamId:%u, taskId:%u", __func__, sqId_, streamId, taskId);
+    sqeType = static_cast<u8>(sqe->header.type);
+    // notifyId 仅 notify 类型 SQE 有效，非 notify 类型不读取避免读到无效字段
+    if (sqeType == static_cast<u8>(Rt91095StarsSqeType::RT_91095_SQE_TYPE_NOTIFY_RECORD)
+        || sqeType == static_cast<u8>(Rt91095StarsSqeType::RT_91095_SQE_TYPE_NOTIFY_WAIT)) {
+        notifyId = sqe->notifyId;
+    } else {
+        notifyId = 0;
+    }
     return HCCL_SUCCESS;
 }
 } // namespace Hccl

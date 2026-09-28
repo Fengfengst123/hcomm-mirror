@@ -160,7 +160,12 @@ HcclResult HcclCommTaskExceptionLite::PrintCommTaskException(CollCommAicpu* aicp
         }
         uint16_t streamId = 0;
         uint16_t taskId = 0;
-        streamLite->GetRtsq()->GetStreamIdAndTaskIdBySqIdx(sqHead, streamId, taskId);
+        u8 sqeType = 0;
+        u32 notifyId = 0;
+        if (streamLite->GetRtsq()->GetSqeHeaderFieldsBySqIdx(sqHead, streamId, taskId, sqeType, notifyId)
+            != HCCL_SUCCESS) {
+            continue;
+        }
         const u32 sqeId = GetSqeId(taskId, streamId);
         HcclResult pRet = PrintTaskExceptionBySqeId(aicpuComm, streamLite->GetSqId(), sqeId);
         CHK_PRT_CONT(
@@ -250,6 +255,10 @@ HcclResult HcclCommTaskExceptionLite::ReportErrMsg(CollCommAicpu* aicpuComm, con
 {
     CHK_PTR_NULL(aicpuComm);
 
+    if (aicpuComm->IsErrorReported()) {
+        return HCCL_SUCCESS;
+    }
+
     const u32 sqeId = GetSqeId(exceptionInfo.taskId, exceptionInfo.streamId);
     HCCL_INFO(
         "[%s]group[%s], sqeId[0x%x], taskId[%u], streamId[%u].", __func__, aicpuComm->GetIdentifier().c_str(), sqeId,
@@ -263,15 +272,13 @@ HcclResult HcclCommTaskExceptionLite::ReportErrMsg(CollCommAicpu* aicpuComm, con
                                            nullptr;
     CHK_PTR_NULL(opInfo);
 
-    if (!aicpuComm->IsErrorReported()) {
-        Hccl::ErrorMessageReport errMsgInfo{};
-        CHK_RET(GenerateErrorMessageReport(aicpuComm, *curTask, exceptionInfo, errMsgInfo));
-        CHK_RET(aicpuComm->SendErrorMessageReportToHost(errMsgInfo));
+    Hccl::ErrorMessageReport errMsgInfo{};
+    CHK_RET(GenerateErrorMessageReport(aicpuComm, *curTask, exceptionInfo, errMsgInfo));
+    CHK_RET(aicpuComm->SendErrorMessageReportToHost(errMsgInfo));
 
-        u32 notifyId = opInfo->cpuWaitAicpuNotifyId;
-        CHK_RET(SendTaskExceptionByMBox(notifyId, 0, exceptionInfo));
-        aicpuComm->SetErrorReported(true);
-    }
+    u32 notifyId = opInfo->cpuWaitAicpuNotifyId;
+    CHK_RET(SendTaskExceptionByMBox(notifyId, 0, exceptionInfo));
+    aicpuComm->SetErrorReported(true);
     return HCCL_SUCCESS;
 }
 
@@ -637,23 +644,49 @@ Hccl::DfxTaskInfo* HcclCommTaskExceptionLite::FindDfxTaskInfo(CollCommAicpu* aic
 {
     Hccl::TaskInfoCircularQueue* queue = GetTaskQueueBySqId(aicpuComm, sqId);
     if (queue == nullptr) {
-        HCCL_ERROR("[%s]GetTaskQueueBySqId queue nullptr, devId[%u], sqId[%u].", __func__, devId_, sqId);
         return nullptr;
     }
     u32 targetTaskId = sqeId;
     for (u16 idx = 0; idx < queue->GetCapacity(); idx++) {
         Hccl::DfxTaskInfo* slot = queue->GetSlot(idx);
-        if (slot != nullptr && slot->dfxOpInfo != 0 && slot->taskId == targetTaskId) {
+        if (slot != nullptr && slot->taskId == targetTaskId) {
             return slot;
         }
     }
-    HCCL_ERROR("[%s]exception task not found, devId[%u], sqId[%u], sqeId[%u]", __func__, devId_, sqId, sqeId);
     return nullptr;
 }
 
 Hccl::TaskInfoCircularQueue* HcclCommTaskExceptionLite::GetTaskQueueBySqId(CollCommAicpu* aicpuComm, u32 sqId)
 {
     std::shared_lock<std::shared_mutex> threadRwlock(aicpuComm->GetCommEngineResMgr()->GetThreadMutex());
+    const std::vector<std::shared_ptr<hccl::Thread>> threads = aicpuComm->GetCommEngineResMgr()->GetAllThread();
+    for (auto& thread : threads) {
+        Hccl::StreamLite* streamLite = static_cast<Hccl::StreamLite*>(thread->GetStreamLitePtr());
+        if (streamLite != nullptr && streamLite->GetSqId() == sqId) {
+            return streamLite->GetTaskInfos();
+        }
+    }
+    return nullptr;
+}
+
+Hccl::DfxTaskInfo* HcclCommTaskExceptionLite::FindDfxTaskInfoNoLock(CollCommAicpu* aicpuComm, u32 sqId, u32 sqeId)
+{
+    Hccl::TaskInfoCircularQueue* queue = GetTaskQueueBySqIdNoLock(aicpuComm, sqId);
+    if (queue == nullptr) {
+        return nullptr;
+    }
+    u32 targetTaskId = sqeId;
+    for (u16 idx = 0; idx < queue->GetCapacity(); idx++) {
+        Hccl::DfxTaskInfo* slot = queue->GetSlot(idx);
+        if (slot != nullptr && slot->taskId == targetTaskId) {
+            return slot;
+        }
+    }
+    return nullptr;
+}
+
+Hccl::TaskInfoCircularQueue* HcclCommTaskExceptionLite::GetTaskQueueBySqIdNoLock(CollCommAicpu* aicpuComm, u32 sqId)
+{
     const std::vector<std::shared_ptr<hccl::Thread>> threads = aicpuComm->GetCommEngineResMgr()->GetAllThread();
     for (auto& thread : threads) {
         Hccl::StreamLite* streamLite = static_cast<Hccl::StreamLite*>(thread->GetStreamLitePtr());

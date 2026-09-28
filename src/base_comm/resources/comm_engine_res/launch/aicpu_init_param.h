@@ -20,6 +20,7 @@ struct DevAicpuCommConfig {
     bool taskExceptionEnable{true};
     u32 notifyWaitTimeout{1836};
     u64 plfDebugConfig{0};
+    u32 taskMonitorInterval{0}; // task执行耗时监控阈值(ms)，0表示关闭
     // 如要新增配置类字段，在此处添加
 };
 

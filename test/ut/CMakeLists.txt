@@ -327,6 +327,8 @@ set(UT_COMMON_INCLUDE_LIST
     ${HCCL_CODE_ROOT}/src/coll_communicator_mgr/dfx/taskException
     ${HCCL_CODE_ROOT}/src/coll_communicator_mgr/dfx/taskException/aicpu
     ${HCCL_CODE_ROOT}/src/coll_communicator_mgr/dfx/taskException/host
+    ${HCCL_CODE_ROOT}/src/coll_communicator_mgr/dfx/streamTaskMonitor
+    ${HCCL_CODE_ROOT}/src/coll_communicator_mgr/dfx/streamTaskMonitor/aicpu
     ${HCCL_CODE_ROOT}/src/legacy/ascend910/framework/device/framework
     ${HCCL_CODE_ROOT}/src/legacy/ascend910/framework/dfx/task_exception
     ${HCCL_CODE_ROOT}/src/legacy/ascend950/framework/dfx/

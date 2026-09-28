@@ -13,6 +13,7 @@
 #include "rtsq_poll/aicpu/coll_rtsq_poll_completion_daemon.h"
 #include "aicpu_daemon_service.h"
 #include "hcclCommTaskExceptionLite.h"
+#include "stream_task_monitor.h"
 #include "coll_comm_aicpu_destroy_func.h"
 #include "aicpu_indop_env.h"
 #include "config_plf_log_v2.h"
@@ -54,14 +55,18 @@ HcclResult CollCommAicpuMgr::InitComm(CommAicpuParam* commAicpuParam)
         ret);
 
     // 全局环境初始化 (call_once 保证只执行一次)
-    static std::once_flag initBackGround;
-    std::call_once(initBackGround, [aicpuComm, this]() {
-        this->InitBackGroundThread(aicpuComm->GetDevId());
-    });
-
+    // 注意：必须先执行 InitIndopEnv（设置 taskMonitorInterval 等环境变量），
+    // 再执行 InitBackGroundThread（拉起背景线程并注册 DaemonFunc）。
+    // 否则背景线程启动时 taskMonitorInterval 尚未赋值，首轮 Call() 会因
+    // IsNoNeedMonitor() 返回 true 而跳过监控（后续不会自愈，因为 call_once 不再执行）。
     static std::once_flag initEnv;
     std::call_once(initEnv, [commAicpuParam, this]() {
         this->InitIndopEnv(commAicpuParam);
+    });
+
+    static std::once_flag initBackGround;
+    std::call_once(initBackGround, [aicpuComm, this]() {
+        this->InitBackGroundThread(aicpuComm->GetDevId());
     });
 
     return HCCL_SUCCESS;
@@ -218,10 +223,13 @@ void CollCommAicpuMgr::InitIndopEnv(CommAicpuParam* commAicpuParam)
 {
     hcomm::SetTaskExceptionEnable(commAicpuParam->commConfig.taskExceptionEnable);
     Hccl::SetPlfDebugConfigValue(commAicpuParam->commConfig.plfDebugConfig);
+    hcomm::StreamTaskMonitor::GetInstance().SetInterval(commAicpuParam->commConfig.taskMonitorInterval);
+    hcomm::StreamTaskMonitor::GetInstance().SetTaskExceptionEnable(commAicpuParam->commConfig.taskExceptionEnable);
     HCCL_RUN_INFO(
-        "[%s]Env: taskExceptionEnable[%d], notifyWaitTimeout[%u s], plfDebugConfig[0x%llx]", __func__,
-        commAicpuParam->commConfig.taskExceptionEnable, commAicpuParam->commConfig.notifyWaitTimeout,
-        commAicpuParam->commConfig.plfDebugConfig);
+        "[%s]Env: taskExceptionEnable[%d], notifyWaitTimeout[%u s], plfDebugConfig[0x%llx], "
+        "taskMonitorInterval[%u ms]",
+        __func__, commAicpuParam->commConfig.taskExceptionEnable, commAicpuParam->commConfig.notifyWaitTimeout,
+        commAicpuParam->commConfig.plfDebugConfig, commAicpuParam->commConfig.taskMonitorInterval);
 }
 
 void CollCommAicpuMgr::InitBackGroundThread(u32 devId)
@@ -239,6 +247,8 @@ void CollCommAicpuMgr::InitBackGroundThread(u32 devId)
     Hccl::AicpuDaemonService::GetInstance().Register(&hccl::CollCommAicpuDestroyFunc::GetInstance());
     Hccl::AicpuDaemonService::GetInstance().Register(&hccl::NsRecoveryFuncLite::GetInstance());
     Hccl::AicpuDaemonService::GetInstance().Register(&hcomm::CollRtsqPollCompletionDaemon::GetInstance());
+    hcomm::StreamTaskMonitor::GetInstance().Init(devId);
+    Hccl::AicpuDaemonService::GetInstance().Register(&hcomm::StreamTaskMonitor::GetInstance());
 
     if (Hccl::StartMC2MaintenanceThread != nullptr) {
         Hccl::StartMC2MaintenanceThread(daemonServiceRun, &commandToBackGroud, daemonServiceStop, &commandToBackGroud);
