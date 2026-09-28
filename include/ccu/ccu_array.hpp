@@ -73,12 +73,7 @@ namespace ccu {
             }
             auto ret = CcuArrayTraits<T>::BlockAlloc(handles.data(), count);
             if (ret != CcuResult::CCU_SUCCESS) {
-                for (uint32_t i = 0; i < count; ++i) {
-                    elems_[i].~T();
-                }
-                ::operator delete(elems_);
-                elems_ = nullptr;
-                count_ = 0;
+                Release();
                 throw ::AscendC::ccu::detail::CcuException(ret, "Array BlockAlloc: failed");
             }
             for (uint32_t i = 0; i < count; ++i) {
@@ -103,28 +98,14 @@ namespace ccu {
                     std::string errMsg = "Array creation failed at index " + std::to_string(i)
                                          + ", requested count=" + std::to_string(count)
                                          + "; the acquire handle likely holds fewer resources than count";
-                    for (uint32_t j = 0; j < count; ++j) {
-                        elems_[j].~T();
-                    }
-                    ::operator delete(elems_);
-                    elems_ = nullptr;
-                    count_ = 0;
+                    Release();
                     throw ::AscendC::ccu::detail::CcuException(ret, errMsg.c_str());
                 }
                 CcuArrayTraits<T>::SetHandle(elems_[i], handle);
             }
         }
 
-        ~Array()
-        {
-            if (elems_ == nullptr) {
-                return;
-            }
-            for (uint32_t i = 0; i < count_; ++i) {
-                elems_[i].~T();
-            }
-            ::operator delete(elems_);
-        }
+        ~Array() { Release(); }
 
         Array(const Array&) = delete;
         Array& operator=(const Array&) = delete;
@@ -138,7 +119,9 @@ namespace ccu {
         Array& operator=(Array&& other) noexcept
         {
             if (this != &other) {
-                this->~Array();
+                // 只释放自身持有的资源，不可调用 this->~Array()：显式析构会结束本对象生命周期，
+                // 之后再访问成员或返回 *this 属未定义行为
+                Release();
                 elems_ = other.elems_;
                 count_ = other.count_;
                 other.elems_ = nullptr;
@@ -154,6 +137,21 @@ namespace ccu {
         uint32_t size() const { return count_; }
 
     private:
+        // 销毁元素并归还存储，使对象回到合法的空状态；不结束对象自身生命周期，可被析构与移动赋值共用
+        void Release() noexcept
+        {
+            if (elems_ == nullptr) {
+                count_ = 0;
+                return;
+            }
+            for (uint32_t i = 0; i < count_; ++i) {
+                elems_[i].~T();
+            }
+            ::operator delete(elems_);
+            elems_ = nullptr;
+            count_ = 0;
+        }
+
         T* elems_{nullptr};
         uint32_t count_{0};
     };

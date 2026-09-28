@@ -108,10 +108,10 @@ namespace ccu {
             // 第一次进入：合成 FuncBlock
             CCU_THROW_IF_FAILED(::CcuFuncBlockBegin(Obj.Key(), &handle), "CallFunc: CcuFuncBlockBegin failed");
 
-            // 形参：按 lambda 形参个数 alloc，并注册为 FuncBlock 的 in args
+            // 形参：std::vector<Variable> 默认构造时已为每个形参申请一个 Xn
+            // (勿再显式CcuVariableAlloc，否则会重复申请)，此处仅逐个注册为FuncBlock 的 in args
             std::vector<Variable> formals(Obj.NumIn());
             for (uint32_t i = 0; i < Obj.NumIn(); i++) {
-                CCU_THROW_IF_FAILED(::CcuVariableAlloc(&formals[i].handle), "CallFunc: CcuVariableAlloc failed");
                 CCU_THROW_IF_FAILED(
                     ::CcuFuncDefineInArg(handle, formals[i].handle), "CallFunc: CcuFuncDefineInArg failed");
             }

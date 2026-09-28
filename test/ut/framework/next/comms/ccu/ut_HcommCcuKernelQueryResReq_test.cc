@@ -135,6 +135,81 @@ CcuResult OneArgKernel(CcuKernelArg arg)
     return g_kernelReturn;
 }
 
+// 空 body 的双形参 Func：kernel 的 Xn 诉求只由实参与形参贡献，便于精确核对形参分配次数。
+AscendC::ccu::Func CallFuncFormalResourceFunc([](AscendC::ccu::Variable first, AscendC::ccu::Variable second) {
+    (void)first;
+    (void)second;
+});
+
+// 验证 CallFunc 首次合成 FuncBlock 时形参 Variable 的资源分配次数。
+CcuResult CallFuncFormalResourceKernel()
+{
+    AscendC::ccu::Variable first;
+    AscendC::ccu::Variable second;
+    return AscendC::ccu::CallFunc<CallFuncFormalResourceFunc>(first, second);
+}
+
+// Array 移动赋值各场景的断言结果，由 dry-run kernel 回传。
+bool g_arrayMoveAssignPassed = false;
+
+// 验证 Array 移动赋值转移资源所有权后，目标仍为可用对象、源退化为合法空对象。
+CcuResult ArrayMoveAssignKernel()
+{
+    namespace ccu = AscendC::ccu;
+    bool passed = true;
+
+    // 非空目标：释放原有资源后接管源资源
+    {
+        ccu::Array<ccu::Variable> dst(2);
+        ccu::Array<ccu::Variable> src(3);
+        auto* srcData = src.data();
+        dst = std::move(src);
+        passed = passed && dst.size() == 3U && dst.data() == srcData;
+        passed = passed && src.size() == 0U && src.data() == nullptr;
+        // 移动后目标仍是有效对象，可继续访问元素并正常析构
+        passed = passed && dst[0].handle != dst[2].handle;
+    }
+
+    // 空目标：源资源直接转移
+    {
+        ccu::Array<ccu::Variable> dst(0);
+        ccu::Array<ccu::Variable> src(2);
+        auto* srcData = src.data();
+        dst = std::move(src);
+        passed = passed && dst.size() == 2U && dst.data() == srcData && src.data() == nullptr;
+    }
+
+    // 空源：目标释放自身资源后退化为空对象
+    {
+        ccu::Array<ccu::Variable> dst(2);
+        ccu::Array<ccu::Variable> src(0);
+        dst = std::move(src);
+        passed = passed && dst.size() == 0U && dst.data() == nullptr;
+    }
+
+    // 连续多次移动赋值到同一目标
+    {
+        ccu::Array<ccu::Variable> dst(1);
+        ccu::Array<ccu::Variable> first(2);
+        ccu::Array<ccu::Variable> second(3);
+        dst = std::move(first);
+        dst = std::move(second);
+        passed = passed && dst.size() == 3U && first.data() == nullptr && second.data() == nullptr;
+    }
+
+    // 自赋值：不得释放自身资源
+    {
+        ccu::Array<ccu::Variable> self(2);
+        auto* selfData = self.data();
+        auto& alias = self;
+        self = std::move(alias);
+        passed = passed && self.size() == 2U && self.data() == selfData;
+    }
+
+    g_arrayMoveAssignPassed = passed;
+    return CcuResult::CCU_SUCCESS;
+}
+
 // 验证 Device 刷新后真实 primitive 与查询入口使用同一个线程 Device。
 CcuResult DeviceRefreshPrimitiveKernel()
 {
@@ -310,6 +385,7 @@ public:
         ResetDeviceState(OTHER_TEST_DEVICE_LOGIC_ID);
         g_noArgKernelCalls = 0;
         g_oneArgKernelCalls = 0;
+        g_arrayMoveAssignPassed = false;
         g_channelGetCalls = 0;
         g_lastKernelArg = nullptr;
         g_kernelReturn = CcuResult::CCU_SUCCESS;
@@ -461,6 +537,26 @@ protected:
 
     HcommCcuResDescHandle resDesc_{0};
 };
+
+// 验证首次合成 FuncBlock 时每个 formal 只申请一次 Xn：2 个实参 + 2 个形参共 4 个。
+TEST_F(
+    HcommCcuKernelQueryResReqTest,
+    Ut_HcommCcuKernelQueryResReq_When_CallFuncFormalResourceKernel_Expect_AllocateEachFormalVariableOnce)
+{
+    EXPECT_EQ(
+        HcommCcuKernelQueryResReq(reinterpret_cast<const void*>(CallFuncFormalResourceKernel), nullptr, 0, resDesc_),
+        CcuResult::CCU_SUCCESS);
+    EXPECT_EQ(QueryNum(Hccl::ResType::XN), 4U);
+}
+
+// 验证 Array 移动赋值在各类目标/源组合下正确转移资源，且目标对象在赋值后仍然可用。
+TEST_F(HcommCcuKernelQueryResReqTest, Ut_CcuArray_When_MoveAssigned_Expect_TransferOwnershipAndKeepTargetUsable)
+{
+    EXPECT_EQ(
+        HcommCcuKernelQueryResReq(reinterpret_cast<const void*>(ArrayMoveAssignKernel), nullptr, 0, resDesc_),
+        CcuResult::CCU_SUCCESS);
+    EXPECT_TRUE(g_arrayMoveAssignPassed);
+}
 
 // 验证无参 Kernel dry-run 成功后，接口正确写入七类资源诉求。
 TEST_F(HcommCcuKernelQueryResReqTest, Ut_HcommCcuKernelQueryResReq_When_ArgNumIsZero_Expect_ReturnIsCCU_SUCCESS)

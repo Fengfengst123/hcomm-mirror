@@ -57,7 +57,7 @@ CcuResult Load(Variable addrVar, Array<Variable>& vArr, uint32_t num);
 | addr | 输入 | 立即数片上内存地址（`uint64_t`）。须为CCU可访问的物理地址或经token化的VA，注册阶段确定，运行期不可变。 |
 | v | 输入/输出 | 目标Variable（重载1，num=1）。运行期从片上内存地址`addr`处读取8字节写入该Variable。 |
 | vArr | 输入/输出 | 目标Variable数组首元素（重载2，num>1）。须通过`ccu::Array<Variable>`申请以保证物理连续。 |
-| num | 输入 | 加载的`uint64_t`元素个数（重载2）。须大于0。`num>1`时依次从片上内存地址`addr`、`addr+8`、…、`addr+(num-1)*8`各读取8字节，分别写入`vArr[0], vArr[1], ..., vArr[num-1]`。 |
+| num | 输入 | 加载的`uint64_t`元素个数（重载2）。须满足`1 ≤ num ≤ vArr.size()`。`num>1`时依次从片上内存地址`addr`、`addr+8`、…、`addr+(num-1)*8`各读取8字节，分别写入`vArr[0], vArr[1], ..., vArr[num-1]`。 |
 
 ### 重载3/4参数（Variable地址，间接寻址）
 
@@ -66,7 +66,7 @@ CcuResult Load(Variable addrVar, Array<Variable>& vArr, uint32_t num);
 | addrVar | 输入 | 地址Variable（`Variable`）。运行期该Variable中存储的值被用作片上内存地址，须已赋有效地址值。 |
 | v | 输入/输出 | 目标Variable（重载3，num=1）。 |
 | vArr | 输入/输出 | 目标Variable数组首元素（重载4，num>1）。须通过`ccu::Array<Variable>`申请以保证物理连续。 |
-| num | 输入 | 加载的`uint64_t`元素个数（重载4）。须大于0。语义同重载2，地址来自`addrVar`的运行期值。 |
+| num | 输入 | 加载的`uint64_t`元素个数（重载4）。须满足`1 ≤ num ≤ vArr.size()`。语义同重载2，地址来自`addrVar`的运行期值。 |
 
 ## 返回值
 
@@ -75,16 +75,15 @@ CcuResult Load(Variable addrVar, Array<Variable>& vArr, uint32_t num);
 | 返回值 | 说明 |
 | --- | --- |
 | `CCU_SUCCESS` | 操作成功。 |
-| `CCU_E_PARA` | 参数错误：`num` 为0；或 `num>1` 时 `vArr` 元素物理不连续。 |
+| `CCU_E_PARA` | 参数错误：`num` 为0或大于 `vArr.size()`；或 `num>1` 时 `vArr` 元素物理不连续。 |
 | `CCU_E_PTR` | 当前不存在处于注册中的kernel（接口在kernel注册阶段之外被调用）。 |
-| `CCU_E_NOT_FOUND` | 传入的 `v`/`vArr` 句柄（或 `vArr[1..num-1]` 的相邻句柄）未在当前kernel 注册；或 `num` 大于 `vArr` 实际长度时访问到不存在的相邻句柄。 |
+| `CCU_E_NOT_FOUND` | 传入的 `v`/`vArr` 句柄（或 `vArr[1..num-1]` 的相邻句柄）未在当前kernel 注册。 |
 
 ## 约束说明
 
 - `addr`须为CCU可访问的物理地址或经token化的VA，直接传入未经token化的进程虚拟地址将触发驱动错误。
-- `num`须大于0，传入0返回`CCU_E_PARA`。
+- `num`须满足`1 ≤ num ≤ vArr.size()`。本接口在访问`vArr[0]`之前完成该校验，传入0或超过`vArr.size()`时返回`CCU_E_PARA`，不会触达底层接口；空`Array`（`vArr.size()`为0）传入任意`num`同样返回`CCU_E_PARA`。
 - `num>1`时（重载2/4），`vArr`须指向物理连续的Variable数组，必须通过`ccu::Array<Variable>`申请。单独声明多个 `Variable` 对象不保证物理连续，违反时在 `Load(...)` 调用处即返回`CCU_E_PARA`。
-- `num` 必须 ≤ `vArr` 实际长度。本接口不校验 `num <= vArr.size()`，`num` 越界会访问到不属于 `vArr` 的相邻句柄或返回 `CCU_E_NOT_FOUND`，请自行保证`num`不超过申请长度。
 - `addrVar`（重载3/4）在调用本接口前须已被赋予有效地址值（通过`LoadArg`、立即数赋值或算术运算）。
 - 立即数地址（重载1/2）在注册阶段确定，运行期不可变；需运行期动态地址时使用重载3/4。
 
