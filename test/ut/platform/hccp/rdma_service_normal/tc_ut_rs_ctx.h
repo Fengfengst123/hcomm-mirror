@@ -56,6 +56,9 @@ void TcRsSetTpAttr();
 void TcRsCtxGetCrErrInfoList();
 void TcRsCtxNotifyEvent();
 void TcRsCtxNotifyEventAubdfxFail();
+void TcRsCtxNotifyNetDfxEvent();
+void TcRsCtxNotifyNetDfxEventAubdfxFail();
+void TcRsCtxNotifyEventUnsupportedType();
 void TcRsAubdfxApiInitRollback();
 #ifdef __cplusplus
 }

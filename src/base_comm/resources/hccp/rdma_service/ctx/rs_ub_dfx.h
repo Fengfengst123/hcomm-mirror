@@ -24,5 +24,6 @@ int RsEpollEventUrmaAsyncEventInHandle(struct rs_cb *rsCb, int fd);
 void RsUbCtxGetAsyncEvents(struct RsUbDevCb *devCb, struct AsyncEvent asyncEvents[], unsigned int *num);
 int RsUbGetJettyContext(struct RsUbDevCb *devCb, unsigned int id, uint8_t context[], unsigned int *len);
 int RsUbCtxNotifyServiceErrEvent(struct RsUbDevCb *devCb, struct CtxNotifyEvent *event);
+int RsUbCtxNotifyNetDfxEvent(struct RsUbDevCb *devCb, struct CtxNotifyEvent *event);
 
 #endif // RS_UB_DFX_H

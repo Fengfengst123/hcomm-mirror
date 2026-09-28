@@ -902,8 +902,10 @@ RS_ATTRI_VISI_DEF int RsCtxNotifyEvent(struct RaRsDevInfo *devInfo, struct CtxNo
     ret = RsUbGetDevCb(rscb, devInfo->devIndex, &devCb);
     CHK_PRT_RETURN(ret != 0, hccp_err("get devCb fail, ret:%d devIndex:0x%x", ret, devInfo->devIndex), ret);
 
-    if (event->eventType == 0U) {
+    if (event->eventType == SERVICE_ERRINFO_CMD) {
         return RsUbCtxNotifyServiceErrEvent(devCb, event);
+    } else if (event->eventType == NET_DFX_SNAPSHOT_CMD) {
+        return RsUbCtxNotifyNetDfxEvent(devCb, event);
     }
 
     hccp_run_warn("[notify][event]unsupported eventType:%u", event->eventType);

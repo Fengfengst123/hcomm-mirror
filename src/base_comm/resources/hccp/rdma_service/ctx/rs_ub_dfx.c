@@ -10,6 +10,7 @@
 
 #include <stdlib.h>
 #include <sys/types.h>
+#include <unistd.h>
 #include <urma_opcode.h>
 #include <udma_u_ctl.h>
 #include "aubdfx_api.h"
@@ -427,7 +428,25 @@ int RsUbCtxNotifyServiceErrEvent(struct RsUbDevCb *devCb, struct CtxNotifyEvent 
         errInfo.value = event->eventInfo.serviceErrInfo.errorInfo.tpn;
     }
 
-    ret = RsAubdfxNotifyEvent(devCb->devAttr.ub.dieId, 0, &errInfo, sizeof(errInfo));
+    ret = RsAubdfxNotifyEvent(devCb->devAttr.ub.dieId, SERVICE_ERRINFO_CMD, &errInfo, sizeof(errInfo));
+    CHK_PRT_RETURN(ret != 0,
+        hccp_err("[notify][event]RsAubdfxNotifyEvent failed, ret:%d dieId:%u", ret, devCb->devAttr.ub.dieId), ret);
+    return ret;
+}
+
+int RsUbCtxNotifyNetDfxEvent(struct RsUbDevCb *devCb, struct CtxNotifyEvent *event)
+{
+    struct ub_net_dfx_info dfxInfo = {0};
+    int ret = 0;
+
+    dfxInfo.hccl_pid = (pid_t)event->eventInfo.netDfxInfo.pid;
+    dfxInfo.hccp_pid = getpid();
+    dfxInfo.status = event->eventInfo.netDfxInfo.status;
+
+    hccp_info_rma("[notify][event]ubNetDfxInfo: hcclPid:%d hccpPid:%d status:%u", dfxInfo.hccl_pid, dfxInfo.hccp_pid,
+        dfxInfo.status);
+
+    ret = RsAubdfxNotifyEvent(devCb->devAttr.ub.dieId, NET_DFX_SNAPSHOT_CMD, &dfxInfo, sizeof(dfxInfo));
     CHK_PRT_RETURN(ret != 0,
         hccp_err("[notify][event]RsAubdfxNotifyEvent failed, ret:%d dieId:%u", ret, devCb->devAttr.ub.dieId), ret);
     return ret;

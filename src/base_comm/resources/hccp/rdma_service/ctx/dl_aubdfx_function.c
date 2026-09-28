@@ -11,7 +11,9 @@
 #include "urma_types.h"
 #include "aubdfx_api.h"
 #include "hccp_dl.h"
+#include "network_comm.h"
 #include "config_log.h"
+#include "perf.h"
 #include "ra_rs_err.h"
 #include "dl_aubdfx_function.h"
 
@@ -88,5 +90,5 @@ int RsAubdfxNotifyEvent(unsigned int dieId, unsigned int notifyCmd, void *data, 
     if (notifyCmd == 0) {
         RsAubdfxPrintUbServiceErrinfo((struct ub_service_errinfo *)data);
     }
-    return gAubdfxOps.rsAubdfxNotifyEvent(dieId, notifyCmd, data, dataLen);
+    return PERF_TRACE(RDMA_OP, DlRetConvert(gAubdfxOps.rsAubdfxNotifyEvent(dieId, notifyCmd, data, dataLen)));
 }

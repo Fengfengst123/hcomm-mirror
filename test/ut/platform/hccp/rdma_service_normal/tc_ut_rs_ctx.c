@@ -828,6 +828,60 @@ void TcRsCtxNotifyEventAubdfxFail()
     mocker_clean();
 }
 
+void TcRsCtxNotifyNetDfxEvent()
+{
+    struct RaRsDevInfo devInfo = {0};
+    struct CtxNotifyEvent event = {0};
+
+    mocker_clean();
+    EXPECT_INT_EQ(RsCtxNotifyEvent(NULL, &event), -EINVAL);
+    EXPECT_INT_EQ(RsCtxNotifyEvent(&devInfo, NULL), -EINVAL);
+
+    devInfo.phyId = 0;
+    devInfo.devIndex = 0;
+    event.eventType = 1;
+    event.eventInfo.netDfxInfo.pid = 1000;
+    event.eventInfo.netDfxInfo.status = 1;
+    mocker_invoke(RsGetRsCb, StubRsGetRsCb, 1);
+    mocker_invoke(RsUbGetDevCb, StubRsUbGetDevCb, 1);
+    mocker(RsAubdfxNotifyEvent, 1, 0);
+    EXPECT_INT_EQ(RsCtxNotifyEvent(&devInfo, &event), 0);
+    mocker_clean();
+}
+
+void TcRsCtxNotifyNetDfxEventAubdfxFail()
+{
+    struct RaRsDevInfo devInfo = {0};
+    struct CtxNotifyEvent event = {0};
+
+    mocker_clean();
+    devInfo.phyId = 0;
+    devInfo.devIndex = 0;
+    event.eventType = 1;
+    event.eventInfo.netDfxInfo.pid = 1000;
+    event.eventInfo.netDfxInfo.status = 1;
+    mocker_invoke(RsGetRsCb, StubRsGetRsCb, 1);
+    mocker_invoke(RsUbGetDevCb, StubRsUbGetDevCb, 1);
+    mocker(RsAubdfxNotifyEvent, 1, -EINVAL);
+    EXPECT_INT_EQ(RsCtxNotifyEvent(&devInfo, &event), -EINVAL);
+    mocker_clean();
+}
+
+void TcRsCtxNotifyEventUnsupportedType()
+{
+    struct RaRsDevInfo devInfo = {0};
+    struct CtxNotifyEvent event = {0};
+
+    mocker_clean();
+    devInfo.phyId = 0;
+    devInfo.devIndex = 0;
+    event.eventType = 2;
+    mocker_invoke(RsGetRsCb, StubRsGetRsCb, 1);
+    mocker_invoke(RsUbGetDevCb, StubRsUbGetDevCb, 1);
+    EXPECT_INT_EQ(RsCtxNotifyEvent(&devInfo, &event), -EINVAL);
+    mocker_clean();
+}
+
 void TcRsAubdfxApiInitRollback()
 {
     mocker_clean();

@@ -23,6 +23,8 @@
 
 enum ServiceType { URMA_TYPE = 0, UBMEM_TYPE, UNIC_TYPE };
 
+enum UbNotifyCmd { SERVICE_ERRINFO_CMD = 0, NET_DFX_SNAPSHOT_CMD, CMD_MAX };
+
 struct ub_service_errinfo {
     uint16_t sub_cmd;
     uint16_t rsv2;
@@ -34,6 +36,13 @@ struct ub_service_errinfo {
     uint32_t dsteid[4];
     uint32_t rsv[2];
     uint64_t value;
+};
+
+struct ub_net_dfx_info {
+    pid_t hccl_pid;
+    pid_t hccp_pid;
+    uint8_t status; // status = 1 : start, status = 0 : end
+    uint8_t rsv[3];
 };
 
 AUBDFX_ATTRI_VISI_DEF int aubdfx_notify_event(unsigned int die_id, unsigned int notify_cmd, void *data,
