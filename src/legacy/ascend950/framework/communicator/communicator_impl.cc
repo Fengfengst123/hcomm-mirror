@@ -3326,11 +3326,7 @@ bool CommunicatorImpl::IsNeedDpu()
     return false;
 }
 
-void CommunicatorImpl::InitHccpPeer() const
-{
-    RaSocketSetWhiteListStatus(1); // PEER模式需要手动开启白名单模式
-    HccpPeerManager::GetInstance().Init(devLogicId);
-}
+void CommunicatorImpl::InitHccpPeer() const { HccpPeerManager::GetInstance().Init(devLogicId); }
 
 HcclResult CommunicatorImpl::PrepareDpuKernelResource(aclrtFuncHandle& funcHandle)
 {

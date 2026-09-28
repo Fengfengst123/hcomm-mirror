@@ -26,6 +26,15 @@ int RaGetSocketListenInfo(const struct SocketListenInfoT conn[], unsigned int nu
 int RaGetSocketListenResult(const struct SocketListenInfo rsConn[], unsigned int rsNum, struct SocketListenInfoT conn[],
     unsigned int num);
 
+int RaGetSocketListenResultV2(const struct SocketListenInfoV2 rsConn[], unsigned int rsNum,
+    struct SocketListenInfoT conn[], unsigned int num);
+
 int RaGetSocketConnectInfo(const struct SocketConnectInfoT conn[], unsigned int num, struct SocketConnectInfo rsConn[],
     unsigned int rsNum);
+
+int RaGetSocketListenInfoV2(const struct SocketListenInfoT conn[], unsigned int num, struct SocketListenInfoV2 rsConn[],
+    unsigned int rsNum);
+
+int RaGetSocketConnectInfoV2(const struct SocketConnectInfoT conn[], unsigned int num,
+    struct SocketConnectInfoV2 rsConn[], unsigned int rsNum);
 #endif // RA_COMM_H

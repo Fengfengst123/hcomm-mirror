@@ -82,7 +82,7 @@ int RsGetConnInfo(struct RsConnCb *connCb, struct SocketConnectInfo *conn, struc
 int RsFindListenNode(struct RsConnCb *connCb, struct RsIpAddrInfo *ipAddr, uint32_t serverPort,
     struct RsListenInfo **listenInfo);
 int RsSocketListenAddToEpoll(struct RsConnCb *connCb, struct RsListenInfo *listenInfo);
-int RsListenNodeAlloc(struct RsConnCb *connCb, struct RsIpAddrInfo *ipAddr, uint32_t serverPort,
+int RsListenNodeAlloc(struct RsConnCb *connCb, struct RsIpAddrInfo *ipAddr, uint32_t serverPort, bool tagChkDis,
     struct RsListenInfo **node);
 int RsSocketListenDelFromEpoll(struct RsConnCb *connCb, struct RsListenInfo *listenInfo);
 void RsListenNodeFree(struct RsConnCb *connCb, struct RsListenInfo *node);

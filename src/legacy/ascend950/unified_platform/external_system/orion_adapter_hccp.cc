@@ -346,14 +346,14 @@ static void SocketBatchConnect(SocketConnectInfoT conn[], u32 num)
 void HrtRaSocketConnectOne(RaSocketConnectParam& in)
 {
     HCCL_INFO(
-        "[ConnectOne][RaSocket] Input params: socketHandle=%p, remoteIp=%s, port=%u, tag=%s", in.socketHandle,
-        in.remoteIp.Describe().c_str(), in.port, in.tag.c_str());
+        "[ConnectOne][RaSocket] Input params: socketHandle=%p, remoteIp=%s, port=%u, tag=%s, tagChkDis=%d",
+        in.socketHandle, in.remoteIp.Describe().c_str(), in.port, in.tag.c_str(), in.tagChkDis);
 
     struct SocketConnectInfoT connInfo {};
     connInfo.socketHandle = in.socketHandle;
     connInfo.remoteIp = IpAddressToHccpIpAddr(in.remoteIp);
     connInfo.port = in.port;
-
+    connInfo.tagChkDis = in.tagChkDis;
     int sret = strcpy_s(connInfo.tag, sizeof(connInfo.tag), in.tag.c_str());
     if (sret != 0) {
         string msg = StringFormat(
@@ -555,10 +555,14 @@ static void HRaSocketListenStop(struct SocketListenInfoT conn[], u32 num)
 
 void HrtRaSocketListenOneStart(RaSocketListenParam& in, HrtNetworkMode netMode)
 {
-    HCCL_INFO("[ListenStart][RaSocket] Input params: socketHandle: %p, port: %u", in.socketHandle, in.port);
+    HCCL_INFO(
+        "[ListenStart][RaSocket] Input params: socketHandle=%p, port=%u, tagChkDis=%d", in.socketHandle, in.port,
+        in.tagChkDis);
+
     struct SocketListenInfoT listenInfo {};
     listenInfo.socketHandle = in.socketHandle;
     listenInfo.port = in.port;
+    listenInfo.tagChkDis = in.tagChkDis;
     HRaSocketListenStart(&listenInfo, 1, in.localIp, netMode);
 }
 
@@ -568,6 +572,7 @@ bool HrtRaSocketTryListenOneStart(RaSocketListenParam& in, HrtNetworkMode netMod
     struct SocketListenInfoT listenInfo {};
     listenInfo.socketHandle = in.socketHandle;
     listenInfo.port = in.port;
+    listenInfo.tagChkDis = in.tagChkDis;
     bool ret = RaSocketTryListenStart(&listenInfo, 1, in.localIp, netMode);
     if (ret && in.port == AUTO_LISTEN_PORT) {
         in.port = listenInfo.port;
@@ -2300,12 +2305,13 @@ ReqHandleResult HrtRaGetAsyncReqResult(RequestHandle& reqHandle)
 RequestHandle RaSocketConnectOneAsync(RaSocketConnectParam& in)
 {
     HCCL_INFO(
-        "[RaSocketConnectOneAsync] Input params: socketHandle=%p, remoteIp=%s, port=%u, tag=%s", in.socketHandle,
-        in.remoteIp.Describe().c_str(), in.port, in.tag.c_str());
+        "[RaSocketConnectOneAsync] Input params: socketHandle=%p, remoteIp=%s, port=%u, tag=%s, tagChkDis=%d",
+        in.socketHandle, in.remoteIp.Describe().c_str(), in.port, in.tag.c_str(), in.tagChkDis);
     struct SocketConnectInfoT connInfo {};
     connInfo.socketHandle = in.socketHandle;
     connInfo.remoteIp = IpAddressToHccpIpAddr(in.remoteIp);
     connInfo.port = in.port;
+    connInfo.tagChkDis = in.tagChkDis;
 
     int sret = strcpy_s(connInfo.tag, sizeof(connInfo.tag), in.tag.c_str());
     if (sret != 0) {

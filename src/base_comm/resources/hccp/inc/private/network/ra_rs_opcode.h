@@ -138,6 +138,8 @@ enum OpType {
     RA_RS_CTX_QP_UNIMPORT = 120,
     RA_RS_GET_IP_BY_EID = 121,
     RA_RS_CTX_NOTIFY_EVENT = 122,
+    RA_RS_SOCKET_CONN_V2 = 123,
+    RA_RS_SOCKET_LISTEN_START_V2 = 124,
     RA_RS_EXTER_OP_MAX_NUM,
 
     // 上面opcode是对部opcode,下面是内部opcode

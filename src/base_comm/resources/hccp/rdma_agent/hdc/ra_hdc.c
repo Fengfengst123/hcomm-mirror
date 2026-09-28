@@ -53,9 +53,11 @@ struct HdcOps gRaHdcOpsHost = {
 struct OpcodeInterfaceInfo gRaInterfaceInfoList[] = {
     // outer opcode version: 1.0
     {RA_RS_SOCKET_CONN, 0},
+    {RA_RS_SOCKET_CONN_V2, 0},
     {RA_RS_SOCKET_CLOSE, 0},
     {RA_RS_SOCKET_ABORT, 0},
     {RA_RS_SOCKET_LISTEN_START, 0},
+    {RA_RS_SOCKET_LISTEN_START_V2, 0},
     {RA_RS_SOCKET_LISTEN_STOP, 0},
     {RA_RS_GET_SOCKET, 0},
     {RA_RS_SOCKET_SEND, 0},

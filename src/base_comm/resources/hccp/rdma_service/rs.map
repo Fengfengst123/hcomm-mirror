@@ -151,11 +151,13 @@ global:
     RsSocketBatchAbort;
     RsSocketBatchClose;
     RsSocketBatchConnect;
+    RsSocketBatchConnectV2;
     RsSocketDeinit;
     RsSocketGetClientSocketErrInfo;
     RsSocketGetServerSocketErrInfo;
     RsSocketInit;
     RsSocketListenStart;
+    RsSocketListenStartV2;
     RsSocketListenStop;
     RsSocketRecv;
     RsSocketSend;

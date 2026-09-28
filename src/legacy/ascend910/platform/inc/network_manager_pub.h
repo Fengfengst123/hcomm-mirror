@@ -52,14 +52,16 @@ public:
     HcclResult DeInit(NICDeployment nicDeploy, bool resetDeviceFlag = false, bool hasBackup = false);
     HcclResult HeterogInit(u32 devId, const HcclIpAddress& ipAddr, u32 port);
     HcclResult HeterogDeinit(u32 devId, const HcclIpAddress& ipAddr, u32 port);
-    HcclResult StartVnic(HcclIpAddress localIp, u32& port);
+    HcclResult StartVnic(HcclIpAddress localIp, u32& port, bool tagChkDis = true);
     HcclResult StopVnic(const HcclIpAddress& localIp, u32 port);
     // port值为无效值0xFFFFFFFF时, 只初始化nic网卡，不启动监听
-    HcclResult
-    StartNic(const HcclIpAddress& ipAddr, u32& port, bool rdmaFlag, HcclIpAddress ipAddrBackup = HcclIpAddress(0));
+    HcclResult StartNic(
+        const HcclIpAddress& ipAddr, u32& port, bool rdmaFlag, HcclIpAddress ipAddrBackup = HcclIpAddress(0),
+        bool tagChkDis = true);
     void SetDisableLiteThread(bool disable);
     HcclResult StopNic(const HcclIpAddress& ipAddr, u32 port);
-    HcclResult StartHostNetAndListen(const HcclIpAddress& ipAddr, SocketHandle& socketHandle, u32& port, bool rdmaFlag);
+    HcclResult StartHostNetAndListen(
+        const HcclIpAddress& ipAddr, SocketHandle& socketHandle, u32& port, bool rdmaFlag, bool tagChkDis = true);
     HcclResult StopHostNetAndListen(SocketHandle socketHandle, const HcclIpAddress& ipAddr, u32 port);
     HcclResult StartHostNet(const HcclIpAddress& ipAddr, SocketHandle& socketHandle);
     HcclResult StopHostNet(SocketHandle socketHandle, const HcclIpAddress& ipAddr);
@@ -118,7 +120,7 @@ private:
         u32 devicePhysicID, const HcclIpAddress& ipAddr, NetworkMode netMode, NotifyTypeT notifyType,
         RdmaHandle& rdmaHandle, bool disabledLiteThread = false, bool enable910ALite = false,
         HcclIpAddress ipAddrBackup = HcclIpAddress(0));
-    HcclResult StartListenSocket(const SocketHandle socketHandle, u32& port) const;
+    HcclResult StartListenSocket(const SocketHandle socketHandle, u32& port, bool tagChkDis = true) const;
     HcclResult StopListenSocket(const SocketHandle socketHandle, u32 port) const;
     HcclResult
     CheckSocketInfo(const SocketHandle socketHandle, const HcclIpAddress& ipAddr, u32 port = NO_LISTEN_PORT) const;

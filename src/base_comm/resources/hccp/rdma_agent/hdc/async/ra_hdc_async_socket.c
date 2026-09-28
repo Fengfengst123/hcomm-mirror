@@ -199,7 +199,8 @@ out:
     return;
 }
 
-int RaHdcSocketListenStartAsync(unsigned int phyId, struct SocketListenInfoT conn[], unsigned int num, void **reqHandle)
+STATIC int RaHdcSocketListenStartAsyncV1(unsigned int phyId, struct SocketListenInfoT conn[], unsigned int num,
+    void **reqHandle)
 {
     struct RaResponseSocketListen *asyncRsp = NULL;
     struct RaRequestHandle *reqHandleTmp = NULL;
@@ -241,6 +242,62 @@ out:
     return ret;
 }
 
+STATIC int RaHdcSocketListenStartAsyncV2(unsigned int phyId, struct SocketListenInfoT conn[], unsigned int num,
+    void **reqHandle)
+{
+    struct RaResponseSocketListen *asyncRsp = NULL;
+    struct RaRequestHandle *reqHandleTmp = NULL;
+    union OpSocketListenDataV2 asyncData = {0};
+    int ret = 0;
+
+    ret = RaGetSocketListenInfoV2(conn, num, asyncData.txData.conn, MAX_SOCKET_NUM);
+    CHK_PRT_RETURN(ret != 0,
+        hccp_err("[listen_start][ra_hdc_socket]get_socket_listen_info failed, ret(%d) phyId(%u)", ret, phyId), -EINVAL);
+    asyncData.txData.num = num;
+
+    asyncRsp = (struct RaResponseSocketListen *)calloc(1, sizeof(struct RaResponseSocketListen));
+    CHK_PRT_RETURN(asyncRsp == NULL, hccp_err("[listen_start][ra_hdc_socket]calloc async_rsp failed, phyId(%u)", phyId),
+        -ENOMEM);
+    asyncRsp->conn = conn;
+    asyncRsp->num = num;
+    reqHandleTmp = (struct RaRequestHandle *)calloc(1, sizeof(struct RaRequestHandle));
+    if (reqHandleTmp == NULL) {
+        hccp_err("[listen_start][ra_hdc_socket]calloc RaRequestHandle failed, phyId[%u]", phyId);
+        ret = -ENOMEM;
+        goto out;
+    }
+    reqHandleTmp->privData = (void *)asyncRsp;
+
+    ret = RaHdcSendMsgAsync(RA_RS_SOCKET_LISTEN_START_V2, phyId, (char *)&asyncData, sizeof(union OpSocketListenDataV2),
+        reqHandleTmp);
+    if (ret != 0) {
+        hccp_err("[listen_start][ra_hdc_socket]hdc async send message process failed ret(%d) phyId(%u)", ret, phyId);
+        free(reqHandleTmp);
+        reqHandleTmp = NULL;
+        goto out;
+    }
+    *reqHandle = (void *)reqHandleTmp;
+    return 0;
+
+out:
+    free(asyncRsp);
+    asyncRsp = NULL;
+    return ret;
+}
+
+int RaHdcSocketListenStartAsync(unsigned int phyId, struct SocketListenInfoT conn[], unsigned int num, void **reqHandle)
+{
+    unsigned int interfaceVersion = 0;
+    int ret = 0;
+
+    ret = RaHdcGetInterfaceVersion(phyId, RA_RS_SOCKET_LISTEN_START_V2, &interfaceVersion);
+    if (ret == 0 && interfaceVersion >= RA_RS_SOCKET_LISTEN_V2_VERSION) {
+        return RaHdcSocketListenStartAsyncV2(phyId, conn, num, reqHandle);
+    }
+
+    return RaHdcSocketListenStartAsyncV1(phyId, conn, num, reqHandle);
+}
+
 void RaHdcAsyncHandleSocketListenStart(struct RaRequestHandle *reqHandle)
 {
     struct RaResponseSocketListen *asyncRsp = NULL;
@@ -253,6 +310,30 @@ void RaHdcAsyncHandleSocketListenStart(struct RaRequestHandle *reqHandle)
     ret = RaGetSocketListenResult(asyncData->rxData.conn, asyncRsp->num, asyncRsp->conn, MAX_SOCKET_NUM);
     if (ret != 0) {
         hccp_err("[listen_start][ra_hdc_socket]ra_get_socket_listen_result failed, ret(%d) phyId(%u)", ret, phyId);
+        reqHandle->opRet = -EINVAL;
+        goto out;
+    }
+    return;
+
+out:
+    free(reqHandle->privData);
+    reqHandle->privData = NULL;
+    return;
+}
+
+void RaHdcAsyncHandleSocketListenStartV2(struct RaRequestHandle *reqHandle)
+{
+    struct RaResponseSocketListen *asyncRsp = NULL;
+    union OpSocketListenDataV2 *asyncData = NULL;
+    unsigned int phyId = reqHandle->phyId;
+    int ret = 0;
+
+    asyncData = (union OpSocketListenDataV2 *)reqHandle->recvBuf;
+    asyncRsp = (struct RaResponseSocketListen *)reqHandle->privData;
+    ret = RaGetSocketListenResultV2(asyncData->rxData.conn, asyncRsp->num, asyncRsp->conn, MAX_SOCKET_NUM);
+    if (ret != 0) {
+        hccp_err("[listen_start_v2][ra_hdc_socket]ra_get_socket_listen_result_v2 failed, ret(%d) phyId(%u)", ret,
+            phyId);
         reqHandle->opRet = -EINVAL;
         goto out;
     }
@@ -292,7 +373,7 @@ int RaHdcSocketListenStopAsync(unsigned int phyId, struct SocketListenInfoT conn
     return 0;
 }
 
-int RaHdcSocketBatchConnectAsync(unsigned int phyId, struct SocketConnectInfoT conn[], unsigned int num,
+STATIC int RaHdcSocketBatchConnectAsyncV1(unsigned int phyId, struct SocketConnectInfoT conn[], unsigned int num,
     void **reqHandle)
 {
     struct RaRequestHandle *reqHandleTmp = NULL;
@@ -325,13 +406,67 @@ int RaHdcSocketBatchConnectAsync(unsigned int phyId, struct SocketConnectInfoT c
         reqHandleTmp = NULL;
         goto out;
     }
-
     *reqHandle = (void *)reqHandleTmp;
 
 out:
     free(asyncData);
     asyncData = NULL;
     return ret;
+}
+
+STATIC int RaHdcSocketBatchConnectAsyncV2(unsigned int phyId, struct SocketConnectInfoT conn[], unsigned int num,
+    void **reqHandle)
+{
+    struct RaRequestHandle *reqHandleTmp = NULL;
+    union OpSocketConnectDataV2 *asyncData = NULL;
+    int ret = 0;
+
+    asyncData = (union OpSocketConnectDataV2 *)calloc(sizeof(union OpSocketConnectDataV2), sizeof(char));
+    CHK_PRT_RETURN(asyncData == NULL,
+        hccp_err("[batch_connect][ra_hdc_socket]calloc async_data failed, phyId(%u)", phyId), -ENOMEM);
+
+    asyncData->txData.num = num;
+    ret = RaGetSocketConnectInfoV2(conn, num, asyncData->txData.conn, MAX_SOCKET_NUM);
+    if (ret != 0) {
+        hccp_err("[batch_connect][ra_hdc_socket]ra_get_socket_connect_info failed, ret(%d) phyId(%u)", ret, phyId);
+        goto out;
+    }
+
+    reqHandleTmp = (struct RaRequestHandle *)calloc(1, sizeof(struct RaRequestHandle));
+    if (reqHandleTmp == NULL) {
+        hccp_err("[batch_connect][ra_hdc_socket]calloc RaRequestHandle failed, phyId[%u]", phyId);
+        ret = -ENOMEM;
+        goto out;
+    }
+
+    ret = RaHdcSendMsgAsync(RA_RS_SOCKET_CONN_V2, phyId, (char *)asyncData, sizeof(union OpSocketConnectDataV2),
+        reqHandleTmp);
+    if (ret != 0) {
+        hccp_err("[batch_connect][ra_hdc_socket]hdc async send message process failed ret(%d) phyId(%u)", ret, phyId);
+        free(reqHandleTmp);
+        reqHandleTmp = NULL;
+        goto out;
+    }
+    *reqHandle = (void *)reqHandleTmp;
+
+out:
+    free(asyncData);
+    asyncData = NULL;
+    return ret;
+}
+
+int RaHdcSocketBatchConnectAsync(unsigned int phyId, struct SocketConnectInfoT conn[], unsigned int num,
+    void **reqHandle)
+{
+    unsigned int interfaceVersion = 0;
+    int ret = 0;
+
+    ret = RaHdcGetInterfaceVersion(phyId, RA_RS_SOCKET_CONN_V2, &interfaceVersion);
+    if (ret == 0 && interfaceVersion >= RA_RS_SOCKET_CONN_V2_VERSION) {
+        return RaHdcSocketBatchConnectAsyncV2(phyId, conn, num, reqHandle);
+    }
+
+    return RaHdcSocketBatchConnectAsyncV1(phyId, conn, num, reqHandle);
 }
 
 int RaHdcSocketBatchCloseAsync(unsigned int phyId, struct SocketCloseInfoT conn[], unsigned int num, void **reqHandle)

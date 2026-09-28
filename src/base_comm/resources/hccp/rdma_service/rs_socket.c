@@ -231,6 +231,7 @@ int RsSocketCopyConnInfo(struct RsConnInfo *connTmp, struct RsConnInfo *conn)
     conn->state = connTmp->state;
     conn->port = connTmp->port;
     conn->ssl = connTmp->ssl;
+    conn->tagChkDis = connTmp->tagChkDis;
     ret = memcpy_s(conn->tag, SOCK_CONN_TAG_SIZE + SOCK_CONN_DEV_ID_SIZE, connTmp->tag, sizeof(connTmp->tag));
     if (ret) {
         hccp_err("rs_conn_info tag copy failed, ret[%d]", ret);
@@ -312,6 +313,7 @@ STATIC void RsEpollEventSslListenInHandle(struct rs_cb *rsCb, struct RsListenInf
     acceptInfo->serverIpAddr = listenInfo->serverIpAddr;
     acceptInfo->clientIpAddr = *remoteIp;
     acceptInfo->connFd = connfd;
+    acceptInfo->tagChkDis = listenInfo->tagChkDis;
     RS_PTHREAD_MUTEX_LOCK(&rsCb->connCb.connMutex);
     listHead = &rsCb->connCb.serverAcceptList;
     RsListAddTail(&acceptInfo->list, listHead);
@@ -372,6 +374,7 @@ STATIC int RsTcpRecvTagInHandle(struct RsListenInfo *listenInfo, int connfd, str
     connTmp->connfd = connfd;
     connTmp->state = RS_CONN_STATE_TAG_SYNC;
     connTmp->port = listenInfo->sockPort;
+    connTmp->tagChkDis = listenInfo->tagChkDis;
     if (timeCost >= RS_RECV_MAX_TIME) {
         hccp_run_info("recv tag success, server:{%s:%u} client:%s timeCost:%fms tagSyncTimes:%u tagEintrTimes:%u",
             listenInfo->serverIpAddr.readAddr, listenInfo->sockPort, remoteIp->readAddr, timeCost,
@@ -675,7 +678,60 @@ static int RsSocketInitListen(struct SocketListenInfo *conn, uint32_t i, struct 
         }
     }
 
-    ret = RsListenNodeAlloc(*connCb, &ipInfo, serverPort, listenInfo);
+    ret = RsListenNodeAlloc(*connCb, &ipInfo, serverPort, false, listenInfo);
+    // listen node found, degrade log level make it consistent with inner call
+    if (ret == -EEXIST) {
+        hccp_info_socket("alloc listen info node unsuccessful, ret:%d, IP:%s, port:%u", ret, ipInfo.readAddr,
+            serverPort);
+    } else if (ret != 0) {
+        hccp_err("alloc listen info node failed, ret:%d, IP:%s, port:%u", ret, ipInfo.readAddr, serverPort);
+    }
+    if (ret != 0) {
+        conn[i].err = ENOMEM;
+        return ret;
+    }
+
+    return 0;
+}
+
+static int RsSocketInitListenV2(struct SocketListenInfoV2 *conn, uint32_t i, struct RsConnCb **connCb,
+    uint32_t serverPort, bool tagChkDis, struct RsListenInfo **listenInfo)
+{
+    unsigned int chipId = 0;
+    int ret = 0;
+
+    CHK_PRT_RETURN(((conn[i].family != AF_INET) && (conn[i].family != AF_INET6)) || conn[i].phyId >= RS_MAX_DEV_NUM,
+        hccp_err("family[%d] invalid, or phyId[%u] invalid, i:%u", conn[i].family, conn[i].phyId, i), -EINVAL);
+
+    if (conn[i].family == AF_INET) {
+        uint32_t *localIp = NULL;
+        localIp = &(conn[i].localIp.addr.s_addr);
+        ret = RsSocketNodeid2vnic(*localIp, localIp);
+        hccp_info_socket("listen [%u] IP 0x%llx, ret_vnic %d", i, *localIp, ret);
+    }
+
+    ret = rsGetLocalDevIDByHostDevID(conn[i].phyId, &chipId);
+    CHK_PRT_RETURN(ret, hccp_err("phyId invalid, ret %d", ret), ret);
+
+    ret = RsDev2conncb(chipId, connCb);
+    CHK_PRT_RETURN(ret, hccp_err("get conncb from dev failed, ret:%d", ret), ret);
+
+    struct RsIpAddrInfo ipInfo = {0};
+    ret = RsConvertIpAddr(conn[i].family, &conn[i].localIp, &ipInfo);
+    CHK_PRT_RETURN(ret, hccp_err("convert(ntop) ip failed, ret:%d", ret), ret);
+
+    struct RsListenInfo *tmpListenInfo;
+    ret = RsFindListenNode(*connCb, &ipInfo, serverPort, &tmpListenInfo);
+    if (ret == 0) {
+        int counter = __sync_fetch_and_add(&(tmpListenInfo->counter), 1);
+        if (counter > 0) {
+            hccp_info_socket("find listen node successful, counter:%d, IP:%s, port:%u", counter, ipInfo.readAddr,
+                serverPort);
+            return -EEXIST;
+        }
+    }
+
+    ret = RsListenNodeAlloc(*connCb, &ipInfo, serverPort, tagChkDis, listenInfo);
     // listen node found, degrade log level make it consistent with inner call
     if (ret == -EEXIST) {
         hccp_info_socket("alloc listen info node unsuccessful, ret:%d, IP:%s, port:%u", ret, ipInfo.readAddr,
@@ -712,6 +768,35 @@ static void RsSocketHandleListenNodeErr(uint32_t i, struct RsConnCb *connCb, str
     uint32_t j;
     int ret;
     struct RsListenInfo *listenInfo = NULL;
+
+    for (j = 0; j < i; j++) {
+        struct RsIpAddrInfo ipInfo = {0};
+        ret = RsConvertIpAddr(conn[j].family, &conn[j].localIp, &ipInfo);
+        if (ret) {
+            hccp_err("convert(ntop) ip failed");
+            continue;
+        }
+        ret = RsFindListenNode(connCb, &ipInfo, serverPort, &listenInfo);
+        if (ret) {
+            hccp_dbg("not find listen node, ret %d", ret);
+        } else {
+            ret = RsEpollCtl(connCb->epollfd, EPOLL_CTL_DEL, listenInfo->listenFd, EPOLLIN);
+            if (ret) {
+                hccp_err("delete from epoll failed, ret:%d, epollfd:%d, listenFd:%d", ret, connCb->epollfd,
+                    listenInfo->listenFd);
+            }
+            RS_CLOSE_RETRY_FOR_EINTR(ret, listenInfo->listenFd);
+            RsListenNodeFree(connCb, listenInfo);
+        }
+    }
+}
+
+static void RsSocketHandleListenNodeErrV2(uint32_t i, struct RsConnCb *connCb, struct SocketListenInfoV2 conn[],
+    uint32_t serverPort)
+{
+    struct RsListenInfo *listenInfo = NULL;
+    uint32_t j = 0;
+    int ret = 0;
 
     for (j = 0; j < i; j++) {
         struct RsIpAddrInfo ipInfo = {0};
@@ -858,6 +943,89 @@ RS_ATTRI_VISI_DEF int RsSocketAcceptCreditAdd(struct SocketListenInfo conn[], ui
     return ret;
 }
 
+RS_ATTRI_VISI_DEF int RsSocketListenStartV2(struct SocketListenInfoV2 conn[], uint32_t num)
+{
+    struct RsListenInfo *listenInfo = NULL;
+    union RsSocketaddr serverAddr = {0};
+    struct RsConnCb *connCb = NULL;
+    socklen_t serverAddrLen = 0;
+    unsigned int serverPort = 0;
+    unsigned int i = 0;
+    int listenFd = 0;
+    int scopeId = 0;
+    int errNo = 0;
+    int flag = 0;
+    int ret = 0;
+
+    RS_SOCKET_PARA_CHECK(num, conn);
+    if (conn[0].family == AF_INET6) {
+        scopeId = RsGetIpv6ScopeId(conn[0].localIp.addr6);
+        CHK_PRT_RETURN(scopeId < 0, hccp_err("scope_id[%d] is invalid", scopeId), -EINVAL);
+    }
+
+    for (i = 0; i < num; i++) {
+        serverPort = conn[i].port;
+        ret = RsSocketInitListenV2(conn, i, &connCb, serverPort, conn[i].tagChkDis, &listenInfo);
+        if (ret == -EEXIST) {
+            continue;
+        }
+        if (ret) {
+            flag = -ENOMEM;
+            hccp_err("listen init failed, ret:%d", ret);
+            goto listen_node_err_handle;
+        }
+
+        /* socket */
+        listenFd = socket(conn[i].family, SOCK_STREAM, 0);
+        if (listenFd < 0) {
+            errNo = errno;
+            hccp_err("create socket for (IP %s : port %u) failed, family %d, errno %d",
+                listenInfo->serverIpAddr.readAddr, serverPort, conn[i].family, errNo);
+            conn[i].phase = LISTEN_CREATE_FD_ERR;
+            goto listen_err_handle;
+        }
+
+        /* bind and listen */
+        connCb->scopeId = scopeId;
+        ret = RsSocketListenBindListen(listenFd, connCb, (struct SocketListenInfo *)&conn[i], listenInfo, serverPort);
+        errNo = ret;
+        if (ret == EADDRINUSE) {
+            hccp_run_warn("bind and listen unsuccessful, errNo:%d, listenFd:%d, state:%u, IP(%s) serverPort:%u", errNo,
+                listenFd, listenInfo->state, listenInfo->serverIpAddr.readAddr, serverPort);
+            goto bind_err_handle;
+        } else if (ret != 0) {
+            hccp_err("bind and listen failed, errNo:%d, listenFd:%d, listen state:%u, IP(%s) serverPort:%u", errNo,
+                listenFd, listenInfo->state, listenInfo->serverIpAddr.readAddr, serverPort);
+            goto bind_err_handle;
+        }
+
+        ret = RsEpollCtl(connCb->epollfd, EPOLL_CTL_ADD, listenFd, EPOLLIN);
+        if (ret) {
+            errNo = ret;
+            hccp_err("RsEpollCtl for epollfd[%d] listen_fd[%d]failed, errno:%d", connCb->epollfd, listenFd, errNo);
+            goto bind_err_handle;
+        }
+
+        serverAddrLen = (conn[0].family == AF_INET) ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
+        getsockname(listenFd, (struct sockaddr *)&serverAddr, &serverAddrLen);
+        serverPort = (conn[0].family == AF_INET) ? ntohs(serverAddr.sAddr.sin_port)
+                                                 : ntohs(serverAddr.sAddr6.sin6_port);
+        RsSocketSetConnListenInfo(listenInfo, listenFd, serverPort, (struct SocketListenInfo *)&conn[i]);
+    }
+
+    return 0;
+
+bind_err_handle:
+    RS_CLOSE_RETRY_FOR_EINTR(ret, listenFd);
+listen_err_handle:
+    RsListenNodeFree(connCb, listenInfo);
+    conn[i].err = (unsigned int)errNo;
+    flag = -errNo;
+listen_node_err_handle:
+    RsSocketHandleListenNodeErrV2(i, connCb, conn, serverPort);
+    return flag;
+}
+
 RS_ATTRI_VISI_DEF int RsSocketListenStop(struct SocketListenInfo conn[], uint32_t num)
 {
     struct RsListenInfo *listenInfo = NULL;
@@ -918,7 +1086,8 @@ RS_ATTRI_VISI_DEF int RsSocketListenStop(struct SocketListenInfo conn[], uint32_
 }
 
 STATIC int RsAllocClientConnNode(struct RsConnCb *connCb, enum RsConnRole role, struct RsConnInfo **conn,
-    struct SocketConnectInfo *socketConn, struct RsIpAddrInfo *clientIp, struct RsIpAddrInfo *serverIp, int serverPort)
+    struct SocketConnectInfo *socketConn, bool tagChkDis, struct RsIpAddrInfo *clientIp, struct RsIpAddrInfo *serverIp,
+    int serverPort)
 {
     struct RsListHead *listHead = NULL;
     struct RsConnInfo *connInfo;
@@ -933,6 +1102,7 @@ STATIC int RsAllocClientConnNode(struct RsConnCb *connCb, enum RsConnRole role, 
     connInfo->serverIp = *serverIp;
     connInfo->clientIp = *clientIp;
     connInfo->scopeId = connCb->scopeId;
+    connInfo->tagChkDis = tagChkDis;
 
     ret = strcpy_s(connInfo->tag, SOCK_CONN_TAG_SIZE, socketConn->tag);
     if (ret) {
@@ -1311,7 +1481,7 @@ int RsSocketConnectAsync(struct RsConnInfo *conn, struct rs_cb *rscb)
             break;
 
         case RS_CONN_STATE_TAG_SYNC:
-            if (gRsCb->connCb.wlistEnable == 1) {
+            if (!conn->tagChkDis) {
                 RsSocketClientValidSync(conn);
             }
             break;
@@ -1344,8 +1514,8 @@ int RsSocketConnectAsync(struct RsConnInfo *conn, struct rs_cb *rscb)
 int RsGetSocketConnectState(struct RsConnInfo *conn)
 {
     if ((conn->state == RS_CONN_STATE_TX_TO_HCCL) ||
-        ((gRsCb->connCb.wlistEnable == 1) && (conn->state == RS_CONN_STATE_VALID_SYNC)) ||
-        ((gRsCb->connCb.wlistEnable == 0) && (conn->state == RS_CONN_STATE_TAG_SYNC))) {
+        ((!conn->tagChkDis) && (conn->state == RS_CONN_STATE_VALID_SYNC)) ||
+        ((conn->tagChkDis) && (conn->state == RS_CONN_STATE_TAG_SYNC))) {
         return 1;
     } else {
         return 0;
@@ -1353,6 +1523,18 @@ int RsGetSocketConnectState(struct RsConnInfo *conn)
 }
 
 STATIC void RsSocketsIpAddrConverter(struct SocketConnectInfo conn[], int num)
+{
+    int j;
+
+    for (j = 0; j < num; j++) {
+        if (conn[j].family == AF_INET) {
+            conn[j].localIp.addr.s_addr = RsSocketVnic2nodeid(conn[j].localIp.addr.s_addr);
+            conn[j].remoteIp.addr.s_addr = RsSocketVnic2nodeid(conn[j].remoteIp.addr.s_addr);
+        }
+    }
+}
+
+STATIC void RsSocketsIpAddrConverterV2(struct SocketConnectInfoV2 conn[], int num)
 {
     int j;
 
@@ -1373,6 +1555,31 @@ static void RsSocketHandleConnNodeErr(uint32_t i, struct RsConnCb *connCb, struc
 
     for (j = 0; j < i; j++) {
         ret = RsGetConnInfo(connCb, conn + j, &connInfo, serverPort);
+        if (ret) {
+            hccp_dbg("not find conn node, ret %d", ret);
+        } else {
+            RS_PTHREAD_MUTEX_LOCK(&connCb->rscb->mutex);
+            RS_PTHREAD_MUTEX_LOCK(&connCb->connMutex);
+            RsListDel(&connInfo->list);
+            free(connInfo);
+            connInfo = NULL;
+            RS_PTHREAD_MUTEX_ULOCK(&connCb->connMutex);
+            RS_PTHREAD_MUTEX_ULOCK(&connCb->rscb->mutex);
+        }
+    }
+
+    return;
+}
+
+static void RsSocketHandleConnNodeErrV2(uint32_t i, struct RsConnCb *connCb, struct SocketConnectInfoV2 conn[],
+    uint32_t serverPort)
+{
+    struct RsConnInfo *connInfo = NULL;
+    uint32_t j = 0;
+    int ret = 0;
+
+    for (j = 0; j < i; j++) {
+        ret = RsGetConnInfo(connCb, (struct SocketConnectInfo *)(conn + j), &connInfo, serverPort);
         if (ret) {
             hccp_dbg("not find conn node, ret %d", ret);
         } else {
@@ -1472,7 +1679,7 @@ RS_ATTRI_VISI_DEF int RsSocketBatchConnect(struct SocketConnectInfo conn[], uint
 
         ret = RsGetConnInfo(connCb, conn + i, &connInfo, serverPort);
         if (ret) {
-            ret = RsAllocClientConnNode(connCb, RS_CONN_ROLE_CLIENT, &connInfo, &conn[i], &localIp, &remoteIp,
+            ret = RsAllocClientConnNode(connCb, RS_CONN_ROLE_CLIENT, &connInfo, &conn[i], false, &localIp, &remoteIp,
                 serverPort);
             if (ret) {
                 hccp_err("rs_alloc_client_conn_node failed, ret:%d, role:%d, localIp:%s, remoteIp:%s, serverPort:%u,"
@@ -1573,6 +1780,79 @@ RS_ATTRI_VISI_DEF int RsSocketBatchClose(int disuseLinger, struct RsSocketCloseI
     return retVal;
 }
 
+RS_ATTRI_VISI_DEF int RsSocketBatchConnectV2(struct SocketConnectInfoV2 conn[], uint32_t num)
+{
+    struct RsConnInfo *connInfo = NULL;
+    struct RsConnCb *connCb = NULL;
+    unsigned int chipId = 0;
+    unsigned int serverPort = 0;
+    struct RsIpAddrInfo remoteIp = {0};
+    struct RsIpAddrInfo localIp = {0};
+    unsigned int i = 0;
+    int ret = 0;
+
+    RS_SOCKET_PARA_CHECK(num, conn);
+    for (i = 0; i < num; i++) {
+        serverPort = conn[i].port;
+        ret = RsSocketConnectCheckPara((struct SocketConnectInfo *)&conn[i]);
+        if (ret) {
+            hccp_err("rs_socket_connect_check_para for failed, ret:%d, i:%u", ret, i);
+            goto conn_node_err_handle;
+        }
+
+        ret = rs_socket_IP_convert((struct SocketConnectInfo *)&conn[i], &remoteIp, &localIp);
+        if (ret) {
+            hccp_err("convert ip invalid, ret %d", ret);
+            goto conn_node_err_handle;
+        }
+        ret = rsGetLocalDevIDByHostDevID(conn[i].phyId, &chipId);
+        if (ret) {
+            hccp_err("phyId invalid, ret %d", ret);
+            goto conn_node_err_handle;
+        }
+
+        ret = RsDev2conncb(chipId, &connCb);
+        if (ret) {
+            hccp_err("get conncb from dev failed(%d)!", ret);
+            goto conn_node_err_handle;
+        }
+
+        if (conn[i].family == AF_INET6) {
+            connCb->scopeId = RsGetIpv6ScopeId(conn[i].localIp.addr6);
+            if (connCb->scopeId < 0) {
+                hccp_err("scope_id[%d] is invalid", connCb->scopeId);
+                connCb->scopeId = 0;
+                goto conn_node_err_handle;
+            }
+        }
+
+        ret = RsGetConnInfo(connCb, (struct SocketConnectInfo *)&conn[i], &connInfo, serverPort);
+        if (ret) {
+            ret = RsAllocClientConnNode(connCb, RS_CONN_ROLE_CLIENT, &connInfo, (struct SocketConnectInfo *)&conn[i],
+                conn[i].tagChkDis, &localIp, &remoteIp, serverPort);
+            if (ret) {
+                hccp_err("rs_alloc_client_conn_node failed, ret:%d, role:%d, localIp:%s, remoteIp:%s, serverPort:%u,"
+                         " tag:%s",
+                    ret, RS_CONN_ROLE_CLIENT, localIp.readAddr, remoteIp.readAddr, serverPort, conn[i].tag);
+                goto conn_node_err_handle;
+            }
+
+            hccp_info_socket("create conn node for {remote_ip(%s), serverPort(%u), tag(%s), tagChkDis(%d)}!",
+                remoteIp.readAddr, serverPort, connInfo->tag, connInfo->tagChkDis);
+        } else {
+            hccp_info_socket("conn node for {remote_ip(%s), serverPort(%u), tag(%s), tagChkDis(%d)} exist! state:%u",
+                remoteIp.readAddr, serverPort, connInfo->tag, connInfo->tagChkDis, connInfo->state);
+        }
+    }
+    sem_post(&gRsCb->connectTrigSem);
+    RsSocketsIpAddrConverterV2(conn, num);
+    return 0;
+
+conn_node_err_handle:
+    RsSocketHandleConnNodeErrV2(i, connCb, conn, serverPort);
+    return ret;
+}
+
 RS_ATTRI_VISI_DEF int RsSocketBatchAbort(struct SocketConnectInfo conn[], uint32_t num)
 {
     struct RsConnInfo *connInfo = NULL;
@@ -1665,7 +1945,7 @@ STATIC int RsFindSockets(struct RsConnInfo *connTmp, struct SocketFdData conn[],
     int ret, i;
 
     /* normal process, no record log */
-    if (gRsCb->connCb.wlistEnable == 1) {
+    if (!connTmp->tagChkDis) {
         if (connTmp->state != RS_CONN_STATE_VALID_SYNC) {
             return -EINVAL;
         }

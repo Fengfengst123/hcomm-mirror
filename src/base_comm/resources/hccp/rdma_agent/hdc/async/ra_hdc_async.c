@@ -45,6 +45,8 @@ struct RaAsyncOpHandle gRaAsyncOpHandle[] = {
     {RA_RS_SOCKET_LISTEN_START, SOCKET_OP, RaHdcAsyncHandleSocketListenStart, sizeof(union OpSocketListenData)},
     {RA_RS_SOCKET_LISTEN_STOP, SOCKET_OP, NULL, sizeof(union OpSocketListenData)},
     {RA_RS_SOCKET_CONN, SOCKET_OP, NULL, sizeof(union OpSocketConnectData)},
+    {RA_RS_SOCKET_CONN_V2, SOCKET_OP, NULL, sizeof(union OpSocketConnectDataV2)},
+    {RA_RS_SOCKET_LISTEN_START_V2, SOCKET_OP, RaHdcAsyncHandleSocketListenStartV2, sizeof(union OpSocketListenDataV2)},
     {RA_RS_SOCKET_CLOSE, SOCKET_OP, RaHdcAsyncHandleSocketBatchClose, sizeof(union OpSocketCloseData)},
     {RA_RS_HDC_SESSION_CLOSE, OTHERS, NULL, sizeof(union OpHdcCloseData)},
 };

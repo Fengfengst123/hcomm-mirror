@@ -293,6 +293,7 @@ struct RsConnInfo {
     struct SocketErrInfo errInfo;
 
     struct RsListHead list;
+    bool tagChkDis;
 };
 
 enum ListenFdState {
@@ -318,6 +319,7 @@ struct RsListenInfo {
     unsigned int acceptCreditLimit;
 
     struct RsListHead list;
+    bool tagChkDis;
 };
 
 struct RsAcceptInfo {
@@ -329,6 +331,7 @@ struct RsAcceptInfo {
     uint32_t state;
 
     struct RsListHead list;
+    bool tagChkDis;
 };
 
 struct RsWhiteList {

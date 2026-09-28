@@ -133,13 +133,9 @@ STATIC int RaInitHdc(struct RaInitConfig *config)
 STATIC int RaInitPeer(struct RaInitConfig *config)
 {
     unsigned int phyId = config->phyId;
-    unsigned int whiteListSwitch = 0;
     int ret;
 
-    ret = RaSocketGetWhiteListStatus(&whiteListSwitch);
-    CHK_PRT_RETURN(ret != 0, hccp_err("[init][ra]get white_list_status failed, ret(%d) phyId(%u)", ret, phyId), ret);
-
-    ret = RaPeerInit(config, whiteListSwitch);
+    ret = RaPeerInit(config, 0);
     CHK_PRT_RETURN(ret != 0, hccp_err("[init][ra]ra_peer_init failed, ret(%d) phyId(%u)", ret, phyId), ret);
 
     return 0;
@@ -240,7 +236,6 @@ HCCP_ATTRI_VISI_DEF int RaDeinit(struct RaInitConfig *config)
         return ConverReturnCode(HCCP_INIT, -EPROTONOSUPPORT);
     }
 
-    RaSocketSetWhiteListStatus(WHITE_LIST_DISABLE);
     gSendWrNum = 0;
     DlHalDeinit();
     return 0;

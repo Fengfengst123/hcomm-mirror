@@ -1530,9 +1530,11 @@ out:
 
 struct RaOpHandle gRaOpHandle[] = {
     {RA_RS_SOCKET_CONN, RaRsSocketBatchConnect, sizeof(union OpSocketConnectData)},
+    {RA_RS_SOCKET_CONN_V2, RaRsSocketBatchConnectV2, sizeof(union OpSocketConnectDataV2)},
     {RA_RS_SOCKET_CLOSE, RaRsSocketBatchClose, sizeof(union OpSocketCloseData)},
     {RA_RS_SOCKET_ABORT, RaRsSocketBatchAbort, sizeof(union OpSocketConnectData)},
     {RA_RS_SOCKET_LISTEN_START, RaRsSocketListenStart, sizeof(union OpSocketListenData)},
+    {RA_RS_SOCKET_LISTEN_START_V2, RaRsSocketListenStartV2, sizeof(union OpSocketListenDataV2)},
     {RA_RS_SOCKET_LISTEN_STOP, RaRsSocketListenStop, sizeof(union OpSocketListenData)},
     {RA_RS_GET_SOCKET, RaRsGetSockets, sizeof(union OpSocketInfoData)},
     {RA_RS_SOCKET_SEND, RaRsSocketSend, sizeof(union OpSocketSendData)},

@@ -23,7 +23,7 @@
 #include "dl_hal_function.h"
 #include "ra_hdc_socket.h"
 
-int RaHdcSocketBatchConnect(unsigned int phyId, struct SocketConnectInfoT conn[], unsigned int num)
+STATIC int RaHdcSocketBatchConnectV1(unsigned int phyId, struct SocketConnectInfoT conn[], unsigned int num)
 {
     union OpSocketConnectData *socketConnectData = NULL;
     unsigned int interfaceVersion = 0;
@@ -31,13 +31,9 @@ int RaHdcSocketBatchConnect(unsigned int phyId, struct SocketConnectInfoT conn[]
 
     socketConnectData = (union OpSocketConnectData *)calloc(sizeof(union OpSocketConnectData), sizeof(char));
     CHK_PRT_RETURN(socketConnectData == NULL,
-        hccp_err("[batch_connect][ra_hdc_socket]calloc socket_connect_data "
-                 "failed, phyId(%u).",
-            phyId),
-        -ENOMEM);
+        hccp_err("[batch_connect][ra_hdc_socket]calloc socket_connect_data failed, phyId(%u).", phyId), -ENOMEM);
 
     socketConnectData->txData.num = num;
-
     ret = RaGetSocketConnectInfo(conn, num, socketConnectData->txData.conn, MAX_SOCKET_NUM);
     if (ret != 0) {
         hccp_err("[batch_connect][ra_hdc_socket]ra_get_socket_connect_info failed, ret(%d) phyId(%u)", ret, phyId);
@@ -46,6 +42,7 @@ int RaHdcSocketBatchConnect(unsigned int phyId, struct SocketConnectInfoT conn[]
 
     // check opcode version, use port by default
     ret = RaHdcGetInterfaceVersion(phyId, RA_RS_SOCKET_CONN, &interfaceVersion);
+    // RA_RS_SOCKET_CONN_VERSION is the version of the interface that supports the use_port flag, which is different
     if (ret == 0 && interfaceVersion >= RA_RS_SOCKET_CONN_VERSION) {
         socketConnectData->txData.num |= (1U << SOCKET_USE_PORT_BIT);
     }
@@ -60,7 +57,74 @@ out:
     return ret;
 }
 
-int RaHdcSocketListenStart(unsigned int phyId, struct SocketListenInfoT conn[], unsigned int num)
+STATIC int RaHdcSocketBatchConnectV2(unsigned int phyId, struct SocketConnectInfoT conn[], unsigned int num)
+{
+    union OpSocketConnectDataV2 *socketConnectData = NULL;
+    int ret = 0;
+
+    socketConnectData = (union OpSocketConnectDataV2 *)calloc(sizeof(union OpSocketConnectDataV2), sizeof(char));
+    CHK_PRT_RETURN(socketConnectData == NULL,
+        hccp_err("[batch_connect][ra_hdc_socket]calloc socket_connect_data_v2 failed, phyId(%u).", phyId), -ENOMEM);
+
+    socketConnectData->txData.num = num;
+    ret = RaGetSocketConnectInfoV2(conn, num, socketConnectData->txData.conn, MAX_SOCKET_NUM);
+    if (ret != 0) {
+        hccp_err("[batch_connect][ra_hdc_socket]ra_get_socket_connect_info failed, ret(%d) phyId(%u)", ret, phyId);
+        goto out;
+    }
+
+    ret = RaHdcProcessMsg(RA_RS_SOCKET_CONN_V2, phyId, (char *)socketConnectData, sizeof(union OpSocketConnectDataV2));
+    if (ret != 0) {
+        hccp_err("[batch_connect][ra_hdc_socket]ra hdc message process failed, ret(%d) phyId(%u)", ret, phyId);
+    }
+
+out:
+    free(socketConnectData);
+    socketConnectData = NULL;
+    return ret;
+}
+
+int RaHdcSocketBatchConnect(unsigned int phyId, struct SocketConnectInfoT conn[], unsigned int num)
+{
+    unsigned int interfaceVersion = 0;
+    int ret = 0;
+
+    ret = RaHdcGetInterfaceVersion(phyId, RA_RS_SOCKET_CONN_V2, &interfaceVersion);
+    if (ret == 0 && interfaceVersion >= RA_RS_SOCKET_CONN_V2_VERSION) {
+        return RaHdcSocketBatchConnectV2(phyId, conn, num);
+    }
+
+    return RaHdcSocketBatchConnectV1(phyId, conn, num);
+}
+
+STATIC int RaHdcSocketListenStartV2(unsigned int phyId, struct SocketListenInfoT conn[], unsigned int num)
+{
+    union OpSocketListenDataV2 socketListenDataV2 = {0};
+    int ret = 0;
+
+    socketListenDataV2.txData.num = num;
+    ret = RaGetSocketListenInfoV2(conn, num, socketListenDataV2.txData.conn, MAX_SOCKET_NUM);
+    CHK_PRT_RETURN(ret != 0,
+        hccp_err("[listen_start][ra_hdc_socket]ra_get_socket_listen_info failed, ret(%d) phyId(%u)", ret, phyId),
+        -EINVAL);
+
+    ret = RaHdcProcessMsg(RA_RS_SOCKET_LISTEN_START_V2, phyId, (char *)&socketListenDataV2,
+        sizeof(union OpSocketListenDataV2));
+    CHK_PRT_RETURN(ret == -EADDRINUSE,
+        hccp_warn_socket("[listen_start][ra_hdc_socket]ra hdc message process unsuccessful, ret(%d) phyId(%u)", ret,
+            phyId),
+        ret);
+    CHK_PRT_RETURN(ret != 0,
+        hccp_err("[listen_start][ra_hdc_socket]ra hdc message process failed, ret(%d) phyId(%u)", ret, phyId), ret);
+
+    ret = RaGetSocketListenResultV2(socketListenDataV2.rxData.conn, num, conn, MAX_SOCKET_NUM);
+    CHK_PRT_RETURN(ret != 0,
+        hccp_err("[listen_start][ra_hdc_socket]ra_get_socket_listen_result failed, ret(%d) phyId(%u)", ret, phyId),
+        -EINVAL);
+    return ret;
+}
+
+STATIC int RaHdcSocketListenStartV1(unsigned int phyId, struct SocketListenInfoT conn[], unsigned int num)
 {
     union OpSocketListenData socketListenData = {0};
     unsigned int interfaceVersion = 0;
@@ -69,9 +133,7 @@ int RaHdcSocketListenStart(unsigned int phyId, struct SocketListenInfoT conn[], 
     socketListenData.txData.num = num;
     ret = RaGetSocketListenInfo(conn, num, socketListenData.txData.conn, MAX_SOCKET_NUM);
     CHK_PRT_RETURN(ret != 0,
-        hccp_err("[listen_start][ra_hdc_socket]ra_get_socket_listen_info failed, "
-                 "ret(%d) phyId(%u)",
-            ret, phyId),
+        hccp_err("[listen_start][ra_hdc_socket]ra_get_socket_listen_info failed, ret(%d) phyId(%u)", ret, phyId),
         -EINVAL);
 
     // check opcode version, use port by default
@@ -83,21 +145,31 @@ int RaHdcSocketListenStart(unsigned int phyId, struct SocketListenInfoT conn[], 
     ret = RaHdcProcessMsg(RA_RS_SOCKET_LISTEN_START, phyId, (char *)&socketListenData,
         sizeof(union OpSocketListenData));
     CHK_PRT_RETURN(ret == -EADDRINUSE,
-        hccp_warn_socket("[listen_start][ra_hdc_socket]ra hdc message process unsuccessful,"
-                         " ret(%d) phyId(%u)",
-            ret, phyId),
+        hccp_warn_socket("[listen_start][ra_hdc_socket]ra hdc message process unsuccessful, ret(%d) phyId(%u)", ret,
+            phyId),
         ret);
     CHK_PRT_RETURN(ret != 0,
         hccp_err("[listen_start][ra_hdc_socket]ra hdc message process failed, ret(%d) phyId(%u)", ret, phyId), ret);
 
     ret = RaGetSocketListenResult(socketListenData.rxData.conn, num, conn, MAX_SOCKET_NUM);
     CHK_PRT_RETURN(ret != 0,
-        hccp_err("[listen_start][ra_hdc_socket]ra_get_socket_listen_result failed, ret(%d) "
-                 "phyId(%u)",
-            ret, phyId),
+        hccp_err("[listen_start][ra_hdc_socket]ra_get_socket_listen_result failed, ret(%d) phyId(%u)", ret, phyId),
         -EINVAL);
 
     return ret;
+}
+
+int RaHdcSocketListenStart(unsigned int phyId, struct SocketListenInfoT conn[], unsigned int num)
+{
+    unsigned int interfaceVersion = 0;
+    int ret = 0;
+
+    ret = RaHdcGetInterfaceVersion(phyId, RA_RS_SOCKET_LISTEN_START_V2, &interfaceVersion);
+    if (ret == 0 && interfaceVersion >= RA_RS_SOCKET_LISTEN_V2_VERSION) {
+        return RaHdcSocketListenStartV2(phyId, conn, num);
+    }
+
+    return RaHdcSocketListenStartV1(phyId, conn, num);
 }
 
 int RaHdcSocketBatchClose(unsigned int phyId, struct SocketCloseInfoT conn[], unsigned int num)

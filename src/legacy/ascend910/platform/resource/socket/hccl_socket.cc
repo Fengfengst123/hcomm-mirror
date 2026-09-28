@@ -56,6 +56,13 @@ HcclResult HcclSocket::Init()
     // 默认场景下，只有VNIC使用强制断链，其它场景还是走优雅断链
     forceClose_ = (socketType_ == NicType::VNIC_TYPE);
 
+    bool tagChkDis = (GetExternalInputHcclEnableWhitelist() == HCCL_WHITELIST_ON) ? false : true;
+    if (GetRemoteIsHdc() && IsGeneralServer()) {
+        tagChkDis = false;
+    }
+    tagChkDis_ = (socketType_ == NicType::HOST_NIC_TYPE) ? tagChkDis : false;
+    HCCL_INFO(
+        "[HcclSocket][Init] device[%d] socketType[%u] tagChkDis[%u].", localDeviceLogicId_, socketType_, tagChkDis_);
     return HCCL_SUCCESS;
 }
 
@@ -81,7 +88,7 @@ HcclResult HcclSocket::DeInit()
     return HCCL_SUCCESS;
 }
 
-HcclResult HcclSocket::ListenHostNet(HcclResult& ret, std::string& errormessage, u32& port)
+HcclResult HcclSocket::ListenHostNet(HcclResult& ret, std::string& errormessage, u32& port, bool tagChkDis)
 {
     bool rdmaFlag = !GetExternalInputHcclIsTcpMode();
     u32 proto = 0;
@@ -93,7 +100,7 @@ HcclResult HcclSocket::ListenHostNet(HcclResult& ret, std::string& errormessage,
         rdmaFlag = false;
     }
     ret = NetworkManager::GetInstance(localDeviceLogicId_)
-              .StartHostNetAndListen(localIp_, hostSocketHandle, port, rdmaFlag);
+              .StartHostNetAndListen(localIp_, hostSocketHandle, port, rdmaFlag, tagChkDis);
     errormessage = "The IP address " + std::string(localIp_.GetReadableIP()) + " and port " + std::to_string(port)
                    + " have already been bound.";
     RPT_INPUT_ERR(
@@ -112,7 +119,7 @@ HcclResult HcclSocket::Listen()
     HcclResult ret = HCCL_E_RESERVED;
     std::string errormessage = "";
     if (socketType_ == NicType::VNIC_TYPE) {
-        ret = NetworkManager::GetInstance(localDeviceLogicId_).StartVnic(localIp_, localPort_);
+        ret = NetworkManager::GetInstance(localDeviceLogicId_).StartVnic(localIp_, localPort_, tagChkDis_);
         errormessage = "The IP address " + std::string(localIp_.GetReadableIP()) + " and port "
                        + std::to_string(localPort_) + " have already been bound.";
         RPT_INPUT_ERR(
@@ -126,14 +133,15 @@ HcclResult HcclSocket::Listen()
             __func__, localDeviceLogicId_, localIp_.GetReadableIP(), localPort_, rdmaFlag, socketType_,
             backupIp_.GetReadableIP());
         // 如果是backup，传入额外的rdev信息
-        ret = NetworkManager::GetInstance(localDeviceLogicId_).StartNic(localIp_, localPort_, rdmaFlag, backupIp_);
+        ret = NetworkManager::GetInstance(localDeviceLogicId_)
+                  .StartNic(localIp_, localPort_, rdmaFlag, backupIp_, tagChkDis_);
         errormessage = "The IP address " + std::string(localIp_.GetReadableIP()) + " and port "
                        + std::to_string(localPort_) + " have already been bound.";
         RPT_INPUT_ERR(
             ret == HCCL_E_UNAVAIL, "EI0020", std::vector<std::string>({"reason"}),
             std::vector<std::string>({errormessage}));
     } else {
-        CHK_RET(ListenHostNet(ret, errormessage, localPort_));
+        CHK_RET(ListenHostNet(ret, errormessage, localPort_, tagChkDis_));
     }
     std::stringstream tmpMsgstream;
     tmpMsgstream
@@ -144,17 +152,17 @@ HcclResult HcclSocket::Listen()
     CHK_PRT_RET(
         ret != HCCL_SUCCESS,
         HCCL_ERROR(
-            "%s socket type[%u], listen on ip[%s] and specific port[%u] fail. "
+            "%s socket type[%u], listen on ip[%s] and specific port[%u] fail, tagChkDis[%u]. "
             "Please check the port status and whether the port is being used by other process.",
-            errmsg.c_str(), socketType_, localIp_.GetReadableAddress(), localPort_),
+            errmsg.c_str(), socketType_, localIp_.GetReadableAddress(), localPort_, tagChkDis_),
         ret);
 
     CHK_RET(GetNicSocketHandle());
 
     listened_ = true;
     HCCL_INFO(
-        "[HcclSocket][Listen] device[%d] listens on ip[%s] port[%u] success, socketType[%u].", localDeviceLogicId_,
-        localIp_.GetReadableAddress(), localPort_, socketType_);
+        "[HcclSocket][Listen] device[%d] listens on ip[%s] port[%u] success, socketType[%u], tagChkDis[%u].",
+        localDeviceLogicId_, localIp_.GetReadableAddress(), localPort_, socketType_, tagChkDis_);
 
     return HCCL_SUCCESS;
 }
@@ -167,7 +175,7 @@ HcclResult HcclSocket::Listen(u32 port)
     std::string errormessage = "";
     HCCL_INFO("[HcclSocket][Listen] device[%d] trying to listen on port[%u]", localDeviceLogicId_, port);
     if (socketType_ == NicType::VNIC_TYPE) {
-        ret = NetworkManager::GetInstance(localDeviceLogicId_).StartVnic(localIp_, port);
+        ret = NetworkManager::GetInstance(localDeviceLogicId_).StartVnic(localIp_, port, tagChkDis_);
         errormessage = "The IP address " + std::string(localIp_.GetReadableIP()) + " and port " + std::to_string(port)
                        + " have already been bound.";
         RPT_INPUT_ERR(
@@ -181,14 +189,15 @@ HcclResult HcclSocket::Listen(u32 port)
             __func__, localDeviceLogicId_, localIp_.GetReadableIP(), port, rdmaFlag, socketType_,
             backupIp_.GetReadableIP());
         // 如果是backup，传入额外的rdev信息
-        ret = NetworkManager::GetInstance(localDeviceLogicId_).StartNic(localIp_, port, rdmaFlag, backupIp_);
+        ret = NetworkManager::GetInstance(localDeviceLogicId_)
+                  .StartNic(localIp_, port, rdmaFlag, backupIp_, tagChkDis_);
         errormessage = "The IP address " + std::string(localIp_.GetReadableIP()) + " and port " + std::to_string(port)
                        + " have already been bound.";
         RPT_INPUT_ERR(
             ret == HCCL_E_UNAVAIL, "EI0020", std::vector<std::string>({"reason"}),
             std::vector<std::string>({errormessage}));
     } else {
-        CHK_RET(ListenHostNet(ret, errormessage, port));
+        CHK_RET(ListenHostNet(ret, errormessage, port, tagChkDis_));
     }
     std::stringstream tmpMsgstream;
     tmpMsgstream
@@ -205,8 +214,8 @@ HcclResult HcclSocket::Listen(u32 port)
     CHK_PRT_RET(
         ret != HCCL_SUCCESS,
         HCCL_ERROR(
-            "%s socket type[%u], listen on ip[%s] and port[%u] fail,.", errmsg.c_str(), socketType_,
-            localIp_.GetReadableAddress(), port),
+            "%s socket type[%u], listen on ip[%s] and port[%u] fail, tagChkDis[%u].", errmsg.c_str(), socketType_,
+            localIp_.GetReadableAddress(), port, tagChkDis_),
         ret);
 
     CHK_RET(GetNicSocketHandle());
@@ -214,8 +223,8 @@ HcclResult HcclSocket::Listen(u32 port)
     localPort_ = port;
     listened_ = true;
     HCCL_INFO(
-        "[HcclSocket][Listen] device[%d] listens on ip[%s] port[%u] success, socketType[%u].", localDeviceLogicId_,
-        localIp_.GetReadableAddress(), localPort_, socketType_);
+        "[HcclSocket][Listen] device[%d] listens on ip[%s] port[%u] success, socketType[%u], tagChkDis[%u].",
+        localDeviceLogicId_, localIp_.GetReadableAddress(), localPort_, socketType_, tagChkDis_);
 
     return HCCL_SUCCESS;
 }
@@ -285,11 +294,13 @@ HcclResult HcclSocket::Connect()
         connectInfo.remoteIp.addr6 = remoteIp_.GetBinaryAddress().addr6;
         connectInfo.socketHandle = nicSocketHandle_;
         connectInfo.port = remotePort_;
+        connectInfo.tagChkDis = tagChkDis_;
         CHK_SAFETY_FUNC_RET(strcpy_s(connectInfo.tag, SOCK_CONN_TAG_SIZE, tag_.c_str()));
 
         HCCL_INFO(
-            "[Connect] localIp[%s], remoteIp[%s], socketHandle[%lu], tag[%s], port[%u]", localIp_.GetReadableAddress(),
-            remoteIp_.GetReadableAddress(), nicSocketHandle_, connectInfo.tag, remotePort_);
+            "[Connect] localIp[%s], remoteIp[%s], socketHandle[%lu], tag[%s], port[%u], tagChkDis[%u]",
+            localIp_.GetReadableAddress(), remoteIp_.GetReadableAddress(), nicSocketHandle_, connectInfo.tag,
+            remotePort_, tagChkDis_);
 
         HcclResult ret = hrtRaSocketBatchConnect(&connectInfo, 1, MAX_VALUE_U32, [this]() -> bool {
             return this->GetStopFlag();

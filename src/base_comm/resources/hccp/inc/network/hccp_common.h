@@ -169,10 +169,12 @@ enum ListenPhase {
  * struct of the listen info
  */
 struct SocketListenInfoT {
-    void *socketHandle; /**< socket handle */
-    unsigned int port;  /**< Socket listening port number */
-    unsigned int phase; /**< refer to enum listen_phase */
-    unsigned int err;   /**< errno */
+    void *socketHandle;    /**< socket handle */
+    unsigned int port;     /**< Socket listening port number */
+    unsigned int phase;    /**< refer to enum listen_phase */
+    unsigned int err;      /**< errno */
+    bool tagChkDis;        /**< per-socket tag check disable: false=check tag, true=skip tag check */
+    unsigned char resv[7]; /**< reserved for future use */
 };
 
 /**
@@ -184,6 +186,8 @@ struct SocketConnectInfoT {
     union HccpIpAddr remoteIp;    /**< IP address of remote socket, [0-7] is reserved for vnic */
     unsigned int port;            /**< Socket listening port number */
     char tag[SOCK_CONN_TAG_SIZE]; /**< tag must ended by '\0' */
+    bool tagChkDis;               /**< per-socket tag check disable: false=check tag, true=skip tag check */
+    unsigned char resv[7];        /**< reserved for future use */
 };
 
 /**

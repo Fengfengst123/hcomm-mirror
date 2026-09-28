@@ -329,7 +329,7 @@ void TcRaPeerSocketBatchConnect()
 {
     unsigned int devId = 0;
     struct SocketConnectInfoT conn[4] = {0};
-    mocker(RaGetSocketConnectInfo, 20, 1);
+    mocker(RaGetSocketConnectInfoV2, 20, 1);
     EXPECT_INT_EQ(RaPeerSocketBatchConnect(devId, conn, 5), 1);
     mocker_clean();
 }
@@ -366,7 +366,7 @@ void TcRaPeerSocketListenStart01()
 {
     unsigned int devId = 0;
     struct SocketListenInfoT conn[5] = {0};
-    mocker(RaGetSocketListenInfo, 10, 1);
+    mocker(RaGetSocketListenInfoV2, 10, 1);
     EXPECT_INT_EQ(RaPeerSocketListenStart(devId, conn, 5), 1);
     mocker_clean();
 }
@@ -377,9 +377,9 @@ void TcRaPeerSocketListenStart02()
     struct SocketListenInfoT conn[5] = {0};
     struct RaSocketHandle socketHandle = {0};
     conn[0].socketHandle = &socketHandle;
-    mocker(RaGetSocketListenInfo, 10, 0);
-    mocker(RsSocketListenStart, 10, 0);
-    mocker(RaGetSocketListenResult, 10, 1);
+    mocker(RaGetSocketListenInfoV2, 10, 0);
+    mocker(RsSocketListenStartV2, 10, 0);
+    mocker(RaGetSocketListenResultV2, 10, 1);
     mocker(pthread_mutex_lock, 10, 0);
     mocker(pthread_mutex_unlock, 10, 0);
     EXPECT_INT_EQ(RaPeerSocketListenStart(devId, conn, 5), 1);

@@ -115,7 +115,13 @@ struct RaSocketListenParam {
     SocketHandle socketHandle; /**< socket handle */
     unsigned int port;         /**< Socket listening port number */
     IpAddress localIp;         /**< local IP address */
-    RaSocketListenParam(SocketHandle handle, u32 port, IpAddress ip) : socketHandle(handle), port(port), localIp(ip) {}
+    bool tagChkDis{false};     /**< per-socket tag check disable */
+    RaSocketListenParam(SocketHandle handle, u32 port, IpAddress ip, bool tagChkDis = false)
+        : socketHandle(handle),
+          port(port),
+          localIp(ip),
+          tagChkDis(tagChkDis)
+    {}
 };
 
 using QpConfig = struct QpConfigDef {
@@ -269,11 +275,14 @@ struct RaSocketConnectParam {
     IpAddress remoteIp;        /**< IP address of remote socket, [0-7] is reserved for vnic */
     unsigned int port;         /**< Socket listening port number */
     std::string tag;
-    RaSocketConnectParam(SocketHandle handle, IpAddress& remoteIp, u32 port, const std::string& tag)
+    bool tagChkDis{false}; /**< per-socket tag check disable */
+    RaSocketConnectParam(
+        SocketHandle handle, IpAddress& remoteIp, u32 port, const std::string& tag, bool tagChkDis = false)
         : socketHandle(handle),
           remoteIp(remoteIp),
           port(port),
-          tag(tag)
+          tag(tag),
+          tagChkDis(tagChkDis)
     {}
 };
 

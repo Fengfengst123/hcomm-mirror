@@ -345,8 +345,8 @@ void TcRsDeinit2()
     int ret = 0;
     int i = 0;
     struct RsInitConfig cfg = {0};
-    struct SocketListenInfo listen[2] = {0};
-    struct SocketConnectInfo conn[2] = {0};
+    struct SocketListenInfoV2 listen[2] = {0};
+    struct SocketConnectInfoV2 conn[2] = {0};
     struct SocketWlistInfoT whiteList = {0};
     whiteList.remoteIp.addr.s_addr = inet_addr("127.0.0.1");
     whiteList.connLimit = 1;
@@ -361,7 +361,8 @@ void TcRsDeinit2()
     listen[0].family = AF_INET;
     listen[0].localIp.addr.s_addr = inet_addr("127.0.0.1");
     listen[0].port = 16666;
-    ret = RsSocketListenStart(&listen[0], 1);
+    listen[0].tagChkDis = true;
+    ret = RsSocketListenStartV2(&listen[0], 1);
 
     strcpy(whiteList.tag, "1234");
     struct rdev rdevInfo = {0};
@@ -384,7 +385,9 @@ void TcRsDeinit2()
     strcpy(conn[1].tag, "5678");
     conn[0].port = 16666;
     conn[1].port = 16666;
-    ret = RsSocketBatchConnect(&conn[0], 2);
+    conn[0].tagChkDis = true;
+    conn[1].tagChkDis = true;
+    ret = RsSocketBatchConnectV2(&conn[0], 2);
 
     usleep(SLEEP_TIME);
 
@@ -552,8 +555,8 @@ void TcRsSocketConnect()
     int ret = 0;
     int i = 0;
     struct RsInitConfig cfg = {0};
-    struct SocketListenInfo listen[2] = {0};
-    struct SocketConnectInfo conn[2] = {0};
+    struct SocketListenInfoV2 listen[2] = {0};
+    struct SocketConnectInfoV2 conn[2] = {0};
     struct RsSocketCloseInfoT sockClose[2] = {0};
     struct SocketFdData socketInfo[3] = {0};
     struct SocketWlistInfoT whiteList = {0};
@@ -571,7 +574,8 @@ void TcRsSocketConnect()
     listen[0].family = AF_INET;
     listen[0].localIp.addr.s_addr = inet_addr("127.0.0.1");
     listen[0].port = 16666;
-    ret = RsSocketListenStart(&listen[0], 1);
+    listen[0].tagChkDis = true;
+    ret = RsSocketListenStartV2(&listen[0], 1);
 
     strcpy(whiteList.tag, "1234");
     struct rdev rdevInfo = {0};
@@ -594,26 +598,30 @@ void TcRsSocketConnect()
     strcpy(conn[1].tag, "5678");
     conn[0].port = 16666;
     conn[1].port = 16666;
-    ret = RsSocketBatchConnect(conn, 2);
+    conn[0].tagChkDis = true;
+    conn[1].tagChkDis = true;
+    ret = RsSocketBatchConnectV2(conn, 2);
 
     strcpy(whiteList.tag, "1234");
     RsSocketWhiteListAdd(rdevInfo, &whiteList, 1);
     /* >>>>>>> RsSocketBatchConnect test case begin <<<<<<<<<<< */
     /* repeat connect */
     conn[0].port = 16666;
-    ret = RsSocketBatchConnect(&conn[0], 1);
+    conn[0].tagChkDis = true;
+    ret = RsSocketBatchConnectV2(&conn[0], 1);
 
     /* param error - conn NULL */
-    ret = RsSocketBatchConnect(NULL, 1);
+    ret = RsSocketBatchConnectV2(NULL, 1);
 
     /* param error - num error */
     conn[0].port = 16666;
-    ret = RsSocketBatchConnect(&conn[0], 0);
+    ret = RsSocketBatchConnectV2(&conn[0], 0);
 
     /* param error - device id error */
     conn[0].phyId = 64;
     conn[0].port = 16666;
-    ret = RsSocketBatchConnect(&conn[0], 1);
+    conn[0].tagChkDis = true;
+    ret = RsSocketBatchConnectV2(&conn[0], 1);
     /* >>>>>>> RsSocketBatchConnect test case end <<<<<<<<<<< */
 
     usleep(SLEEP_TIME);
@@ -672,7 +680,7 @@ void TcRsSocketConnect()
 
     /* ------Resource CLEAN-------- */
     listen[0].port = 16666;
-    ret = RsSocketListenStop(&listen[0], 1);
+    ret = RsSocketListenStop((struct SocketListenInfo*)&listen[0], 1);
 
     ret = RsDeinit(&cfg);
     EXPECT_INT_EQ(ret, 0);
@@ -685,8 +693,8 @@ void TcRsGetSockets()
     int ret = 0;
     int i = 0;
     struct RsInitConfig cfg = {0};
-    struct SocketListenInfo listen[2] = {0};
-    struct SocketConnectInfo conn[2] = {0};
+    struct SocketListenInfoV2 listen[2] = {0};
+    struct SocketConnectInfoV2 conn[2] = {0};
     struct RsSocketCloseInfoT sockClose[2] = {0};
     struct SocketFdData socketInfo[3] = {0};
     struct SocketWlistInfoT whiteList = {0};
@@ -704,7 +712,8 @@ void TcRsGetSockets()
     listen[0].family = AF_INET;
     listen[0].localIp.addr.s_addr = inet_addr("127.0.0.1");
     listen[0].port = 16666;
-    ret = RsSocketListenStart(&listen[0], 1);
+    listen[0].tagChkDis = true;
+    ret = RsSocketListenStartV2(&listen[0], 1);
     strcpy(whiteList.tag, "1234");
     struct rdev rdevInfo = {0};
     rdevInfo.phyId = 0;
@@ -726,7 +735,9 @@ void TcRsGetSockets()
     strcpy(conn[1].tag, "5678");
     conn[0].port = 16666;
     conn[1].port = 16666;
-    ret = RsSocketBatchConnect(&conn[0], 2);
+    conn[0].tagChkDis = true;
+    conn[1].tagChkDis = true;
+    ret = RsSocketBatchConnectV2(&conn[0], 2);
 
     usleep(SLEEP_TIME);
 
@@ -804,7 +815,7 @@ void TcRsGetSockets()
 
     /* ------Resource CLEAN-------- */
     listen[0].port = 16666;
-    ret = RsSocketListenStop(&listen[0], 1);
+    ret = RsSocketListenStop((struct SocketListenInfo*)&listen[0], 1);
 
     ret = RsDeinit(&cfg);
     EXPECT_INT_EQ(ret, 0);
@@ -893,8 +904,8 @@ void TcRsQpCreate()
     int i = 0;
     int tryNum = 10;
     struct RsInitConfig cfg = {0};
-    struct SocketListenInfo listen[2] = {0};
-    struct SocketConnectInfo conn[2] = {0};
+    struct SocketListenInfoV2 listen[2] = {0};
+    struct SocketConnectInfoV2 conn[2] = {0};
     struct RsSocketCloseInfoT sockClose[2] = {0};
     struct SocketFdData socketInfo[3] = {0};
     struct SocketWlistInfoT whiteList = {0};
@@ -925,7 +936,8 @@ void TcRsQpCreate()
     listen[0].family = AF_INET;
     listen[0].localIp.addr.s_addr = inet_addr("127.0.0.1");
     listen[0].port = 16666;
-    ret = RsSocketListenStart(&listen[0], 1);
+    listen[0].tagChkDis = true;
+    ret = RsSocketListenStartV2(&listen[0], 1);
 
     strcpy(whiteList.tag, "1234");
     struct rdev rdevInfo = {0};
@@ -940,7 +952,8 @@ void TcRsQpCreate()
     conn[0].remoteIp.addr.s_addr = inet_addr("127.0.0.1");
     strcpy(conn[0].tag, "1234");
     conn[0].port = 16666;
-    ret = RsSocketBatchConnect(&conn[0], 1);
+    conn[0].tagChkDis = true;
+    ret = RsSocketBatchConnectV2(&conn[0], 1);
 
     usleep(SLEEP_TIME);
 
@@ -1093,7 +1106,7 @@ void TcRsQpCreate()
 
     /* ------Resource CLEAN-------- */
     listen[0].port = 16666;
-    ret = RsSocketListenStop(&listen[0], 1);
+    ret = RsSocketListenStop((struct SocketListenInfo*)&listen[0], 1);
 
     ret = RsRdevDeinit(phyId, NOTIFY, rdevIndex);
     EXPECT_INT_EQ(ret, 0);
@@ -1178,8 +1191,8 @@ void TcRsQpCreateWithAttrsV1()
     int i = 0;
     int tryNum = 10;
     struct RsInitConfig cfg = {0};
-    struct SocketListenInfo listen[2] = {0};
-    struct SocketConnectInfo conn[2] = {0};
+    struct SocketListenInfoV2 listen[2] = {0};
+    struct SocketConnectInfoV2 conn[2] = {0};
     struct RsSocketCloseInfoT sockClose[2] = {0};
     struct SocketFdData socketInfo[3] = {0};
     struct SocketWlistInfoT whiteList = {0};
@@ -1211,7 +1224,8 @@ void TcRsQpCreateWithAttrsV1()
     listen[0].family = AF_INET;
     listen[0].localIp.addr.s_addr = inet_addr("127.0.0.1");
     listen[0].port = 16666;
-    ret = RsSocketListenStart(&listen[0], 1);
+    listen[0].tagChkDis = true;
+    ret = RsSocketListenStartV2(&listen[0], 1);
 
     strcpy(whiteList.tag, "1234");
     struct rdev rdevInfo = {0};
@@ -1226,7 +1240,8 @@ void TcRsQpCreateWithAttrsV1()
     conn[0].remoteIp.addr.s_addr = inet_addr("127.0.0.1");
     strcpy(conn[0].tag, "1234");
     conn[0].port = 16666;
-    ret = RsSocketBatchConnect(&conn[0], 1);
+    conn[0].tagChkDis = true;
+    ret = RsSocketBatchConnectV2(&conn[0], 1);
 
     usleep(SLEEP_TIME);
 
@@ -1374,7 +1389,7 @@ void TcRsQpCreateWithAttrsV1()
 
     /* ------Resource CLEAN-------- */
     listen[0].port = 16666;
-    ret = RsSocketListenStop(&listen[0], 1);
+    ret = RsSocketListenStop((struct SocketListenInfo*)&listen[0], 1);
 
     ret = RsRdevDeinit(phyId, NOTIFY, rdevIndex);
     EXPECT_INT_EQ(ret, 0);
@@ -1427,8 +1442,8 @@ void TcRsMrSync()
     int i = 0;
     int tryNum = 10;
     struct RsInitConfig cfg = {0};
-    struct SocketListenInfo listen[2] = {0};
-    struct SocketConnectInfo conn[2] = {0};
+    struct SocketListenInfoV2 listen[2] = {0};
+    struct SocketConnectInfoV2 conn[2] = {0};
     struct RsSocketCloseInfoT sockClose[2] = {0};
     struct SocketFdData socketInfo[3] = {0};
     struct SocketWlistInfoT whiteList = {0};
@@ -1445,7 +1460,8 @@ void TcRsMrSync()
     listen[0].family = AF_INET;
     listen[0].localIp.addr.s_addr = inet_addr("127.0.0.1");
     listen[0].port = 16666;
-    ret = RsSocketListenStart(&listen[0], 1);
+    listen[0].tagChkDis = true;
+    ret = RsSocketListenStartV2(&listen[0], 1);
 
     rs_ut_msg("___________________after listen:\n");
     strcpy(whiteList.tag, "1234");
@@ -1461,7 +1477,8 @@ void TcRsMrSync()
     conn[0].remoteIp.addr.s_addr = inet_addr("127.0.0.1");
     strcpy(conn[0].tag, "1234");
     conn[0].port = 16666;
-    ret = RsSocketBatchConnect(&conn[0], 1);
+    conn[0].tagChkDis = true;
+    ret = RsSocketBatchConnectV2(&conn[0], 1);
 
     rs_ut_msg("___________________after connect:\n");
 
@@ -1551,7 +1568,7 @@ void TcRsMrSync()
 
     /* ------Resource CLEAN-------- */
     listen[0].port = 16666;
-    ret = RsSocketListenStop(&listen[0], 1);
+    ret = RsSocketListenStop((struct SocketListenInfo*)&listen[0], 1);
 
     rs_ut_msg("___________________after stop listen:\n");
 
@@ -1580,8 +1597,8 @@ static int TcRsSockQpCreateNormal(int* fd, uint32_t* qpn, int* fd2, uint32_t* qp
     int flag = 0; /* RC */
     int qpMode = 0;
     struct RsInitConfig cfg = {0};
-    struct SocketListenInfo listen[1] = {0};
-    struct SocketConnectInfo conn[2] = {0};
+    struct SocketListenInfoV2 listen[1] = {0};
+    struct SocketConnectInfoV2 conn[2] = {0};
     struct SocketFdData socketInfo[3] = {0};
     struct SocketWlistInfoT whiteList = {0};
     struct RsQpResp resp = {0};
@@ -1610,7 +1627,8 @@ static int TcRsSockQpCreateNormal(int* fd, uint32_t* qpn, int* fd2, uint32_t* qp
     listen[0].family = AF_INET;
     listen[0].localIp.addr.s_addr = inet_addr("127.0.0.1");
     listen[0].port = 16666;
-    ret = RsSocketListenStart(&listen[0], 1);
+    listen[0].tagChkDis = true;
+    ret = RsSocketListenStartV2(&listen[0], 1);
     rs_ut_msg("RS LISTEN, ret:%d !\n", ret);
 
     strcpy(whiteList.tag, "1234");
@@ -1623,7 +1641,8 @@ static int TcRsSockQpCreateNormal(int* fd, uint32_t* qpn, int* fd2, uint32_t* qp
     conn[0].remoteIp.addr.s_addr = inet_addr("127.0.0.1");
     strcpy(conn[0].tag, "1234");
     conn[0].port = 16666;
-    ret = RsSocketBatchConnect(&conn[0], 1);
+    conn[0].tagChkDis = true;
+    ret = RsSocketBatchConnectV2(&conn[0], 1);
     rs_ut_msg("RS CONNECT, ret:%d !\n", ret);
 
     usleep(SLEEP_TIME);
@@ -1693,8 +1712,8 @@ static int TcRsSockQpCreate(int* fd, uint32_t* qpn, int* fd2, uint32_t* qpn2)
     int flag = 0; /* RC */
     int qpMode = 1;
     struct RsInitConfig cfg = {0};
-    struct SocketListenInfo listen[1] = {0};
-    struct SocketConnectInfo conn[2] = {0};
+    struct SocketListenInfoV2 listen[1] = {0};
+    struct SocketConnectInfoV2 conn[2] = {0};
     struct SocketFdData socketInfo[3] = {0};
     struct SocketWlistInfoT whiteList = {0};
     struct RsQpResp resp = {0};
@@ -1717,7 +1736,8 @@ static int TcRsSockQpCreate(int* fd, uint32_t* qpn, int* fd2, uint32_t* qpn2)
     listen[0].family = AF_INET;
     listen[0].localIp.addr.s_addr = inet_addr("127.0.0.1");
     listen[0].port = 16666;
-    ret = RsSocketListenStart(&listen[0], 1);
+    listen[0].tagChkDis = true;
+    ret = RsSocketListenStartV2(&listen[0], 1);
     rs_ut_msg("RS LISTEN, ret:%d !\n", ret);
     strcpy(whiteList.tag, "1234");
 
@@ -1733,7 +1753,8 @@ static int TcRsSockQpCreate(int* fd, uint32_t* qpn, int* fd2, uint32_t* qpn2)
     conn[0].remoteIp.addr.s_addr = inet_addr("127.0.0.1");
     strcpy(conn[0].tag, "1234");
     conn[0].port = 16666;
-    ret = RsSocketBatchConnect(&conn[0], 1);
+    conn[0].tagChkDis = true;
+    ret = RsSocketBatchConnectV2(&conn[0], 1);
     rs_ut_msg("RS CONNECT, ret:%d !\n", ret);
 
     usleep(SLEEP_TIME);
@@ -1802,7 +1823,7 @@ static int TcRsSockQpDestroy(int fd, uint32_t qpn, int fd2, uint32_t qpn2)
     uint32_t rdevIndex = 0;
     struct RsInitConfig cfg = {0};
     struct RsSocketCloseInfoT sockClose[2] = {0};
-    struct SocketListenInfo listen[1] = {0};
+    struct SocketListenInfoV2 listen[1] = {0};
     struct rdev rdevInfo = {0};
     rdevInfo.phyId = 0;
     rdevInfo.family = AF_INET;
@@ -1830,7 +1851,7 @@ static int TcRsSockQpDestroy(int fd, uint32_t qpn, int fd2, uint32_t qpn2)
     listen[0].family = AF_INET;
     listen[0].localIp.addr.s_addr = inet_addr("127.0.0.1");
     listen[0].port = 16666;
-    ret = RsSocketListenStop(&listen[0], 1);
+    ret = RsSocketListenStop((struct SocketListenInfo*)&listen[0], 1);
     rs_ut_msg("RS socket listen stop: ret:%d\n", ret);
 
     ret = RsRdevDeinit(phyId, NOTIFY, rdevIndex);
@@ -2102,8 +2123,8 @@ void TcRsSocketOps()
     int i = 0;
     int tryNum = 10;
     struct RsInitConfig cfg = {0};
-    struct SocketListenInfo listen[2] = {0};
-    struct SocketConnectInfo conn[2] = {0};
+    struct SocketListenInfoV2 listen[2] = {0};
+    struct SocketConnectInfoV2 conn[2] = {0};
     struct RsSocketCloseInfoT sockClose[2] = {0};
     struct SocketFdData socketInfo[3] = {0};
     struct SocketWlistInfoT whiteList = {0};
@@ -2125,27 +2146,30 @@ void TcRsSocketOps()
     listen[0].family = AF_INET;
     listen[0].localIp.addr.s_addr = inet_addr("127.0.0.1");
     listen[0].port = 16666;
-    ret = RsSocketListenStart(&listen[0], 1);
+    listen[0].tagChkDis = true;
+    ret = RsSocketListenStartV2(&listen[0], 1);
 
     /* >>>>>>> RsSocketListenStart test case begin <<<<<<<<<<< */
     /* param error - close_info NULL */
-    ret = RsSocketListenStart(NULL, 1);
+    ret = RsSocketListenStartV2(NULL, 1);
     EXPECT_INT_NE(ret, 0);
 
     /* param error - num = 0 */
     listen[0].port = 16666;
-    ret = RsSocketListenStart(&listen[0], 0);
+    ret = RsSocketListenStartV2(&listen[0], 0);
     EXPECT_INT_NE(ret, 0);
 
     /* param error - fd */
     listen[0].phyId = 64;
     listen[0].port = 16666;
-    ret = RsSocketListenStart(&listen[0], 1);
+    listen[0].tagChkDis = true;
+    ret = RsSocketListenStartV2(&listen[0], 1);
     listen[0].phyId = 0;
 
     /* repeat listen */
     listen[0].port = 16666;
-    ret = RsSocketListenStart(&listen[0], 1);
+    listen[0].tagChkDis = true;
+    ret = RsSocketListenStartV2(&listen[0], 1);
     /* >>>>>>> RsSocketListenStart test case end <<<<<<<<<<< */
 
     strcpy_s(whiteList.tag, SOCK_CONN_TAG_SIZE, "1234");
@@ -2169,7 +2193,9 @@ void TcRsSocketOps()
     strcpy_s(conn[1].tag, SOCK_CONN_TAG_SIZE, "5678");
     conn[0].port = 16666;
     conn[1].port = 16666;
-    ret = RsSocketBatchConnect(&conn[0], 2);
+    conn[0].tagChkDis = true;
+    conn[1].tagChkDis = true;
+    ret = RsSocketBatchConnectV2(&conn[0], 2);
 
     usleep(SLEEP_TIME);
 
@@ -2282,20 +2308,20 @@ void TcRsSocketOps()
 
     /* param error - num = 0 */
     listen[0].port = 16666;
-    ret = RsSocketListenStop(&listen[0], 0);
+    ret = RsSocketListenStop((struct SocketListenInfo*)&listen[0], 0);
     EXPECT_INT_NE(ret, 0);
 
     /* param error - fd */
     listen[0].phyId = 64;
     listen[0].port = 16666;
-    ret = RsSocketListenStop(&listen[0], 1);
+    ret = RsSocketListenStop((struct SocketListenInfo*)&listen[0], 1);
     EXPECT_INT_NE(ret, 0);
     listen[0].phyId = 0;
     /* >>>>>>> RsSocketListenStop test case end <<<<<<<<<<< */
 
     /* ------Resource CLEAN-------- */
     listen[0].port = 16666;
-    ret = RsSocketListenStop(&listen[0], 1);
+    ret = RsSocketListenStop((struct SocketListenInfo*)&listen[0], 1);
 
     ret = RsDeinit(&cfg);
     EXPECT_INT_EQ(ret, 0);
@@ -2918,9 +2944,9 @@ void TcRsWhiteList()
     int ret = 0;
     int tryNum = 10;
     struct RsInitConfig cfg = {0};
-    struct SocketListenInfo listen = {0};
-    struct SocketConnectInfo conn = {0};
-    struct SocketConnectInfo conn1 = {0};
+    struct SocketListenInfoV2 listen = {0};
+    struct SocketConnectInfoV2 conn = {0};
+    struct SocketConnectInfoV2 conn1 = {0};
 
     struct RsSocketCloseInfoT sockClose = {0};
     struct RsSocketCloseInfoT sockClose1 = {0};
@@ -2941,7 +2967,8 @@ void TcRsWhiteList()
     listen.family = AF_INET;
     listen.localIp.addr.s_addr = inet_addr("127.0.0.1");
     listen.port = 18888;
-    ret = RsSocketListenStart(&listen, 1);
+    listen.tagChkDis = true;
+    ret = RsSocketListenStartV2(&listen, 1);
 
     conn.phyId = 0;
     conn.family = AF_INET;
@@ -2949,7 +2976,8 @@ void TcRsWhiteList()
     conn.localIp.addr.s_addr = inet_addr("127.0.0.1");
     strcpy(conn.tag, "LinkCheck");
     conn.port = 18888;
-    ret = RsSocketBatchConnect(&conn, 1);
+    conn.tagChkDis = true;
+    ret = RsSocketBatchConnectV2(&conn, 1);
     EXPECT_INT_EQ(ret, 0);
 
     conn1.phyId = 0;
@@ -2993,7 +3021,7 @@ void TcRsWhiteList()
     sockClose1.fd = socketInfo1.fd;
 
     listen.port = 18888;
-    ret = RsSocketListenStop(&listen, 1);
+    ret = RsSocketListenStop((struct SocketListenInfo*)&listen, 1);
 
     ret = RsSocketDeinit(rdevInfo);
     EXPECT_INT_EQ(ret, 0);
@@ -3013,8 +3041,8 @@ void TcRsSslTest1()
     uint32_t qpn, qpn2;
     int i = 0;
     struct RsInitConfig cfg = {0};
-    struct SocketListenInfo listen[2] = {0};
-    struct SocketConnectInfo conn[2] = {0};
+    struct SocketListenInfoV2 listen[2] = {0};
+    struct SocketConnectInfoV2 conn[2] = {0};
     struct RsSocketCloseInfoT sockClose[2] = {0};
     struct SocketFdData socketInfo[3] = {0};
     struct SocketWlistInfoT whiteList = {0};
@@ -3094,7 +3122,8 @@ void TcRsSslTest1()
     listen[0].family = AF_INET;
     listen[0].localIp.addr.s_addr = inet_addr("127.0.0.1");
     listen[0].port = 26666;
-    ret = RsSocketListenStart(&listen[0], 1);
+    listen[0].tagChkDis = true;
+    ret = RsSocketListenStartV2(&listen[0], 1);
 
     strcpy(whiteList.tag, "1234");
     struct rdev rdevInfo = {0};
@@ -3109,7 +3138,8 @@ void TcRsSslTest1()
     conn[0].remoteIp.addr.s_addr = inet_addr("127.0.0.1");
     strcpy(conn[0].tag, "1234");
     conn[0].port = 26666;
-    ret = RsSocketBatchConnect(&conn[0], 1);
+    conn[0].tagChkDis = true;
+    ret = RsSocketBatchConnectV2(&conn[0], 1);
     usleep(SLEEP_TIME);
 
     i = 0;
@@ -5193,8 +5223,8 @@ void TcRsNormalQpCreate()
     int i = 0;
     int tryNum = 10;
     struct RsInitConfig cfg = {0};
-    struct SocketListenInfo listen[2] = {0};
-    struct SocketConnectInfo conn[2] = {0};
+    struct SocketListenInfoV2 listen[2] = {0};
+    struct SocketConnectInfoV2 conn[2] = {0};
     struct RsSocketCloseInfoT sockClose[2] = {0};
     struct SocketFdData socketInfo[3] = {0};
     struct SocketWlistInfoT whiteList = {0};
@@ -5211,7 +5241,8 @@ void TcRsNormalQpCreate()
     listen[0].family = AF_INET;
     listen[0].localIp.addr.s_addr = inet_addr("127.0.0.1");
     listen[0].port = 16666;
-    ret = RsSocketListenStart(&listen[0], 1);
+    listen[0].tagChkDis = true;
+    ret = RsSocketListenStartV2(&listen[0], 1);
 
     rs_ut_msg("___________________after listen:\n");
     strcpy(whiteList.tag, "1234");
@@ -5227,7 +5258,8 @@ void TcRsNormalQpCreate()
     conn[0].remoteIp.addr.s_addr = inet_addr("127.0.0.1");
     strcpy(conn[0].tag, "1234");
     conn[0].port = 16666;
-    ret = RsSocketBatchConnect(&conn[0], 1);
+    conn[0].tagChkDis = true;
+    ret = RsSocketBatchConnectV2(&conn[0], 1);
 
     rs_ut_msg("___________________after connect:\n");
 
@@ -5418,7 +5450,7 @@ void TcRsNormalQpCreate()
 
     /* ------Resource CLEAN-------- */
     listen[0].port = 16666;
-    ret = RsSocketListenStop(&listen[0], 1);
+    ret = RsSocketListenStop((struct SocketListenInfo*)&listen[0], 1);
 
     rs_ut_msg("___________________after stop listen:\n");
 

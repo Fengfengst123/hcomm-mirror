@@ -86,7 +86,7 @@ int RsWlistCheckConnAdd(struct rs_cb *rsCb, struct RsConnInfo *connTmp)
     int retClose;
     struct RsConnInfo *conn = NULL;
 
-    if (rsCb->connCb.wlistEnable == 1) {
+    if (!connTmp->tagChkDis) {
         ret = RsWhiteListCheckValid(rsCb->chipId, &rsCb->connCb, connTmp);
         if (ret) {
             hccp_info_socket(
@@ -184,6 +184,7 @@ STATIC int RsSslRecvTagInHandle(struct RsAcceptInfo *acceptInfo, struct RsConnIn
     connTmp->state = RS_CONN_STATE_TAG_SYNC;
     connTmp->port = acceptInfo->sockPort;
     connTmp->ssl = acceptInfo->ssl;
+    connTmp->tagChkDis = acceptInfo->tagChkDis;
 
     hccp_info_socket("recv tag success, server:{%s:%u} client:%s timeCost:%fms tagSyncTime:%u tagEintrTime:%u",
         acceptInfo->serverIpAddr.readAddr, acceptInfo->sockPort, acceptInfo->clientIpAddr.readAddr, timeCost,

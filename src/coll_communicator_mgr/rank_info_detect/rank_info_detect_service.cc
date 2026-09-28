@@ -94,9 +94,10 @@ void RankInfoDetectService::GetConnections()
             HCCL_ERROR("[RankInfoDetectService::%s] timeout[%lld s] is exhausted", __func__, timeout);
             break;
         }
+        bool whiteListDisable = EnvConfig::GetInstance().GetHostNicConfig().GetWhitelistDisable();
         std::shared_ptr<Socket> connSocket = std::make_shared<Socket>(
-            hccpHostSocketHandle, hostIp_, hostPort, hostIp_, connSocketTag, SocketRole::SERVER,
-            NicType::HOST_NIC_TYPE);
+            hccpHostSocketHandle, hostIp_, hostPort, hostIp_, connSocketTag, SocketRole::SERVER, NicType::HOST_NIC_TYPE,
+            whiteListDisable);
         // GetStatus 是阻塞接口，传入剩余时间作为超时上限，避免其内部超时导致外层循环超时处理失效
         EXCEPTION_CATCH(status = connSocket->GetStatus(topoExRes_i), {
             // 非本端client首次连接异常，直接重试

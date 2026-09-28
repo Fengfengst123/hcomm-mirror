@@ -255,7 +255,7 @@ void TcPeer()
 
     struct SocketConnectInfoT connectErrRs[1] = {0};
     connectErrRs[0].socketHandle = socketHandle;
-    mocker((stub_fn_t)RsSocketBatchConnect, 10, -1);
+    mocker((stub_fn_t)RsSocketBatchConnectV2, 10, -1);
     ret = RaPeerSocketBatchConnect(0, connectErrRs, 1);
     EXPECT_INT_EQ(-1, ret);
     mocker((stub_fn_t)RsSocketSetScopeId, 10, -2);
@@ -265,7 +265,7 @@ void TcPeer()
 
     struct SocketListenInfoT listenErrRs[1] = {0};
     listenErrRs[0].socketHandle = socketHandle;
-    mocker((stub_fn_t)RsSocketListenStart, 10, -1);
+    mocker((stub_fn_t)RsSocketListenStartV2, 10, -1);
     ret = RaPeerSocketListenStart(0, listenErrRs, 1);
     EXPECT_INT_NE(0, ret);
     mocker((stub_fn_t)RsSocketSetScopeId, 10, -2);
@@ -502,8 +502,8 @@ void TcPeerFail()
     struct SocketListenInfoT connListenInfo[1] = {0};
     connListenInfo[0].port = 0;
     connListenInfo[0].socketHandle = &socketHandle;
-    mocker((stub_fn_t)RaGetSocketListenInfo, 10, 0);
-    mocker((stub_fn_t)RsSocketListenStart, 10, -1);
+    mocker((stub_fn_t)RaGetSocketListenInfoV2, 10, 0);
+    mocker((stub_fn_t)RsSocketListenStartV2, 10, -1);
     RaPeerSocketListenStart(0, connListenInfo, 1);
     mocker((stub_fn_t)RsSocketListenStop, 10, -1);
     RaPeerSocketListenStop(0, connListenInfo, 1);

@@ -100,7 +100,6 @@ HcclResult CpuUrmaEndpoint::Init()
         HCCL_ERROR("call hrtGetDevice failed, deviceLogicId[%d]", deviceLogicId);
         return ret;
     }
-    RaSocketSetWhiteListStatus(1); // PEER模式需要手动开启白名单模式
     Hccl::HccpPeerManager::GetInstance().Init(deviceLogicId);
     ret = hrtGetDevicePhyIdByIndex(static_cast<uint32_t>(deviceLogicId), devPhyId);
     if (ret != HCCL_SUCCESS) {

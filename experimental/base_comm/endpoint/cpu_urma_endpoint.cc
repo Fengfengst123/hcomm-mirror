@@ -41,7 +41,6 @@ HcclResult CpuUrmaEndpoint::Init()
 
     Hccl::IpAddress ipAddr{};
     CHK_RET(hcomm::CommAddrToIpAddress(endpointDesc_.commAddr, ipAddr));
-    RaSocketSetWhiteListStatus(1); // PEER模式需要手动开启白名单模式
     CHK_RET(InitHostPeerRaOnce(kHostResourceId, "CpuUrmaEndpoint"));
     auto& rdmaHandleMgr = Hccl::RdmaHandleManager::GetInstance();
     ctxHandle_ = static_cast<void*>(

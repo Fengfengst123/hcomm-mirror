@@ -110,12 +110,12 @@ int RaPeerSocketBatchAbort(unsigned int devId, struct SocketConnectInfoT conn[],
 
 int RaPeerSocketBatchConnect(unsigned int devId, struct SocketConnectInfoT conn[], unsigned int num)
 {
-    int ret;
-    struct SocketConnectInfo connOut[MAX_SOCKET_NUM];
+    struct SocketConnectInfoV2 connOut[MAX_SOCKET_NUM] = {0};
+    int ret = 0;
 
-    ret = RaGetSocketConnectInfo(conn, num, connOut, MAX_SOCKET_NUM);
+    ret = RaGetSocketConnectInfoV2(conn, num, connOut, MAX_SOCKET_NUM);
     CHK_PRT_RETURN(ret != 0,
-        hccp_err("[batch_connect][ra_peer_socket]RaGetSocketConnectInfo failed,"
+        hccp_err("[batch_connect][ra_peer_socket]RaGetSocketConnectInfoV2 failed,"
                  " ret(%d), phyId(%u)",
             ret, devId),
         ret);
@@ -130,7 +130,7 @@ int RaPeerSocketBatchConnect(unsigned int devId, struct SocketConnectInfoT conn[
         return ret;
     }
 
-    ret = RsSocketBatchConnect(connOut, num);
+    ret = RsSocketBatchConnectV2(connOut, num);
     if (ret) {
         hccp_err("[batch_connect][ra_peer_socket]ra client connect failed ret(%d), phyId(%u)", ret, devId);
     }
@@ -140,9 +140,9 @@ int RaPeerSocketBatchConnect(unsigned int devId, struct SocketConnectInfoT conn[
 
 int RaPeerSocketListenStart(unsigned int devId, struct SocketListenInfoT conn[], unsigned int num)
 {
-    struct SocketListenInfo rsConn[MAX_SOCKET_NUM] = {0};
-    unsigned int i;
-    int ret;
+    struct SocketListenInfoV2 rsConn[MAX_SOCKET_NUM] = {0};
+    unsigned int i = 0;
+    int ret = 0;
 
     for (i = 0; i < num; i++) {
         CHK_PRT_RETURN(conn[i].port > MAX_PORT_NUM,
@@ -153,7 +153,7 @@ int RaPeerSocketListenStart(unsigned int devId, struct SocketListenInfoT conn[],
             -EINVAL);
     }
 
-    ret = RaGetSocketListenInfo(conn, num, rsConn, MAX_SOCKET_NUM);
+    ret = RaGetSocketListenInfoV2(conn, num, rsConn, MAX_SOCKET_NUM);
     CHK_PRT_RETURN(ret != 0,
         hccp_err("[listen_start][ra_peer_socket]ra_get_socket_listen_info failed "
                  "ret(%d), phyId(%u)",
@@ -169,7 +169,7 @@ int RaPeerSocketListenStart(unsigned int devId, struct SocketListenInfoT conn[],
         return ret;
     }
 
-    ret = RsSocketListenStart(rsConn, num);
+    ret = RsSocketListenStartV2(rsConn, num);
     // listen node found, degrade log level make it consistent with inner call
     if (ret == -EEXIST) {
         hccp_info_socket("[listen_start][ra_peer_socket]ra listen start unsuccessful ret(%d), phyId(%u)", ret, devId);
@@ -184,7 +184,7 @@ int RaPeerSocketListenStart(unsigned int devId, struct SocketListenInfoT conn[],
     }
     PEER_PTHREAD_MUTEX_UNLOCK(&gRaPeerMutex[devId]);
 
-    ret = RaGetSocketListenResult(rsConn, num, conn, MAX_SOCKET_NUM);
+    ret = RaGetSocketListenResultV2(rsConn, num, conn, MAX_SOCKET_NUM);
     CHK_PRT_RETURN(ret != 0,
         hccp_err("[listen_start][ra_peer_socket]ra_get_socket_listen_result failed ret(%d), phyId(%u)", ret, devId),
         ret);
@@ -1129,7 +1129,7 @@ int RaPeerDeinit(struct RaInitConfig *cfg)
     struct RsInitConfig rsPeerOnlineCfg = {
         .chipId = cfg->phyId,
         .hccpMode = cfg->nicPosition,
-        .whiteListStatus = WHITE_LIST_ENABLE,
+        .whiteListStatus = 0,
     };
 
     if (__sync_fetch_and_sub(&(gRaInitCounter[cfg->phyId]), 1) > 1) {

@@ -28,14 +28,15 @@ class Socket {
 public:
     Socket(
         SocketHandle socketHandle, IpAddress localIp, u32 listenPort, IpAddress remoteIp, const std::string& tag,
-        SocketRole role, NicType nicType)
+        SocketRole role, NicType nicType, bool tagChkDis = false)
         : socketHandle(socketHandle),
           localIp(localIp),
           listenPort(listenPort),
           remoteIp(remoteIp),
           tag(tag),
           role(role),
-          nicType(nicType)
+          nicType(nicType),
+          tagChkDis_(tagChkDis)
     {}
 
     virtual ~Socket();
@@ -100,6 +101,7 @@ private:
     bool isConnected{false};
     bool isListening{false};
     bool isDestroyed{false};
+    bool tagChkDis_{false};
     std::unique_ptr<SocketListenInfoT> listenInfo_{nullptr};
 
     std::chrono::steady_clock::time_point lastLogTime{}; // 抑制日志刷屏时间戳，刷新时可置空

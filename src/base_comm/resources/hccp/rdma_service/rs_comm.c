@@ -16,9 +16,11 @@
 struct OpcodeInterfaceInfo gInterfaceInfoList[] = {
     // outer opcode version: 1.0
     {RA_RS_SOCKET_CONN, 2},
+    {RA_RS_SOCKET_CONN_V2, 1},
     {RA_RS_SOCKET_CLOSE, 2},
     {RA_RS_SOCKET_ABORT, 1},
     {RA_RS_SOCKET_LISTEN_START, 2},
+    {RA_RS_SOCKET_LISTEN_START_V2, 1},
     {RA_RS_SOCKET_LISTEN_STOP, 2},
     {RA_RS_GET_SOCKET, 3},
     {RA_RS_SOCKET_SEND, 1},

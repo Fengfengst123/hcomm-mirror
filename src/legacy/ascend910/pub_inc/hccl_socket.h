@@ -110,7 +110,7 @@ private:
     HcclResult GetNicSocketHandle();
     HcclResult GetNicSocketHandle(
         std::map<HcclIpAddress, IpSocket>& socketMap, const HcclIpAddress& ip, SocketHandle& nicSocketHandle);
-    HcclResult ListenHostNet(HcclResult& ret, std::string& errormessage, u32& port);
+    HcclResult ListenHostNet(HcclResult& ret, std::string& errormessage, u32& port, bool tagChkDis = true);
 
     std::string tag_;
     HcclNetDevCtx netDevCtx_;
@@ -130,6 +130,7 @@ private:
     bool isHostUseDevNic_{false};
     bool listened_{false};
     bool forceClose_{false};
+    bool tagChkDis_{false};
     std::atomic<bool> stopFlag_{false};
     s32 sendStatus_{0};
     s32 recvStatus_{0};

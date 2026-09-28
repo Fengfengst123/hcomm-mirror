@@ -34,7 +34,7 @@ void Socket::Listen()
 {
     HCCL_INFO("[Socket::%s] listen start, listenPort[%u]", __func__, listenPort);
     HrtNetworkMode netMode = nicType == NicType::HOST_NIC_TYPE ? HrtNetworkMode::PEER : HrtNetworkMode::HDC;
-    RaSocketListenParam param(socketHandle, listenPort, localIp);
+    RaSocketListenParam param(socketHandle, listenPort, localIp, tagChkDis_);
     HrtRaSocketListenOneStart(param, netMode);
     isListening = true;
     socketStatus = SocketStatus::LISTENING;
@@ -44,7 +44,7 @@ bool Socket::Listen(u32& port)
 {
     HCCL_INFO("[Socket::%s] trying to listen on port[%u]", __func__, port);
     HrtNetworkMode netMode = nicType == NicType::HOST_NIC_TYPE ? HrtNetworkMode::PEER : HrtNetworkMode::HDC;
-    RaSocketListenParam param(socketHandle, port, localIp);
+    RaSocketListenParam param(socketHandle, port, localIp, tagChkDis_);
     bool ret = HrtRaSocketTryListenOneStart(param, netMode);
     CHK_PRT_RET(
         !ret,
@@ -68,7 +68,7 @@ void Socket::Connect()
         return;
     }
 
-    RaSocketConnectParam param(socketHandle, remoteIp, listenPort, tag);
+    RaSocketConnectParam param(socketHandle, remoteIp, listenPort, tag, tagChkDis_);
     HrtRaSocketConnectOne(param);
     HCCL_INFO("conn.tag %s", tag.c_str());
 
@@ -439,6 +439,7 @@ void Socket::ListenAsync()
     listenInfo_ = std::make_unique<SocketListenInfoT>();
     listenInfo_->socketHandle = socketHandle;
     listenInfo_->port = listenPort;
+    listenInfo_->tagChkDis = tagChkDis_;
     reqHandle = RaSocketListenOneStartAsync(listenInfo_.get());
     socketStatus = SocketStatus::LISTEN_STARTING;
 }
@@ -449,7 +450,7 @@ void Socket::ConnectAsync()
         return;
     }
 
-    RaSocketConnectParam param(socketHandle, remoteIp, listenPort, tag);
+    RaSocketConnectParam param(socketHandle, remoteIp, listenPort, tag, tagChkDis_);
     reqHandle = RaSocketConnectOneAsync(param);
     HCCL_INFO("[Socket][%s] conn.tag %s", __func__, tag.c_str());
 

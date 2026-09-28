@@ -218,9 +218,11 @@ RS_ATTRI_VISI_DEF int RsDestroyEventHandle(int *eventHandle);
 /* ++++++++++++++++++++++++++++++Socket API++++++++++++++++++++++++++++++++++ */
 #define RS_SOCK_PORT_DEF 16666
 RS_ATTRI_VISI_DEF int RsSocketListenStart(struct SocketListenInfo conn[], uint32_t num);
+RS_ATTRI_VISI_DEF int RsSocketListenStartV2(struct SocketListenInfoV2 conn[], uint32_t num);
 RS_ATTRI_VISI_DEF int RsSocketListenStop(struct SocketListenInfo conn[], uint32_t num);
 
 RS_ATTRI_VISI_DEF int RsSocketBatchConnect(struct SocketConnectInfo conn[], uint32_t num);
+RS_ATTRI_VISI_DEF int RsSocketBatchConnectV2(struct SocketConnectInfoV2 conn[], uint32_t num);
 RS_ATTRI_VISI_DEF int RsSocketBatchAbort(struct SocketConnectInfo conn[], uint32_t num);
 
 RS_ATTRI_VISI_DEF int RsSocketGetClientSocketErrInfo(struct SocketConnectInfo conn[], struct SocketErrInfo err[],

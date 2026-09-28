@@ -72,6 +72,28 @@ struct SocketListenInfo {
     unsigned int err;
 };
 
+struct SocketConnectInfoV2 {
+    unsigned int phyId;
+    int family;
+    union HccpIpAddr localIp;
+    union HccpIpAddr remoteIp;
+    unsigned int port;
+    char tag[SOCK_CONN_TAG_SIZE];
+    bool tagChkDis;
+    unsigned char resv[7];
+};
+
+struct SocketListenInfoV2 {
+    unsigned int phyId;
+    int family;
+    union HccpIpAddr localIp;
+    unsigned int port;
+    unsigned int phase;
+    unsigned int err;
+    bool tagChkDis;
+    unsigned char resv[7];
+};
+
 struct SocketFdData {
     int fd;
     unsigned int phyId;
@@ -224,6 +246,8 @@ enum {
 #define RA_RS_SEND_WRLIST_EXT_V2_VERSION 1
 #define RA_RS_SOCKET_CONN_VERSION 2
 #define RA_RS_SOCKET_LISTEN_VERSION 2
+#define RA_RS_SOCKET_CONN_V2_VERSION 1
+#define RA_RS_SOCKET_LISTEN_V2_VERSION 1
 #define RA_RS_GET_SOCKET_VERSION 2
 #define RA_RS_GET_VNIC_IP_INFOS_VERSION 1
 #define RA_RS_GET_NOTIFY_BA_VERSION 1

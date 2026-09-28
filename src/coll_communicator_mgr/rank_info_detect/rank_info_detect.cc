@@ -126,8 +126,6 @@ SocketHandle RankInfoDetect::GetHostSocketHandle()
         CHK_PRT_THROW(
             hostSocketWlist_.empty(), HCCL_ERROR("[%s] whitelist file have no valid host ip.", __func__),
             InternalException, "get host ip error");
-        u32 whiteListEnable = 1;
-        HrtRaSocketSetWhiteListStatus(whiteListEnable);
     }
 
     HCCL_DEBUG("[RankInfoDetect::%s] get host socket handle success, socketHandle[%p].", __func__, hostSocketHandle);
@@ -138,9 +136,11 @@ shared_ptr<Socket> RankInfoDetect::ServerInit()
 {
     HCCL_DEBUG("[RankInfoDetect::%s] server init start.", __func__);
 
+    bool whiteListDisable = EnvConfig::GetInstance().GetHostNicConfig().GetWhitelistDisable();
     SocketHandle hccpHostSocketHandle = GetHostSocketHandle();
     std::shared_ptr<Socket> serverSocket = std::make_shared<Socket>(
-        hccpHostSocketHandle, hostIp_, hostPort_, hostIp_, "server", SocketRole::SERVER, NicType::HOST_NIC_TYPE);
+        hccpHostSocketHandle, hostIp_, hostPort_, hostIp_, "server", SocketRole::SERVER, NicType::HOST_NIC_TYPE,
+        whiteListDisable);
     if (hostPort_ == HCCL_INVALID_PORT) {
         auto portRange = EnvConfig::GetInstance().GetHostNicConfig().GetHostSocketPortRange();
         if (portRange.empty()) {
@@ -206,9 +206,11 @@ std::shared_ptr<Socket> RankInfoDetect::ClientInit(const HcclRootHandleV2& rootH
     u32 serverPort = rootHandle.listenPort;
 
     // 创建clientSocket
+    bool whiteListDisable = EnvConfig::GetInstance().GetHostNicConfig().GetWhitelistDisable();
     std::string tag = RANK_INFO_DETECT_TAG + "_" + rootHandle.identifier + "_" + std::to_string(serverPort);
     std::shared_ptr<Socket> clientSocket = std::make_shared<Socket>(
-        hostSocketHandle, hostIp_, serverPort, serverIp, tag, SocketRole::CLIENT, NicType::HOST_NIC_TYPE);
+        hostSocketHandle, hostIp_, serverPort, serverIp, tag, SocketRole::CLIENT, NicType::HOST_NIC_TYPE,
+        whiteListDisable);
 
     HCCL_INFO("[RankInfoDetect::%s] clientSocket[%s] init end.", __func__, clientSocket->Describe().c_str());
     return clientSocket;

@@ -98,14 +98,16 @@ void HccpTimeInterval(struct timeval* endTime, struct timeval* startTime, float*
 }
 
 int RsSocketBatchConnect(struct SocketConnectInfo conn[], uint32_t num) { return 0; }
+int RsSocketBatchConnectV2(struct SocketConnectInfoV2 conn[], uint32_t num) { return 0; }
 
 int RsSocketSetScopeId(unsigned int devId, int scopeId) { return 0; }
 
 int RsSocketBatchClose(int disuseLinger, struct RsSocketCloseInfoT conn[], u32 num) { return 0; }
 
-int RsSocketBatchAbort(int disuseLinger, struct RsSocketCloseInfoT conn[], u32 num) { return 0; }
+int RsSocketBatchAbort(struct SocketConnectInfo conn[], uint32_t num) { return 0; }
 
 int RsSocketListenStart(struct SocketListenInfo listen[], uint32_t num) { return 0; }
+int RsSocketListenStartV2(struct SocketListenInfoV2 listen[], uint32_t num) { return 0; }
 
 int RsSocketListenStop(struct SocketListenInfo listen[], uint32_t num) { return 0; }
 

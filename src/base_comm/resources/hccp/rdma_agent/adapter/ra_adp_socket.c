@@ -24,9 +24,11 @@
 
 struct RsSocketOps gSocketOps = {
     .socketBatchConnect = RsSocketBatchConnect,
+    .socketBatchConnectV2 = RsSocketBatchConnectV2,
     .socketBatchClose = RsSocketBatchClose,
     .socketBatchAbort = RsSocketBatchAbort,
     .socketListenStart = RsSocketListenStart,
+    .socketListenStartV2 = RsSocketListenStartV2,
     .socketListenStop = RsSocketListenStop,
     .getSockets = RsGetSockets,
     .socketSend = RsHdcSocketSend,
@@ -158,6 +160,64 @@ int RaRsSocketListenStart(char *inBuf, char *outBuf, int *outLen, int *opResult,
     ret = memcpy_s((socketListenDataOut->rxData).conn, sizeof(struct SocketListenInfo) * MAX_SOCKET_NUM,
         (socketListenData->txData).conn, sizeof(struct SocketListenInfo) * (socketListenData->txData).num);
     CHK_PRT_RETURN(ret, hccp_err("memcpy_s socket_listen_info failed, ret[%d]", ret), -ESAFEFUNC);
+    return 0;
+}
+
+int RaRsSocketBatchConnectV2(char *inBuf, char *outBuf, int *outLen, int *opResult, int rcvBufLen)
+{
+    (void)outBuf;
+    (void)outLen;
+    union OpSocketConnectDataV2 *socketConnectData = (union OpSocketConnectDataV2 *)(inBuf + sizeof(struct MsgHead));
+    unsigned int i = 0;
+
+    HCCP_CHECK_PARAM_LEN_RET_HOST(sizeof(union OpSocketConnectDataV2), sizeof(struct MsgHead), rcvBufLen, opResult);
+    HCCP_CHECK_PARAM_NUM(socketConnectData->txData.num, MAX_SOCKET_NUM);
+
+    for (i = 0; i < (socketConnectData->txData).num; i++) {
+        if ((socketConnectData->txData).conn[i].port > MAX_PORT_NUM) {
+            hccp_err("[batch_connect_v2]conn[%u].port=%u invalid", i, (socketConnectData->txData).conn[i].port);
+            return -EINVAL;
+        }
+    }
+
+    *opResult = gSocketOps.socketBatchConnectV2((socketConnectData->txData).conn, (socketConnectData->txData).num);
+    if (*opResult != 0) {
+        hccp_err("socket batch connect v2 failed ret[%d].", *opResult);
+    }
+
+    return 0;
+}
+
+int RaRsSocketListenStartV2(char *inBuf, char *outBuf, int *outLen, int *opResult, int rcvBufLen)
+{
+    (void)outLen;
+    union OpSocketListenDataV2 *socketListenData = (union OpSocketListenDataV2 *)(inBuf + sizeof(struct MsgHead));
+    union OpSocketListenDataV2 *socketListenDataOut = NULL;
+    unsigned int i = 0;
+    int ret = 0;
+
+    HCCP_CHECK_PARAM_LEN_RET_HOST(sizeof(union OpSocketListenDataV2), sizeof(struct MsgHead), rcvBufLen, opResult);
+    HCCP_CHECK_PARAM_NUM(socketListenData->txData.num, MAX_SOCKET_NUM);
+
+    for (i = 0; i < (socketListenData->txData).num; i++) {
+        if ((socketListenData->txData).conn[i].port > MAX_PORT_NUM) {
+            hccp_err("[listen_start_v2]conn[%u].port=%u invalid", i, (socketListenData->txData).conn[i].port);
+            return -EINVAL;
+        }
+    }
+    *opResult = gSocketOps.socketListenStartV2((socketListenData->txData).conn, (socketListenData->txData).num);
+    if (*opResult == -EADDRINUSE) {
+        hccp_warn_socket("socket listen start v2 unsuccessful ret[%d]", *opResult);
+        return 0;
+    } else if (*opResult != 0) {
+        hccp_err("socket listen start v2 failed ret[%d]", *opResult);
+        return 0;
+    }
+
+    socketListenDataOut = (union OpSocketListenDataV2 *)(outBuf + sizeof(struct MsgHead));
+    ret = memcpy_s((socketListenDataOut->rxData).conn, sizeof(struct SocketListenInfoV2) * MAX_SOCKET_NUM,
+        (socketListenData->txData).conn, sizeof(struct SocketListenInfoV2) * (socketListenData->txData).num);
+    CHK_PRT_RETURN(ret, hccp_err("memcpy_s socket_listen_info_v2 failed, ret[%d]", ret), -ESAFEFUNC);
     return 0;
 }
 

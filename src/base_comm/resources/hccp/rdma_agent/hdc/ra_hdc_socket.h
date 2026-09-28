@@ -82,6 +82,30 @@ union OpSocketListenData {
     } rxData;
 };
 
+union OpSocketConnectDataV2 {
+    struct {
+        unsigned int num;
+        struct SocketConnectInfoV2 conn[MAX_SOCKET_NUM];
+    } txData;
+
+    struct {
+        unsigned int rsvd[RA_RSVD_NUM_801];
+    } rxData;
+};
+
+union OpSocketListenDataV2 {
+    struct {
+        unsigned int phyId;
+        unsigned int num;
+        struct SocketListenInfoV2 conn[MAX_SOCKET_NUM];
+    } txData;
+
+    struct {
+        unsigned int rsvd;
+        struct SocketListenInfoV2 conn[MAX_SOCKET_NUM];
+    } rxData;
+};
+
 union OpSocketInfoData {
     struct {
         unsigned int num;

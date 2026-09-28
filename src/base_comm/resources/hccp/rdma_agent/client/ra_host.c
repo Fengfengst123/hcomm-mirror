@@ -1559,6 +1559,7 @@ HCCP_ATTRI_VISI_DEF int RaGetNotifyMrInfo(void *rdevHandle, struct MrInfoT *info
 
 HCCP_ATTRI_VISI_DEF int RaSocketGetWhiteListStatus(unsigned int *enable)
 {
+    hccp_warn("RaSocketGetWhiteListStatus has no effect");
     CHK_PRT_RETURN(enable == NULL, hccp_err("[get][ra_socket_white_list_status]white list switch enable is NULL"),
         ConverReturnCode(SOCKET_OP, -EINVAL));
 
@@ -1575,6 +1576,8 @@ HCCP_ATTRI_VISI_DEF int RaSocketSetWhiteListStatus(unsigned int enable)
         hccp_err("[set][ra_socket_white_list_status]white list switch is invalid, enable(%u)", enable),
         ConverReturnCode(SOCKET_OP, -EINVAL));
 
+    hccp_warn("RaSocketSetWhiteListStatus is deprecated and has no effect, "
+              "whitelist is controlled by per-socket tagChkDis");
     gWhiteListSwitch = enable;
     return 0;
 }

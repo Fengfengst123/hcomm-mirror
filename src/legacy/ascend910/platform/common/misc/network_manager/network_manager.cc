@@ -251,7 +251,8 @@ HcclResult NetworkManager::GetTsdOpen(NICDeployment nicDeploy, bool hasBackup, b
 }
 /* init network resource */
 HcclResult NetworkManager::Init(
-    NICDeployment nicDeploy, bool enableWhitelistFlag, u32 devicePhyId, bool isHostUseDevNic, bool hasBackup)
+    NICDeployment nicDeploy, [[maybe_unused]] bool enableWhitelistFlag, u32 devicePhyId, bool isHostUseDevNic,
+    bool hasBackup)
 {
     s32 ref = 0;
     if (nicDeploy == NICDeployment::NIC_DEPLOYMENT_HOST) {
@@ -301,15 +302,7 @@ HcclResult NetworkManager::Init(
     }
 
     struct RaInitConfig config = {DEFAULT_INIT_PHY_ID, DEFAULT_INIT_NIC_POS, DEFAULT_HDC_TYPE, false};
-    u32 enableWhiteList = (GetExternalInputHcclEnableWhitelist() == HCCL_WHITELIST_ON) ? 1 : 0;
-    if (GetRemoteIsHdc() && IsGeneralServer()) {
-        HCCL_INFO("General server NetworkManager open Whitelist");
-        enableWhitelistFlag = true;
-        enableWhiteList = true;
-    }
-    if (nicDeploy == NICDeployment::NIC_DEPLOYMENT_HOST && enableWhitelistFlag) {
-        CHK_RET(hrtRaSocketSetWhiteListStatus(enableWhiteList));
-    }
+
     // DC场景网卡与进程在同一侧，需要设置为类似host网卡模式
     config.nicPosition = Is310PDevice() ? 0 : static_cast<u32>(nicDeploy);
     config.phyId = devicePhyId_;
@@ -418,8 +411,6 @@ HcclResult NetworkManager::HeterogInit(u32 devId, const HcclIpAddress& ipAddr, u
         HCCL_INFO("NetworkManager: heterog init nic, ref[%u], skip", ref);
         return HCCL_SUCCESS;
     }
-
-    CHK_RET(hrtRaSocketSetWhiteListStatus(0));
 
     // 暂缺获取物理id的手段
     RaInitConfig config = {DEFAULT_INIT_PHY_ID, DEFAULT_INIT_NIC_POS, DEFAULT_HDC_TYPE, false};
@@ -696,7 +687,7 @@ HcclResult NetworkManager::DeInitV2(NICDeployment nicDeploy, bool isBackup, [[ma
     return HCCL_SUCCESS;
 }
 
-HcclResult NetworkManager::StartVnic(HcclIpAddress localIp, u32& port)
+HcclResult NetworkManager::StartVnic(HcclIpAddress localIp, u32& port, bool tagChkDis)
 {
     CHK_PRT_RET(
         deviceNicInitRef_.Count() <= 0, HCCL_ERROR("[Start][Vnic]can't start vnic socket before init device nic!"),
@@ -734,12 +725,12 @@ HcclResult NetworkManager::StartVnic(HcclIpAddress localIp, u32& port)
         bool isAutoPort = port == 0;
         HCCL_INFO("[Start][Vnic]trying to listen on ip[%s] port[%u].", localIp.GetReadableAddress(), port);
         CHK_RET(CheckAutoListenVersion(isAutoPort));
-        HcclResult ret = StartListenSocket(sock.nicSocketHandle, port); /* 只拉起1个vnic */
+        HcclResult ret = StartListenSocket(sock.nicSocketHandle, port, tagChkDis); /* 只拉起1个vnic */
         CHK_PRT_RET(
             ret == HCCL_E_UNAVAIL,
             HCCL_INFO(
-                "[Start][StartVnic]Could not start listening socket for IP [%s] and port [%u].",
-                localIp.GetReadableAddress(), port),
+                "[Start][StartVnic]Could not start listening socket for IP [%s] and port [%u], tagChkDis[%u].",
+                localIp.GetReadableAddress(), port, tagChkDis),
             ret);
         CHK_PRT_RET(
             ret != HCCL_SUCCESS,
@@ -875,7 +866,8 @@ HcclResult NetworkManager::StopVnicSocketHandle(const HcclIpAddress& localIp)
     return HCCL_SUCCESS;
 }
 
-HcclResult NetworkManager::StartNic(const HcclIpAddress& ipAddr, u32& port, bool rdmaFlag, HcclIpAddress ipAddrBackup)
+HcclResult NetworkManager::StartNic(
+    const HcclIpAddress& ipAddr, u32& port, bool rdmaFlag, HcclIpAddress ipAddrBackup, bool tagChkDis)
 {
     CHK_PRT_RET(
         deviceNicInitRef_.Count() == 0, HCCL_ERROR("[Start][Nic]can't start nic socket before init device nic!"),
@@ -938,9 +930,11 @@ HcclResult NetworkManager::StartNic(const HcclIpAddress& ipAddr, u32& port, bool
         HCCL_WARNING("port[%u] is already listened.", port);
     } else {
         bool isAutoPort = port == 0;
-        HCCL_INFO("[Start][Nic]trying to listen on ip[%s] port[%u].", ipAddr.GetReadableAddress(), port);
+        HCCL_INFO(
+            "[Start][Nic]trying to listen on ip[%s] port[%u] tagChkDis[%u].", ipAddr.GetReadableAddress(), port,
+            tagChkDis);
         CHK_RET(CheckAutoListenVersion(isAutoPort));
-        HcclResult ret = StartListenSocket(sock.nicSocketHandle, port);
+        HcclResult ret = StartListenSocket(sock.nicSocketHandle, port, tagChkDis);
         CHK_PRT_RET(
             ret == HCCL_E_UNAVAIL,
             HCCL_INFO(
@@ -951,14 +945,15 @@ HcclResult NetworkManager::StartNic(const HcclIpAddress& ipAddr, u32& port, bool
             ret != HCCL_SUCCESS,
             HCCL_ERROR(
                 "[Start][Nic]errNo[0x%016llx] ra inner listen start failed, "
-                "devid[%u], ip[%s], port[%u], return[%d]",
-                HCCL_ERROR_CODE(HCCL_E_TCP_CONNECT), devicePhyId_, ipAddr.GetReadableAddress(), port, ret),
+                "devid[%u], ip[%s], port[%u], tagChkDis[%u], return[%d]",
+                HCCL_ERROR_CODE(HCCL_E_TCP_CONNECT), devicePhyId_, ipAddr.GetReadableAddress(), port, tagChkDis, ret),
             HCCL_E_TCP_CONNECT);
         HCCL_INFO("port[%u] listen start OK", port);
         sock.listenedPort.insert(port);
         HCCL_RUN_INFO(
-            "[Start][Nic]Listen on ip[%s], port[%u] success, devPhyId[%u], devLogicId[%u], isAutoPort[%d]",
-            ipAddr.GetReadableAddress(), port, devicePhyId_, deviceLogicId_, isAutoPort);
+            "[Start][Nic]Listen on ip[%s], port[%u], tagChkDis[%u] success, devPhyId[%u], devLogicId[%u], "
+            "isAutoPort[%d]",
+            ipAddr.GetReadableAddress(), port, tagChkDis, devicePhyId_, deviceLogicId_, isAutoPort);
     }
     int refCount = IPPortListenRefMapDevice_[ipAddr][port].Ref();
     HCCL_INFO("Nic ip[%s] port[%u] refcount is [%d]", ipAddr.GetReadableAddress(), port, refCount);
@@ -1409,8 +1404,8 @@ HcclResult NetworkManager::InitDeviceSocket(u32 devicePhysicID, const HcclIpAddr
     return HCCL_SUCCESS;
 }
 
-HcclResult
-NetworkManager::StartHostNetAndListen(const HcclIpAddress& ipAddr, SocketHandle& socketHandle, u32& port, bool rdmaFlag)
+HcclResult NetworkManager::StartHostNetAndListen(
+    const HcclIpAddress& ipAddr, SocketHandle& socketHandle, u32& port, bool rdmaFlag, bool tagChkDis)
 {
     CHK_PRT_RET(
         (hostNicInitRef_.Count() == 0),
@@ -1446,7 +1441,7 @@ NetworkManager::StartHostNetAndListen(const HcclIpAddress& ipAddr, SocketHandle&
     if (IPPortListenRefMapHost_[ipAddr][port].Count() == 0 && sock.listenedPort.find(port) == sock.listenedPort.end()) {
         bool isAutoPort = port == 0;
         HCCL_INFO("[Start][HostNetAndListen]trying to listen on ip[%s] port[%u].", ipAddr.GetReadableAddress(), port);
-        ret = StartListenSocket(sock.nicSocketHandle, port);
+        ret = StartListenSocket(sock.nicSocketHandle, port, tagChkDis);
         CHK_PRT_RET(
             ret == HCCL_E_UNAVAIL,
             HCCL_INFO(
@@ -1462,8 +1457,8 @@ NetworkManager::StartHostNetAndListen(const HcclIpAddress& ipAddr, SocketHandle&
         sock.listenedPort.insert(port);
         HCCL_RUN_INFO(
             "[Start][HostNetAndListen]Listen on ip[%s], port[%u] success, "
-            "devPhyId[%u], devLogicId[%u], isAutoPort[%d]",
-            ipAddr.GetReadableAddress(), port, devicePhyId_, deviceLogicId_, isAutoPort);
+            "devPhyId[%u], devLogicId[%u], isAutoPort[%d], tagChkDis[%u]",
+            ipAddr.GetReadableAddress(), port, devicePhyId_, deviceLogicId_, isAutoPort, tagChkDis);
     }
     int refCount = IPPortListenRefMapHost_[ipAddr][port].Ref();
     HCCL_INFO("host ip[%s] port[%u] refcount is [%d]", ipAddr.GetReadableAddress(), port, refCount);
@@ -1471,7 +1466,7 @@ NetworkManager::StartHostNetAndListen(const HcclIpAddress& ipAddr, SocketHandle&
     socketHandle = sock.nicSocketHandle;
     raResourceInfo_.nicSocketMap.insert(std::make_pair(ipAddr, sock));
     hostNicSocketClientRef_[ipAddr].Ref();
-    HCCL_INFO("HostNet, ip[%s] port[%u] socket init OK", ipAddr.GetReadableAddress(), port);
+    HCCL_INFO("HostNet, ip[%s] port[%u] tagChkDis[%u] socket init OK", ipAddr.GetReadableAddress(), port, tagChkDis);
     return HCCL_SUCCESS;
 }
 
@@ -1708,7 +1703,8 @@ HcclResult NetworkManager::GetRaResourceInfo(RaResourceInfo& raResourceInfo)
 }
 
 HcclResult NetworkManager::PsWorkerRaInit(
-    u32 devId, const HcclIpAddress& ipAddr, u32 port, bool isHostUseDevNic, bool remoteIsHdc, bool isBoardVersion)
+    u32 devId, const HcclIpAddress& ipAddr, u32 port, bool isHostUseDevNic, [[maybe_unused]] bool remoteIsHdc,
+    [[maybe_unused]] bool isBoardVersion)
 {
     HCCL_INFO("PsWorkerRaInit, devicePhyId[%u], deviceLogicId_[%d]", devicePhyId_, deviceLogicId_);
     // 引用计数
@@ -1762,14 +1758,6 @@ HcclResult NetworkManager::PsWorkerRaInit(
             "NetworkManager open tsd success, devicePhyId[%u], deviceLogicId_[%d], subPid[%lld]", devicePhyId_,
             deviceLogicId_, static_cast<s64>(subPid_));
     }
-
-    bool isOpenWhiteList = false;
-    if (!isBoardVersion && remoteIsHdc && IsGeneralServer()) {
-        HCCL_INFO("general server, ps open WhiteList");
-        isOpenWhiteList = true;
-    }
-
-    CHK_RET(hrtRaSocketSetWhiteListStatus(static_cast<u32>(isOpenWhiteList)));
 
     RaInitConfig config = {DEFAULT_INIT_PHY_ID, DEFAULT_INIT_NIC_POS, DEFAULT_HDC_TYPE, false};
     config.phyId = devicePhyId;
@@ -2091,11 +2079,13 @@ HcclResult NetworkManager::CreateHostSocketHandle(const HcclIpAddress& ipAddr, S
     return HCCL_SUCCESS;
 }
 
-HcclResult NetworkManager::StartListenSocket(const SocketHandle socketHandle, u32& port) const
+HcclResult NetworkManager::StartListenSocket(const SocketHandle socketHandle, u32& port, bool tagChkDis) const
 {
     struct SocketListenInfoT serverInfo = {};
     serverInfo.socketHandle = const_cast<SocketHandle>(socketHandle);
     serverInfo.port = port;
+    serverInfo.tagChkDis = tagChkDis;
+    HCCL_INFO("StartListenSocket, port[%u], tagChkDis[%u]", port, tagChkDis);
     if (isRaInitRepeated_) {
         return HCCL_SUCCESS;
     }
@@ -2114,7 +2104,7 @@ HcclResult NetworkManager::StartListenSocket(const SocketHandle socketHandle, u3
         CHK_PRT_RET(
             port == AUTO_LISTEN_PORT, HCCL_ERROR("start listen on a port selected by os automatically failed"),
             HCCL_E_NOT_SUPPORT);
-        HCCL_RUN_INFO("start listen on port[%u] by auto success.", port);
+        HCCL_RUN_INFO("start listen on port[%u] tagChkDis[%u] by auto success.", port, tagChkDis);
     }
     return HCCL_SUCCESS;
 }
