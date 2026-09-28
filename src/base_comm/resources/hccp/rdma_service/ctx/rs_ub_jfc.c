@@ -111,7 +111,13 @@ STATIC int RsJfcResAddrMunmap(struct RsCtxJfcCb *jfcCb, struct UdmaVaInfo *vaInf
     struct res_map_info_in resInfoIn = {0};
     int ret = 0;
 
-    resInfoIn.res_id = RsGenerateMmapResId(jfcCb->jfcId, jfcCb->devCb->devAttr.ub.dieId,
+    if (!RsGenerateMmapResIdCheck(EX_UB_RES_TYPE_JFC, jfcCb->devCb->devAttr.ub.dieId)) {
+        hccp_err("RsGenerateMmapResIdCheck failed, exUbResType:%d, dieId:%u", EX_UB_RES_TYPE_JFC,
+            jfcCb->devCb->devAttr.ub.dieId);
+        return -EINVAL;
+    }
+
+    resInfoIn.res_id = RsGenerateMmapResId(jfcCb->jfcId, EX_UB_RES_TYPE_JFC, jfcCb->devCb->devAttr.ub.dieId,
         jfcCb->devCb->devAttr.ub.funcId);
     resInfoIn.target_proc_type = PROCESS_CP1;
     resInfoIn.res_type = (enum res_addr_type)vaInfo->resType;
@@ -129,7 +135,13 @@ STATIC int RsJfcResAddrMmap(struct RsCtxJfcCb *jfcCb, struct UdmaVaInfo *vaInfo,
     struct res_map_info_in resInfoIn = {0};
     int ret = 0;
 
-    resInfoIn.res_id = RsGenerateMmapResId(jfcCb->jfcId, jfcCb->devCb->devAttr.ub.dieId,
+    if (!RsGenerateMmapResIdCheck(EX_UB_RES_TYPE_JFC, jfcCb->devCb->devAttr.ub.dieId)) {
+        hccp_err("RsGenerateMmapResIdCheck failed, exUbResType:%d, dieId:%u", EX_UB_RES_TYPE_JFC,
+            jfcCb->devCb->devAttr.ub.dieId);
+        return -EINVAL;
+    }
+
+    resInfoIn.res_id = RsGenerateMmapResId(jfcCb->jfcId, EX_UB_RES_TYPE_JFC, jfcCb->devCb->devAttr.ub.dieId,
         jfcCb->devCb->devAttr.ub.funcId);
     resInfoIn.target_proc_type = PROCESS_CP1;
     resInfoIn.res_type = (enum res_addr_type)vaInfo->resType;

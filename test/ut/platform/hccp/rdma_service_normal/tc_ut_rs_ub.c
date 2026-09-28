@@ -42,7 +42,8 @@
 
 extern uint32_t RsGenerateUeInfo(uint32_t dieId, uint32_t funcId);
 extern uint32_t RsGenerateDevIndex(uint32_t devCnt, uint32_t dieId, uint32_t funcId);
-extern uint32_t RsGenerateMmapResId(uint32_t id, uint32_t dieId, uint32_t funcId);
+extern bool RsGenerateMmapResIdCheck(uint32_t exUbResType, uint32_t dieId);
+extern uint32_t RsGenerateMmapResId(uint32_t ubResId, uint32_t exUbResType, uint32_t dieId, uint32_t funcId);
 extern int RsUbGetRdevCb(struct rs_cb* rsCb, unsigned int rdevIndex, struct RsUbDevCb** devCb);
 extern int RsUrmaDeviceApiInit(void);
 extern int RsOpenUrmaSo(void);

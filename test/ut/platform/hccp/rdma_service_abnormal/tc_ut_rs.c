@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
 #include <sys/socket.h>
@@ -195,7 +196,8 @@ extern int RsFindWhiteListNode(
 extern int RsServerSendWlistCheckResult(struct RsConnInfo* conn, bool flag);
 extern uint32_t RsGenerateUeInfo(uint32_t dieId, uint32_t funcId);
 extern uint32_t RsGenerateDevIndex(uint32_t devCnt, uint32_t dieId, uint32_t funcId);
-extern uint32_t RsGenerateMmapResId(uint32_t id, uint32_t dieId, uint32_t funcId);
+extern bool RsGenerateMmapResIdCheck(uint32_t exUbResType, uint32_t dieId);
+extern uint32_t RsGenerateMmapResId(uint32_t ubResId, uint32_t exUbResType, uint32_t dieId, uint32_t funcId);
 extern int RsNetAdaptApiInit(void);
 extern int RsConnectHandle(struct RsInitConfig* cfg);
 extern int RsSocketStateReset(unsigned int chipId, struct RsConnInfo* conn, uint32_t sslEnable, struct rs_cb* rscb);
