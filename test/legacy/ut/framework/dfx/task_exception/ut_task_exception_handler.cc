@@ -276,6 +276,28 @@ TEST_F(TaskExceptionHandlerTest, Ut_ProcessCcuException_When_DfxOpInfoNull_Expec
     globalMirrorTasks.DestroyQueue(0, 0);
 }
 
+TEST_F(TaskExceptionHandlerTest, Ut_GetGroupRankInfo_When_CommValid_Expect_ReturnGroupNameAndUdi)
+{
+    CommunicatorImpl communicator{};
+    communicator.id = "GroupName";
+    communicator.rankSize = 4;
+    communicator.myRank = 1;
+    communicator.udi_ = "test_udi";
+    shared_ptr<DfxOpInfo> dfxOpInfo = make_shared<DfxOpInfo>();
+    dfxOpInfo->comm_ = &communicator;
+    TaskParam taskParam{};
+    TaskInfo taskInfo(0, 0, 1, taskParam, dfxOpInfo);
+    std::string result = TaskExceptionHandler::GetGroupRankInfo(taskInfo);
+    EXPECT_EQ(result, "group:[GroupName], hcclUdi:[test_udi], rankSize[4], rankId[1]");
+}
+
+TEST_F(TaskExceptionHandlerTest, Ut_GetGroupRankInfo_When_CommNull_Expect_ReturnEmpty)
+{
+    auto taskInfo = InitTaskInfo(0, 0);
+    std::string result = TaskExceptionHandler::GetGroupRankInfo(*taskInfo);
+    EXPECT_EQ(result, "");
+}
+
 TEST_F(TaskExceptionHandlerTest, test_GetMC2AlgTaskParam)
 {
     auto taskInfo = InitTaskInfo();

@@ -53,6 +53,7 @@ struct HDCommunicateParams {
 struct DevAicpuCommConfig {
     bool taskExceptionEnable{true};
     uint32_t notifyWaitTimeout{1836};
+    uint64_t plfDebugConfig{0};
     // 如要新增配置类字段，在此处添加
 };
 struct CommAicpuParam {
@@ -65,6 +66,7 @@ struct CommAicpuParam {
     HDCommunicateParams kfcControlTransferH2DParams;
     HDCommunicateParams kfcStatusTransferD2HParams;
     DevAicpuCommConfig commConfig; // 收编通信域配置类变量
+    char udi[HCOMID_MAX_SIZE];
 };
 
 #endif

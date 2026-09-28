@@ -332,6 +332,12 @@ HcclResult CommConfig::SetConfigUdi(const CommConfigHandle& config)
     return HCCL_SUCCESS;
 }
 
+HcclResult CommConfig::SetConfigUdi(const std::string& udi)
+{
+    udi_ = udi;
+    return HCCL_SUCCESS;
+}
+
 HcclResult CommConfig::SetConfigBufferName(const CommConfigHandle& config)
 {
     if (config.bufferName[0] != '\0') {

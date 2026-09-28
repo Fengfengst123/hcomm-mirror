@@ -347,8 +347,8 @@ string TaskExceptionHandler::GetGroupRankInfo(const TaskInfo& taskInfo)
     }
     const CommunicatorImpl* communicator = static_cast<CommunicatorImpl*>(taskInfo.dfxOpInfo_->comm_);
     return StringFormat(
-        "group:[%s], rankSize[%u], rankId[%d]", communicator->GetId().c_str(), communicator->GetRankSize(),
-        communicator->GetMyRank());
+        "group:[%s], hcclUdi:[%s], rankSize[%u], rankId[%d]", communicator->GetId().c_str(),
+        communicator->GetUdi().c_str(), communicator->GetRankSize(), communicator->GetMyRank());
 }
 
 inline void PrintBaseErrorLog(const std::string& stageErrInfo, u32 deviceId, const std::string& baseInfo)

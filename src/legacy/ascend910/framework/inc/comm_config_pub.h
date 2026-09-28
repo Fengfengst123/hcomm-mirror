@@ -113,6 +113,7 @@ public:
     HcclResult SetConfigHcclQos(u32 hcclQos);
     HcclResult SetConfigHcclAlgoStr(const std::string& hcclAlgo);
     const std::string& GetConfigHcclAlgoStr() const;
+    HcclResult SetConfigUdi(const std::string& udi);
     HcclResult SetConfigSqDepth(u32 sqDepth);
     HcclResult SetConfigDeterministic(u8 deterministic);
 

@@ -35,6 +35,7 @@ struct CommAicpuParam {
     hccl::HDCommunicateParams kfcControlTransferH2DParams;
     hccl::HDCommunicateParams kfcStatusTransferD2HParams;
     DevAicpuCommConfig commConfig; // 收编通信域配置类变量
+    char udi[HCOMID_MAX_SIZE]{};
 };
 
 #endif

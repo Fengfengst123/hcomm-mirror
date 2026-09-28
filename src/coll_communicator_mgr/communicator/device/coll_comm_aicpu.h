@@ -56,6 +56,7 @@ public:
 
     const hccl::HcclTopoInfo& GetTopoInfo() { return topoInfo_; }
     const std::string& GetIdentifier() { return identifier_; }
+    const std::string& GetUdi() { return udi_; }
 
     // taskException
     bool IsErrorReported() { return isErrorReported_; }
@@ -95,6 +96,7 @@ private:
     std::shared_ptr<hccl::HDCommunicate> kfcStatusTransferD2H_{nullptr};
 
     std::string identifier_;
+    std::string udi_;
     HcclCommStatus commStatus_{HcclCommStatus::HCCL_COMM_STATUS_INVALID};
     hccl::HcclTopoInfo topoInfo_;
 

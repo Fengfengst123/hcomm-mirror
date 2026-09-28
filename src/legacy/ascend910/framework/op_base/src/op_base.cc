@@ -2954,6 +2954,26 @@ static HcclResult GetDeterministicConfig(hccl::CollComm* collComm, uint32_t info
     *static_cast<uint32_t*>(info) = static_cast<uint32_t>(collComm->GetCommConfig().GetConfigDeterministic());
     return HcclResult::HCCL_SUCCESS;
 }
+
+static HcclResult GetUdiConfig(hccl::CollComm* collComm, uint32_t infoLen, void* info)
+{
+    if (static_cast<size_t>(infoLen) <= 1) {
+        HCCL_ERROR("[%s] infoLen[%u] too small to hold udi.", __func__, infoLen);
+        return HcclResult::HCCL_E_PARA;
+    }
+    const std::string& udi = collComm->GetCommConfig().GetConfigUdi();
+    if (static_cast<size_t>(infoLen) < udi.size() + 1) {
+        HCCL_ERROR("[%s] infoLen[%u] less than udi size[%zu] + 1.", __func__, infoLen, udi.size());
+        return HcclResult::HCCL_E_PARA;
+    }
+    int32_t sRet = memcpy_s(info, infoLen, udi.c_str(), udi.size());
+    if (sRet != EOK) {
+        HCCL_ERROR("[%s] memcpy_s failed, ret[%d].", __func__, sRet);
+        return HcclResult::HCCL_E_INTERNAL;
+    }
+    static_cast<char*>(info)[udi.size()] = '\0';
+    return HcclResult::HCCL_SUCCESS;
+}
 #endif
 
 HcclResult HcclConfigGetInfo(
@@ -2975,6 +2995,8 @@ HcclResult HcclConfigGetInfo(
             return GetUbMultiChannelNumConfig(infoLen, info);
         case HcclConfigType::HCCL_CONFIG_TYPE_DETERMINISTIC:
             return GetDeterministicConfig(collComm, infoLen, info);
+        case HcclConfigType::HCCL_CONFIG_TYPE_UDI:
+            return GetUdiConfig(collComm, infoLen, info);
         default:
             HCCL_ERROR("[%s] cfgType[%d] is invalid.", __func__, cfgType);
             return HcclResult::HCCL_E_PARA;

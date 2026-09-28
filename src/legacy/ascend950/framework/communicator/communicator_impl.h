@@ -106,6 +106,8 @@ public:
 
     const string& GetId() const;
 
+    const string& GetUdi() const;
+
     u32 GetIdIndex() const;
 
     RankId GetMyRank() const;
@@ -380,6 +382,7 @@ private:
     DevId devPhyId;
     DevId devLogicId;
     HcclCommConfig config;
+    std::string udi_;
     std::shared_ptr<RankGraph> rankGraph;
     uint32_t dpuStreamId{0};
     unique_ptr<DataBufManager> dataBufferManager;

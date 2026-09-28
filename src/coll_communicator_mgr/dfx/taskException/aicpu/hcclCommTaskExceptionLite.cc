@@ -636,8 +636,8 @@ std::string HcclCommTaskExceptionLite::GetGroupInfo(CollCommAicpu* aicpuComm)
         return "";
     }
     return Hccl::StringFormat(
-        "group:[%s], rankSize:[%u], localRank:[%u]", aicpuComm->GetIdentifier().c_str(),
-        aicpuComm->GetTopoInfo().userRankSize, aicpuComm->GetTopoInfo().userRank);
+        "group:[%s], hcclUdi:[%s], rankSize:[%u], localRank:[%u]", aicpuComm->GetIdentifier().c_str(),
+        aicpuComm->GetUdi().c_str(), aicpuComm->GetTopoInfo().userRankSize, aicpuComm->GetTopoInfo().userRank);
 }
 
 Hccl::DfxTaskInfo* HcclCommTaskExceptionLite::FindDfxTaskInfo(CollCommAicpu* aicpuComm, u32 sqId, u32 sqeId)

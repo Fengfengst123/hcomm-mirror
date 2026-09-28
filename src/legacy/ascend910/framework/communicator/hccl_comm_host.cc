@@ -390,6 +390,13 @@ HcclResult hcclComm::InitCollComm(
         = Hccl::EnvConfig::GetInstance().GetLogConfig().GetDfsConfig().taskExceptionEnable;
     commAicpuParam_.commConfig.notifyWaitTimeout = Hccl::EnvConfig::GetInstance().GetRtsConfig().GetExecTimeOut();
     commAicpuParam_.commConfig.plfDebugConfig = Hccl::GetPlfDebugConfigValue();
+    if (config != nullptr) {
+        auto sRet = snprintf_s(commAicpuParam_.udi, HCOMID_MAX_SIZE, HCOMID_MAX_SIZE - 1, "%.127s", config->hcclUdi);
+        if (sRet < 0) {
+            HCCL_ERROR("[InitCollComm]udi snprintf_s fail, commId: %s", commName.c_str());
+            return HCCL_E_PARA;
+        }
+    }
     commAicpuParam_.commConfig.taskMonitorInterval
         = Hccl::EnvConfig::GetInstance().GetLogConfig().GetDfsConfig().taskMonitorInterval;
     const auto opExpansionMode = GetCollCommOpExpansionMode(collComm_.get());

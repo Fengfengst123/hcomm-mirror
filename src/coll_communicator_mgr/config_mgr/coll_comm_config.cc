@@ -153,6 +153,10 @@ HcclResult ApplyHcclCommConfig(
         size_t algoLen = strnlen(hcclCommConfig->hcclAlgo, static_cast<size_t>(HCCL_COMM_ALGO_MAX_LENGTH));
         CHK_RET(commConfig.SetConfigHcclAlgoStr(std::string(hcclCommConfig->hcclAlgo, algoLen)));
     }
+    if (hcclCommConfig->hcclUdi[0] != '\0') {
+        size_t udiLen = strnlen(hcclCommConfig->hcclUdi, UDI_MAX_LENGTH);
+        CHK_RET(commConfig.SetConfigUdi(std::string(hcclCommConfig->hcclUdi, udiLen)));
+    }
     CHK_RET(ApplyHcclSqDepth(hcclCommConfig, commConfig));
     return HCCL_SUCCESS;
 }

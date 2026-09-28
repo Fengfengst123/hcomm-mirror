@@ -104,9 +104,11 @@ TEST_F(CcuTaskExceptionTest, GetGroupRankInfo_Normal)
     MOCKER_CPP(&hccl::CollComm::GetCommId).stubs().will(returnValue(testCommStr));
     MOCKER_CPP(&hccl::CollComm::GetRankSize).stubs().will(returnValue(8u));
     MOCKER_CPP(&hccl::CollComm::GetMyRankId).stubs().will(returnValue(3u));
+    collComm.GetCommConfig().SetConfigUdi(std::string("test_udi"));
     std::string result = CcuTaskException::GetGroupRankInfo(taskInfo);
     EXPECT_NE(result, "");
     EXPECT_TRUE(result.find("group:[TestComm]") != std::string::npos);
+    EXPECT_TRUE(result.find("hcclUdi:[test_udi]") != std::string::npos);
     EXPECT_TRUE(result.find("rankSize[8]") != std::string::npos);
     EXPECT_TRUE(result.find("rankId[3]") != std::string::npos);
 }

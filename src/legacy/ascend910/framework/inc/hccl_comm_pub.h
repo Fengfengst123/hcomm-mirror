@@ -481,7 +481,7 @@ private:
     std::unique_ptr<HcclCommunicator> communicator_;
 
     bool isAicpuCommInit_ = false;
-    CommAicpuParam commAicpuParam_;
+    CommAicpuParam commAicpuParam_{};
     aclrtBinHandle binHandle_ = nullptr;
     DevType devType_ = DevType::DEV_TYPE_COUNT;
     u32 hcclQos_;

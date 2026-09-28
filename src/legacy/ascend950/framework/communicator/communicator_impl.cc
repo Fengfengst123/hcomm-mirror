@@ -10,6 +10,7 @@
 
 #include "communicator_impl.h"
 #include <memory>
+#include <cstring>
 #include <op_type.h>
 #include <adapter_error_manager_pub.h>
 #include "orion_adapter_rts.h"
@@ -336,6 +337,8 @@ HcclResult CommunicatorImpl::CreateSubComm(
         if (initFlag) {
             // 创建子虚拟拓扑
             std::unique_ptr<RankGraph> subRankGraph = rankGraph->CreateSubRankGraph(rankIds);
+            // 无 subConfig 的子域无法从配置获取 udi，从父域传递
+            subCommImpl->udi_ = udi_;
             // 初始化子通信域
             CHK_RET(subCommImpl->Init(subCommParams, subRankGraph, devLogicId));
             RankIpPortMapPtr rankIpPortMapPtr;
@@ -1255,6 +1258,7 @@ void CommunicatorImpl::InitCommonDataNotInitDevType(const CommParams& commParams
 {
     InitCommonData(commParams);
     config = commConfig;
+    udi_ = std::string(commConfig.hcclUdi, strnlen(commConfig.hcclUdi, UDI_MAX_LENGTH));
     cclBufferSize = config.hcclBufferSize;
 }
 
@@ -1667,6 +1671,8 @@ void CommunicatorImpl::InitHostDeviceSyncNotifyManager()
 }
 
 const string& CommunicatorImpl::GetId() const { return id; }
+
+const string& CommunicatorImpl::GetUdi() const { return udi_; }
 
 u32 CommunicatorImpl::GetIdIndex() const { return idIndex; }
 

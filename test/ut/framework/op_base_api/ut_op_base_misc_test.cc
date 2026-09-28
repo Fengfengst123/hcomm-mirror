@@ -177,6 +177,30 @@ TEST_F(OpBaseMiscTest, Ut_HcclSetConfig_When_A5CommExists_Expect_UpdateUnlessEnv
     opBaseInfo.opGroup2CommMap.clear();
 }
 
+TEST_F(OpBaseMiscTest, Ut_HcclConfigGetInfo_When_CfgTypeIsUDI_Expect_ReturnIsHCCL_SUCCESS)
+{
+    UT_COMM_CREATE_DEFAULT(comm);
+    CollComm collComm(nullptr, 0, "ut_comm", ManagerCallbacks{}, CollCommInitMode::simpleMode);
+    MOCKER_CPP(&hcclComm::GetCollComm).stubs().will(returnValue(&collComm));
+    (void)collComm.GetCommConfig().SetConfigUdi(std::string("test_udi"));
+    char udiInfo[UDI_MAX_LENGTH] = {0};
+    HcclResult ret = HcclConfigGetInfo(comm, HcclConfigType::HCCL_CONFIG_TYPE_UDI, UDI_MAX_LENGTH, udiInfo);
+    EXPECT_EQ(ret, HCCL_SUCCESS);
+    EXPECT_STREQ(udiInfo, "test_udi");
+    Ut_Comm_Destroy(comm);
+}
+
+TEST_F(OpBaseMiscTest, Ut_HcclConfigGetInfo_When_CfgTypeIsUDI_And_InfoLenTooSmall_Expect_ReturnIsHCCL_E_PARA)
+{
+    UT_COMM_CREATE_DEFAULT(comm);
+    CollComm collComm(nullptr, 0, "ut_comm", ManagerCallbacks{}, CollCommInitMode::simpleMode);
+    MOCKER_CPP(&hcclComm::GetCollComm).stubs().will(returnValue(&collComm));
+    char udiInfo[UDI_MAX_LENGTH] = {0};
+    HcclResult ret = HcclConfigGetInfo(comm, HcclConfigType::HCCL_CONFIG_TYPE_UDI, 1, udiInfo);
+    EXPECT_EQ(ret, HCCL_E_PARA);
+    Ut_Comm_Destroy(comm);
+}
+
 TEST_F(OpBaseMiscTest, Ut_HcclCommSymWinGet_When_GetCommSymWinSucceeds_Expect_ReturnIsHCCL_SUCCESS)
 {
     UT_COMM_CREATE_DEFAULT(comm);

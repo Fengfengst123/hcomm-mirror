@@ -22,7 +22,7 @@
 
 获取指定通信域的HCCL配置信息。
 
-根据配置项类型查询对应的配置信息，并写入调用者提供的缓冲区中，当前支持查询通信算子的展开模式、通信算法配置字符串、UB多channel数量及确定性计算等级。
+根据配置项类型查询对应的配置信息，并写入调用者提供的缓冲区中，当前支持查询通信算子的展开模式、通信算法配置字符串、UB多channel数量、确定性计算等级及UDI。
 
 ## 函数原型
 
@@ -36,7 +36,7 @@ HcclResult HcclConfigGetInfo(HcclComm comm, HcclConfigType cfgType, uint32_t inf
 | --- | --- | --- |
 | comm | 输入 | 通信域句柄。<br>HcclComm类型的定义可参见[HcclComm](./data_type_definition/HcclComm.md)。 |
 | cfgType | 输入 | 需要查询的配置项类型，HcclConfigType的定义可参见[HcclConfigType](./data_type_definition/HcclConfigType.md)。 |
-| infoLen | 输入 | 目标配置类型的大小（字节数）。查询HCCL_CONFIG_TYPE_OP_EXPANSION_MODE时必须等于待查询配置类型的实际大小；查询HCCL_CONFIG_TYPE_HCCL_ALGO时必须不小于HCCL_COMM_ALGO_MAX_LENGTH；查询HCCL_CONFIG_TYPE_UB_MULTI_CHANNEL_NUM或HCCL_CONFIG_TYPE_DETERMINISTIC时必须等于sizeof(uint32_t)。 |
+| infoLen | 输入 | 目标配置类型的大小（字节数）。查询HCCL_CONFIG_TYPE_OP_EXPANSION_MODE时必须等于待查询配置类型的实际大小；查询HCCL_CONFIG_TYPE_HCCL_ALGO时必须不小于HCCL_COMM_ALGO_MAX_LENGTH；查询HCCL_CONFIG_TYPE_UB_MULTI_CHANNEL_NUM或HCCL_CONFIG_TYPE_DETERMINISTIC时必须等于sizeof(uint32_t)；查询HCCL_CONFIG_TYPE_UDI时必须不小于UDI_MAX_LENGTH字节数（该配置项当前仅Atlas训练系列产品支持查询）。 |
 | info | 输出 | 配置信息输出缓冲区，必须按目标配置类型对齐且可写。 |
 
 ## 返回值
@@ -69,4 +69,9 @@ ret = HcclConfigGetInfo(comm, HCCL_CONFIG_TYPE_UB_MULTI_CHANNEL_NUM, numSize, &m
 uint32_t deterministic = 0;
 uint32_t deterministicSize = sizeof(uint32_t); // 必须等于目标类型大小
 ret = HcclConfigGetInfo(comm, HCCL_CONFIG_TYPE_DETERMINISTIC, deterministicSize, &deterministic);
+
+// 查询UDI
+char udiInfo[UDI_MAX_LENGTH];
+uint32_t udiSize = UDI_MAX_LENGTH; // 必须不小于UDI_MAX_LENGTH
+ret = HcclConfigGetInfo(comm, HCCL_CONFIG_TYPE_UDI, udiSize, udiInfo);
 ```

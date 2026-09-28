@@ -201,7 +201,39 @@ TEST_F(hcclCommTaskExceptionLiteTest, Ut_GetGroupInfo_When_AicpuCommValid_Expect
     aicpuComm.identifier_ = "test_group_name";
     InitCommEngineResMgr(aicpuComm);
     std::string result = HcclCommTaskExceptionLite::GetInstance().GetGroupInfo(&aicpuComm);
-    EXPECT_EQ(result, "group:[test_group_name], rankSize:[0], localRank:[0]");
+    EXPECT_EQ(result, "group:[test_group_name], hcclUdi:[], rankSize:[0], localRank:[0]");
+}
+
+TEST_F(hcclCommTaskExceptionLiteTest, Ut_GetGroupInfo_When_AicpuCommValidWithUdi_Expect_ReturnGroupNameAndUdi)
+{
+    CollCommAicpu aicpuComm;
+    aicpuComm.identifier_ = "test_group_name";
+    aicpuComm.udi_ = "test_udi_123";
+    InitCommEngineResMgr(aicpuComm);
+    std::string result = HcclCommTaskExceptionLite::GetInstance().GetGroupInfo(&aicpuComm);
+    EXPECT_EQ(result, "group:[test_group_name], hcclUdi:[test_udi_123], rankSize:[0], localRank:[0]");
+}
+
+TEST_F(hcclCommTaskExceptionLiteTest, Ut_GetGroupRankInfo_When_HostCommValid_Expect_ReturnGroupNameAndUdi)
+{
+    const s32 testDeviceId = 63;
+    Hccl::TaskParam taskParam{};
+    taskParam.taskType = Hccl::TaskParamType::TASK_NOTIFY_WAIT;
+    Hccl::TaskInfo taskInfo(0, 0, 1, taskParam, nullptr);
+    taskInfo.dfxOpInfo_ = std::make_shared<Hccl::DfxOpInfo>();
+    hccl::ManagerCallbacks callbacks;
+    hccl::CollComm collComm(nullptr, 0, "test_group_name", callbacks);
+    taskInfo.dfxOpInfo_->comm_ = &collComm;
+
+    TaskExceptionHost* handler = TaskExceptionHost::GetInstance(testDeviceId);
+    ASSERT_NE(handler, nullptr);
+    std::string result = handler->GetGroupRankInfo(taskInfo);
+    EXPECT_TRUE(result.find("group:[test_group_name]") != std::string::npos);
+    EXPECT_TRUE(result.find("hcclUdi:[]") != std::string::npos);
+
+    collComm.GetCommConfig().SetConfigUdi(std::string("test_udi_123"));
+    result = handler->GetGroupRankInfo(taskInfo);
+    EXPECT_TRUE(result.find("hcclUdi:[test_udi_123]") != std::string::npos);
 }
 
 TEST_F(hcclCommTaskExceptionLiteTest, Ut_HandleDpuTaskexception_When_CommIdNotInMap_Expect_ReturnSuccess)

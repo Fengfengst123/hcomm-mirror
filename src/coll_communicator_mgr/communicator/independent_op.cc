@@ -56,6 +56,12 @@ HcclResult IndependentOp::SetIndependentOpConfig(
     commAicpuParam_.kfcStatusTransferD2HParams = kfcStatusTransferD2HParams;
     commAicpuParam_.userRank = topoAttr.userRank;
     commAicpuParam_.userRankSize = topoAttr.userRankSize;
+    auto udi = commConfig.GetConfigUdi();
+    auto sRet = snprintf_s(commAicpuParam_.udi, HCOMID_MAX_SIZE, HCOMID_MAX_SIZE - 1, "%.127s", udi.c_str());
+    if (sRet < 0) {
+        HCCL_ERROR("[IndependentOp][%s]udi snprintf_s fail, commId: %s", __func__, commId_.c_str());
+        return HCCL_E_PARA;
+    }
     CHK_PRT(channelMgr_.SetHcclQos(commConfig.GetConfigHcclQos()));
     HCCL_INFO(
         "[IndependentOp][%s] Hcom[%s] threadNum[%u], notifyPerThread[%u], cclBufferSize[%llu], deviceLogicId[%u], "

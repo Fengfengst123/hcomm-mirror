@@ -287,8 +287,8 @@ std::string TaskExceptionHost::GetGroupRankInfo(const Hccl::TaskInfo& taskInfo) 
 
     hccl::CollComm* communicator = static_cast<hccl::CollComm*>(taskInfo.dfxOpInfo_->comm_);
     return Hccl::StringFormat(
-        "group:[%s], rankSize[%u], rankId[%u]", communicator->GetCommId().c_str(), communicator->GetRankSize(),
-        communicator->GetMyRankId());
+        "group:[%s], hcclUdi:[%s], rankSize[%u], rankId[%u]", communicator->GetCommId().c_str(),
+        communicator->GetCommConfig().GetConfigUdi().c_str(), communicator->GetRankSize(), communicator->GetMyRankId());
 }
 
 void TaskExceptionHost::GetAicpuCqeErrRemoteLocalIdByRankId(

@@ -39,6 +39,7 @@ HcclResult CollCommAicpu::InitAicpuIndOp(CommAicpuParam* commAicpuParam)
     topoInfo_.devicePhyId = commAicpuParam->devicePhyId;
     topoInfo_.deviceType = static_cast<DevType>(commAicpuParam->deviceType);
     identifier_ = std::string(commAicpuParam->hcomId);
+    udi_ = std::string(commAicpuParam->udi);
     topoInfo_.userRankSize = commAicpuParam->userRankSize;
     topoInfo_.userRank = commAicpuParam->userRank;
 
@@ -76,10 +77,10 @@ HcclResult CollCommAicpu::InitAicpuIndOp(CommAicpuParam* commAicpuParam)
     commStatus_ = HcclCommStatus::HCCL_COMM_STATUS_READY;
 
     HCCL_RUN_INFO(
-        "[%s]success, group[%s], deviceLogicId[%u], devicePhyId[%u], deviceType[%u], rankSize[%u] "
+        "[%s]success, group[%s], hcclUdi[%s], deviceLogicId[%u], devicePhyId[%u], deviceType[%u], rankSize[%u] "
         "userRank[%u], devId[%u]",
-        __func__, identifier_.c_str(), topoInfo_.deviceLogicId, topoInfo_.devicePhyId, topoInfo_.deviceType,
-        topoInfo_.userRankSize, topoInfo_.userRank, devId_);
+        __func__, identifier_.c_str(), udi_.c_str(), topoInfo_.deviceLogicId, topoInfo_.devicePhyId,
+        topoInfo_.deviceType, topoInfo_.userRankSize, topoInfo_.userRank, devId_);
     return HCCL_SUCCESS;
 }
 
