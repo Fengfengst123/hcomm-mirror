@@ -249,8 +249,6 @@ typedef struct HcclCommConfigDef {
     ```text
     # 整数秒配置，配置为1800s
     hcclExecTimeOut = 1800
-    # 十毫秒级精度配置，配置为50ms
-    hcclExecTimeOut = 0.05
     ```
 
   **注意事项：**
