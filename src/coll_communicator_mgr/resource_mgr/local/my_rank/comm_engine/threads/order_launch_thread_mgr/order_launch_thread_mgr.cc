@@ -200,8 +200,6 @@ HcclResult OrderLaunchThreadMgr::SetAttachedStream(const std::string& group, u32
     // 不做释放：线程由 g_ThreadMap 持有（HcommThreadAcquireByNotify 经 SaveThreads 登记），
     // L1 仅摘缓存引用；运行中释放会导致设备侧UAF（device core），线程最终随进程退出
     // 由 g_ThreadMap 静态析构回收（Stream/DeviceMem 析构链含context探测，退出期安静）。
-    // notify与group绑定不受换图影响（借用模型下新旧线程可安全共用同一批对象），
-    // 下次建链直接复用，notify身份跨图保持——旧图在途record仍指向有效notify
     auto groupGraphIt = groupGraphMap_.find(group);
     if (groupGraphIt != groupGraphMap_.end() && groupGraphIt->second != graphId) {
         HCCL_INFO(
@@ -240,15 +238,11 @@ HcclResult OrderLaunchThreadMgr::SetAttachedStream(const std::string& group, u32
     hcomAttachedStreamMap_[graphId] = stream;
     groupGraphMap_[group] = graphId;
     // 流ID仅用于日志定位（换图/换流排查）：查询失败不影响主流程，保持INVALID便于识别
-    s32 oldStreamId = INVALID_INT;
     s32 newStreamId = INVALID_INT;
-    if (oldStream != nullptr) {
-        (void)hrtGetStreamId(oldStream, oldStreamId);
-    }
     (void)hrtGetStreamId(stream, newStreamId);
     HCCL_INFO(
-        "%s success, group[%s], graphId[%u], oldStream[%p](id[%d]), stream[%p](id[%d]), streamMapSize[%zu]", __func__,
-        group.c_str(), graphId, oldStream, oldStreamId, stream, newStreamId, hcomAttachedStreamMap_.size());
+        "%s success, group[%s], graphId[%u], oldStream[%p], stream[%p](id[%d]), streamMapSize[%zu]", __func__,
+        group.c_str(), graphId, oldStream, stream, newStreamId, hcomAttachedStreamMap_.size());
     return HCCL_SUCCESS;
 }
 
