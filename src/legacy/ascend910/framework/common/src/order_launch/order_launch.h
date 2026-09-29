@@ -26,6 +26,13 @@ struct OrderLaunchResMgr {
     u64 context;
     Stream opbaseStream;   // 单算子模式使用
     Stream aclgraphStream; // aclgraph模式使用
+    // aclgraph Anchor stream（锚点流）：仅承载每个模型首个op的锚点任务（wait eventA + record eventB）。
+    Stream aclgraphAnchorStream;
+    HcclRtEvent aclgraphAnchorEventA = nullptr;
+    HcclRtEvent aclgraphAnchorEventB = nullptr;
+    // 已投递锚点任务的模型
+    std::unordered_set<u64> aclgraphAnchorModelIds;
+
     bool resValid;
     bool contextInitialized; // 标记context是否已初始化，一旦初始化就不会变回INVALID_U64）
 
@@ -33,6 +40,10 @@ struct OrderLaunchResMgr {
         : context(INVALID_U64),
           opbaseStream(),
           aclgraphStream(),
+          aclgraphAnchorStream(),
+          aclgraphAnchorEventA(nullptr),
+          aclgraphAnchorEventB(nullptr),
+          aclgraphAnchorModelIds(),
           resValid(false),
           contextInitialized(false)
     {}
@@ -62,9 +73,17 @@ struct OrderLaunchResMgr {
     }
 
     // 析构资源
-    void DestroyResources() const
+    void DestroyResources()
     {
-        // 析构资源位置预留，后续根据需要实现
+        // anchor流锚点event随context资源销毁；stream由Stream析构自行销毁
+        if (aclgraphAnchorEventA != nullptr) {
+            (void)hrtEventDestroy(aclgraphAnchorEventA);
+            aclgraphAnchorEventA = nullptr;
+        }
+        if (aclgraphAnchorEventB != nullptr) {
+            (void)hrtEventDestroy(aclgraphAnchorEventB);
+            aclgraphAnchorEventB = nullptr;
+        }
     }
 };
 
@@ -88,6 +107,7 @@ public:
         std::shared_ptr<LocalNotify> notify1, u32 timeOut);
 
     HcclResult SetHcomStream(u32 graphId, const Stream& hcomAttachedStream);
+    HcclResult EraseAclgraphAnchorModelId(u64 modelId);
 
 private:
     OrderLaunch();
@@ -99,6 +119,9 @@ private:
         std::shared_ptr<LocalNotify> notify0, std::shared_ptr<LocalNotify> notify1, u32 timeOut);
     HcclResult InitGroupCtx(const std::string& group);
     HcclResult EnsureOrderStreamForGroup(std::string& group, u64 context, Stream& orderStream);
+    // 按需创建anchor流（锚点流）与两个锚点专用event（与order流同context）
+    HcclResult EnsureAclgraphAnchorStreamRes(u64 context, OrderLaunchResMgr& resMgr);
+    HcclResult EmitAclgraphAnchorTasks(u64 context, OrderLaunchResMgr& resMgr, const Stream& mainStream, u64 modelId);
     HcclResult GetCurrentContext(u64& currentContext) const;
 
     std::mutex streamMutex_;

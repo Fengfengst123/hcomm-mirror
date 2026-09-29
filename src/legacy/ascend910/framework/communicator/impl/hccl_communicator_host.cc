@@ -5302,6 +5302,7 @@ void HcclCommunicator::EraseCaptureModelId(u64 modelId)
         captureModelIds_.erase(it);
         HCCL_INFO("[HcclCommunicator][%s] modelId[%llu] is erased from captureModelIds_", __func__, modelId);
     }
+    (void)OrderLaunch::GetInstance(deviceLogicId_).EraseAclgraphAnchorModelId(modelId);
     return;
 }
 

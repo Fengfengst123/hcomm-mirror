@@ -151,15 +151,23 @@ HcclResult OrderLaunch::AclgraphLaunchInOrderToOrderStream(
     }
 
     u64 context = groupCtxMap_[group];
-    Stream& aclgraphStream = contextResMgrMap_[context].aclgraphStream;
+    OrderLaunchResMgr& resMgr = contextResMgrMap_[context];
+    Stream& aclgraphStream = resMgr.aclgraphStream;
     EnsureOrderStreamForGroup(group, context, aclgraphStream); // aclgraph控制流
-
+    // aclgraph场景，申请一条aclgraph空流anchorStream，mainStream <-> anchorStream，保证子图中至少有一条流join回主流
+    CHK_RET(EnsureAclgraphAnchorStreamRes(context, resMgr));
     rtModel_t rtModel = nullptr;
     bool isCapture = false;
     CHK_RET(GetStreamCaptureInfo(mainStream.ptr(), rtModel, isCapture));
-    CHK_RET(AddStreamToModel(aclgraphStream.ptr(), rtModel));
+    CHK_PTR_NULL(rtModel);
 
     aclError ret = ACL_SUCCESS;
+
+    u64 modelId = 0;
+    CHK_RET(GetModelId(rtModel, modelId));
+    // aclgraph主流与通信流为同一条流时，由空流锚点保证aclgraph（EndCapture）规则校验通过，保证子图中至少有一条流join回主流
+    CHK_RET(EmitAclgraphAnchorTasks(context, resMgr, mainStream, modelId));
+
     // kernelStream -> aclgraphStream
     ret = aclrtRecordEvent(event, kernelStream.ptr());
     CHK_PRT_RET(ret != ACL_SUCCESS, HCCL_ERROR("[%s]aclrtRecordEvent failed, ret[%d]", __func__, ret), HCCL_E_RUNTIME);
@@ -355,6 +363,78 @@ HcclResult OrderLaunch::EnsureOrderStreamForGroup(std::string& group, u64 contex
             "streamId[%d]",
             group.c_str(), context, orderStream.id());
     }
+    return HCCL_SUCCESS;
+}
+
+HcclResult OrderLaunch::EraseAclgraphAnchorModelId(u64 modelId)
+{
+    CHK_PRT_RET(initialized_ == false, HCCL_WARNING("OrderLaunch has been destroyed"), HCCL_SUCCESS);
+    std::unique_lock<std::mutex> mapLock(streamMutex_);
+    for (auto& entry : contextResMgrMap_) {
+        entry.second.aclgraphAnchorModelIds.erase(modelId);
+    }
+    HCCL_INFO("[%s] modelId[%llu] erased from aclgraph anchor records", __func__, modelId);
+    return HCCL_SUCCESS;
+}
+
+HcclResult OrderLaunch::EnsureAclgraphAnchorStreamRes(u64 context, OrderLaunchResMgr& resMgr)
+{
+    if (resMgr.aclgraphAnchorStream.ptr() == nullptr) {
+        // Anchor流不设streamMode：仅承载event wait/record锚点任务，无kernel任务，不涉及遇错即停
+        resMgr.aclgraphAnchorStream = Stream(StreamType::STREAM_TYPE_ONLINE);
+        HCCL_INFO(
+            "[OrderLaunch] Created aclgraph anchor stream id[%d] with context[0x%llx]",
+            resMgr.aclgraphAnchorStream.id(), context);
+    }
+    if (resMgr.aclgraphAnchorEventA == nullptr) {
+        aclError ret = aclrtCreateEventExWithFlag(&resMgr.aclgraphAnchorEventA, ACL_EVENT_SYNC);
+        CHK_PRT_RET(
+            ret != ACL_SUCCESS,
+            HCCL_ERROR("[%s]aclrtCreateEventExWithFlag anchorEventA failed, ret[%d]", __func__, ret), HCCL_E_RUNTIME);
+    }
+    if (resMgr.aclgraphAnchorEventB == nullptr) {
+        aclError ret = aclrtCreateEventExWithFlag(&resMgr.aclgraphAnchorEventB, ACL_EVENT_SYNC);
+        CHK_PRT_RET(
+            ret != ACL_SUCCESS,
+            HCCL_ERROR("[%s]aclrtCreateEventExWithFlag anchorEventB failed, ret[%d]", __func__, ret), HCCL_E_RUNTIME);
+    }
+    return HCCL_SUCCESS;
+}
+
+/**
+ * @brief
+ * 模型首个op时在Anchor流上投递锚点任务，保证capture主流和mainStream为同一条流时，至少有一条流可以join回capture主流
+ * mainStream(=origin流) record eventA -> Anchor stream wait eventA
+ * -> 空流 record eventB -> mainStream wait eventB。
+ */
+HcclResult
+OrderLaunch::EmitAclgraphAnchorTasks(u64 context, OrderLaunchResMgr& resMgr, const Stream& mainStream, u64 modelId)
+{
+    if (!resMgr.aclgraphAnchorModelIds.insert(modelId).second) {
+        return HCCL_SUCCESS; // 非首op，锚点已投递
+    }
+    HCCL_INFO(
+        "[%s] model first op, emit anchor tasks on anchor stream, modelId[%llu], context[0x%llx]", __func__, modelId,
+        context);
+    Stream& anchorStream = resMgr.aclgraphAnchorStream;
+    // mainStream（origin流）record eventA
+    aclError ret = aclrtRecordEvent(resMgr.aclgraphAnchorEventA, mainStream.ptr());
+    CHK_PRT_RET(
+        ret != ACL_SUCCESS, HCCL_ERROR("[%s]aclrtRecordEvent anchorA failed, ret[%d]", __func__, ret), HCCL_E_RUNTIME);
+    // Anchor stream wait eventA
+    ret = aclrtStreamWaitEvent(anchorStream.ptr(), resMgr.aclgraphAnchorEventA);
+    CHK_PRT_RET(
+        ret != ACL_SUCCESS, HCCL_ERROR("[%s]aclrtStreamWaitEvent anchorA failed, ret[%d]", __func__, ret),
+        HCCL_E_RUNTIME);
+    // Anchor stream record eventB
+    ret = aclrtRecordEvent(resMgr.aclgraphAnchorEventB, anchorStream.ptr());
+    CHK_PRT_RET(
+        ret != ACL_SUCCESS, HCCL_ERROR("[%s]aclrtRecordEvent anchorB failed, ret[%d]", __func__, ret), HCCL_E_RUNTIME);
+    // mainStream（origin流）wait eventB
+    ret = aclrtStreamWaitEvent(mainStream.ptr(), resMgr.aclgraphAnchorEventB);
+    CHK_PRT_RET(
+        ret != ACL_SUCCESS, HCCL_ERROR("[%s]aclrtStreamWaitEvent anchorB failed, ret[%d]", __func__, ret),
+        HCCL_E_RUNTIME);
     return HCCL_SUCCESS;
 }
 
