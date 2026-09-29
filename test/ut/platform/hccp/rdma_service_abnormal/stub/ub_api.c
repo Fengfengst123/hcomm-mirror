@@ -52,6 +52,8 @@ urma_status_t urma_get_ip_by_eid(const urma_context_t* ctx, const urma_eid_t* ei
  */
 urma_status_t urma_uninit(void) { return 0; }
 
+uint64_t urma_get_abi_version(void) { return (1ULL << 32); }
+
 /* Device Manage API */
 /**
  *  Get device list.

@@ -33,6 +33,12 @@ urma_status_t urma_init(urma_init_attr_t *conf);
  */
 urma_status_t urma_uninit(void);
 
+/**
+ * Get urma ABI version.
+ * Return: urma ABI version
+ */
+uint64_t urma_get_abi_version(void);
+
 /* Device Manage API */
 /**
  *  Get device list.

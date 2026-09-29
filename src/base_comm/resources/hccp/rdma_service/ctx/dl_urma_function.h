@@ -40,6 +40,7 @@
 struct RsUrmaOps {
     urma_status_t (*rsUrmaInit)(urma_init_attr_t *conf);
     urma_status_t (*rsUrmaUninit)(void);
+    uint64_t (*rsUrmaGetAbiVersion)(void);
     urma_device_t **(*rsUrmaGetDeviceList)(int *numDevices);
     void (*rsUrmaFreeDeviceList)(urma_device_t **deviceList);
     urma_eid_info_t *(*rsUrmaGetEidList)(urma_device_t *dev, uint32_t *cnt);
@@ -113,6 +114,7 @@ int RsUbApiInit(void);
 
 int RsUrmaInit(urma_init_attr_t *conf);
 int RsUrmaUninit(void);
+uint64_t RsUrmaGetAbiVersion();
 urma_device_t **RsUrmaGetDeviceList(int *numDevices);
 urma_device_t *RsUrmaGetDeviceByEid(urma_eid_t eid, urma_transport_type_t type);
 void RsUrmaFreeDeviceList(urma_device_t **deviceList);

@@ -26,6 +26,12 @@
 #define UB_ID_OFFSET 16U
 #define EX_UB_RES_TYPE_OFFSET 12U // 4bit(DIE_ID) + 8bit(FUNC_ID) = 12bit
 #define EX_UB_RES_DIE_ID_MAX 16U  // reserve 4bit from original 8bit DIE_ID
+#define RS_MAINBOARD_ID_CARD_NOMESH 0x68
+#define RS_MAINBOARD_ID_CARD_2PMESH 0x6a
+#define RS_MAINBOARD_ID_CARD_4PMESH 0x6c
+
+#define URMA_GET_ABI_VERSION(major, minor, patch)                                                                      \
+    (((major) * UINT64_C(1) << 32) | ((minor) * UINT64_C(1) << 16) | ((patch) * UINT64_C(1)))
 
 struct RsUbDevCb {
     struct rs_cb *rscb;

@@ -21,6 +21,7 @@
 #include "dl_aubdfx_function.h"
 #include "ra_rs_err.h"
 #include "rs_ctx_inner.h"
+#include "rs_ctx.h"
 #include "rs_ub.h"
 #include "rs_ub_dfx.h"
 
@@ -222,21 +223,50 @@ int RsEpollEventJfcInHandle(struct rs_cb *rsCb, int fd)
     return -ENODEV;
 }
 
-STATIC int RsUbFillAsyncEventCb(urma_async_event_t *event, struct RsUbDevCb *devCb,
+STATIC int RsUbAsyncEventGetJfcContext(urma_async_event_t *event, struct RsUbDevCb *devCb,
     struct RsCtxAsyncEventCb *asyncEventCb)
 {
     int ret = 0;
 
+    asyncEventCb->resId = event->element.jfc->jfc_id.id;
+
+    CHK_PRT_RETURN(RsCtxGetContextNotSupported(devCb->rscb->hccpMode, devCb->rscb->chipId),
+        hccp_warn_rma("not support get jfc context"), 0);
+
+    ret = RsUrmaGetJfcOpt(event->element.jfc, URMA_JFC_FULL_CTX, asyncEventCb->context, JFC_CONTEXT_LEN);
+    CHK_PRT_RETURN(ret != 0,
+        hccp_err("RsUrmaGetJfcOpt failed, ret:%d, jfcId:%u devIndex:0x%0x", ret, event->element.jfc->jfc_id.id,
+            devCb->index),
+        ret);
+    asyncEventCb->len = JFC_CONTEXT_LEN;
+    return ret;
+}
+
+STATIC int RsUbAsyncEventGetJettyContext(urma_async_event_t *event, struct RsUbDevCb *devCb,
+    struct RsCtxAsyncEventCb *asyncEventCb)
+{
+    int ret = 0;
+
+    asyncEventCb->resId = event->element.jetty->jetty_id.id;
+
+    CHK_PRT_RETURN(RsCtxGetContextNotSupported(devCb->rscb->hccpMode, devCb->rscb->chipId),
+        hccp_warn_rma("not support get jetty context"), 0);
+
+    ret = RsUrmaGetJettyOpt(event->element.jetty, URMA_JETTY_FULL_CTX, asyncEventCb->context, JETTY_CONTEXT_LEN);
+    CHK_PRT_RETURN(ret != 0,
+        hccp_warn_rma("RsUrmaGetJettyOpt failed, ret:%d, jettyId:%u devIndex:0x%0x", ret,
+            event->element.jetty->jetty_id.id, devCb->index),
+        ret);
+    asyncEventCb->len = JETTY_CONTEXT_LEN;
+    return ret;
+}
+
+STATIC int RsUbFillAsyncEventCb(urma_async_event_t *event, struct RsUbDevCb *devCb,
+    struct RsCtxAsyncEventCb *asyncEventCb)
+{
     switch (event->event_type) {
         case URMA_EVENT_JFC_ERR:
-            asyncEventCb->resId = event->element.jfc->jfc_id.id;
-            ret = RsUrmaGetJfcOpt(event->element.jfc, URMA_JFC_FULL_CTX, asyncEventCb->context, JFC_CONTEXT_LEN);
-            CHK_PRT_RETURN(ret != 0,
-                hccp_err("RsUrmaGetJfcOpt failed, ret:%d, jfcId:%u devIndex:0x%0x", ret, event->element.jfc->jfc_id.id,
-                    devCb->index),
-                -EOPENSRC);
-            asyncEventCb->len = JFC_CONTEXT_LEN;
-            break;
+            return RsUbAsyncEventGetJfcContext(event, devCb, asyncEventCb);
         case URMA_EVENT_JFS_ERR:
             asyncEventCb->resId = event->element.jfs->jfs_id.id;
             break;
@@ -246,15 +276,7 @@ STATIC int RsUbFillAsyncEventCb(urma_async_event_t *event, struct RsUbDevCb *dev
             break;
         case URMA_EVENT_JETTY_ERR:
         case URMA_EVENT_JETTY_LIMIT:
-            asyncEventCb->resId = event->element.jetty->jetty_id.id;
-            ret = RsUrmaGetJettyOpt(event->element.jetty, URMA_JETTY_FULL_CTX, asyncEventCb->context,
-                JETTY_CONTEXT_LEN);
-            CHK_PRT_RETURN(ret != 0,
-                hccp_err("RsUrmaGetJettyOpt failed, ret:%d, jettyId:%u devIndex:0x%0x", ret,
-                    event->element.jetty->jetty_id.id, devCb->index),
-                -EOPENSRC);
-            asyncEventCb->len = JETTY_CONTEXT_LEN;
-            break;
+            return RsUbAsyncEventGetJettyContext(event, devCb, asyncEventCb);
         case URMA_EVENT_JETTY_GRP_ERR:
             asyncEventCb->resId = event->element.jetty_grp->jetty_grp_id.id;
             break;
@@ -274,7 +296,7 @@ STATIC int RsUbFillAsyncEventCb(urma_async_event_t *event, struct RsUbDevCb *dev
             hccp_warn_rma("invalid event_type:%d devIndex:0x%x", event->event_type, devCb->index);
             break;
     }
-    return ret;
+    return 0;
 }
 
 STATIC int RsUbGetSaveAsyncEvent(struct RsUbDevCb *devCb)

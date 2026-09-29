@@ -37,6 +37,8 @@ urma_status_t urma_init(urma_init_attr_t* conf) { return 0; }
  */
 urma_status_t urma_uninit(void) { return 0; }
 
+uint64_t urma_get_abi_version(void) { return (1ULL << 32); }
+
 /**
  * get eid by ip info
  * @param[in] ctx: the created urma context pointer;

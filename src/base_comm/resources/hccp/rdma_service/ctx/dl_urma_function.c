@@ -25,6 +25,7 @@ struct RsUrmaOps gUrmaOps;
 struct RsUrmaOps gUrmaOps = {
     .rsUrmaInit = urma_init,
     .rsUrmaUninit = urma_uninit,
+    .rsUrmaGetAbiVersion = urma_get_abi_version,
     .rsUrmaGetDeviceList = urma_get_device_list,
     .rsUrmaGetDeviceByEid = urma_get_device_by_eid,
     .rsUrmaFreeDeviceList = urma_free_device_list,
@@ -106,6 +107,9 @@ STATIC int RsUrmaDeviceApiInit(void)
 
     gUrmaOps.rsUrmaUninit = (urma_status_t(*)(void))HccpDlsym(gUrmaApiHandle, "urma_uninit");
     DL_API_RET_IS_NULL_CHECK(gUrmaOps.rsUrmaUninit, "urma_uninit");
+
+    gUrmaOps.rsUrmaGetAbiVersion = (uint64_t(*)(void))HccpDlsym(gUrmaApiHandle, "urma_get_abi_version");
+    DL_API_RET_IS_NULL_INFO(gUrmaOps.rsUrmaGetAbiVersion, "urma_get_abi_version");
 
     gUrmaOps.rsUrmaGetDeviceList = (urma_device_t * *(*)(int *)) HccpDlsym(gUrmaApiHandle, "urma_get_device_list");
     DL_API_RET_IS_NULL_CHECK(gUrmaOps.rsUrmaGetDeviceList, "urma_get_device_list");
@@ -484,6 +488,17 @@ int RsUrmaUninit(void)
 #endif
     }
     return PERF_TRACE(RDMA_OP, DlRetConvert(gUrmaOps.rsUrmaUninit()));
+}
+
+uint64_t RsUrmaGetAbiVersion()
+{
+    if (gUrmaOps.rsUrmaGetAbiVersion == NULL) {
+#ifndef CA_CONFIG_LLT
+        hccp_run_warn("rsUrmaGetAbiVersion is null");
+        return 0;
+#endif
+    }
+    return PERF_TRACE(RDMA_OP, gUrmaOps.rsUrmaGetAbiVersion());
 }
 
 urma_device_t **RsUrmaGetDeviceList(int *numDevices)

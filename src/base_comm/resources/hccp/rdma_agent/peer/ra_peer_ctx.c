@@ -8,10 +8,13 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+#include "user_log.h"
+#include "config_log.h"
 #include "ra_rs_ctx.h"
 #include "ra_peer.h"
 #include "rs_ctx.h"
 #include "ra_ctx_comm.h"
+#include "ra_rs_err.h"
 #include "ra_peer_ctx.h"
 
 int RaPeerGetDevEidInfoNum(struct RaInfo info, unsigned int *num)
@@ -571,6 +574,10 @@ int RaPeerCtxGetJettyContext(struct RaCtxQpHandle *qpHandle, uint8_t context[], 
     RsSetCtx(phyId);
     ret = RsCtxGetUbContext(&devInfo, qpHandle->id, CONTEXT_TYPE_JETTY, context, len);
     RaPeerMutexUnlock(phyId);
+    CHK_PRT_RETURN(ret == -ENOTSUPP,
+        hccp_warn_rma("[get][jettyContext] not support, ret:%d, phyId:%u devIndex:0x%x", ret, phyId,
+            qpHandle->devIndex),
+        ret);
     CHK_PRT_RETURN(ret != 0,
         hccp_err("[get][jettyContext]RsCtxGetJettyContext failed, ret[%d] phyId[%u], devIndex[%u]", ret, phyId,
             qpHandle->devIndex),

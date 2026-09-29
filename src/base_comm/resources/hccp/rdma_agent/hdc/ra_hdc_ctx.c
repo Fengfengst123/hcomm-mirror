@@ -969,6 +969,10 @@ int RaHdcCtxGetJettyContext(struct RaCtxQpHandle *qpHandle, uint8_t context[], u
     opData.txData.contextType = CONTEXT_TYPE_JETTY;
     opData.txData.len = *len;
     ret = RaHdcProcessMsg(RA_RS_CTX_GET_UB_CONTEXT, phyId, (char *)&opData, sizeof(union OpCtxGetContextData));
+    CHK_PRT_RETURN(ret == -ENOTSUPP,
+        hccp_warn_rma("[get][jettyContext] not support, ret:%d, phyId:%u devIndex:0x%x", ret, phyId,
+            qpHandle->devIndex),
+        ret);
     CHK_PRT_RETURN(ret != 0,
         hccp_err("[get][jettyContext]hdc message process failed ret:%d, phyId:%u"
                  " devIndex:0x%x",

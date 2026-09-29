@@ -135,6 +135,39 @@ int RsCtxApiDeinit(enum NetworkMode hccpMode, enum ProtocolTypeT protocol)
     return 0;
 }
 
+bool RsCtxIsPcieStd(unsigned int phyId)
+{
+    unsigned int logicId = 0;
+    unsigned int chipId = 0;
+    int64_t val = 0;
+    int ret = 0;
+
+    CHK_PRT_RETURN(phyId >= RS_MAX_DEV_NUM, hccp_err("invalid param phy_id[%u]", phyId), -EINVAL);
+    ret = rsGetLocalDevIDByHostDevID(phyId, &chipId);
+    CHK_PRT_RETURN(ret != 0, hccp_err("phy_id[%u] invalid, ret %d", phyId, ret), ret);
+    ret = DlDrvDeviceGetIndexByPhyId(chipId, &logicId);
+    CHK_PRT_RETURN(ret != 0, hccp_err("DlDrvDeviceGetIndexByPhyId failed, ret(%d), chipId(%u)", ret, chipId), ret);
+
+    ret = DlHalGetDeviceInfo(logicId, MODULE_TYPE_SYSTEM, INFO_TYPE_MAINBOARD_ID, &val);
+    if (ret != 0 || val < 0) {
+        hccp_err("DlHalGetDeviceInfo failed ret[%d] logicId[%u]", ret, logicId);
+        return false;
+    }
+    return (val == RS_MAINBOARD_ID_CARD_NOMESH || val == RS_MAINBOARD_ID_CARD_2PMESH ||
+            val == RS_MAINBOARD_ID_CARD_4PMESH);
+}
+
+bool RsCtxGetContextNotSupported(unsigned int mode, unsigned int phyId)
+{
+    uint64_t expectUrmaVersion = URMA_GET_ABI_VERSION(0, 1, 0);
+
+    if (mode != NETWORK_PEER_ONLINE && !RsCtxIsPcieStd(phyId)) {
+        // server pod default support get context
+        return false;
+    }
+    return RsUrmaGetAbiVersion() < expectUrmaVersion;
+}
+
 RS_ATTRI_VISI_DEF int RsGetDevEidInfoNum(unsigned int phyId, unsigned int *num)
 {
     int ret = 0;
@@ -877,6 +910,9 @@ RS_ATTRI_VISI_DEF int RsCtxGetUbContext(struct RaRsDevInfo *devInfo, unsigned in
 
     ret = RsUbGetDevCb(rscb, devInfo->devIndex, &devCb);
     CHK_PRT_RETURN(ret != 0, hccp_err("get devCb failed, ret:%d devIndex:0x%x", ret, devInfo->devIndex), ret);
+
+    CHK_PRT_RETURN(RsCtxGetContextNotSupported(devCb->rscb->hccpMode, devInfo->phyId),
+        hccp_warn_rma("not support get jetty context"), -ENOTSUPP);
 
     if (contextType == CONTEXT_TYPE_JETTY) {
         ret = RsUbGetJettyContext(devCb, id, context, len);

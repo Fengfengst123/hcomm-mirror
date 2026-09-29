@@ -2211,6 +2211,11 @@ void TcRaHdcCtxGetJettyContext()
     EXPECT_INT_EQ(ret, -1);
     mocker_clean();
 
+    mocker(RaHdcProcessMsg, 1, -ENOTSUPP);
+    ret = RaHdcCtxGetJettyContext(&qpHandle, context, &len);
+    EXPECT_INT_EQ(ret, -ENOTSUPP);
+    mocker_clean();
+
     mocker(RaHdcProcessMsg, 1, 0);
     mocker(memcpy_s, 1, -1);
     ret = RaHdcCtxGetJettyContext(&qpHandle, context, &len);
@@ -2239,6 +2244,11 @@ void TcRaPeerCtxGetJettyContext()
     mocker(RsCtxGetUbContext, 1, -1);
     ret = RaPeerCtxGetJettyContext(&qpHandle, context, &len);
     EXPECT_INT_EQ(ret, -1);
+    mocker_clean();
+
+    mocker(RsCtxGetUbContext, 1, -ENOTSUPP);
+    ret = RaPeerCtxGetJettyContext(&qpHandle, context, &len);
+    EXPECT_INT_EQ(ret, -ENOTSUPP);
     mocker_clean();
 }
 

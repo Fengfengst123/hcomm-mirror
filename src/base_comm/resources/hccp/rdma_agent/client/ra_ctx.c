@@ -1085,12 +1085,6 @@ HCCP_ATTRI_VISI_DEF int RaCtxGetJettyContext(void *qpHandle, uint8_t context[], 
         qpHandleTmp->devIndex, qpHandleTmp->qpInfo.ub.id, *len);
 
     ret = qpHandleTmp->ctxHandle->ctxOps->raCtxGetJettyContext(qpHandleTmp, context, len);
-    CHK_PRT_RETURN(ret != 0,
-        hccp_err("[get][jettyContext]raCtxGetJettyContext failed, ret:%d phyId:%u devIndex"
-                 ":0x%x",
-            ret, qpHandleTmp->phyId, qpHandleTmp->devIndex),
-        ConverReturnCode(RDMA_OP, ret));
-
     return ConverReturnCode(RDMA_OP, ret);
 }
 
