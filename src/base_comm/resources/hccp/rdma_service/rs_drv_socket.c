@@ -717,7 +717,8 @@ int RsFindWhiteListNode(struct RsWhiteList *rsSocketWhiteList, struct SocketWlis
          whiteListTmp2 = list_entry(whiteListTmp2->list.next, struct RsWhiteListInfo, list)) {
         hccp_info_socket("client_ip %s 0x%08x, expectIp %s 0x%08x", whiteListTmp->clientIp.readAddr,
             whiteListTmp->clientIp.binAddr.addr.s_addr, expectIp.readAddr, expectIp.binAddr.addr.s_addr);
-        if (strncmp(whiteListTmp->tag, whiteListExpect->tag, SOCK_CONN_TAG_SIZE) == 0) {
+        if ((!RsCompareIpAddr(&whiteListTmp->clientIp, &expectIp)) &&
+            (strncmp(whiteListTmp->tag, whiteListExpect->tag, SOCK_CONN_TAG_SIZE) == 0)) {
             *whiteListNode = whiteListTmp;
             return 0;
         }
