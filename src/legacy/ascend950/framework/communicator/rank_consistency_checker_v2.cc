@@ -121,8 +121,9 @@ bool RankConsistencyCheckerV2::CompareCrcArrayV2(
         if (localArray[i] != remoteArray[i]) {
             const std::string& name = nameSource[i].name;
             HCCL_ERROR(
-                "[%s][%s] CMD information %s check fail, %s local[%u], remote[%u].", LOG_KEYWORDS_INIT_CHANNEL.c_str(),
-                LOG_KEYWORDS_PARAMETER_CONFLICT.c_str(), categoryLabel.c_str(), name.c_str(), localArray[i],
+                "[%s][%s] errNo[0x%016llx] CMD information %s check fail, %s local[%u], remote[%u].",
+                LOG_KEYWORDS_INIT_CHANNEL.c_str(), LOG_KEYWORDS_PARAMETER_CONFLICT.c_str(),
+                HCOM_ERROR_CODE(HcclResult::HCCL_E_PARA), categoryLabel.c_str(), name.c_str(), localArray[i],
                 remoteArray[i]);
             RPT_INPUT_ERR(
                 true, "EI0005", std::vector<std::string>({"ccl_op", "para_name", "local_para", "remote_para"}),

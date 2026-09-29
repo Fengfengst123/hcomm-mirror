@@ -10,6 +10,7 @@
 
 #include "cast_utils.h"
 #include "adapter_error_manager_pub.h"
+#include "hccl_log_keywords.h"
 #include "hcomm_adapter_hccp.h"
 
 #include <algorithm>
@@ -141,10 +142,17 @@ RequestResult HccpGetAsyncReqResult(RequestHandle& reqHandle)
     }
 
     if (reqResult.reqResult != 0) {
+        const bool isJettyExhausted
+            = reqResult.interfaceOpcode == HCCP_OP_CTX_QP_CREATE && IS_JETTY_RESOURCE_EXHAUSTED(reqResult.reqResult);
         RPT_ENV_ERR(
-            reqResult.interfaceOpcode == HCCP_OP_CTX_QP_CREATE && IS_JETTY_RESOURCE_EXHAUSTED(reqResult.reqResult),
-            "EI0007", std::vector<std::string>({"resource_type", "resource_info"}),
+            isJettyExhausted, "EI0007", std::vector<std::string>({"resource_type", "resource_info"}),
             std::vector<std::string>({"jetty", "CreateJettyAsync"}));
+        if (isJettyExhausted) {
+            HCCL_ERROR(
+                "[%s][%s] errNo[0x%016llx] CreateJettyAsync failed: jetty resources are exhausted, ret[%d]",
+                LOG_KEYWORDS_INIT_CHANNEL.c_str(), LOG_KEYWORDS_RESOURCE.c_str(),
+                HCCL_ERROR_CODE(HcclResult::HCCL_E_NETWORK), reqResult.reqResult);
+        }
         HCCL_ERROR(
             "[%s] failed, the asynchronous request "
             "error[%d], reqhandle[%llx].",
@@ -243,6 +251,12 @@ HccpUbCreateJetty(const CtxHandle ctxhandle, const HrtRaUbCreateJettyParam& in, 
         RPT_ENV_ERR(
             IS_JETTY_RESOURCE_EXHAUSTED(ret), "EI0007", std::vector<std::string>({"resource_type", "resource_info"}),
             std::vector<std::string>({"jetty", "CreateJetty"}));
+        if (IS_JETTY_RESOURCE_EXHAUSTED(ret)) {
+            HCCL_ERROR(
+                "[%s][%s] errNo[0x%016llx] CreateJetty failed: jetty resources are exhausted, ret[%d]",
+                LOG_KEYWORDS_INIT_CHANNEL.c_str(), LOG_KEYWORDS_RESOURCE.c_str(),
+                HCCL_ERROR_CODE(HcclResult::HCCL_E_NETWORK), ret);
+        }
         return HcclResult::HCCL_E_NETWORK;
     }
 

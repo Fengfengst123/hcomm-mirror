@@ -12,6 +12,8 @@
 #include "mockcpp/mokc.h"
 #include <mockcpp/mockcpp.hpp>
 #include "hcomm_adapter_hccp.h"
+#include "adapter_error_manager_pub.h"
+#include "hccp_async.h"
 #include "hccp_common.h"
 #include "hccp_tlv.h"
 
@@ -22,6 +24,15 @@ namespace {
 constexpr uintptr_t FAKE_HCCP_CONTEXT = 0x12345678U;
 constexpr uint32_t FAKE_UBOE_IPV4 = 0xC0A80367U;
 constexpr uint8_t FAKE_UBOE_EID_LAST_BYTE = 0x67U;
+
+std::string gCapturedErrorCode;
+
+void StubRptInputErrCapture(std::string errorCode, std::vector<std::string> keys, std::vector<std::string> values)
+{
+    (void)keys;
+    (void)values;
+    gCapturedErrorCode = errorCode;
+}
 
 int RaGetIpByEidSuccessStub(void* ctxHandle, union HccpEid eid[], struct IpInfo ip[], unsigned int* num)
 {
@@ -183,6 +194,45 @@ TEST_F(HcommAdapterHccpTest, ut_HccpGetCtpEnable_When_CtxHandleNull_Expect_EPtrA
     bool ctpEnable = true;
     EXPECT_EQ(HccpGetCtpEnable(nullptr, ctpEnable), HCCL_E_PTR);
     EXPECT_FALSE(ctpEnable);
+}
+
+TEST_F(HcommAdapterHccpTest, Ut_HccpUbCreateJetty_When_ResourceExhausted_Expect_ReportEI0007)
+{
+    gCapturedErrorCode.clear();
+    MOCKER(RaCtxQpCreate).stubs().will(returnValue(ROCE_ENOMEM));
+    MOCKER(RptInputErr).stubs().will(invoke(StubRptInputErrCapture));
+    HrtRaUbCreateJettyParam in;
+    HrtRaUbJettyCreatedOutParam out;
+
+    testing::internal::CaptureStdout();
+    const HcclResult ret = HccpUbCreateJetty(reinterpret_cast<void*>(FAKE_HCCP_CONTEXT), in, out);
+    const std::string log = testing::internal::GetCapturedStdout();
+
+    EXPECT_EQ(ret, HCCL_E_NETWORK);
+    EXPECT_EQ(gCapturedErrorCode, "EI0007");
+    EXPECT_NE(log.find("[InitChannelStage][Resource]"), std::string::npos);
+    EXPECT_NE(log.find("jetty resources are exhausted"), std::string::npos);
+}
+
+TEST_F(HcommAdapterHccpTest, Ut_HccpGetAsyncReqResult_When_JettyResourceExhausted_Expect_ReportEI0007)
+{
+    gCapturedErrorCode.clear();
+    AsyncReqResult asyncResult = {ROCE_ENOMEM, HCCP_OP_CTX_QP_CREATE};
+    MOCKER(RaGetAsyncReqResult)
+        .stubs()
+        .with(mockcpp::any(), outBoundP(&asyncResult, sizeof(asyncResult)))
+        .will(returnValue(0));
+    MOCKER(RptInputErr).stubs().will(invoke(StubRptInputErrCapture));
+    RequestHandle reqHandle = 12;
+
+    testing::internal::CaptureStdout();
+    const RequestResult ret = HccpGetAsyncReqResult(reqHandle);
+    const std::string log = testing::internal::GetCapturedStdout();
+
+    EXPECT_EQ(ret, RequestResult::ASYNC_REQUEST_FAILED);
+    EXPECT_EQ(gCapturedErrorCode, "EI0007");
+    EXPECT_NE(log.find("[InitChannelStage][Resource]"), std::string::npos);
+    EXPECT_NE(log.find("jetty resources are exhausted"), std::string::npos);
 }
 
 // ========== HccpRaTlvRequestForCustomChannel 测试 ==========

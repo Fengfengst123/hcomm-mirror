@@ -196,7 +196,10 @@ TEST_F(CollOperatorCheckTest, test_CheckCollOperator_allgather_opType_not_ok)
     remoteOpData.staticShape = false;
     remoteOpData.outputDataType = DataType::INT8;
 
+    testing::internal::CaptureStdout();
     EXPECT_THROW(CheckCollOperator(localOpData, remoteOpData), InvalidParamsException);
+    const std::string log = testing::internal::GetCapturedStdout();
+    EXPECT_NE(log.find("[InitChannelStage][ParameterConflict] errNo["), std::string::npos);
 }
 
 TEST_F(CollOperatorCheckTest, test_CheckCollOperator_allgather_reduceOp_not_ok)

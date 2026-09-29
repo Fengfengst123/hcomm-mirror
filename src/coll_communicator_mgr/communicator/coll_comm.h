@@ -159,6 +159,7 @@ private:
     HcclResult InitHDCommunicate();
     HcclResult InitTaskExceptionHandler();
     HcclResult InitKfcAndRegisterCollComm();
+    void PrintCommKeyInfo(uint32_t rankNum) const;
     HcclResult GetRankIpPortMap();
     HcclResult InitSymmetricMemory();
     HcclResult PrepareSharedSymmetricWindow(void* ptr, size_t size, void*& devLegacySymWin, HcclCommSymWindow& devWin);

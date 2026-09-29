@@ -134,19 +134,30 @@ void GetJsonPropertyList(const nlohmann::json& obj, const char* propName, nlohma
     }
 }
 
+void JsonParser::ReportRanktableFileError(
+    const std::string& filePath, const std::string& errorReason, HcclResult errorCode,
+    const std::string& plogReason) const
+{
+    const std::string reportedPath = filePath.empty() ? "<empty>" : filePath;
+    const std::string& reportedReason = plogReason.empty() ? errorReason : plogReason;
+    RPT_INPUT_ERR(
+        true, "EI0004", std::vector<std::string>({"ranktable_path", "error_reason"}),
+        std::vector<std::string>({reportedPath, errorReason}));
+    HCCL_ERROR(
+        "[%s][%s] errNo[0x%016llx] rankTable file[%s] parse failed, reason: %s", LOG_KEYWORDS_INIT_GROUP.c_str(),
+        LOG_KEYWORDS_RANKTABLE_CONFIG.c_str(), HCOM_ERROR_CODE(errorCode), reportedPath.c_str(),
+        reportedReason.c_str());
+}
+
 void JsonParser::ParseFileToJson(const std::string& filePath, nlohmann::json& parseInformation) const
 {
     // 校验文件是否存在
     char resolvedPath[PATH_MAX] = {0};
     if (realpath(filePath.c_str(), resolvedPath) == nullptr) {
-        RPT_INPUT_ERR(
-            true, "EI0004", std::vector<std::string>({"ranktable_path", "error_reason"}),
-            std::vector<std::string>(
-                {filePath, "The rankTable file path does not exist, the permission is insufficient, or the JSON format "
-                           "is incorrect."}));
-        HCCL_ERROR(
-            "[%s][%s] errNo[0x%016llx] path %s is not a valid real path", LOG_KEYWORDS_INIT_GROUP.c_str(),
-            LOG_KEYWORDS_RANKTABLE_CONFIG.c_str(), HCOM_ERROR_CODE(HcclResult::HCCL_E_PARA), filePath.c_str());
+        ReportRanktableFileError(
+            filePath,
+            "The rankTable file path does not exist, the permission is insufficient, or the JSON format is incorrect.",
+            HcclResult::HCCL_E_PARA, StringFormat("path %s is not a valid real path", filePath.c_str()));
         THROW<InvalidParamsException>(StringFormat(
             "[Get][RanktableRealPath]errNo[0x%016llx] path %s is not a valid real path",
             HCOM_ERROR_CODE(HcclResult::HCCL_E_PARA), filePath.c_str()));
@@ -155,15 +166,18 @@ void JsonParser::ParseFileToJson(const std::string& filePath, nlohmann::json& pa
     HCCL_INFO("waiting for json file load complete");
     std::ifstream infoFile(resolvedPath, std::ifstream::in);
     if (!infoFile) {
-        HCCL_ERROR(
-            "[%s][%s] errNo[0x%016llx] open file %s failed", LOG_KEYWORDS_INIT_GROUP.c_str(),
-            LOG_KEYWORDS_RANKTABLE_CONFIG.c_str(), HCOM_ERROR_CODE(HcclResult::HCCL_E_OPEN_FILE_FAILURE), resolvedPath);
+        ReportRanktableFileError(filePath, "Failed to open the rankTable file.", HcclResult::HCCL_E_OPEN_FILE_FAILURE);
         THROW<InternalException>(StringFormat(
             "[Read][File]errNo[0x%016llx],open file %s failed", HCOM_ERROR_CODE(HcclResult::HCCL_E_OPEN_FILE_FAILURE),
             resolvedPath));
     }
 
-    ParseInformation(parseInformation, infoFile);
+    try {
+        ParseInformation(parseInformation, infoFile);
+    } catch (const InvalidParamsException&) {
+        ReportRanktableFileError(filePath, "The JSON format is incorrect.", HcclResult::HCCL_E_PARA);
+        throw;
+    }
     infoFile.close();
 }
 

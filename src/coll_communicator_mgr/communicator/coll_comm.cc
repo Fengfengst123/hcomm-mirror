@@ -24,6 +24,7 @@
 #include "plf_debug_config.h"
 #include "coll_comm_mgr.h"
 #include "adapter_rts_common.h"
+#include "hccl_log_keywords.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -194,6 +195,7 @@ CollComm::InitFullMode(void* rankGraph, aclrtBinHandle binHandle, HcclMem cclBuf
         return HCCL_E_PTR);
     CHK_RET(myRank_->Init(cclBuffer, opExpansionMode, rankNum));
     CHK_RET(hrtGetDevice(&deviceLogicId_));
+    PrintCommKeyInfo(rankNum);
     CHK_RET(InitWorldTeams());
     CHK_RET(InitSymmetricMemory());
 
@@ -213,6 +215,13 @@ CollComm::InitFullMode(void* rankGraph, aclrtBinHandle binHandle, HcclMem cclBuf
 
     EXCEPTION_HANDLE_END
     return HCCL_SUCCESS;
+}
+
+void CollComm::PrintCommKeyInfo(uint32_t rankNum) const
+{
+    HCCL_RUN_INFO(
+        "[%s]identifier[%s] rankSize[%u] comm[%p]", LOG_KEYWORDS_COMMUNICATOR.c_str(), commId_.c_str(), rankNum, comm_);
+    HCCL_RUN_INFO("[%s]userRank[%u] deviceLogicId[%d]", LOG_KEYWORDS_LOCALRANK.c_str(), rankId_, deviceLogicId_);
 }
 
 HcclResult CollComm::InitSymmetricMemory()

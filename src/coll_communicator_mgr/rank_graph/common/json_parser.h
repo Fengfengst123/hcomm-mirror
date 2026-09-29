@@ -38,6 +38,9 @@ public:
     void ParseFileToJson(const std::string& filePath, nlohmann::json& parseInformation) const;
 
 private:
+    void ReportRanktableFileError(
+        const std::string& filePath, const std::string& errorReason, HcclResult errorCode,
+        const std::string& plogReason = "") const;
     template <typename T>
     void ParseInformation(nlohmann::json& parseInformation, T& information) const;
 };
@@ -67,6 +70,10 @@ void JsonParser::ParseFile(const std::string& filePath, T& info) const
     // 校验文件是否存在
     char resolvedPath[PATH_MAX] = {0};
     if (realpath(filePath.c_str(), resolvedPath) == nullptr) {
+        ReportRanktableFileError(
+            filePath,
+            "The rankTable file path does not exist, the permission is insufficient, or the JSON format is incorrect.",
+            HcclResult::HCCL_E_PARA, StringFormat("path %s is not a valid real path", filePath.c_str()));
         THROW<InvalidParamsException>(StringFormat(
             "[Get][RanktableRealPath]errNo[0x%016llx] path %s is not a valid real path",
             HCOM_ERROR_CODE(HcclResult::HCCL_E_PARA), filePath.c_str()));
@@ -75,18 +82,25 @@ void JsonParser::ParseFile(const std::string& filePath, T& info) const
     HCCL_INFO("waiting for json file load complete");
     std::ifstream infoFile(resolvedPath, std::ifstream::in);
     if (!infoFile) {
+        ReportRanktableFileError(filePath, "Failed to open the rankTable file.", HcclResult::HCCL_E_OPEN_FILE_FAILURE);
         THROW<InternalException>(StringFormat(
             "[Read][File]errNo[0x%016llx],open file %s failed", HCOM_ERROR_CODE(HcclResult::HCCL_E_OPEN_FILE_FAILURE),
             resolvedPath));
     }
 
     nlohmann::json json;
-    ParseInformation(json, infoFile);
+    try {
+        ParseInformation(json, infoFile);
+    } catch (const InvalidParamsException&) {
+        ReportRanktableFileError(filePath, "The JSON format is incorrect.", HcclResult::HCCL_E_PARA);
+        throw;
+    }
     infoFile.close();
 
     try {
         info.Deserialize(json);
     } catch (nlohmann::json::exception& e) {
+        ReportRanktableFileError(filePath, "The JSON content cannot be deserialized.", HcclResult::HCCL_E_PARA);
         THROW<InvalidParamsException>(e.what());
     }
 }

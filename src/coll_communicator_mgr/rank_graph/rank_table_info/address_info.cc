@@ -189,12 +189,20 @@ void AddressInfo::EidToAddr(std::string address)
         RPT_INPUT_ERR(
             true, "EI0014", std::vector<std::string>({"value", "variable", "expect"}),
             std::vector<std::string>({address, "addr", "A valid EID"}));
+        HCCL_ERROR(
+            "[%s][%s] errNo[0x%016llx] addr[%s] is not a valid EID: length[%zu], expected[%u]",
+            LOG_KEYWORDS_INIT_GROUP.c_str(), LOG_KEYWORDS_RANKTABLE_CHECK.c_str(),
+            HCOM_ERROR_CODE(HcclResult::HCCL_E_PARA), address.c_str(), address.length(),
+            URMA_EID_LEN * URMA_EID_NUM_TWO);
         THROW<InvalidParamsException>(
             StringFormat("[AddressInfo::%s] failed with rankAddrs : error in length. ", __func__));
     } else if (!IpAddress::IsEID(address)) {
         RPT_INPUT_ERR(
             true, "EI0014", std::vector<std::string>({"value", "variable", "expect"}),
             std::vector<std::string>({address, "addr", "A valid EID"}));
+        HCCL_ERROR(
+            "[%s][%s] errNo[0x%016llx] addr[%s] is not a valid EID format", LOG_KEYWORDS_INIT_GROUP.c_str(),
+            LOG_KEYWORDS_RANKTABLE_CHECK.c_str(), HCOM_ERROR_CODE(HcclResult::HCCL_E_PARA), address.c_str());
         THROW<InvalidParamsException>(
             StringFormat("[AddressInfo::%s] failed with rankAddrs : error in format. ", __func__));
     }
@@ -213,6 +221,9 @@ void AddressInfo::IPV4ToAddr(std::string address)
         RPT_INPUT_ERR(
             true, "EI0014", std::vector<std::string>({"value", "variable", "expect"}),
             std::vector<std::string>({address, "addr", "A valid IPv4 address"}));
+        HCCL_ERROR(
+            "[%s][%s] errNo[0x%016llx] addr[%s] is not a valid IPv4 address", LOG_KEYWORDS_INIT_GROUP.c_str(),
+            LOG_KEYWORDS_RANKTABLE_CHECK.c_str(), HCOM_ERROR_CODE(HcclResult::HCCL_E_PARA), address.c_str());
         THROW<InvalidParamsException>(StringFormat("[AddressInfo::%s] failed with addrs is error. ", __func__));
     }
     IpAddress ipAddress0(address, ipFamily);
@@ -230,6 +241,9 @@ void AddressInfo::IPV6ToAddr(std::string address)
         RPT_INPUT_ERR(
             true, "EI0014", std::vector<std::string>({"value", "variable", "expect"}),
             std::vector<std::string>({address, "addr", "A valid IPv6 address"}));
+        HCCL_ERROR(
+            "[%s][%s] errNo[0x%016llx] addr[%s] is not a valid IPv6 address", LOG_KEYWORDS_INIT_GROUP.c_str(),
+            LOG_KEYWORDS_RANKTABLE_CHECK.c_str(), HCOM_ERROR_CODE(HcclResult::HCCL_E_PARA), address.c_str());
         THROW<InvalidParamsException>(StringFormat("[AddressInfo::%s] failed with addr is error. ", __func__));
     }
     IpAddress ipAddress0(address, ipFamily);

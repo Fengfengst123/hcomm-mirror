@@ -296,6 +296,22 @@ TEST_F(AddressInfoParserTest, Ut_Deserialize_When_EmptyAddr_Expect_Exception)
     EXPECT_THROW(addressInfoParser.ParseString(addressInfoString, addressInfo), InvalidParamsException);
 }
 
+TEST_F(AddressInfoParserTest, Ut_Deserialize_When_InvalidIpv4_Expect_EI0014Keyword)
+{
+    MOCKER(RptInputErr).stubs().will(returnValue(HCCL_SUCCESS));
+    JsonParser addressInfoParser;
+    AddressInfo addressInfo;
+    const std::string addressInfoString
+        = R"({"addr_type":"IPV4","addr":"192.168.100","ports":["1/1"],"plane_id":"planeB"})";
+
+    testing::internal::CaptureStdout();
+    EXPECT_THROW(addressInfoParser.ParseString(addressInfoString, addressInfo), InvalidParamsException);
+    const std::string log = testing::internal::GetCapturedStdout();
+
+    EXPECT_NE(log.find("[InitGroupStage][RanktableCheck]"), std::string::npos);
+    EXPECT_NE(log.find("is not a valid IPv4 address"), std::string::npos);
+}
+
 class AddressInfoParserInvalidTest :
     public AddressInfoParserTest,
     public testing::WithParamInterface<InvalidAddressInfoCase> {};

@@ -1057,9 +1057,12 @@ TEST_F(RankTableInfoParserTest, Ut_Deserialize_When_RankTableRankCountInvalid_Ex
 
 TEST_F(RankTableInfoParserTest, Ut_Deserialize_When_RootInfoRankIdMissing_Expect_EI0016WithKeys)
 {
+    testing::internal::CaptureStdout();
     DeserializeWithRptCapture(
         R"({"version": "2.0", "rank_count": 1, "rank_list": [{"device_id": 0}]})", RankTableSource::ROOTINFO);
+    const std::string log = testing::internal::GetCapturedStdout();
     ExpectReportOnce("EI0016", {"value", "variable", "expect"}, {"device_id", "rank_id", "0 ~ UINT32_MAX"});
+    EXPECT_NE(log.find("[InitGroupStage][RanktableCheck]"), std::string::npos);
 }
 
 // 验证 rank_id 逆序时 Deserialize 后 ranks 已按 rankId 升序排列。

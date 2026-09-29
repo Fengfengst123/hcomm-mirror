@@ -49,7 +49,7 @@ void PhyTopoBuilder::Build(const std::string& topoPath)
             true, "EI0004", std::vector<std::string>({"ranktable_path", "error_reason"}),
             std::vector<std::string>({"<empty>", "The topo JSON file path is empty."}));
         HCCL_ERROR(
-            "[%s][%s]errNo[0x%016llx] topo path %s is not a valid real path.", LOG_KEYWORDS_INIT_GROUP.c_str(),
+            "[%s][%s] errNo[0x%016llx] topo path %s is not a valid real path.", LOG_KEYWORDS_INIT_GROUP.c_str(),
             LOG_KEYWORDS_RANKTABLE_CONFIG.c_str(), HCOM_ERROR_CODE(HcclResult::HCCL_E_PARA), topoPath.c_str());
         THROW<InvalidParamsException>("[PhyTopoBuilder::%s] Topo path is empty.", __func__);
     }
@@ -92,6 +92,9 @@ std::shared_ptr<TopoInfo> PhyTopoBuilder::LoadTopoInfo(const std::string& topoPa
     // 检查是否为非法路径以及size的大小。
     struct stat fileStat;
     if (stat(topoPath.c_str(), &fileStat) != 0) {
+        RPT_INPUT_ERR(
+            true, "EI0004", std::vector<std::string>({"ranktable_path", "error_reason"}),
+            std::vector<std::string>({topoPath, "Failed to get the topo JSON file status."}));
         HCCL_ERROR(
             "[%s][%s] errNo[0x%016llx] Get file stat failed, file path:%s, errno:%d, error: %s",
             LOG_KEYWORDS_INIT_GROUP.c_str(), LOG_KEYWORDS_RANKTABLE_CONFIG.c_str(),
@@ -103,6 +106,9 @@ std::shared_ptr<TopoInfo> PhyTopoBuilder::LoadTopoInfo(const std::string& topoPa
 
     u64 topoFileSize = static_cast<u64>(fileStat.st_size);
     if (topoFileSize > SUPPORT_MAX_TOPOFILE_SIZE || topoFileSize <= 0) {
+        RPT_INPUT_ERR(
+            true, "EI0004", std::vector<std::string>({"ranktable_path", "error_reason"}),
+            std::vector<std::string>({topoPath, "The topo JSON file is empty or exceeds the maximum supported size."}));
         HCCL_ERROR(
             "[%s][%s] errNo[0x%016llx] topoFileSize size: %llu exceeds max allowed size (%u bytes)",
             LOG_KEYWORDS_INIT_GROUP.c_str(), LOG_KEYWORDS_RANKTABLE_CONFIG.c_str(),

@@ -371,8 +371,11 @@ TEST_F(AdapterHccpTest, Ut_HrtRaSocketTryListenOneStart_When_InValid_IP_Expect_R
     SocketHandle socketHandle = nullptr;
     RaSocketListenParam listenInfo(socketHandle, 0, IpAddress());
 
+    testing::internal::CaptureStdout();
     EXPECT_THROW(HrtRaSocketTryListenOneStart(listenInfo, HrtNetworkMode::HDC), NetworkApiException);
+    const std::string log = testing::internal::GetCapturedStdout();
     EXPECT_EQ(gCapturedErrorCode, "EI0016");
+    EXPECT_NE(log.find("[InitGroupStage][RanktableCheck]"), std::string::npos);
 }
 
 TEST_F(AdapterHccpTest, Ut_HrtRaSocketNonBlockSendHeart_When_Input_normal_Expect_Return_Success)
@@ -474,8 +477,48 @@ TEST_F(AdapterHccpTest, HrtHrtRaRdmaInit_return_HCCP_ELINKDOWN_NOK)
     struct RaInterface rdevInfo;
     // when
 
+    gCapturedErrorCode.clear();
+    MOCKER(RptInputErr).stubs().will(invoke(StubRptInputErrCapture));
+    testing::internal::CaptureStdout();
     EXPECT_THROW(HrtRaRdmaInit(HrtNetworkMode::HDC, rdevInfo), NetworkApiException);
+    const std::string log = testing::internal::GetCapturedStdout();
+    EXPECT_EQ(gCapturedErrorCode, "EI0009");
+    EXPECT_NE(log.find("[InitGroupStage][RunFailed]"), std::string::npos);
+    EXPECT_NE(log.find("transport init error"), std::string::npos);
     delete[] num;
+}
+
+TEST_F(AdapterHccpTest, HrtRaRdmaInit_InvalidIps_ReportsEI0014)
+{
+    gCapturedErrorCode.clear();
+    MOCKER(RaRdevInit).stubs().will(returnValue(HCCP_EINVALIDIPS));
+    MOCKER(RptInputErr).stubs().will(invoke(StubRptInputErrCapture));
+    RaInterface interface{0, IpAddress("192.168.1.1", AF_INET)};
+
+    testing::internal::CaptureStdout();
+    EXPECT_THROW(HrtRaRdmaInit(HrtNetworkMode::HDC, interface), NetworkApiException);
+    const std::string log = testing::internal::GetCapturedStdout();
+
+    EXPECT_EQ(gCapturedErrorCode, "EI0014");
+    EXPECT_NE(log.find("[InitGroupStage][RanktableCheck]"), std::string::npos);
+    EXPECT_NE(log.find("in the ranktable is inconsistent"), std::string::npos);
+}
+
+TEST_F(AdapterHccpTest, HrtRaRdmaInitProbe_InvalidIps_ReportsEI0014)
+{
+    gCapturedErrorCode.clear();
+    MOCKER(RaRdevInit).stubs().will(returnValue(HCCP_EINVALIDIPS));
+    MOCKER(RptInputErr).stubs().will(invoke(StubRptInputErrCapture));
+    RaInterface interface{0, IpAddress("192.168.1.1", AF_INET)};
+    RdmaHandle rdmaHandle = nullptr;
+
+    testing::internal::CaptureStdout();
+    const s32 ret = HrtRaRdmaInit(HrtNetworkMode::PEER, interface, rdmaHandle);
+    const std::string log = testing::internal::GetCapturedStdout();
+
+    EXPECT_EQ(ret, HCCP_EINVALIDIPS);
+    EXPECT_EQ(gCapturedErrorCode, "EI0014");
+    EXPECT_NE(log.find("[InitGroupStage][RanktableCheck]"), std::string::npos);
 }
 
 TEST_F(AdapterHccpTest, HrtRaQpCreate_NOK)
@@ -637,6 +680,23 @@ TEST_F(AdapterHccpTest, HrtRaUbCreateJetty_ok)
     HrtRaUbCreateJettyParam inParam4{100, 100, 100, 100, HrtJettyMode::DEV_USED, 0, 100, 100, 100, 100};
     HrtRaUbJettyCreatedOutParam result4 = HrtRaUbCreateJetty(handle, inParam4);
     EXPECT_EQ(0, result4.jettyVa);
+}
+
+TEST_F(AdapterHccpTest, HrtRaUbCreateJetty_ResourceExhausted_ReportsEI0007)
+{
+    gCapturedErrorCode.clear();
+    MOCKER(RaCtxQpCreate).stubs().will(returnValue(ROCE_ENOMEM));
+    MOCKER(RptInputErr).stubs().will(invoke(StubRptInputErrCapture));
+    RdmaHandle handle = reinterpret_cast<RdmaHandle>(0x123);
+    HrtRaUbCreateJettyParam inParam{100, 100, 100, 100, HrtJettyMode::HOST_OPBASE, 0, 100, 100, 100, 100};
+
+    testing::internal::CaptureStdout();
+    EXPECT_THROW(HrtRaUbCreateJetty(handle, inParam), NetworkApiException);
+    const std::string log = testing::internal::GetCapturedStdout();
+
+    EXPECT_EQ(gCapturedErrorCode, "EI0007");
+    EXPECT_NE(log.find("[InitChannelStage][Resource]"), std::string::npos);
+    EXPECT_NE(log.find("jetty resources are exhausted"), std::string::npos);
 }
 
 TEST_F(AdapterHccpTest, HrtRaUbDestroyJetty_ok) { HrtRaUbDestroyJetty(0); }
@@ -823,6 +883,26 @@ TEST_F(AdapterHccpTest, RaGetAsyncReqResult_return_zero_result_error)
     GlobalMockObject::verify();
 }
 
+TEST_F(AdapterHccpTest, HrtRaGetAsyncReqResult_ResourceExhausted_ReportsEI0007)
+{
+    gCapturedErrorCode.clear();
+    AsyncReqResult fakeResult = {ROCE_ENOMEM, HCCP_OP_CTX_QP_CREATE};
+    MOCKER(RaGetAsyncReqResult)
+        .stubs()
+        .with(mockcpp::any(), outBoundP(&fakeResult, sizeof(fakeResult)))
+        .will(returnValue(0));
+    MOCKER(RptInputErr).stubs().will(invoke(StubRptInputErrCapture));
+    RequestHandle reqHandle = 12;
+
+    testing::internal::CaptureStdout();
+    EXPECT_THROW(HrtRaGetAsyncReqResult(reqHandle), NetworkApiException);
+    const std::string log = testing::internal::GetCapturedStdout();
+
+    EXPECT_EQ(gCapturedErrorCode, "EI0007");
+    EXPECT_NE(log.find("[InitChannelStage][Resource]"), std::string::npos);
+    EXPECT_NE(log.find("jetty resources are exhausted"), std::string::npos);
+}
+
 TEST_F(AdapterHccpTest, RaBlockGetSocket_return_err)
 {
     int reqResult = SOCK_EAGAIN;
@@ -937,8 +1017,11 @@ TEST_F(AdapterHccpTest, Ut_HrtRaSocketBlockRecv_When_SockClosed_Expect_Throw_Net
     MockRaSocketRecv(SOCK_ESOCKCLOSED, 0);
     MockEnvLinkTimeoutGet(1);
     MOCKER(RptInputErr).stubs().will(invoke(StubRptInputErrCapture));
+    testing::internal::CaptureStdout();
     EXPECT_THROW(HrtRaSocketBlockRecv(fakeFdHandle, fakeData, 100), NetworkApiException);
+    const std::string log = testing::internal::GetCapturedStdout();
     EXPECT_EQ(gCapturedErrorCode, "EI0015");
+    EXPECT_NE(log.find("[InitGroupStage][RanktableDetect]"), std::string::npos);
 }
 
 TEST_F(AdapterHccpTest, Ut_HrtRaSocketBlockRecv_When_SockClose_Expect_Throw_NetworkApiException)

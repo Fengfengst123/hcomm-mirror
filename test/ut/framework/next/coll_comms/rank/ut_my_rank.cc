@@ -332,6 +332,9 @@ TEST_F(MyRankTest, Ut_When_GetDevicePortByAddr_NullMapOrPort_Expect_E_PTR)
 
 TEST_F(MyRankTest, Ut_When_BatchCreateChannels_Expect_SUCCESS)
 {
+    extern s32 log_level_get_stub();
+    extern void log_level_set_stub(s32 logLevel);
+
     setenv("HCCL_DFS_CONFIG", "task_exception:on", 1);
     uint32_t devPort = 60001;
     MOCKER_CPP(&Hccl::IRankGraph::GetDevicePort)
@@ -391,10 +394,15 @@ TEST_F(MyRankTest, Ut_When_BatchCreateChannels_Expect_SUCCESS)
     std::vector<ChannelHandle> hostChannelHandles(3);
     ChannelHandle* hostChannelHandleList = hostChannelHandles.data();
     std::vector<std::vector<MemHandle>> allHandles1(1);
-    EXPECT_EQ(
-        myRank->BatchCreateChannels(
-            COMM_ENGINE_AICPU_TS, channelDesc, 1, hcommDesc, hostChannelHandleList, allHandles1),
-        HCCL_SUCCESS);
+    const s32 originalLogLevel = log_level_get_stub();
+    log_level_set_stub(DLOG_INFO);
+    testing::internal::CaptureStdout();
+    const HcclResult createRet = myRank->BatchCreateChannels(
+        COMM_ENGINE_AICPU_TS, channelDesc, 1, hcommDesc, hostChannelHandleList, allHandles1);
+    const std::string createLog = testing::internal::GetCapturedStdout();
+    log_level_set_stub(originalLogLevel);
+    EXPECT_EQ(createRet, HCCL_SUCCESS);
+    EXPECT_NE(createLog.find("[LinkInfo]userRank[0] remoteRank[1]"), std::string::npos);
     EXPECT_EQ(myRank->newChannels_.size(), 1);
     EXPECT_EQ(myRank->newChannels_[0], std::make_pair(channelIdx0, RmtEp1reuseIdx0));
 

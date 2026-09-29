@@ -482,8 +482,7 @@ HRaSocketListenStart(struct SocketListenInfoT conn[], u32 num, const IpAddress& 
 }
 
 static bool RaSocketTryListenStart(
-    struct SocketListenInfoT conn[], u32 num, [[maybe_unused]] const IpAddress& localIp,
-    [[maybe_unused]] HrtNetworkMode netMode)
+    struct SocketListenInfoT conn[], u32 num, const IpAddress& localIp, [[maybe_unused]] HrtNetworkMode netMode)
 {
     CHECK_NULLPTR(conn, "[RaSocketTryListenStart] conn is nullptr!");
     HCCL_INFO("[TryListenStart][RaSocket] Input params: num=%u", num);
@@ -503,7 +502,12 @@ static bool RaSocketTryListenStart(
     } else if (ret == SOCK_EADDRNOTAVAIL) {
         RPT_INPUT_ERR(
             true, "EI0016", std::vector<std::string>({"value", "variable", "expect"}),
-            std::vector<std::string>({std::to_string(ret), "socket listen start", "0"}));
+            std::vector<std::string>(
+                {localIp.Describe(), "socket listen IP", "IP address configured on the local network adapter"}));
+        HCCL_ERROR(
+            "[%s][%s] errNo[0x%016llx] socket listen IP[%s] is not available; check IP configuration, ret[%d]",
+            LOG_KEYWORDS_INIT_GROUP.c_str(), LOG_KEYWORDS_RANKTABLE_CHECK.c_str(),
+            HCCL_ERROR_CODE(HcclResult::HCCL_E_PARA), localIp.Describe().c_str(), ret);
         MACRO_THROW(
             NetworkApiException,
             StringFormat(
@@ -850,6 +854,10 @@ void HrtRaSocketBlockRecv(const FdHandle fdHandle, void* data, u32 size)
                 true, "EI0015", std::vector<std::string>({"error_reason"}),
                 std::vector<std::string>(
                     {StringFormat("socket closed during recv, fdHandle[%p], ret[%d]", fdHandle, rtRet)}));
+            HCCL_ERROR(
+                "[%s][%s] errNo[0x%016llx] socket closed during recv, fdHandle[%p], ret[%d]",
+                LOG_KEYWORDS_INIT_GROUP.c_str(), LOG_KEYWORDS_RANKTABLE_DETECT.c_str(),
+                HCCL_ERROR_CODE(HcclResult::HCCL_E_TCP_TRANSFER), fdHandle, rtRet);
             MACRO_THROW(
                 NetworkApiException,
                 StringFormat(
@@ -1167,6 +1175,18 @@ vector<IpAddress> HrtGetDeviceIp(u32 devicePhyId, NetworkMode netWorkMode)
     return ipAddr;
 }
 
+static void ReportRdmaIpMismatch(const RaInterface& in)
+{
+    RPT_INPUT_ERR(
+        true, "EI0014", std::vector<std::string>({"value", "variable", "expect"}),
+        std::vector<std::string>({in.address.GetIpStr(), "IP", "IP address of the network adapter"}));
+    HCCL_ERROR(
+        "[%s][%s] errNo[0x%016llx] the IP address(%s) in the ranktable is inconsistent with the IP address of "
+        "the network adapter, device[%u]",
+        LOG_KEYWORDS_INIT_GROUP.c_str(), LOG_KEYWORDS_RANKTABLE_CHECK.c_str(), HCCL_ERROR_CODE(HcclResult::HCCL_E_PARA),
+        in.address.GetIpStr().c_str(), in.phyId);
+}
+
 RdmaHandle HrtRaRdmaInit(HrtNetworkMode netMode, RaInterface& in)
 {
     RdmaHandle rdmaHandle = nullptr;
@@ -1178,12 +1198,16 @@ RdmaHandle HrtRaRdmaInit(HrtNetworkMode netMode, RaInterface& in)
     rdevInfo.family = in.address.GetFamily();
     rdevInfo.localIp = IpAddressToHccpIpAddr(in.address);
     s32 ret = RaRdevInit(mode, notifyType, rdevInfo, &rdmaHandle);
+    if (ret == HCCP_EINVALIDIPS) {
+        ReportRdmaIpMismatch(in);
+    }
     RPT_INPUT_ERR(
         ret == HCCP_ELINKDOWN, "EI0009", vector<string>({"device_id", "reason"}),
         vector<string>({std::to_string(rdevInfo.phyId), "The network port is down"}));
     if (ret == HCCP_ELINKDOWN) {
         HCCL_ERROR(
-            "[%s][%s] errNo[0x%016llx] rdma init fail, device[%u] network port is down.",
+            "[%s][%s] errNo[0x%016llx] Device %u transport init error. Reason: The network port is down; "
+            "rdma init fail.",
             LOG_KEYWORDS_INIT_GROUP.c_str(), LOG_KEYWORDS_RUN_FAILED.c_str(),
             HCCL_ERROR_CODE(HcclResult::HCCL_E_NETWORK), rdevInfo.phyId);
     }
@@ -1207,7 +1231,11 @@ s32 HrtRaRdmaInit(HrtNetworkMode netMode, RaInterface& in, RdmaHandle& rdmaHandl
     rdevInfo.phyId = in.phyId;
     rdevInfo.family = in.address.GetFamily();
     rdevInfo.localIp = IpAddressToHccpIpAddr(in.address);
-    return RaRdevInit(mode, notifyType, rdevInfo, &rdmaHandle);
+    s32 ret = RaRdevInit(mode, notifyType, rdevInfo, &rdmaHandle);
+    if (ret == HCCP_EINVALIDIPS) {
+        ReportRdmaIpMismatch(in);
+    }
+    return ret;
 }
 
 void HrtRaRdmaDeInit(RdmaHandle rdmaHandle, HrtNetworkMode netMode)
@@ -1865,6 +1893,12 @@ HrtRaUbJettyCreatedOutParam HrtRaUbCreateJetty(RdmaHandle handle, const HrtRaUbC
         RPT_ENV_ERR(
             IS_JETTY_RESOURCE_EXHAUSTED(ret), "EI0007", std::vector<std::string>({"resource_type", "resource_info"}),
             std::vector<std::string>({"jetty", "CreateJetty"}));
+        if (IS_JETTY_RESOURCE_EXHAUSTED(ret)) {
+            HCCL_ERROR(
+                "[%s][%s] errNo[0x%016llx] CreateJetty failed: jetty resources are exhausted, ret[%d]",
+                LOG_KEYWORDS_INIT_CHANNEL.c_str(), LOG_KEYWORDS_RESOURCE.c_str(),
+                HCCL_ERROR_CODE(HcclResult::HCCL_E_NETWORK), ret);
+        }
         string msg = StringFormat("ubCreateJetty failed, rdmaHandle=%p,", handle);
         MACRO_THROW(NetworkApiException, msg);
     }
@@ -2288,10 +2322,17 @@ ReqHandleResult HrtRaGetAsyncReqResult(RequestHandle& reqHandle)
     }
 
     if (reqResult.reqResult != 0) {
+        const bool isJettyExhausted
+            = reqResult.interfaceOpcode == HCCP_OP_CTX_QP_CREATE && IS_JETTY_RESOURCE_EXHAUSTED(reqResult.reqResult);
         RPT_ENV_ERR(
-            reqResult.interfaceOpcode == HCCP_OP_CTX_QP_CREATE && IS_JETTY_RESOURCE_EXHAUSTED(reqResult.reqResult),
-            "EI0007", std::vector<std::string>({"resource_type", "resource_info"}),
+            isJettyExhausted, "EI0007", std::vector<std::string>({"resource_type", "resource_info"}),
             std::vector<std::string>({"jetty", "CreateJettyAsync"}));
+        if (isJettyExhausted) {
+            HCCL_ERROR(
+                "[%s][%s] errNo[0x%016llx] CreateJettyAsync failed: jetty resources are exhausted, ret[%d]",
+                LOG_KEYWORDS_INIT_CHANNEL.c_str(), LOG_KEYWORDS_RESOURCE.c_str(),
+                HCCL_ERROR_CODE(HcclResult::HCCL_E_NETWORK), reqResult.reqResult);
+        }
         MACRO_THROW(
             NetworkApiException, StringFormat(
                                      "[%s] failed, the asynchronous request "

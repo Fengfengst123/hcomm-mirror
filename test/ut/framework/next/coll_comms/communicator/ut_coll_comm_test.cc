@@ -75,6 +75,22 @@ TEST_F(TestCollComm, Ut_TestCollCommInit_When_RankGraphNullptr_Return_HCCL_E_PTR
     EXPECT_EQ(ret, HCCL_E_PTR);
 }
 
+TEST_F(TestCollComm, Ut_PrintCommKeyInfo_When_Called_Expect_A5Keywords)
+{
+    hccl::CollComm collComm(reinterpret_cast<void*>(0x123), 3, "test_comm", hccl::ManagerCallbacks{});
+    collComm.deviceLogicId_ = 1;
+
+    const s32 originalLogLevel = log_level_get_stub();
+    log_level_set_stub(DLOG_INFO);
+    testing::internal::CaptureStdout();
+    collComm.PrintCommKeyInfo(8);
+    const std::string log = testing::internal::GetCapturedStdout();
+    log_level_set_stub(originalLogLevel);
+
+    EXPECT_NE(log.find("[Communicator Key Info]identifier[test_comm] rankSize[8]"), std::string::npos);
+    EXPECT_NE(log.find("[LocalRank Key Info]userRank[3] deviceLogicId[1]"), std::string::npos);
+}
+
 TEST_F(TestCollComm, test_get_comm_status_initial_and_after_change)
 {
     std::unique_ptr<CollComm> coll_

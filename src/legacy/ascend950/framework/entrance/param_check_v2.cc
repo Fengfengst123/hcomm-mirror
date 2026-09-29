@@ -40,6 +40,23 @@ const std::unordered_set<HcclDataType, EnumHashV2> HCCL_SUPPORT_DATA_TYPE_V2
 const std::unordered_set<HcclReduceOp, EnumHashV2> HCCL_SUPPORT_REDUCE_OP_V2
     = {HCCL_REDUCE_SUM, HCCL_REDUCE_MAX, HCCL_REDUCE_MIN, HCCL_REDUCE_PROD};
 
+namespace {
+void ReportRanktableFileErrorV2(
+    const std::string& rankTablePath, const std::string& errorReason, HcclResult errorCode,
+    const std::string& plogReason = "")
+{
+    const std::string reportedPath = rankTablePath.empty() ? "<empty>" : rankTablePath;
+    const std::string& reportedReason = plogReason.empty() ? errorReason : plogReason;
+    RPT_INPUT_ERR(
+        true, "EI0004", std::vector<std::string>({"ranktable_path", "error_reason"}),
+        std::vector<std::string>({reportedPath, errorReason}));
+    HCCL_ERROR(
+        "[%s][%s] errNo[0x%016llx] rankTable file[%s] load failed, reason: %s", LOG_KEYWORDS_INIT_GROUP.c_str(),
+        LOG_KEYWORDS_RANKTABLE_CONFIG.c_str(), HCCL_ERROR_CODE(errorCode), reportedPath.c_str(),
+        reportedReason.c_str());
+}
+} // namespace
+
 const std::unordered_set<HcclDataType, EnumHashV2> HCCL_SUPPORT_PROD_DATA_TYPE_V2
     = {HCCL_DATA_TYPE_INT64, HCCL_DATA_TYPE_UINT64, HCCL_DATA_TYPE_FP64};
 
@@ -448,35 +465,31 @@ HcclResult HcomCheckUserRankV2(const u32 totalRanks, const u32 userRank)
 HcclResult HcomLoadRankTableFileV2(const char* clusterInfo, std::string& rankTableM)
 {
     CHK_PTR_NULL(clusterInfo);
-    CHK_PRT_RET(
-        strlen(clusterInfo) >= PATH_MAX,
-        HCCL_ERROR("[HcomLoadRankTableFileV2]clusterInfo exceeds PATH_MAX[%u]", PATH_MAX), HCCL_E_PARA);
+    if (strlen(clusterInfo) >= PATH_MAX) {
+        ReportRanktableFileErrorV2(clusterInfo, "The rankTable file path length exceeds PATH_MAX.", HCCL_E_PARA);
+        return HCCL_E_PARA;
+    }
 
     // 校验文件是否存在
     char resolvedPath[PATH_MAX] = {0};
     if (realpath(clusterInfo, resolvedPath) == nullptr) {
-        std::string rankTablePath(clusterInfo);
-        RPT_INPUT_ERR(
-            true, "EI0004", std::vector<std::string>({"ranktable_path", "error_reason"}),
-            std::vector<std::string>(
-                {rankTablePath, "The rankTable file path does not exist, the permission is insufficient, or the JSON "
-                                "format is incorrect."}));
-        HCCL_ERROR(
-            "[%s][%s] errNo[0x%016llx] RanktableRealPath: %s is not a valid real path", LOG_KEYWORDS_INIT_GROUP.c_str(),
-            LOG_KEYWORDS_RANKTABLE_CONFIG.c_str(), HCCL_ERROR_CODE(HCCL_E_PARA), clusterInfo);
+        ReportRanktableFileErrorV2(
+            clusterInfo,
+            "The rankTable file path does not exist, the permission is insufficient, or the JSON format is incorrect.",
+            HCCL_E_PARA, StringFormat("path %s is not a valid real path", clusterInfo));
         return HCCL_E_PARA;
     }
 
     HCCL_INFO("[RankTable]waiting for json file load complete");
     std::ifstream infoFile(resolvedPath, std::ifstream::in | std::ifstream::ate); // ate模式打开文件,方便获取size
     if (!infoFile) {
-        HCCL_ERROR("[RankTable]open file %s failed", resolvedPath);
+        ReportRanktableFileErrorV2(clusterInfo, "Failed to open the rankTable file.", HCCL_E_OPEN_FILE_FAILURE);
         return HCCL_E_INTERNAL;
     }
 
     uint64_t fileSize = infoFile.tellg();
     if (fileSize > RANKTABLE_MAX_SIZE) {
-        HCCL_ERROR("[RankTable]load ranktable failed, file size = %llu is too large", fileSize);
+        ReportRanktableFileErrorV2(clusterInfo, "The rankTable file exceeds the maximum supported size.", HCCL_E_PARA);
         return HCCL_E_PARA;
     }
 
@@ -485,7 +498,7 @@ HcclResult HcomLoadRankTableFileV2(const char* clusterInfo, std::string& rankTab
     rankTableStr << infoFile.rdbuf();
     rankTableM = rankTableStr.str();
     if (rankTableM.empty()) {
-        HCCL_ERROR("[RankTable]load ranktable failed, file is empty");
+        ReportRanktableFileErrorV2(clusterInfo, "The rankTable file is empty.", HCCL_E_PARA);
         return HCCL_E_PARA;
     }
     s32 deviceLogicId = 0;

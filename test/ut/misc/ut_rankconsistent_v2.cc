@@ -67,8 +67,11 @@ TEST_F(RankConsistentV2Test, Ut_CompareCheckFrameV2_RankTableMismatch_Expect_INT
     CheckFrameV2 remoteFrame = localFrame;
     remoteFrame.rankTableCrcArray[0] = 0xDEADBEEF;
 
+    testing::internal::CaptureStdout();
     HcclResult ret = checker_.CompareCheckFrameV2(localFrame, remoteFrame);
+    const std::string log = testing::internal::GetCapturedStdout();
     EXPECT_EQ(ret, HCCL_E_INTERNAL);
+    EXPECT_NE(log.find("[InitChannelStage][ParameterConflict] errNo["), std::string::npos);
 }
 
 // 异常：CANN版本不一致

@@ -771,10 +771,11 @@ HcclResult MyRank::BatchCreateChannels(
         const EndpointDesc& remoteEndpointDesc = channelDescs[i].remoteEndpoint;
         uint32_t remoteRank = channelDescs[i].remoteRank;
 
-        HCCL_INFO(
-            "[%s][%u/%u] remoteRank[%u] localProtocol[%d] remoteProtocol[%d] engine[%s]", __func__, i + 1, channelNum,
-            remoteRank, localEndpointDesc.protocol, remoteEndpointDesc.protocol,
-            GetEnumToString(GetCommEngineStatusStrMap(), engine).c_str());
+        HCCL_RUN_INFO(
+            "[%s]userRank[%u] remoteRank[%u] localProtocol[%d] remoteProtocol[%d] engine[%s] channel[%u/%u]",
+            LOG_KEYWORDS_LINK_INFO.c_str(), localRank, remoteRank, localEndpointDesc.protocol,
+            remoteEndpointDesc.protocol, GetEnumToString(GetCommEngineStatusStrMap(), engine).c_str(), i + 1,
+            channelNum);
 
         EndpointHandle epHandle = nullptr;
         auto ret = endpointMgr_->Get(localEndpointDesc, epHandle);
