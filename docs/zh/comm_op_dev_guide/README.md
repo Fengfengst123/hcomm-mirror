@@ -43,4 +43,4 @@
     - [编译部署](./ccu_comm_op_dev/build_deploy.md)
 
 - [基于NPU环境测试](npu_test.md)
-- [通信算子开发API<a name="sub_menu"></a>](../api_ref/comm_opdev/README.md)
+- [通信算子开发API<a name="sub_menu" npu_parse_enabled="true"></a>](../api_ref/comm_opdev/README.md)
