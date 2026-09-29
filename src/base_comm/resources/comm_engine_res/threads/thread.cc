@@ -8,7 +8,9 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+#include <mutex>
 #include <shared_mutex>
+#include <unordered_set>
 #include "thread.h"
 #include "cpu_ts_thread.h"
 #include "aicpu_ts_thread.h"
@@ -45,6 +47,11 @@ struct DeviceThreadKeyHash {
 static unordered_map<ThreadHandle, shared_ptr<Thread>> g_ThreadMap;
 static unordered_map<DeviceThreadKey, ThreadHandle, DeviceThreadKeyHash> g_ThreadD2HMap;
 static shared_mutex g_ThreadMapMtx;
+// order控制流线程集合（进程级，key=host侧线程对象句柄，即g_ThreadMap的key）：acquire保序分支
+// （仅OPBASE/ACLGRAPH）获取即登记，L0导出miss路径查询填orderCtrlFlag（device侧分流进Registry）。
+// 独立锁无嵌套（调用点均先释放ThreadMap锁）；线程释放时同步摘除，防句柄地址复用误判
+static std::mutex g_OrderCtrlMtx;
+static unordered_set<ThreadHandle> g_OrderCtrlThreads;
 
 HcclResult CreateThread(
     CommEngine engine, StreamType streamType, uint32_t notifyNum, NotifyLoadType loadType,
@@ -325,6 +332,11 @@ static HcclResult FreeThreadHandlesLocked(
             "[%s] erase thread: deviceId[%d], inHandle[0x%llx], mappedHandle[0x%llx], ptr[%p]", __func__, deviceId,
             inHandle, mappedHandle, itC->second.get());
         g_ThreadMap.erase(itC);
+        // 同步摘除order控制流标记：防线程释放后句柄地址被新线程复用时误判为order
+        {
+            lock_guard<mutex> orderLock(g_OrderCtrlMtx);
+            g_OrderCtrlThreads.erase(mappedHandle);
+        }
 
         for (auto it = g_ThreadD2HMap.begin(); it != g_ThreadD2HMap.end();) {
             if (it->second == mappedHandle && it->first.deviceId == deviceId) {
@@ -418,6 +430,18 @@ HcclResult LookupD2HHandle(ThreadHandle deviceHandle, ThreadHandle& outHostHandl
         HCCL_E_NOT_FOUND);
     outHostHandle = it->second;
     return HCCL_SUCCESS;
+}
+
+void MarkOrderCtrlThread(ThreadHandle hostHandle)
+{
+    lock_guard<mutex> lock(g_OrderCtrlMtx);
+    g_OrderCtrlThreads.insert(hostHandle);
+}
+
+bool IsOrderCtrlThread(ThreadHandle hostHandle)
+{
+    lock_guard<mutex> lock(g_OrderCtrlMtx);
+    return g_OrderCtrlThreads.find(hostHandle) != g_OrderCtrlThreads.end();
 }
 #endif
 

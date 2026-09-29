@@ -318,9 +318,24 @@ HcclResult OrderLaunchThreadMgr::EnsureOrderThread(
             static_cast<HcclResult>(ret));
 
         ctxRes.resValid = true;
-        HCCL_INFO(
-            "[OrderLaunchThreadMgr] Created new order thread[0x%llx], context[0x%llx], mode[%u]", targetThread,
-            currentContext, static_cast<u8>(mode));
+        // 线程首次创建审计（仅创建时打，避免每次acquire刷日志）：流ID经L0接口查询，
+        // 失败保持INVALID便于识别，不影响主流程
+        s32 streamId = INVALID_INT;
+        if (targetThread != 0) {
+            void* streamInfo = nullptr;
+            HcommResult resRet
+                = HcommThreadResGetInfo(targetThread, THREAD_RES_TYPE_STREAM, sizeof(streamInfo), &streamInfo);
+            if (resRet == HCCL_SUCCESS && streamInfo != nullptr) {
+                ThreadResTypeStream stream = static_cast<ThreadResTypeStream>(streamInfo);
+                (void)hrtGetStreamId(stream, streamId);
+            } else {
+                HCCL_WARNING("[%s] get stream info failed, ret[%d], thread[0x%llx]", __func__, resRet, targetThread);
+            }
+        }
+        HCCL_RUN_INFO(
+            "[%s] success, comm[%s], mode[%u], thread[0x%llx], streamId[%d], "
+            "notifyNumPerThread[%u]",
+            __func__, group.c_str(), static_cast<u8>(mode), targetThread, streamId, notifyNumPerThread);
     } else {
         HCCL_DEBUG(
             "[OrderLaunchThreadMgr][%s] order thread already exists, context[0x%llx], thread[0x%llx]", __func__,

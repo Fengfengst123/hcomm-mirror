@@ -27,6 +27,8 @@
 #include "adapter_rts.h"
 #include "hcclCommOp.h"
 #include "hcomm_thread_c_adpt.h"
+#include "hcomm_res.h"
+#include "thread.h"
 #include "res_pub.h"
 #include "prof_cycle_time.h"
 using namespace hccl;
@@ -379,7 +381,7 @@ HcclResult HcclDedicatedThreadAcquire(
         notifyNumPerThread);
     hccl::CollComm* collComm = hcclComm->GetCollComm();
     CHK_PTR_NULL(collComm);
-    /* 保序场景：委托给 OrderLaunchThreadMgr（进程粒度） */
+    /* 保序场景：委托给 OrderLaunchThreadMgr（进程粒度）；不提前返回，统一落到函数末尾审计日志 */
     if (ORDER_LAUNCH_TYPES.find(useType) != ORDER_LAUNCH_TYPES.end()) {
         s32 deviceLogicId = Hccl::HrtGetDevice();
         auto& resMgr = hccl::CollCommMgr::GetInstance().GetOrderLaunchThreadMgr(deviceLogicId);
@@ -391,15 +393,20 @@ HcclResult HcclDedicatedThreadAcquire(
                 "[%s] OrderLaunchThreadAcquire fail, ret[%d], useType[%d]", __func__, ret, static_cast<s32>(useType)),
             ret);
         *thread = th;
-        return HCCL_SUCCESS;
+        // 仅context级共享的OPBASE/ACLGRAPH登记order控制流集合（白名单，时序早于export、miss查询
+        // 必然可见；key=host句柄，无需反查），后续export经opParam传device侧注入进程级Registry（防
+        // 跨comm复用句柄UAF）。DEVICE/GE无跨comm共享，不登记、走comm容器
+        if (*thread != 0
+            && (useType == HCCL_DED_THREAD_TYPE_AICPU_ORDER_LAUNCH_OPBASE
+                || useType == HCCL_DED_THREAD_TYPE_AICPU_ORDER_LAUNCH_ACLGRAPH)) {
+            hccl::MarkOrderCtrlThread(*thread);
+        }
+    } else {
+        CommEngineResMgr* engineResMgr = collComm->GetCommEngineResMgr();
+        CHK_PTR_NULL(engineResMgr);
+        CHK_RET(engineResMgr->HcclDedicatedThreadAcquire(useType, notifyNumPerThread, thread));
     }
 
-    CommEngineResMgr* engineResMgr = collComm->GetCommEngineResMgr();
-    CHK_PTR_NULL(engineResMgr);
-    CHK_RET(engineResMgr->HcclDedicatedThreadAcquire(useType, notifyNumPerThread, thread));
-    HCCL_INFO(
-        "[%s] success, dedThreadType[%u], thread[0x%llx], notifyNumPerThread[%u]", __func__, useType, *thread,
-        notifyNumPerThread);
     EXCEPTION_HANDLE_END
 
     return HCCL_SUCCESS;

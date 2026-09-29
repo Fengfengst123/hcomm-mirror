@@ -38,6 +38,9 @@ struct ThreadMgrAicpuParam {
     u32 deviceType{0};                       // 基础通信使用
     DevAicpuThreadConfig threadConfig;       // 收编thread配置类变量
     CommEngine engine{COMM_ENGINE_RESERVED}; // 通信引擎类型，由Host侧Thread对象携带
+    // order控制流导出标记（按线程下标，与threadParam对齐）：device侧InitThreads据此把重建对象
+    // 分流进进程级Registry（生命周期与通信域解耦）。
+    uint8_t orderCtrlFlag[SIGNAL_DEV_STREAM_MAX_NUM] = {};
 };
 
 struct DevAicpuNotifyConfig {

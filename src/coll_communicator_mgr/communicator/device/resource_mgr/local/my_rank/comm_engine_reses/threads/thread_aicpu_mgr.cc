@@ -18,6 +18,9 @@
 #include <sstream>
 #include <iomanip>
 
+std::mutex ThreadAicpuMgr::s_orderCtrlMutex;
+std::unordered_map<hccl::Thread*, ThreadAicpuMgr::OrderCtrlEntry> ThreadAicpuMgr::g_orderCtrlThreads;
+
 ThreadAicpuMgr::ThreadAicpuMgr(hccl::HcclCommDfxLite& dfx, std::function<HcclResult(bool)> checkExecStatusCallback)
     : dfx_(dfx),
       checkExecStatusCallback_(std::move(checkExecStatusCallback))
@@ -32,6 +35,26 @@ ThreadAicpuMgr::~ThreadAicpuMgr()
     threads_.clear();
 }
 
+void ThreadAicpuMgr::RegisterOrderCtrlThread(
+    std::shared_ptr<hccl::Thread> thread, ThreadAicpuMgr* refMgr, const std::string& commId)
+{
+    std::lock_guard<std::mutex> lock(s_orderCtrlMutex);
+    hccl::Thread* key = thread.get();
+    auto it = g_orderCtrlThreads.find(key);
+    if (it == g_orderCtrlThreads.end()) {
+        OrderCtrlEntry entry;
+        entry.thread = thread;
+        entry.refMgrs.insert(refMgr);
+        auto ret = g_orderCtrlThreads.emplace(key, std::move(entry));
+        HCCL_INFO(
+            "[ThreadAicpuMgr][%s] order ctrl thread[%p] registered, comm[%s], mgr[%p], refs[%zu]", __func__, key,
+            commId.c_str(), static_cast<const void*>(refMgr), ret.first->second.refMgrs.size());
+    } else {
+        // host侧线程缓存保证每(线程,comm)仅一次miss建链，重复登记为防御性幂等
+        it->second.refMgrs.insert(refMgr);
+    }
+}
+
 HcclResult ThreadAicpuMgr::InitThreads(ThreadMgrAicpuParam* param)
 {
     CHK_PTR_NULL(param);
@@ -39,8 +62,8 @@ HcclResult ThreadAicpuMgr::InitThreads(ThreadMgrAicpuParam* param)
     ThreadHandle* threadArray = static_cast<ThreadHandle*>(param->deviceHandle);
     CHK_PTR_NULL(threadArray);
     std::string hcomId(param->hcomId);
-    // 创建期即分流：真线程入outThreads，桩线程入stubThreads暂存（后置注册/入表零判别）。
-    // stubThreads须在threadMutex_内并入cpuExportThread_（与threads_锁纪律一致）
+    // 创建期即分流：真线程入outThreads（comm容器），GE桩入stubThreads（cpuExportThread_，comm
+    // 容器），order控制流真线程（OPBASE/ACLGRAPH）入进程级Registry
     std::vector<std::shared_ptr<hccl::Thread>> outThreads;
     std::vector<std::shared_ptr<hccl::Thread>> stubThreads;
     outThreads.reserve(threadNum);
@@ -76,12 +99,22 @@ HcclResult ThreadAicpuMgr::InitThreads(ThreadMgrAicpuParam* param)
             static_cast<unsigned long long>(threadArray[i]));
         if (thread->IsFakeDeviceRes()) {
             stubThreads.emplace_back(std::move(thread));
-        } else {
-            outThreads.emplace_back(std::move(thread));
+            continue;
         }
+        if (param->orderCtrlFlag[i] != 0) {
+            // order控制流（OPBASE/ACLGRAPH，context级共享）：注入进程级Registry（不进comm容器，
+            // ~ThreadAicpuMgr不释放）。不挂comm级DFX/Cache回调（Registry存活期长于comm，回调引用
+            // dfx_会悬垂；DFX降级不影响record/wait）
+            RegisterOrderCtrlThread(std::move(thread), this, hcomId);
+            continue;
+        }
+        HCCL_INFO(
+            "[ThreadAicpuMgr][%s] thread[%llu] dispatch to comm container, comm[%s]", __func__,
+            static_cast<unsigned long long>(threadArray[i]), hcomId.c_str());
+        outThreads.emplace_back(std::move(thread));
     }
 
-    // 注册仅真线程（桩线程无StreamLite/Rtsq，dfx与缓存回调均无可挂载对象）
+    // 注册仅真线程（桩线程无StreamLite/Rtsq，Registry线程不挂comm级回调）
     for (size_t i = 0; i < outThreads.size(); ++i) {
         CHK_RET(RegisterThreadAddDfxTaskInfo(reinterpret_cast<ThreadHandle>(outThreads[i].get())));
         CHK_RET(RegisterThreadCacheCallback(static_cast<hccl::AicpuTsThread*>(outThreads[i].get())));

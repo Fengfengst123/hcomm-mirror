@@ -87,8 +87,11 @@ static HcclResult PrepareThreadMgrParam(
     // 从 Thread 对象获取 engine（同一批 threads 属于同一 engine）
     opParam.engine = newThreads[0]->GetCommEngine();
 
-    // 拷贝每个线程的 unique id
+    // 拷贝线程unique id，并查进程级集合（key=host对象句柄）填orderCtrlFlag。时序天然保证：
+    // 创建路径kernel先于acquire出口登记→flag=0；导出miss路径kernel晚于登记→flag=1（其它路径恒不在集合）
     for (u32 i = 0; i < opParam.threadNum; ++i) {
+        opParam.orderCtrlFlag[i]
+            = hccl::IsOrderCtrlThread(reinterpret_cast<ThreadHandle>(newThreads[i].get())) ? 1U : 0U;
         const std::string& uid = newThreads[i]->GetUniqueId();
         // 不同于notify路径中uid边界条件，此处采用 >=， 最后一位留给'\0'
         CHK_PRT_RET(
