@@ -101,7 +101,7 @@ HcclResult IAicpuTsThread::NotifyWait(uint32_t notifyId, uint32_t timeout) const
     RtsqBase* rtsqA5 = static_cast<StreamLite*>(streamLiteVoidPtr_)->GetRtsq();
 
     HCCL_INFO(
-        "[IAicpuTsThread::%s] at Stream id [%u], notifyId [%u], timeout [%u ms]", __func__,
+        "[IAicpuTsThread::%s] at Stream id [%u], notifyId [%u], timeout [%u s]", __func__,
         static_cast<StreamLite*>(streamLiteVoidPtr_)->GetId(), notifyId, timeout);
 
     rtsqA5->NotifyWait(notifyId, timeout);
