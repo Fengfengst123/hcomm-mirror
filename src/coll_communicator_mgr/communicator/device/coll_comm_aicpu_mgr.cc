@@ -121,7 +121,7 @@ CollCommAicpu* CollCommAicpuMgr::AcquireCommForUse(const std::string& group)
             return nullptr;
         }
 
-        if (iter->second.isUsed) {
+        if (!iter->second.useMtx->try_lock()) {
             auto curTime = std::chrono::steady_clock::now();
             if ((curTime - startTime) >= waitPollTimeOutMs) {
                 startTime = curTime;
@@ -131,8 +131,8 @@ CollCommAicpu* CollCommAicpuMgr::AcquireCommForUse(const std::string& group)
             usleep(pollIntervalUs);
             continue;
         }
+        iter->second.isLocked = true;
         currentComm_ = iter->second.comm.get();
-        iter->second.isUsed = true;
         HCCL_INFO("[CollCommAicpuMgr][%s]success, group[%s]", __func__, group.c_str());
         return iter->second.comm.get();
     }
@@ -146,7 +146,10 @@ void CollCommAicpuMgr::ReleaseComm(const std::string& group)
         return;
     }
     currentComm_ = nullptr;
-    iter->second.isUsed = false;
+    if (iter->second.isLocked) {
+        iter->second.isLocked = false;
+        iter->second.useMtx->unlock();
+    }
 }
 
 CollCommAicpu* CollCommAicpuMgr::FindCommByGroup(const std::string& group)
@@ -190,12 +193,12 @@ HcclResult CollCommAicpuMgr::DestroyComm(const std::string& group)
     aicpuComm->SetCommmStatus(HcclCommStatus::HCCL_COMM_STATUS_INVALID);
 
     // 正在使用中，不销毁，返回重试状态让调用方稍后再试
-    if (iter->second.isUsed) {
+    if (iter->second.isLocked) {
         HCCL_RUN_WARNING("[CollCommAicpuMgr][%s]comm group [%s] has been used, skip erase", __func__, group.c_str());
         return HCCL_E_AGAIN;
     }
 
-    // 防御性检查 legacy 通信域 busy 标记，避免 isUsed 与 legacy busy 不同步时误销毁
+    // 防御性检查 legacy 通信域 busy 标记，避免 isLocked 与 legacy busy 不同步时误销毁
     if (aicpuComm->GetLegacy910CollComm() != nullptr && aicpuComm->IsLegacy910CollCommBusy()) {
         HCCL_RUN_WARNING("[CollCommAicpuMgr][%s]legacy comm group [%s] is busy, skip erase", __func__, group.c_str());
         return HCCL_E_AGAIN;

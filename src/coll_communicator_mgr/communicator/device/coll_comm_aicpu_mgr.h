@@ -12,6 +12,8 @@
 #define COLL_COMM_AICPU_MGR_H
 
 #include "coll_comm_aicpu.h"
+#include <memory>
+#include <mutex>
 #include <shared_mutex>
 #include <unordered_map>
 #include <vector>
@@ -49,7 +51,8 @@ private:
 
     struct CommEntry {
         std::unique_ptr<CollCommAicpu> comm;
-        bool isUsed{false};
+        std::unique_ptr<std::mutex> useMtx{std::make_unique<std::mutex>()};
+        bool isLocked{false};
     };
 
     std::shared_mutex commMapMutex_;
