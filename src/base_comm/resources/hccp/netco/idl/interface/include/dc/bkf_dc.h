@@ -108,6 +108,22 @@ typedef uint32_t (*F_BKF_DC_GET_FIRSTTUPLE)(void *cookie, uint32_t type, void *o
 typedef uint32_t (*F_BKF_DC_GET_NEXTTUPLE)(void *cookie, uint32_t type, void *lastKey, void *outputKey,
     void *outputTupleVal);
 
+/**
+ * @brief Get a tuple value diagnostic string using the table registration context.
+ *
+ * @param[in] cookie The BkfDcTableTypeVTbl.cookie supplied to BkfDcRegTableType, forwarded unchanged.
+ * @param[in] tupleVal The non-null tuple value passed to BkfDcGetTupleValStr.
+ * @param[out] buf Caller-owned output buffer. The callback must not write beyond bufLen bytes.
+ * @param[in] bufLen Positive output buffer capacity in bytes, including the terminating null character.
+ * @return Diagnostic string pointer, forwarded unchanged by BkfDcGetTupleValStr. Return a null-terminated
+ *         string in buf or another string whose lifetime covers the caller's use; DC does not free it.
+ * @note Migration: tupleValGetStrOrNull previously used the three-argument F_BKF_GET_STR type.
+ *       Downstream registrants must add void *cookie as the first callback parameter and rebuild against
+ *       this header. If unused, explicitly ignore cookie; do not cast the old callback to this type.
+ *       F_BKF_GET_STR and tupleKeyGetStrOrNull remain three-argument interfaces.
+ */
+typedef char *(*F_BKF_DC_GET_TUPLE_VAL_STR)(void *cookie, void *tupleVal, uint8_t *buf, int32_t bufLen);
+
 /* reg type */
 /**
  * @brief
@@ -124,7 +140,8 @@ typedef struct tagBkfDcTableTypeVTbl {
     uint16_t tupleValLen;               /**< tuple val长度 */
     F_BKF_CMP tupleKeyCmp;              /**< tuple key比较接口 */
     F_BKF_GET_STR tupleKeyGetStrOrNull; /**< tuple key获取诊断字符串接口 */
-    F_BKF_GET_STR tupleValGetStrOrNull; /**< tuple val获取诊断字符串接口 */
+    F_BKF_DC_GET_TUPLE_VAL_STR
+    tupleValGetStrOrNull; /**< 可为空；非空时首参传入本虚表的cookie，空时使用内存格式化输出 */
     F_BKF_DC_GET_FIRSTTUPLE getFirst;
     F_BKF_DC_GET_NEXTTUPLE getNext;
 } BkfDcTableTypeVTbl;

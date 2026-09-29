@@ -495,7 +495,12 @@ TEST_F(LinkPcieTest, ut_function_for_device)
     HcclDataType datatype = HcclDataType::HCCL_DATA_TYPE_INT32;
     HcclReduceOp redOp = HcclReduceOp::HCCL_REDUCE_SUM;
 
-    MOCKER_CPP(&TransportDeviceIbverbs::TxPayLoad).stubs().will(returnValue(HCCL_SUCCESS));
+    MOCKER_CPP(
+        &TransportDeviceIbverbs::TxPayLoad,
+        HcclResult(TransportDeviceIbverbs::*)(
+            UserMemType, u64, const void*, u64, WqeType, WrAuxInfo&, std::vector<WrInformation>&))
+        .stubs()
+        .will(returnValue(HCCL_SUCCESS));
 
     ret = linktmp->TxWithReduce(txMems, datatype, redOp, stream);
     EXPECT_EQ(ret, HCCL_SUCCESS);

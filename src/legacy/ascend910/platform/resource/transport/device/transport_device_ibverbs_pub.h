@@ -138,6 +138,15 @@ public:
     HcclResult Drain(Stream& stream) override;
     HcclResult InitDrainNotifyInfo() override;
 
+protected:
+    // Keep the host overloads visible alongside the device-specific WR overloads.
+    using TransportIbverbs::GetMemInfo;
+    using TransportIbverbs::RdmaSendAsync;
+    using TransportIbverbs::TxPayLoad;
+    using TransportIbverbs::TxSendDataAndNotify;
+    using TransportIbverbs::TxSendDataAndNotifyWithSingleQP;
+    using TransportIbverbs::TxSendWqe;
+
 private:
     bool IsModifyToAtomicWrite();
     using DeviceMemDetailsRmaMgr = hcomm::RmaBufferMgr<BufferKey<uintptr_t, u64>, std::shared_ptr<RoceMemDetails>>;

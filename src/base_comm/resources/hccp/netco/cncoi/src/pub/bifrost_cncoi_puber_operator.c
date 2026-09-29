@@ -148,7 +148,7 @@ uint32_t BifrostCncoiPuberOperatorReg(BifrostCncoiPuber *bifrostCncoiPuber, Bifr
     dcVTbl.tupleValLen = appVTbl->tupleValLen;
     dcVTbl.tupleKeyCmp = (F_BKF_CMP)BifrostCncoiOperatorKeyCmp;
     dcVTbl.tupleKeyGetStrOrNull = (F_BKF_GET_STR)BifrostCncoiOperatorKeyGetStr;
-    dcVTbl.tupleValGetStrOrNull = (F_BKF_GET_STR)appVTbl->onGetTupleValStr;
+    dcVTbl.tupleValGetStrOrNull = appVTbl->onGetTupleValStr;
     ret = BkfDcRegTableType(bifrostCncoiPuber->argInit.dc, &dcVTbl);
     if (ret != BKF_OK) {
         return ret;

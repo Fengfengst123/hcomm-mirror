@@ -151,7 +151,7 @@ uint32_t BifrostCncoiPuberRankDistributeReg(BifrostCncoiPuber *bifrostCncoiPuber
     dcVTbl.tupleValLen = appVTbl->tupleValLen;
     dcVTbl.tupleKeyCmp = (F_BKF_CMP)BifrostCncoiRankDistributeKeyCmp;
     dcVTbl.tupleKeyGetStrOrNull = (F_BKF_GET_STR)BifrostCncoiRankDistributeKeyGetStr;
-    dcVTbl.tupleValGetStrOrNull = (F_BKF_GET_STR)appVTbl->onGetTupleValStr;
+    dcVTbl.tupleValGetStrOrNull = appVTbl->onGetTupleValStr;
     ret = BkfDcRegTableType(bifrostCncoiPuber->argInit.dc, &dcVTbl);
     if (ret != BKF_OK) {
         return ret;

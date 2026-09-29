@@ -148,7 +148,7 @@ uint32_t BifrostCncoiPuberAdjacencyReg(BifrostCncoiPuber *bifrostCncoiPuber, Bif
     dcVTbl.tupleValLen = appVTbl->tupleValLen;
     dcVTbl.tupleKeyCmp = (F_BKF_CMP)BifrostCncoiAdjacencyKeyCmp;
     dcVTbl.tupleKeyGetStrOrNull = (F_BKF_GET_STR)BifrostCncoiAdjacencyKeyGetStr;
-    dcVTbl.tupleValGetStrOrNull = (F_BKF_GET_STR)appVTbl->onGetTupleValStr;
+    dcVTbl.tupleValGetStrOrNull = appVTbl->onGetTupleValStr;
     ret = BkfDcRegTableType(bifrostCncoiPuber->argInit.dc, &dcVTbl);
     if (ret != BKF_OK) {
         return ret;

@@ -892,7 +892,7 @@ char *BkfDcGetTupleValStr(BkfDc *dc, uint16_t tableTypeId, void *tupleVal, uint8
     }
 
     if (tableType->vTbl.tupleValGetStrOrNull != VOS_NULL) {
-        return tableType->vTbl.tupleValGetStrOrNull(tupleVal, buf, bufLen);
+        return tableType->vTbl.tupleValGetStrOrNull(tableType->vTbl.cookie, tupleVal, buf, bufLen);
     } else {
         return BKF_GET_MEM_STD_STR(tupleVal, tableType->vTbl.tupleValLen, buf, bufLen);
     }

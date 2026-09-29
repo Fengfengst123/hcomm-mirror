@@ -292,15 +292,17 @@ uint32_t BkfSysLogReg(BkfSysLogMng *sysLogMng, BkfSysLogTypeVTbl *vTbl)
     return BKF_OK;
 }
 
-STATIC void BkfSysLogTmrCallback(BkfSysLog *sysLog, void *paramTmrLibUnknown)
+STATIC uint32_t BkfSysLogTmrCallback(void *paramTmrStart, void *paramTmrLibUnknown)
 {
     (void)paramTmrLibUnknown;
+    BkfSysLog *sysLog = (BkfSysLog *)paramTmrStart;
     BkfSysLogMng *sysLogMng = sysLog->sysLogMng;
     BkfSysLogTableType *tableType = sysLog->tableType;
 
     if (VOS_AVLL_IN_TREE(sysLog->avlNode)) {
         BkfSysLogDelete(sysLogMng, tableType, sysLog);
     }
+    return BKF_OK;
 }
 
 STATIC uint32_t BkfSysLogTmrStart(BkfSysLogMng *sysLogMng, BkfSysLogTableType *tableType, BkfSysLog *sysLog)
@@ -311,7 +313,7 @@ STATIC uint32_t BkfSysLogTmrStart(BkfSysLogMng *sysLogMng, BkfSysLogTableType *t
     }
     sysLog->tableType = tableType;
     sysLog->sysLogMng = sysLogMng;
-    sysLog->tmrId = BkfTmrStartLoop(sysLogMng->argInit.tmrMng, (F_BKF_TMR_TIMEOUT_PROC)BkfSysLogTmrCallback,
+    sysLog->tmrId = BkfTmrStartLoop(sysLogMng->argInit.tmrMng, BkfSysLogTmrCallback,
         sysLogMng->argInit.restrainIntervalMs, sysLog);
     return BKF_OK;
 }
