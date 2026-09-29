@@ -541,32 +541,6 @@ HcclResult MyRank::GetEndpointPairFromChannel(
     return HCCL_SUCCESS;
 }
 
-void MyRank::FillEndpointPairIpIndex(
-    hcomm::EndpointPair* endpointPair, uint32_t remoteRank, const EndpointDesc& localEp, const EndpointDesc& remoteEp)
-{
-    if (rankGraph_ == nullptr || endpointPair == nullptr) {
-        return;
-    }
-    Hccl::IpAddress localIpAddr{};
-    Hccl::IpAddress remoteIpAddr{};
-    if (CommAddrToIpAddress(localEp.commAddr, localIpAddr) != HCCL_SUCCESS
-        || CommAddrToIpAddress(remoteEp.commAddr, remoteIpAddr) != HCCL_SUCCESS) {
-        HCCL_WARNING("[MyRank::FillEndpointPairIpIndex] CommAddrToIpAddress failed, keep ipIndex default 0.");
-        return;
-    }
-    uint32_t localIpIndex = 0;
-    uint32_t remoteIpIndex = 0;
-    HcclResult res = rankGraph_->GetIpIndex(rankId_, localIpAddr, localIpIndex);
-    if (res != HCCL_SUCCESS && res != HCCL_E_NOT_SUPPORT) {
-        HCCL_WARNING("[MyRank::FillEndpointPairIpIndex] GetIpIndex failed for localRank, keep ipIndex default 0.");
-    }
-    res = rankGraph_->GetIpIndex(remoteRank, remoteIpAddr, remoteIpIndex);
-    if (res != HCCL_SUCCESS && res != HCCL_E_NOT_SUPPORT) {
-        HCCL_WARNING("[MyRank::FillEndpointPairIpIndex] GetIpIndex failed for remoteRank, keep ipIndex default 0.");
-    }
-    endpointPair->SetIpIndexPair(localIpIndex, remoteIpIndex);
-}
-
 inline std::string AddProtocolToSocketTag(const std::string& socketTag, const HcclChannelDesc* channelDescs)
 {
     std::string newSocketTag = socketTag + "_protocol_" + std::to_string(channelDescs->channelProtocol);
@@ -584,10 +558,6 @@ HcclResult MyRank::BatchServerInitForChannels(
         uint32_t remoteRank = 0;
 
         CHK_RET(GetEndpointPairFromChannel(channelDescs[i], i, channelNum, remoteRank, endpointPair, rankPair));
-
-        // 查 local/remote addr 的 ipIndex 注入 EndpointPair，供 SocketConfig 拼 hccpTag 使用
-        FillEndpointPairIpIndex(
-            endpointPair, remoteRank, channelDescs[i].localEndpoint, channelDescs[i].remoteEndpoint);
 
         if (reuseSocketIdxMap.find(rankPair) == reuseSocketIdxMap.end()) {
             std::unordered_map<hcomm::EndpointPair*, u32> endpointPair2Idx{};
@@ -630,10 +600,6 @@ HcclResult MyRank::BatchGetSocketsForChannels(
         uint32_t remoteRank = 0;
 
         CHK_RET(GetEndpointPairFromChannel(channelDescs[i], i, channelNum, remoteRank, endpointPair, rankPair));
-
-        // 查 local/remote addr 的 ipIndex 注入 EndpointPair，供 SocketConfig 拼 hccpTag 使用
-        FillEndpointPairIpIndex(
-            endpointPair, remoteRank, channelDescs[i].localEndpoint, channelDescs[i].remoteEndpoint);
 
         uint32_t listenPort = 0;
         CHK_RET(QueryListenPort(

@@ -358,22 +358,6 @@ HcclResult RankGraph::GetEndpointNum(uint32_t layer, uint32_t topoInstId, uint32
     return HCCL_SUCCESS;
 }
 
-HcclResult RankGraph::GetIpIndex(RankId rankId, const IpAddress& ipAddr, uint32_t& ipIndex) const
-{
-    auto rankIt = ipIndexMap_.find(rankId);
-    if (rankIt == ipIndexMap_.end()) {
-        HCCL_WARNING("[RankGraph::GetIpIndex] rankId [%u] not in ipIndexMap", rankId);
-        return HCCL_E_NOT_FOUND;
-    }
-    auto addrIt = rankIt->second.find(ipAddr);
-    if (addrIt == rankIt->second.end()) {
-        HCCL_WARNING("[RankGraph::GetIpIndex] ipAddr[%s] not found for rankId [%u]", ipAddr.GetIpStr().c_str(), rankId);
-        return HCCL_E_NOT_FOUND;
-    }
-    ipIndex = addrIt->second;
-    return HCCL_SUCCESS;
-}
-
 HcclResult GetCommAddr(CommAddr& commAddr, const IpAddress& ipAddr)
 {
     s32 family = ipAddr.GetFamily();
@@ -826,16 +810,6 @@ unique_ptr<RankGraph> RankGraph::CreateSubRankGraph(const std::vector<u32>& rank
     RankId subMyRankId = GetSubRankId(subRankIds, myRank_);
     unique_ptr<RankGraph> subRankGraph = make_unique<RankGraph>(subMyRankId);
     subRankGraph->SetLevel0PcieFallback(level0PcieFallback_); // 无UB兜底标记随子图继承
-
-    // 继承父图 ipIndexMap_，子图 rankId 是 rankIds 数组下标，需做映射
-    std::unordered_map<RankId, std::map<IpAddress, uint32_t>> subIpIndexMap;
-    for (RankId subRankId = 0; subRankId < static_cast<RankId>(subRankIds.size()); ++subRankId) {
-        auto it = ipIndexMap_.find(subRankIds[subRankId]);
-        if (it != ipIndexMap_.end()) {
-            subIpIndexMap[subRankId] = it->second;
-        }
-    }
-    subRankGraph->SetIpIndexMap(std::move(subIpIndexMap));
 
     // step2: subRankGraph添加subPeers
     RankId2PeerMap peers; // 保存Peer指针以便后续执行Add操作

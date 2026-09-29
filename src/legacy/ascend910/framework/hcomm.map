@@ -461,7 +461,6 @@ global:
         "Hccl::RankGraph::GetEndpointInfo(unsigned int, EndpointDesc const*, EndpointAttr, unsigned int, void*) const";  # _ZNK4Hccl9RankGraph15GetEndpointInfoEjPK12EndpointDesc12EndpointAttrjPv
         "Hccl::RankGraph::GetEndpointNum(unsigned int, unsigned int, unsigned int*) const";  # _ZNK4Hccl9RankGraph14GetEndpointNumEjjPj
         "Hccl::RankGraph::GetInnerRankSize() const";  # _ZNK4Hccl9RankGraph16GetInnerRankSizeEv
-        "Hccl::RankGraph::GetIpIndex(int, Hccl::IpAddress const&, unsigned int&) const";  # _ZNK4Hccl9RankGraph10GetIpIndexEiRKNS_9IpAddressERj
         "Hccl::RankGraph::GetLevelNum() const";  # _ZNK4Hccl9RankGraph11GetLevelNumEv
         "Hccl::RankGraph::GetLevels(int) const";  # _ZNK4Hccl9RankGraph9GetLevelsEi
         "Hccl::RankGraph::GetLocalId(int) const";  # _ZNK4Hccl9RankGraph10GetLocalIdEi

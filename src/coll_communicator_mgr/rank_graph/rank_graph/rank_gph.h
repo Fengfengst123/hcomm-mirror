@@ -78,14 +78,6 @@ public:
         uint32_t rankId, const EndpointDesc* endpointDesc, EndpointAttr endpointAttr, uint32_t infoLen,
         void* info) const;
 
-    // 按 addr 和 rankId 查询 ipIndex（打平所有 netLayer 去重排序后的下标）
-    HcclResult GetIpIndex(RankId rankId, const IpAddress& ipAddr, uint32_t& ipIndex) const;
-    // 设置 ipIndex 映射表（由 RankGraphBuilder 在构建完成后统一设置）
-    void SetIpIndexMap(std::unordered_map<RankId, std::map<IpAddress, uint32_t>>&& ipIndexMap)
-    {
-        ipIndexMap_ = std::move(ipIndexMap);
-    }
-
     // 创建子虚拟拓扑
     std::unique_ptr<RankGraph> CreateSubRankGraph(const std::vector<u32>& rankIds) const; // 外部接口传入类型为u32
     // 打包接口
@@ -99,8 +91,6 @@ private:
     RankId myRank_;
     bool initFlag_{false};
     bool level0PcieFallback_{false}; // 本rank的level0是否为无UB兜底层
-    std::unordered_map<RankId, std::map<IpAddress, uint32_t>>
-        ipIndexMap_; // ipIndex 映射表，由 RankGraphBuilder 统一设置
 
     void CreateSubNetInstances(
         const std::vector<RankId> rankIds, Level2Id2NetInst& subNetInstances, RankId2PeerMap& peers,

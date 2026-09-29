@@ -23,12 +23,6 @@ RankGraphV2::RankGraphV2(void* rankGraphPtr) : rankGraph_(static_cast<Hccl::Rank
 
 bool RankGraphV2::IsLevel0PcieFallback() const { return rankGraph_ != nullptr && rankGraph_->IsLevel0PcieFallback(); }
 
-HcclResult RankGraphV2::GetIpIndex(uint32_t rankId, const Hccl::IpAddress& ipAddr, uint32_t& ipIndex) const
-{
-    CHK_PTR_NULL(rankGraph_);
-    return rankGraph_->GetIpIndex(rankId, ipAddr, ipIndex);
-}
-
 HcclResult RankGraphV2::GetRankSize(uint32_t* rankSize) { return pImpl->GetRankSize(rankSize); }
 
 HcclResult RankGraphV2::GetDevicePort(const uint32_t rank, uint32_t* devPort)

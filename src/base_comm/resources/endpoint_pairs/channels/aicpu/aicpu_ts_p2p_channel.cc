@@ -154,9 +154,6 @@ HcclResult AicpuTsP2pChannel::BuildSocket()
         = (channelDesc_.channelName != nullptr) ? std::string(channelDesc_.channelName) : "AUTOMATIC_SOCKET_TAG";
     bool noRankId = true;
     Hccl::SocketConfig socketConfig = Hccl::SocketConfig(linkData, socketTag, noRankId);
-    if (channelDesc_.channelName != nullptr && channelDesc_.channelName[0] != '\0') {
-        socketConfig.SetHccpTag(socketTag);
-    }
     SaveSocketConfig(socketConfig);
     CHK_RET(SocketMgr::GetInstance(devicePhyId_).GetSocket(*socketConfig_, socket_));
 

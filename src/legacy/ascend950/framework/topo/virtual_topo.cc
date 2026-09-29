@@ -36,8 +36,6 @@ LinkData::LinkData(vector<char>& data)
     binaryStream >> localDieId_;
     binaryStream >> portGroupSize;
     binaryStream >> fullmesh;
-    binaryStream >> localIpIndex_;
-    binaryStream >> remoteIpIndex_;
 
     u32 offset;
     u32 addrSize;
@@ -78,8 +76,6 @@ std::vector<char> LinkData::GetUniqueId() const
     binaryStream << localDieId_;
     binaryStream << portGroupSize;
     binaryStream << fullmesh;
-    binaryStream << localIpIndex_;
-    binaryStream << remoteIpIndex_;
 
     vector<char> result;
     binaryStream.Dump(result);

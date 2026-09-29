@@ -43,7 +43,6 @@ public:
         void* info) override;
     HcclResult GetDeviceId(uint32_t rankId, uint32_t* deviceId) override;
     bool IsLevel0PcieFallback() const override; // 无UB盖板兜底场景：本rank的level0为pcie fallback层
-    HcclResult GetIpIndex(uint32_t rankId, const Hccl::IpAddress& ipAddr, uint32_t& ipIndex) const override;
 
 private:
     std::unique_ptr<Hccl::IRankGraph> pImpl;
