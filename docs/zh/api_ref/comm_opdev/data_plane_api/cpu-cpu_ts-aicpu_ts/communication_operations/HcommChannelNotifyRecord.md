@@ -47,6 +47,7 @@ int32_t：接口成功返回0，其他失败。
 - `remoteNotifyIdx`必须小于通信通道另一端的Notify数量，且通信通道创建时的`notifyNum`需大于0。
 <!-- end id6 -->
 - 本接口需要配合[HcommChannelNotifyWait](HcommChannelNotifyWait.md)使用。
+- 同一个`ChannelHandle`不支持多线程并发访问。
 
 ## 调用示例
 

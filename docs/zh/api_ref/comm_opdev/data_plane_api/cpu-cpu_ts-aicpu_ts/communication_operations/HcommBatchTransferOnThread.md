@@ -45,15 +45,17 @@ int32_t：接口成功返回0，其他失败。
 ## 约束说明
 
 <!-- npu="A3,910b" id6 -->
-针对如下产品，该接口仅支持通信协议RoCE，且transType仅支持HCOMM_TRANSFER_TYPE_WRITE和HCOMM_TRANSFER_TYPE_READ类型，其他类型返回HCCL_E_NOT_SUPPORT。
-
-<!-- npu="A3" id7 -->
-- Atlas A3系列产品
-<!-- end id7 -->
-<!-- npu="910b" id8 -->
-- Atlas A2系列产品
-<!-- end id8 -->
+- 针对如下产品，该接口仅支持通信协议RoCE，且transType仅支持HCOMM_TRANSFER_TYPE_WRITE和HCOMM_TRANSFER_TYPE_READ类型，其他类型返回HCCL_E_NOT_SUPPORT。
+    <!-- npu="A3" id7 -->
+    - Atlas A3系列产品
+    <!-- end id7 -->
+    <!-- npu="910b" id8 -->
+    - Atlas A2系列产品
+    <!-- end id8 -->
 <!-- end id6 -->
+
+- 同一个`ThreadHandle`不支持多线程并发访问。
+- 同一个`ChannelHandle`不支持多线程并发访问。
 
 ## 调用示例
 

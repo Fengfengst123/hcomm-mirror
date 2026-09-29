@@ -56,6 +56,7 @@ int32_t：接口成功返回0，其他失败。
 - 手动传入超时时间的 `HcommChannelNotifyWaitOnThread`和`HcommThreadNotifyWaitOnThread`不受本接口影响。
 - 建议在数据面操作开始前设置默认超时时间。
 - 当前只支持整数传入`timeOut`，不支持小数传入。
+- 并发说明：本接口为全局配置接口，须串行调用。
 
 ## 调用示例
 

@@ -61,6 +61,8 @@ int32_t：接口成功返回0，其他失败。
 - AICPU_TS模式下，在Device侧调用该接口前，如需设置超时时间，需要调用[HcommSetNotifyWaitTimeOut](./HcommSetNotifyWaitTimeOut.md)设置，不调用设置接口则默认超时时间为1836秒。
 - 针对Ascend 950PR&950DT系列产品的AICPU_TS模式，`localNotifyIdx`必须小于本端通信通道的Notify数量，且通信通道创建时的`notifyNum`需大于0。
 <!-- end id6 -->
+- 同一个`ThreadHandle`不支持多线程并发访问。
+- 同一个`ChannelHandle`不支持多线程并发访问。
 
 ## 调用示例
 

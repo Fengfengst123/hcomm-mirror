@@ -63,6 +63,7 @@ int32_t：接口成功返回0，其他失败。
 <!-- npu="950" id7 -->
 - 针对Ascend 950PR&950DT系列产品的AICPU_TS模式，`notifyIdx`必须小于本端Thread的Notify数量，且Thread创建时的`notifyNumPerThread`需大于0。
 <!-- end id7 -->
+- 同一个`ThreadHandle`不支持多线程并发访问。
 
 ## 调用示例
 

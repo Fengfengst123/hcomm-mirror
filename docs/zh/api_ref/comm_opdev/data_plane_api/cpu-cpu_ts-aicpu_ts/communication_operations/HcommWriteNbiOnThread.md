@@ -50,6 +50,8 @@ int32_t：接口成功返回0，其他失败。
 - Host CPU侧调用时，`thread`参数无作用，可传入0。
 - `[src, src + len)`必须落在本端已注册或获取的内存范围内，`[dst, dst + len)`必须落在对端已导入或获取的内存范围内。
 - 该接口返回成功仅表示写请求提交成功。如需确认写操作完成，调用方应调用[HcommChannelFenceOnThread](HcommChannelFenceOnThread.md)等待通道上已提交的写操作完成。
+- `thread`参数有作用时，同一个`ThreadHandle`不支持多线程并发访问。
+- 同一个`ChannelHandle`不支持多线程并发访问。
 
 ## 调用示例
 

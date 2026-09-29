@@ -53,9 +53,11 @@ int32_t：接口成功返回0，其他失败。
 
 ## 约束说明
 
-该接口需要配合[HcommChannelNotifyWaitOnThread](HcommChannelNotifyWaitOnThread.md)使用。
+- 该接口需要配合[HcommChannelNotifyWaitOnThread](HcommChannelNotifyWaitOnThread.md)使用。
+- 在Ascend 950PR&950DT系列产品上，仅支持AICPU_TS模式下、在Device侧调用该接口。
 
-在Ascend 950PR&950DT系列产品上，仅支持AICPU_TS模式下、在Device侧调用该接口。
+- 同一个`ThreadHandle`不支持多线程并发访问。
+- 同一个`ChannelHandle`不支持多线程并发访问。
 
 ## 调用示例
 

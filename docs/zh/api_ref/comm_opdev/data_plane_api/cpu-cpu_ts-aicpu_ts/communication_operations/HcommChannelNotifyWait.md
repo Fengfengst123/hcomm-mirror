@@ -48,6 +48,7 @@ int32_t：接口成功返回0，其他失败。
 - `localNotifyIdx`必须小于本端通信通道的Notify数量，且通信通道创建时的`notifyNum`需大于0；`timeOut`需大于0。
 <!-- end id6 -->
 - 本接口需要配合[HcommChannelNotifyRecord](HcommChannelNotifyRecord.md)使用。
+- 同一个`ChannelHandle`不支持多线程并发访问。
 
 ## 调用示例
 

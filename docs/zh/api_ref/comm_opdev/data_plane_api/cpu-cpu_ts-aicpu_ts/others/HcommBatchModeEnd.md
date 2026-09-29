@@ -40,10 +40,11 @@ int32_t：接口成功返回0，其他失败。
 
 ## 约束说明
 
-HcommBatchModeStart和HcommBatchModeEnd必须成对调用，且需要在同一线程中执行。
+- HcommBatchModeStart和HcommBatchModeEnd必须成对调用，且需要在同一线程中执行。
+- 并发说明：本接口须串行调用。
 
 <!-- npu="950" id6 -->
-仅Ascend 950PR&950DT系列产品支持批量模式和立即执行模式（不调用批量接口），其他产品必须使用批量模式。
+- 仅Ascend 950PR&950DT系列产品支持批量模式和立即执行模式（不调用批量接口），其他产品必须使用批量模式。
 <!-- end id6 -->
 
 ## 调用示例

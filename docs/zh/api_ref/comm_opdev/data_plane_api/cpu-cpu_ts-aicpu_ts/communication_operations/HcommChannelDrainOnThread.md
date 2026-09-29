@@ -56,6 +56,7 @@ int32_t：接口成功返回0，其他失败。
 - 针对Ascend 950PR&950DT系列产品，在Host CPU侧调用时，申请入参`channel`使用的通信引擎须为`COMM_ENGINE_CPU`，且`channelDesc.remoteEndpoint.protocol`须为`COMM_PROTOCOL_ROCE`或`COMM_PROTOCOL_UB_CTP`。
 <!-- end id9 -->
 - 同一个`ChannelHandle`不支持多线程并发访问。
+- 同一个`ThreadHandle`不支持多线程并发访问。
 
 ## 调用示例
 

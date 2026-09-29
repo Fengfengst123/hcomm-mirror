@@ -49,6 +49,8 @@ int32_t：接口成功返回0，其他失败。
 - 针对Ascend 950PR&950DT系列产品的CPU引擎RoCE场景，`remoteNotifyIdx`必须小于通信通道另一端的Notify数量，且通信通道创建时的`notifyNum`需大于0。
 <!-- end id6 -->
 - Host CPU侧调用时，`thread`参数无作用，可传入0。
+- 同一个`ThreadHandle`不支持多线程并发访问。
+- 同一个`ChannelHandle`不支持多线程并发访问。
 
 ## 调用示例
 

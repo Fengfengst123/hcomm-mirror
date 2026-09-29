@@ -49,6 +49,7 @@ int32_t：接口成功返回0，其他失败。
 <!-- end id6 -->
 - `[dst, dst + len)`必须落在本端已注册或获取的内存范围内，`[src, src + len)`必须落在对端已导入或获取的内存范围内。
 - 该接口返回成功仅表示读请求提交成功。如需确认读操作完成，请调用[HcommChannelFence](HcommChannelFence.md)等待通道上已提交的读操作完成。
+- 同一个`ChannelHandle`不支持多线程并发访问。
 
 ## 调用示例
 

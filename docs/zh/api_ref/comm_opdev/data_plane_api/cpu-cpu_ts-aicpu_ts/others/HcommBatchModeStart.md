@@ -43,6 +43,7 @@ int32_t：接口成功返回0，其他失败。
 1. HcommBatchModeStart和HcommBatchModeEnd必须成对调用，且需在同一线程中执行。
 2. 批量模式下缓存的操作需在HcommBatchModeEnd调用后才会实际执行。
 3. 仅Ascend 950PR&950DT系列产品支持批量模式和立即执行模式（不调用批量接口），其他产品必须使用批量模式。
+4. 并发说明：本接口须串行调用。
 
 ## 调用示例
 
