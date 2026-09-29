@@ -1460,6 +1460,43 @@ void CcuTaskException::PrintCcuErrorLog(
     }
 }
 
+namespace {
+    // 按ctx分组批量查询jetty状态；任一分组查询失败即返回该分组的错误码
+    HcclResult BatchQueryJettyStatusByCtx(
+        const std::vector<CcuJetty*>& ccuJettys, const std::vector<JettyHandle>& jettyHandles,
+        std::vector<JettyStatus>& jettyStatusVec)
+    {
+        const u32 jettyNum = static_cast<u32>(ccuJettys.size());
+        std::unordered_map<CtxHandle, std::vector<std::pair<JettyHandle, u32>>> ctxGroups;
+        for (u32 i = 0; i < jettyNum; ++i) {
+            ctxGroups[ccuJettys[i]->GetCtxHandle()].emplace_back(jettyHandles[i], i);
+        }
+        jettyStatusVec.resize(jettyNum);
+        for (auto& [ctxHandle, group] : ctxGroups) {
+            std::vector<JettyHandle> handles;
+            handles.reserve(group.size());
+            for (auto& item : group) {
+                handles.push_back(item.first);
+            }
+            u32 num = static_cast<u32>(handles.size());
+            std::vector<JettyStatus> statusVec;
+
+            HcclResult ret = HccpBatchQueryJettyStatus(ctxHandle, handles, statusVec, num);
+            if (ret != HCCL_SUCCESS) {
+                HCCL_ERROR(
+                    "[%s]HccpBatchQueryJettyStatus failed, ret[%d], ctxHandle[%p]", __func__, ret,
+                    static_cast<const void*>(ctxHandle));
+                return ret; // 任一分组查询失败直接退出，jettyStatusVec中其余分组保持默认值
+            }
+
+            for (u32 j = 0; j < num; ++j) {
+                jettyStatusVec[group[j].second] = statusVec[j];
+            }
+        }
+        return HCCL_SUCCESS;
+    }
+} // namespace
+
 HcclResult CcuTaskException::PrintCcuUbRegisters(
     const std::vector<CcuErrorInfo>& errorInfos, s32 devLogicId, [[maybe_unused]] const Hccl::TaskInfo& taskInfo)
 {
@@ -1475,25 +1512,13 @@ HcclResult CcuTaskException::PrintCcuUbRegisters(
     u32 jettyNum = static_cast<u32>(ccuJettys.size());
     CHK_PRT_RET(jettyNum == 0, HCCL_RUN_INFO("[%s]jettyNum[%u], skip", __func__, jettyNum), HCCL_SUCCESS);
 
-    std::vector<JettyStatus> jettyStatusVec;
-    std::unordered_map<CtxHandle, std::vector<std::pair<JettyHandle, u32>>> ctxGroups;
+    std::vector<JettyHandle> jettyHandles;
+    jettyHandles.reserve(jettyNum);
     for (u32 i = 0; i < jettyNum; ++i) {
-        ctxGroups[ccuJettys[i]->GetCtxHandle()].emplace_back(ccuJettys[i]->GetJettyHandle(), i);
+        jettyHandles.push_back(ccuJettys[i]->GetJettyHandle());
     }
-    jettyStatusVec.resize(jettyNum);
-    for (auto& [ctxHandle, group] : ctxGroups) {
-        std::vector<JettyHandle> handles;
-        handles.reserve(group.size());
-        for (auto& item : group) {
-            handles.push_back(item.first);
-        }
-        u32 num = static_cast<u32>(handles.size());
-        std::vector<JettyStatus> statusVec;
-        CHK_RET(HccpBatchQueryJettyStatus(ctxHandle, handles, statusVec, num));
-        for (u32 j = 0; j < num; ++j) {
-            jettyStatusVec[group[j].second] = statusVec[j];
-        }
-    }
+    std::vector<JettyStatus> jettyStatusVec;
+    CHK_RET(BatchQueryJettyStatusByCtx(ccuJettys, jettyHandles, jettyStatusVec));
 
     for (u32 i = 0; i < jettyNum; ++i) {
         if (jettyStatusVec[i] == JettyStatus::ERROR || jettyStatusVec[i] == JettyStatus::SUSPENDED) {
@@ -2109,24 +2134,8 @@ CcuTaskException::GetCcuErrorMsgByType(const CcuErrorInfo& ccuErrorInfo, const H
     }
 }
 
-void CcuTaskException::NotifyControlPlaneOnUbError(
-    const std::vector<CcuErrorInfo>& errorInfos, const Hccl::TaskInfo& taskInfo, u32 deviceId, uint8_t missionStatus)
+void CcuTaskException::CollectErrorJettys(const std::vector<CcuErrorInfo>& errorInfos, CcuJettyNotifyInfo& jettyInfo)
 {
-    uint32_t devPhyId = 0;
-    EXCEPTION_CATCH(devPhyId = Hccl::HrtGetDevicePhyIdByUserDevId(static_cast<s32>(deviceId)), return);
-    struct RaInfo raInfo = {};
-    raInfo.mode = NETWORK_OFFLINE;
-    raInfo.phyId = devPhyId;
-
-    const bool supported = RaHasCapability(&raInfo, RA_CAP_UDMA_NOTIFY_EVENT);
-    if (!supported) {
-        HCCL_WARNING("[%s]RaHasCapability returned false, skip notify control plane, devPhyId[%u]", __func__, devPhyId);
-        return;
-    }
-
-    std::vector<CcuJetty*> ccuJettys;
-    std::vector<uint16_t> channelIds;
-    std::vector<JettyHandle> jettyHandles;
     for (const CcuErrorInfo& errorInfo : errorInfos) {
         uint16_t channelId = GetChannleIdByCcuErrorInfo(errorInfo);
         if (channelId == INVALID_U16) {
@@ -2139,59 +2148,29 @@ void CcuTaskException::NotifyControlPlaneOnUbError(
         }
 
         for (auto* jetty : ctx.second) {
-            if (std::find(ccuJettys.begin(), ccuJettys.end(), jetty) == ccuJettys.end()) {
-                ccuJettys.push_back(jetty);
-                jettyHandles.push_back(jetty->GetJettyHandle());
+            if (std::find(jettyInfo.ccuJettys.begin(), jettyInfo.ccuJettys.end(), jetty) == jettyInfo.ccuJettys.end()) {
+                jettyInfo.ccuJettys.push_back(jetty);
+                jettyInfo.jettyHandles.push_back(jetty->GetJettyHandle());
                 // 取遍历到的第一个channelId，通知jetty(tpn)出错了，只带这个channelId的eid信息
-                channelIds.push_back(channelId);
+                jettyInfo.channelIds.push_back(channelId);
             }
         }
     }
+}
 
-    u32 jettyNum = static_cast<u32>(ccuJettys.size());
-    if (jettyNum == 0) {
-        return;
-    }
-
-    std::vector<JettyStatus> jettyStatusVec;
-    std::unordered_map<CtxHandle, std::vector<std::pair<JettyHandle, u32>>> ctxGroups;
-    for (u32 i = 0; i < jettyNum; ++i) {
-        ctxGroups[ccuJettys[i]->GetCtxHandle()].emplace_back(jettyHandles[i], i);
-    }
-    jettyStatusVec.resize(jettyNum);
-    for (auto& [ctxHandle, group] : ctxGroups) {
-        std::vector<JettyHandle> handles;
-        handles.reserve(group.size());
-        for (auto& item : group) {
-            handles.push_back(item.first);
-        }
-        u32 num = static_cast<u32>(handles.size());
-        std::vector<JettyStatus> statusVec;
-
-        if (HccpBatchQueryJettyStatus(ctxHandle, handles, statusVec, num) != HCCL_SUCCESS) {
-            HCCL_ERROR(
-                "[%s]HccpBatchQueryJettyStatus failed, skip this ctx group, ctxHandle[%p]", __func__,
-                static_cast<const void*>(ctxHandle));
-            continue; // 跳过失败分组，其余分组继续；该组 jettyStatusVec 保持默认值，后续状态过滤自然跳过
-        }
-
-        for (u32 j = 0; j < num; ++j) {
-            jettyStatusVec[group[j].second] = statusVec[j];
-        }
-    }
-
-    for (u32 i = 0; i < jettyNum; ++i) {
-        if (jettyStatusVec[i] != JettyStatus::ERROR && jettyStatusVec[i] != JettyStatus::SUSPENDED) {
-            continue;
-        }
-
-        RdmaHandle rdmaHandle = static_cast<RdmaHandle>(ccuJettys[i]->GetCtxHandle());
+void CcuTaskException::NotifyJettyErrorToControlPlane(
+    uint32_t devPhyId, const Hccl::TaskInfo& taskInfo, u32 deviceId, uint8_t missionStatus,
+    const CcuJettyNotifyInfo& jettyInfo, const std::vector<u32>& errorJettyIdx)
+{
+    for (u32 idx : errorJettyIdx) {
+        CcuJetty* jetty = jettyInfo.ccuJettys[idx];
+        RdmaHandle rdmaHandle = static_cast<RdmaHandle>(jetty->GetCtxHandle());
         if (rdmaHandle == nullptr) {
             HCCL_ERROR("[%s]rdmaHandle is nullptr, skip", __func__);
             continue;
         }
 
-        auto addrPair = GetAddrPairByChannelId(channelIds[i], taskInfo, deviceId);
+        auto addrPair = GetAddrPairByChannelId(jettyInfo.channelIds[idx], taskInfo, deviceId);
 
         struct CtxNotifyEvent event = {};
         event.eventType = 0;
@@ -2211,13 +2190,13 @@ void CcuTaskException::NotifyControlPlaneOnUbError(
             HCCL_ERROR("[%s]memcpy_s dstEid failed, ret[%d]", __func__, sRet);
             continue;
         }
-        event.eventInfo.serviceErrInfo.errorInfo.tpn = ccuJettys[i]->GetTpn();
+        event.eventInfo.serviceErrInfo.errorInfo.tpn = jetty->GetTpn();
 
         int32_t retCode = RaCtxNotifyEvent(rdmaHandle, &event);
         std::string eventInfo = Hccl::StringFormat(
             "devPhyId[%u], rdmaHandle[%p], jettyHandle[%p], serviceType[%u], errorType[%u], tpn[%u], "
             "srcEid[%s], dstEid[%s]",
-            devPhyId, static_cast<const void*>(rdmaHandle), static_cast<const void*>(jettyHandles[i]),
+            devPhyId, static_cast<const void*>(rdmaHandle), static_cast<const void*>(jettyInfo.jettyHandles[idx]),
             event.eventInfo.serviceErrInfo.serviceType, event.eventInfo.serviceErrInfo.errorType,
             event.eventInfo.serviceErrInfo.errorInfo.tpn, addrPair.first.Describe().c_str(),
             addrPair.second.Describe().c_str());
@@ -2227,6 +2206,41 @@ void CcuTaskException::NotifyControlPlaneOnUbError(
             HCCL_ERROR("[%s]notify control plane finish, %s", __func__, eventInfo.c_str());
         }
     }
+}
+
+void CcuTaskException::NotifyControlPlaneOnUbError(
+    const std::vector<CcuErrorInfo>& errorInfos, const Hccl::TaskInfo& taskInfo, u32 deviceId, uint8_t missionStatus)
+{
+    uint32_t devPhyId = 0;
+    EXCEPTION_CATCH(devPhyId = Hccl::HrtGetDevicePhyIdByUserDevId(static_cast<s32>(deviceId)), return);
+    struct RaInfo raInfo = {};
+    raInfo.mode = NETWORK_OFFLINE;
+    raInfo.phyId = devPhyId;
+
+    const bool supported = RaHasCapability(&raInfo, RA_CAP_UDMA_NOTIFY_EVENT);
+    if (!supported) {
+        HCCL_WARNING("[%s]RaHasCapability returned false, skip notify control plane, devPhyId[%u]", __func__, devPhyId);
+        return;
+    }
+
+    CcuJettyNotifyInfo jettyInfo;
+    CollectErrorJettys(errorInfos, jettyInfo);
+    if (jettyInfo.ccuJettys.empty()) {
+        return;
+    }
+
+    // 按ctx分组批量查询jetty状态；任一分组查询失败直接退出，不通知
+    const u32 jettyNum = static_cast<u32>(jettyInfo.ccuJettys.size());
+    std::vector<JettyStatus> jettyStatusVec;
+    CHK_RET_NULL(BatchQueryJettyStatusByCtx(jettyInfo.ccuJettys, jettyInfo.jettyHandles, jettyStatusVec));
+
+    std::vector<u32> errorJettyIdx;
+    for (u32 i = 0; i < jettyNum; ++i) {
+        if (jettyStatusVec[i] == JettyStatus::ERROR || jettyStatusVec[i] == JettyStatus::SUSPENDED) {
+            errorJettyIdx.push_back(i);
+        }
+    }
+    NotifyJettyErrorToControlPlane(devPhyId, taskInfo, deviceId, missionStatus, jettyInfo, errorJettyIdx);
 }
 
 } // namespace hcomm

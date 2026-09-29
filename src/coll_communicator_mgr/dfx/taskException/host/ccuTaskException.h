@@ -35,6 +35,13 @@ void RegisterGetCcuCqeErrInfoCallBackHcomm(GetCcuCqeErrInfoCallBackHcomm p1); //
 using CcuGetErrStatusVecCallBack = std::vector<std::string> (*)(s32 deviceLogicID);
 void RegisterCcuGetErrStatusVecCallBack(CcuGetErrStatusVecCallBack callback);
 
+// UB错误通知控制面所需的jetty信息，三个vector按下标对齐
+struct CcuJettyNotifyInfo {
+    std::vector<CcuJetty*> ccuJettys;      // 去重后的jetty列表
+    std::vector<uint16_t> channelIds;      // 与ccuJettys下标对齐；同一jetty取首个命中的channelId
+    std::vector<JettyHandle> jettyHandles; // 与ccuJettys下标对齐
+};
+
 class CcuTaskException {
 public:
     CcuTaskException() = default;
@@ -223,6 +230,10 @@ private:
     static void ClusterMoniterGetCcuCqeErrInfo(
         u32 RemoteDeviceId, u32 locDeviceId, uint16_t status, std::string LocalEid, std::string RemoteEid,
         std::string RemoteInsId);
+    static void CollectErrorJettys(const std::vector<CcuErrorInfo>& errorInfos, CcuJettyNotifyInfo& jettyInfo);
+    static void NotifyJettyErrorToControlPlane(
+        uint32_t devPhyId, const Hccl::TaskInfo& taskInfo, u32 deviceId, uint8_t missionStatus,
+        const CcuJettyNotifyInfo& jettyInfo, const std::vector<u32>& errorJettyIdx);
     static void NotifyControlPlaneOnUbError(
         const std::vector<CcuErrorInfo>& errorInfos, const Hccl::TaskInfo& taskInfo, u32 deviceId,
         uint8_t missionStatus);

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Copyright (c) 2026 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
  * CANN Open Software License Agreement Version 2.0 (the "License").
@@ -1589,245 +1589,224 @@ static HcclResult StubBatchQueryJettyStatusReady(
     return HCCL_SUCCESS;
 }
 
-TEST_F(CcuTaskExceptionTest, NotifyControlPlaneOnUbError_When_EmptyErrorInfos_Expect_Return)
+static HcclResult
+StubBatchQueryJettyStatusFail(const CtxHandle, const std::vector<JettyHandle>&, std::vector<JettyStatus>&, u32&)
 {
-    std::vector<CcuErrorInfo> errorInfos;
-    Hccl::TaskParam taskParam{.taskType = Hccl::TaskParamType::TASK_CCU};
-    Hccl::TaskInfo taskInfo{0, 0, 0, taskParam, nullptr, false};
-
-    MOCKER(Hccl::HrtGetDevicePhyIdByUserDevId).stubs().with(mockcpp::any()).will(returnValue(static_cast<u32>(0)));
-    MOCKER(RaHasCapability).stubs().with(mockcpp::any(), mockcpp::any()).will(returnValue(true));
-
-    EXPECT_NO_THROW(CcuTaskException::NotifyControlPlaneOnUbError(errorInfos, taskInfo, 0, 0x01));
-    GlobalMockObject::verify();
+    return HCCL_E_INTERNAL;
 }
 
-TEST_F(CcuTaskExceptionTest, NotifyControlPlaneOnUbError_When_CapabilityNotSupported_Expect_Return)
+// NotifyControlPlaneOnUbError链路公共搭建：注册channelId映射与jetty池，并mock取jetty链路
+static void SetupJettyQueryScene(
+    const std::vector<uint16_t>& channelIds, uint8_t dieId, CcuJetty& jetty, CcuUrmaChannel& channel,
+    CcuChannelCtxPool& pool, UrmaEndpoint& endpoint)
 {
-    CcuErrorInfo errorInfo{};
-    errorInfo.repType = CcuRep::CcuRepType::READ;
-    errorInfo.msg.transMem.channelId = 200;
-    std::vector<CcuErrorInfo> errorInfos{errorInfo};
-    Hccl::TaskParam taskParam{.taskType = Hccl::TaskParamType::TASK_CCU};
-    Hccl::TaskInfo taskInfo{0, 0, 0, taskParam, nullptr, false};
-
-    MOCKER(Hccl::HrtGetDevicePhyIdByUserDevId).stubs().with(mockcpp::any()).will(returnValue(static_cast<u32>(0)));
-    MOCKER(RaHasCapability).stubs().with(mockcpp::any(), mockcpp::any()).will(returnValue(false));
-
-    EXPECT_NO_THROW(CcuTaskException::NotifyControlPlaneOnUbError(errorInfos, taskInfo, 0, 0x01));
-    GlobalMockObject::verify();
-}
-
-TEST_F(CcuTaskExceptionTest, NotifyControlPlaneOnUbError_When_AllInvalidChannelIds_Expect_Return)
-{
-    CcuErrorInfo errorInfo1;
-    errorInfo1.repType = CcuRep::CcuRepType::REM_POST_SEM;
-    errorInfo1.msg.waitSignal.channelId[0] = 65535;
-    CcuErrorInfo errorInfo2;
-    errorInfo2.repType = CcuRep::CcuRepType::READ;
-    errorInfo2.msg.transMem.channelId = 65535;
-    std::vector<CcuErrorInfo> errorInfos{errorInfo1, errorInfo2};
-    Hccl::TaskParam taskParam{.taskType = Hccl::TaskParamType::TASK_CCU};
-    Hccl::TaskInfo taskInfo{0, 0, 0, taskParam, nullptr, false};
-
-    MOCKER(Hccl::HrtGetDevicePhyIdByUserDevId).stubs().with(mockcpp::any()).will(returnValue(static_cast<u32>(0)));
-    MOCKER(RaHasCapability).stubs().with(mockcpp::any(), mockcpp::any()).will(returnValue(true));
-
-    EXPECT_NO_THROW(CcuTaskException::NotifyControlPlaneOnUbError(errorInfos, taskInfo, 0, 0x01));
-    GlobalMockObject::verify();
-}
-
-TEST_F(CcuTaskExceptionTest, NotifyControlPlaneOnUbError_When_JettysExist_Expect_NotifyEvent)
-{
-    constexpr uint16_t channelId = 200;
-    constexpr uint8_t dieId = 0;
-    {
-        std::lock_guard<std::mutex> lock(g_channelMapMutex);
-        g_channelIdToHandle[channelId] = 0xAAAA;
-    }
-
-    CcuJetty jetty(Hccl::IpAddress{}, CcuJettyInfo{});
     jetty.ctxHandle_ = reinterpret_cast<CtxHandle>(0x1);
     jetty.jettyHandlePtr_ = reinterpret_cast<void*>(0x2);
-    jetty.jettyInfo_.taJettyId = 7;
+    {
+        std::lock_guard<std::mutex> lock(g_channelMapMutex);
+        for (uint16_t channelId : channelIds) {
+            g_channelIdToHandle[channelId] = 0xA000 + channelId;
+        }
+    }
+    for (uint16_t channelId : channelIds) {
+        pool.channelJettyInfoMap_[{dieId, channelId}].second.push_back(&jetty);
+    }
+    endpoint.ccuChannelCtxPool_.reset(&pool);
 
-    HcommChannelDesc chDesc{};
-    CcuUrmaChannel channel(reinterpret_cast<EndpointHandle>(0x10), chDesc);
     void* channelPtr = static_cast<Channel*>(&channel);
-
+    void* endpointPtr = static_cast<Endpoint*>(&endpoint);
     MOCKER(HcommChannelGet)
         .stubs()
         .with(mockcpp::any(), outBoundP(&channelPtr))
         .will(returnValue(static_cast<HcommResult>(0)));
-
-    CcuChannelCtxPool pool(0);
-    pool.channelJettyInfoMap_[{dieId, channelId}].second.push_back(&jetty);
-
-    EndpointDesc epDesc{};
-    UrmaEndpoint endpoint(epDesc);
-    endpoint.ccuChannelCtxPool_.reset(&pool);
-    void* endpointPtr = static_cast<Endpoint*>(&endpoint);
-
     MOCKER(HcommEndpointGet)
         .stubs()
         .with(mockcpp::any(), outBoundP(&endpointPtr))
         .will(returnValue(static_cast<HcommResult>(0)));
-
     MOCKER_CPP(&UrmaEndpoint::GetCcuChannelCtxPool).stubs().will(returnValue(&pool));
-
     MOCKER(Hccl::HrtGetDevicePhyIdByUserDevId).stubs().with(mockcpp::any()).will(returnValue(static_cast<u32>(0)));
     MOCKER(RaHasCapability).stubs().with(mockcpp::any(), mockcpp::any()).will(returnValue(true));
-    MOCKER(HccpBatchQueryJettyStatus)
-        .stubs()
-        .with(mockcpp::any(), mockcpp::any(), mockcpp::any(), mockcpp::any())
-        .will(invoke(StubBatchQueryJettyStatusError));
-    MOCKER(RaCtxNotifyEvent).stubs().with(mockcpp::any(), mockcpp::any()).will(returnValue(0));
+}
 
-    CcuErrorInfo errorInfo{};
-    errorInfo.repType = CcuRep::CcuRepType::READ;
-    errorInfo.dieId = dieId;
-    errorInfo.msg.transMem.channelId = channelId;
-    std::vector<CcuErrorInfo> errorInfos{errorInfo};
-    Hccl::TaskParam taskParam{.taskType = Hccl::TaskParamType::TASK_CCU};
-    Hccl::TaskInfo taskInfo{0, 0, 0, taskParam, nullptr, false};
-
-    EXPECT_NO_THROW(CcuTaskException::NotifyControlPlaneOnUbError(errorInfos, taskInfo, 0, 0x01));
-
+// 公共清理：verify并恢复全局状态
+static void
+TeardownJettyQueryScene(const std::vector<uint16_t>& channelIds, CcuChannelCtxPool& pool, UrmaEndpoint& endpoint)
+{
     GlobalMockObject::verify();
     pool.channelJettyInfoMap_.clear();
     (void)endpoint.ccuChannelCtxPool_.release();
     {
         std::lock_guard<std::mutex> lock(g_channelMapMutex);
-        g_channelIdToHandle.erase(channelId);
+        for (uint16_t channelId : channelIds) {
+            g_channelIdToHandle.erase(channelId);
+        }
     }
 }
 
-TEST_F(CcuTaskExceptionTest, NotifyControlPlaneOnUbError_When_RaCtxNotifyEventFails_Expect_NoCrash)
+TEST_F(CcuTaskExceptionTest, NotifyControlPlaneOnUbError_When_EarlyReturn_Expect_NoNotify)
 {
-    constexpr uint16_t channelId = 201;
-    constexpr uint8_t dieId = 0;
-    {
-        std::lock_guard<std::mutex> lock(g_channelMapMutex);
-        g_channelIdToHandle[channelId] = 0xBBBB;
-    }
+    CcuErrorInfo invalidSem{};
+    invalidSem.repType = CcuRep::CcuRepType::REM_POST_SEM;
+    invalidSem.msg.waitSignal.channelId[0] = 65535; // INVALID_U16
+    CcuErrorInfo invalidRead{};
+    invalidRead.repType = CcuRep::CcuRepType::READ;
+    invalidRead.msg.transMem.channelId = 65535; // INVALID_U16
 
-    CcuJetty jetty(Hccl::IpAddress{}, CcuJettyInfo{});
-    jetty.ctxHandle_ = reinterpret_cast<CtxHandle>(0x1);
-    jetty.jettyHandlePtr_ = reinterpret_cast<void*>(0x2);
-    jetty.jettyInfo_.taJettyId = 8;
+    struct TestScene {
+        bool capabilitySupported;
+        std::vector<CcuErrorInfo> errorInfos;
+        std::string sceneName;
+    };
+    const std::vector<TestScene> scenes = {
+        {false, {invalidSem}, "CapabilityNotSupported"},
+        {true, {invalidSem, invalidRead}, "AllInvalidChannelIds"},
+    };
 
-    HcommChannelDesc chDesc{};
-    CcuUrmaChannel channel(reinterpret_cast<EndpointHandle>(0x10), chDesc);
-    void* channelPtr = static_cast<Channel*>(&channel);
-
-    MOCKER(HcommChannelGet)
-        .stubs()
-        .with(mockcpp::any(), outBoundP(&channelPtr))
-        .will(returnValue(static_cast<HcommResult>(0)));
-
-    CcuChannelCtxPool pool(0);
-    pool.channelJettyInfoMap_[{dieId, channelId}].second.push_back(&jetty);
-
-    EndpointDesc epDesc{};
-    UrmaEndpoint endpoint(epDesc);
-    endpoint.ccuChannelCtxPool_.reset(&pool);
-    void* endpointPtr = static_cast<Endpoint*>(&endpoint);
-
-    MOCKER(HcommEndpointGet)
-        .stubs()
-        .with(mockcpp::any(), outBoundP(&endpointPtr))
-        .will(returnValue(static_cast<HcommResult>(0)));
-
-    MOCKER_CPP(&UrmaEndpoint::GetCcuChannelCtxPool).stubs().will(returnValue(&pool));
-
-    MOCKER(Hccl::HrtGetDevicePhyIdByUserDevId).stubs().with(mockcpp::any()).will(returnValue(static_cast<u32>(0)));
-    MOCKER(RaHasCapability).stubs().with(mockcpp::any(), mockcpp::any()).will(returnValue(true));
-    MOCKER(HccpBatchQueryJettyStatus)
-        .stubs()
-        .with(mockcpp::any(), mockcpp::any(), mockcpp::any(), mockcpp::any())
-        .will(invoke(StubBatchQueryJettyStatusError));
-    MOCKER(RaCtxNotifyEvent).stubs().with(mockcpp::any(), mockcpp::any()).will(returnValue(-1));
-
-    CcuErrorInfo errorInfo{};
-    errorInfo.repType = CcuRep::CcuRepType::READ;
-    errorInfo.dieId = dieId;
-    errorInfo.msg.transMem.channelId = channelId;
-    std::vector<CcuErrorInfo> errorInfos{errorInfo};
     Hccl::TaskParam taskParam{.taskType = Hccl::TaskParamType::TASK_CCU};
     Hccl::TaskInfo taskInfo{0, 0, 0, taskParam, nullptr, false};
 
-    EXPECT_NO_THROW(CcuTaskException::NotifyControlPlaneOnUbError(errorInfos, taskInfo, 0, 0x01));
+    for (const auto& scene : scenes) {
+        SCOPED_TRACE("scene: " + scene.sceneName);
+        MOCKER(Hccl::HrtGetDevicePhyIdByUserDevId).stubs().with(mockcpp::any()).will(returnValue(static_cast<u32>(0)));
+        MOCKER(RaHasCapability)
+            .stubs()
+            .with(mockcpp::any(), mockcpp::any())
+            .will(returnValue(scene.capabilitySupported));
+        MOCKER(RaCtxNotifyEvent).expects(never());
 
-    GlobalMockObject::verify();
-    pool.channelJettyInfoMap_.clear();
-    (void)endpoint.ccuChannelCtxPool_.release();
-    {
-        std::lock_guard<std::mutex> lock(g_channelMapMutex);
-        g_channelIdToHandle.erase(channelId);
+        EXPECT_NO_THROW(CcuTaskException::NotifyControlPlaneOnUbError(scene.errorInfos, taskInfo, 0, 0x01));
+        GlobalMockObject::verify();
     }
 }
 
-TEST_F(CcuTaskExceptionTest, NotifyControlPlaneOnUbError_When_JettyStatusReady_Expect_Skip)
+TEST_F(CcuTaskExceptionTest, NotifyControlPlaneOnUbError_When_JettyStatusQuery_Expect_NotifyOrSkip)
 {
-    constexpr uint16_t channelId = 202;
     constexpr uint8_t dieId = 0;
-    {
-        std::lock_guard<std::mutex> lock(g_channelMapMutex);
-        g_channelIdToHandle[channelId] = 0xCCCC;
+    using QueryStub = HcclResult (*)(const CtxHandle, const std::vector<JettyHandle>&, std::vector<JettyStatus>&, u32&);
+    struct TestScene {
+        uint16_t channelId;
+        QueryStub queryStub;
+        bool expectNotify;
+        int32_t notifyRet;
+        std::string sceneName;
+    };
+    const std::vector<TestScene> scenes = {
+        {200, StubBatchQueryJettyStatusError, true, 0, "JettyErrorNotifySuccess"},
+        {201, StubBatchQueryJettyStatusError, true, -1, "JettyErrorNotifyFail"},
+        {202, StubBatchQueryJettyStatusReady, false, 0, "JettyStatusReadySkip"},
+        {203, StubBatchQueryJettyStatusFail, false, 0, "BatchQueryFailSkip"},
+    };
+
+    for (const auto& scene : scenes) {
+        SCOPED_TRACE("scene: " + scene.sceneName);
+        CcuJetty jetty(Hccl::IpAddress{}, CcuJettyInfo{});
+        HcommChannelDesc chDesc{};
+        CcuUrmaChannel channel(reinterpret_cast<EndpointHandle>(0x10), chDesc);
+        CcuChannelCtxPool pool(0);
+        EndpointDesc epDesc{};
+        UrmaEndpoint endpoint(epDesc);
+        SetupJettyQueryScene({scene.channelId}, dieId, jetty, channel, pool, endpoint);
+
+        MOCKER(HccpBatchQueryJettyStatus)
+            .stubs()
+            .with(mockcpp::any(), mockcpp::any(), mockcpp::any(), mockcpp::any())
+            .will(invoke(scene.queryStub));
+        if (scene.expectNotify) {
+            MOCKER(RaCtxNotifyEvent)
+                .expects(once())
+                .with(mockcpp::any(), mockcpp::any())
+                .will(returnValue(scene.notifyRet));
+        } else {
+            MOCKER(RaCtxNotifyEvent).expects(never());
+        }
+
+        CcuErrorInfo errorInfo{};
+        errorInfo.repType = CcuRep::CcuRepType::READ;
+        errorInfo.dieId = dieId;
+        errorInfo.msg.transMem.channelId = scene.channelId;
+        std::vector<CcuErrorInfo> errorInfos{errorInfo};
+        Hccl::TaskParam taskParam{.taskType = Hccl::TaskParamType::TASK_CCU};
+        Hccl::TaskInfo taskInfo{0, 0, 0, taskParam, nullptr, false};
+
+        EXPECT_NO_THROW(CcuTaskException::NotifyControlPlaneOnUbError(errorInfos, taskInfo, 0, 0x01));
+        TeardownJettyQueryScene({scene.channelId}, pool, endpoint);
     }
+}
+
+// ============ CollectErrorJettys 测试（NotifyControlPlaneOnUbError拆分出的子函数） ============
+
+TEST_F(CcuTaskExceptionTest, CollectErrorJettys_When_MixedErrorInfos_Expect_SkipInvalidAndDedup)
+{
+    constexpr uint16_t channelIdA = 300;
+    constexpr uint16_t channelIdB = 301;
+    constexpr uint16_t channelIdNoJetty = 302;
+    constexpr uint8_t dieId = 0;
 
     CcuJetty jetty(Hccl::IpAddress{}, CcuJettyInfo{});
-    jetty.ctxHandle_ = reinterpret_cast<CtxHandle>(0x1);
-    jetty.jettyHandlePtr_ = reinterpret_cast<void*>(0x2);
-    jetty.jettyInfo_.taJettyId = 9;
-
     HcommChannelDesc chDesc{};
     CcuUrmaChannel channel(reinterpret_cast<EndpointHandle>(0x10), chDesc);
-    void* channelPtr = static_cast<Channel*>(&channel);
-
-    MOCKER(HcommChannelGet)
-        .stubs()
-        .with(mockcpp::any(), outBoundP(&channelPtr))
-        .will(returnValue(static_cast<HcommResult>(0)));
-
     CcuChannelCtxPool pool(0);
-    pool.channelJettyInfoMap_[{dieId, channelId}].second.push_back(&jetty);
-
     EndpointDesc epDesc{};
     UrmaEndpoint endpoint(epDesc);
-    endpoint.ccuChannelCtxPool_.reset(&pool);
-    void* endpointPtr = static_cast<Endpoint*>(&endpoint);
+    // channelIdA/channelIdB均映射到同一个jetty，验证去重后只收集一次且channelId取第一个
+    SetupJettyQueryScene({channelIdA, channelIdB}, dieId, jetty, channel, pool, endpoint);
+    {
+        // channelIdNoJetty仅注册映射，池中无jetty(GetCcuChannelCtxById返回HCCL_E_NOT_FOUND)
+        std::lock_guard<std::mutex> lock(g_channelMapMutex);
+        g_channelIdToHandle[channelIdNoJetty] = 0xEEEE;
+    }
 
-    MOCKER(HcommEndpointGet)
-        .stubs()
-        .with(mockcpp::any(), outBoundP(&endpointPtr))
-        .will(returnValue(static_cast<HcommResult>(0)));
+    auto makeErrorInfo = [](CcuRep::CcuRepType repType, uint8_t dieId, uint16_t channelId) {
+        CcuErrorInfo errorInfo{};
+        errorInfo.repType = repType;
+        errorInfo.dieId = dieId;
+        if (repType == CcuRep::CcuRepType::REM_POST_SEM) {
+            errorInfo.msg.waitSignal.channelId[0] = channelId;
+        } else {
+            errorInfo.msg.transMem.channelId = channelId;
+        }
+        return errorInfo;
+    };
+    std::vector<CcuErrorInfo> errorInfos{
+        makeErrorInfo(CcuRep::CcuRepType::REM_POST_SEM, dieId, 65535),    // INVALID_U16，直接跳过
+        makeErrorInfo(CcuRep::CcuRepType::READ, dieId, channelIdNoJetty), // channelId有效但池中无jetty
+        makeErrorInfo(CcuRep::CcuRepType::READ, dieId, channelIdA),
+        makeErrorInfo(CcuRep::CcuRepType::READ, dieId, channelIdB)};
 
-    MOCKER_CPP(&UrmaEndpoint::GetCcuChannelCtxPool).stubs().will(returnValue(&pool));
+    CcuJettyNotifyInfo jettyInfo;
+    CcuTaskException::CollectErrorJettys(errorInfos, jettyInfo);
 
-    MOCKER(Hccl::HrtGetDevicePhyIdByUserDevId).stubs().with(mockcpp::any()).will(returnValue(static_cast<u32>(0)));
-    MOCKER(RaHasCapability).stubs().with(mockcpp::any(), mockcpp::any()).will(returnValue(true));
-    MOCKER(HccpBatchQueryJettyStatus)
-        .stubs()
-        .with(mockcpp::any(), mockcpp::any(), mockcpp::any(), mockcpp::any())
-        .will(invoke(StubBatchQueryJettyStatusReady));
+    EXPECT_EQ(jettyInfo.ccuJettys.size(), 1u);
+    EXPECT_EQ(jettyInfo.ccuJettys[0], &jetty);
+    EXPECT_EQ(jettyInfo.channelIds.size(), 1u);
+    EXPECT_EQ(jettyInfo.channelIds[0], channelIdA);
+    EXPECT_EQ(jettyInfo.jettyHandles.size(), 1u);
+    EXPECT_EQ(jettyInfo.jettyHandles[0], reinterpret_cast<JettyHandle>(0x2));
+
+    TeardownJettyQueryScene({channelIdA, channelIdB, channelIdNoJetty}, pool, endpoint);
+}
+
+// ============ NotifyJettyErrorToControlPlane 测试（NotifyControlPlaneOnUbError拆分出的子函数） ============
+
+TEST_F(CcuTaskExceptionTest, NotifyJettyErrorToControlPlane_When_SkipConditions_Expect_NoNotify)
+{
+    CcuJetty jetty(Hccl::IpAddress{}, CcuJettyInfo{});
+    jetty.ctxHandle_ = nullptr; // GetCtxHandle返回nullptr，rdmaHandle为空直接跳过
+    jetty.jettyHandlePtr_ = reinterpret_cast<void*>(0x2);
+
+    Hccl::TaskParam taskParam{.taskType = Hccl::TaskParamType::TASK_CCU};
+    Hccl::TaskInfo taskInfo{0, 0, 0, taskParam, nullptr, false};
+
+    // 场景1：rdmaHandle为空，跳过该jetty
+
+    SCOPED_TRACE("scene: RdmaHandleNull");
+    CcuJettyNotifyInfo jettyInfo;
+    jettyInfo.ccuJettys.push_back(&jetty);
+    jettyInfo.jettyHandles.push_back(jetty.GetJettyHandle());
+    jettyInfo.channelIds.push_back(200);
+    std::vector<u32> errorJettyIdx{0};
+
     MOCKER(RaCtxNotifyEvent).expects(never());
-
-    CcuErrorInfo errorInfo{};
-    errorInfo.repType = CcuRep::CcuRepType::READ;
-    errorInfo.dieId = dieId;
-    errorInfo.msg.transMem.channelId = channelId;
-    std::vector<CcuErrorInfo> errorInfos{errorInfo};
-    Hccl::TaskParam taskParam{.taskType = Hccl::TaskParamType::TASK_CCU};
-    Hccl::TaskInfo taskInfo{0, 0, 0, taskParam, nullptr, false};
-
-    EXPECT_NO_THROW(CcuTaskException::NotifyControlPlaneOnUbError(errorInfos, taskInfo, 0, 0x01));
-
+    EXPECT_NO_THROW(CcuTaskException::NotifyJettyErrorToControlPlane(0, taskInfo, 0, 0x01, jettyInfo, errorJettyIdx));
     GlobalMockObject::verify();
-    pool.channelJettyInfoMap_.clear();
-    (void)endpoint.ccuChannelCtxPool_.release();
-    {
-        std::lock_guard<std::mutex> lock(g_channelMapMutex);
-        g_channelIdToHandle.erase(channelId);
-    }
 }
