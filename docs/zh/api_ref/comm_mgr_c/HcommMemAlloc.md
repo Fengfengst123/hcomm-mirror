@@ -45,7 +45,7 @@ HcommResult HcommMemAlloc(void **ptr, size_t size)
 
 ## 返回值
 
-[HcommResult](./data_type_definition/HcclResult.md)：接口成功返回 `HCCL_SUCCESS`，其他值表示失败。
+[HcommResult](../comm_opdev/datatype_definition/HcommResult.md)：接口成功返回 `HCCL_SUCCESS`，其他值表示失败。
 
 - `HCCL_E_PARA`：参数非法（`ptr` 为空指针或 `size` 为 0）。
 - `HCCL_E_RUNTIME`：ACL运行时接口调用失败（获取设备、预留虚拟地址、申请物理内存或映射失败）。

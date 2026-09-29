@@ -43,7 +43,7 @@ HcommResult HcommMemFree(void *ptr)
 
 ## 返回值
 
-[HcommResult](./data_type_definition/HcclResult.md)：返回 `HCCL_SUCCESS` 表示接口调用成功；返回 `HCCL_E_RUNTIME` 表示ACL运行时接口调用失败（反查句柄、解映射、释放物理内存或释放虚拟地址失败）。
+[HcommResult](../comm_opdev/datatype_definition/HcommResult.md)：返回 `HCCL_SUCCESS` 表示接口调用成功；返回 `HCCL_E_RUNTIME` 表示ACL运行时接口调用失败（反查句柄、解映射、释放物理内存或释放虚拟地址失败）。
 
 ## 约束说明
 
