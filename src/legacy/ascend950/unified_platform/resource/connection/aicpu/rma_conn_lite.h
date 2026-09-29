@@ -159,28 +159,6 @@ public:
         (void)count;
     }
 
-    virtual bool CheckOverflow(u64 totalSize, bool isRead, bool isNotify)
-    {
-        (void)totalSize;
-        (void)isRead;
-        (void)isNotify;
-        return false;
-    }
-
-    virtual bool CheckOverflow(u32 wqeCount)
-    {
-        (void)wqeCount;
-        return false;
-    }
-
-    virtual u32 CalcWqeCount(u64 totalSize, bool isRead, bool isNotify) const
-    {
-        (void)totalSize;
-        (void)isRead;
-        (void)isNotify;
-        return 0;
-    }
-
 protected:
     u32 qpVa_{0};
 

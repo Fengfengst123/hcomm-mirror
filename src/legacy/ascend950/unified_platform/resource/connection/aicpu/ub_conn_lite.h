@@ -181,27 +181,9 @@ public:
         ci = lastCi;
     }
 
-    inline bool CheckOverflow(u64 totalSize, bool isRead, bool isNotify) override
-    {
-        u32 maxSliceSize = isRead ? maxReadSize : maxWriteSize;
-        u32 n = static_cast<u32>((totalSize + maxSliceSize - 1) / maxSliceSize);
-        if (isNotify) {
-            n += 1;
-        }
-        return (static_cast<u32>(GetInflight()) + n) > sqDepth_;
-    }
+    inline bool CheckOverflow(u32 wqeCount) const { return (static_cast<u32>(GetInflight()) + wqeCount) > sqDepth_; }
 
-    inline bool CheckOverflow(u32 wqeCount) override { return (static_cast<u32>(GetInflight()) + wqeCount) > sqDepth_; }
-
-    inline u32 CalcWqeCount(u64 totalSize, bool isRead, bool isNotify) const override
-    {
-        u32 maxSliceSize = isRead ? maxReadSize : maxWriteSize;
-        u32 n = static_cast<u32>((totalSize + maxSliceSize - 1) / maxSliceSize);
-        if (isNotify) {
-            n += 1;
-        }
-        return n;
-    }
+    void MakeSureAvailableSpace(u32 wqeCount) const;
 
 private:
     u16 pi{0};

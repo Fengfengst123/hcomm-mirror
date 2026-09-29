@@ -763,31 +763,8 @@ TEST_F(AicpuUbConnLiteTest, CheckOverflow_ExpectCorrect)
     ubConn.sqDepth_ = 8;
     ubConn.pi = 5;
     ubConn.ci = 2; // inflight=3
-    ubConn.maxReadSize = 1024;
-    ubConn.maxWriteSize = 1024;
 
     // cache版: 3+3<=8, 3+6>8
     EXPECT_FALSE(ubConn.CheckOverflow(static_cast<u32>(3)));
     EXPECT_TRUE(ubConn.CheckOverflow(static_cast<u32>(6)));
-    // transport版: 2048/1024=2个WQE, 3+2<=8
-    EXPECT_FALSE(ubConn.CheckOverflow(static_cast<u64>(2048), true, false));
-    // transport版: 8192/1024=8+1(notify)=9个WQE, 3+9>8
-    EXPECT_TRUE(ubConn.CheckOverflow(static_cast<u64>(8192), false, true));
-}
-
-/* ---------- CalcWqeCount ---------- */
-
-TEST_F(AicpuUbConnLiteTest, CalcWqeCount_ExpectCorrect)
-{
-    UbJettyLiteId id(1, 1, 1);
-    UbJettyLiteAttr attr(1, 1, 8, 1, false);
-    Eid rmtEid;
-    UbConnLite ubConn(id, attr, rmtEid);
-
-    ubConn.maxReadSize = 1024;
-    ubConn.maxWriteSize = 1024;
-
-    EXPECT_EQ(2u, ubConn.CalcWqeCount(2048, true, false)); // 整除
-    EXPECT_EQ(3u, ubConn.CalcWqeCount(2049, true, false)); // 非整除取上整
-    EXPECT_EQ(3u, ubConn.CalcWqeCount(2048, false, true)); // notify多占一个WQE
 }

@@ -166,11 +166,9 @@ public:
 private:
     using UbTransportLiteImplHandle = void*; // UbTransportLiteImpl*
 
-    // 预计算的WQE溢出检查信息: SubmitCacheEntry时按UbConnLite分组累加wqeCount, CheckWqeOverflow_直接遍历
     struct ConnOverflowInfo {
         Hccl::UbConnLite* ubConnLitePtr = nullptr;
-        Hccl::UbTransportLiteImpl* ubTransportLiteImplPtr = nullptr;
-        uint32_t wqeCount = 0;
+        uint32_t wqebbCount = 0; // 带notify的WQE占用2个wqebb, 其余WQE占用1个wqebb
     };
 
     inline static void CombineUint32ToUint64(uint64_t& addr, const uint32_t high, const uint32_t low)

@@ -871,17 +871,7 @@ void UbTransportLiteImpl::BatchTransfer(
     // 当前使用1个connection，下标为0 (当前只有一个connection，对应一个jetty)
     RmaConnLite* conn = connVec[0];
 
-    // 展开下发WQE前检查jetty SQ深度, 避免溢出
     u32 insNum = loc.size();
-    u32 pendingWqeCount = 0;
-    for (u32 i = 0; i < insNum; i++) {
-        bool isRead
-            = (transferOp[i].transType == TransferType::READ || transferOp[i].transType == TransferType::READ_REDUCE);
-        pendingWqeCount += cachedConn_->CalcWqeCount(GetRmaBufSlicelite(loc[i]).GetSize(), isRead, false);
-    }
-    if (UNLIKELY(CheckBatchOverflow(pendingWqeCount) != HCCL_SUCCESS)) {
-        HCCL_WARNING("[%s] jetty SQ overflow. pendingWqeCount[%u].", __func__, pendingWqeCount);
-    }
 
     // 展开下发WQE前, 按需设置cache context
     UbConnLite* ubConnLitePtr = nullptr;
@@ -1083,7 +1073,6 @@ HcclResult UbTransportLiteImpl::ExecuteBatchTransfer(
     transferOps.reserve(transferDescNum);
     notifyIdxs.reserve(transferDescNum);
 
-    u32 pendingWqeCount = 0;
     for (uint32_t i = 0; i < transferDescNum; i++) {
         Hccl::RmaBufferLite locRmaBuf;
         void* rmt = nullptr;
@@ -1105,13 +1094,6 @@ HcclResult UbTransportLiteImpl::ExecuteBatchTransfer(
                     "dataType[%d], reduceOp[%d].",
                     __func__, i, rmt, loc, len, tfType, dataType, reduceOp),
                 ret);
-            bool isRead = (tfType == Hccl::TransferType::READ || tfType == Hccl::TransferType::READ_REDUCE);
-            bool isNotify
-                = (tfType == Hccl::TransferType::WRITE_WITH_NOTIFY
-                   || tfType == Hccl::TransferType::WRITE_REDUCE_WITH_NOTIFY);
-            pendingWqeCount += cachedConn_->CalcWqeCount(len, isRead, isNotify);
-        } else {
-            pendingWqeCount += 1;
         }
         if (tfType == Hccl::TransferType::NOTIFY_RECORD || tfType == Hccl::TransferType::WRITE_WITH_NOTIFY
             || tfType == Hccl::TransferType::WRITE_REDUCE_WITH_NOTIFY) {
@@ -1136,11 +1118,6 @@ HcclResult UbTransportLiteImpl::ExecuteBatchTransfer(
             "reduceOp[%d].",
             __func__, i, rmt, loc, len, tfType, dataType, reduceOp);
     }
-    // 目前只有这个函数失败会返回HCCL_E_AGAIN，外面的函数收到HCCL_E_AGAIN既可以判断jetty SQ overflow
-    HcclResult overflowRet = CheckBatchOverflow(pendingWqeCount);
-    CHK_PRT_RET(
-        overflowRet != HCCL_SUCCESS,
-        HCCL_WARNING("[%s] jetty SQ overflow, pendingWqeCount[%u].", __func__, pendingWqeCount), overflowRet);
     EXCEPTION_CATCH(
         BatchTransferAll(locSlices, rmtSlices, transferOps, notifyIdxs, *streamLitePtr), return HCCL_E_INTERNAL);
     return HCCL_SUCCESS;
@@ -1525,7 +1502,5 @@ bool UbTransportLiteImpl::IsReportTask() const
 {
     return taskExceptionEnable_ || DfxProfilingHandlerLite::GetInstance().GetProfL1State();
 }
-
-u64 UbTransportLiteImpl::GetDrainSize() const { return drainNotify_.size; }
 
 } // namespace Hccl

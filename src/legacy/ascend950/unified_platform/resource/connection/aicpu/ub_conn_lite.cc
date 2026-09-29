@@ -18,8 +18,13 @@
 #include "string_util.h"
 #include "binary_stream.h"
 #include "data_type.h"
+#ifdef CCL_KERNEL_AICPU
+#include "hcomm_primitives.h"
+#include "aicpu_ts_primitives_c_adpt.h"
+#endif
 
 constexpr u32 MAX_LOG_TIMEOUT_MS = 500;
+constexpr u32 SQ_FULL_PRINT_INTERVAL = 30; // 溢出等待时日志打印间隔30s
 namespace Hccl {
 constexpr u32 ADDR_BIT_OFFSET = 32;
 constexpr u32 SQE_SIZE_128 = 128;
@@ -133,6 +138,10 @@ void UbConnLite::ProcessSlices(
     if (UNLIKELY(loc.GetAddr() > UINT64_MAX - totalSize || rmt.GetAddr() > UINT64_MAX - totalSize)) {
         THROW<InternalException>("integer overflow occurs");
     }
+
+    u64 wqeCount = lastSliceSize > 0 ? (sliceNum + 1) : sliceNum;
+    MakeSureAvailableSpace(static_cast<u32>(wqeCount));
+
     for (u64 sliceIdx = 0; sliceIdx < sliceNum; sliceIdx++) {
         u64 offset = sliceIdx * sliceSize;
         u64 locAddr = loc.GetAddr() + offset;
@@ -186,6 +195,11 @@ void UbConnLite::ProcessSlicesWithNotify(
     u64 locBufSize = loc.GetSize();
     u64 sliceNum = locBufSize / sliceSize;
     u64 lastSliceSize = locBufSize % sliceSize;
+
+    u64 wqeCount = lastSliceSize > 0 ? (sliceNum + 1) : sliceNum;
+    // processOneSliceWithNotify里面的pi = pi + PI_NUM_TWO,所以额外加1
+    MakeSureAvailableSpace(static_cast<u32>(wqeCount) + 1);
+
     if (sliceNum > 0 && lastSliceSize == 0) {
         sliceNum--;
         lastSliceSize = sliceSize;
@@ -391,6 +405,9 @@ void UbConnLite::InlineWrite(
 {
     HCCL_INFO("[UbConnLite::%s] start", __func__);
 
+    // inline写固定占用1个WQE
+    MakeSureAvailableSpace(1);
+
     // 构造sqe
     UdmaSqeWrite sqe{};
     sqe.comm.inlineEn = 1;
@@ -565,6 +582,7 @@ void UbConnLite::FillBatchOneWqe(
     u32 sqOffset = pi % sqDepth_;
     pi = pi + 1;
     if (UNLIKELY(pi > sqDepth_)) {
+        HCCL_ERROR("[%s]dieId:%u, funcId:%u, jettyId:%u, pi %u", __func__, dieId_, funcId_, jettyId_, pi);
         pi = pi % sqDepth_;
     }
 
@@ -758,4 +776,48 @@ UbConnLiteParam::UbConnLiteParam(std::vector<char>& uniqueId)
         "[UbConnLiteParam::%s] locEid[%s], rmtEid[%s]", __func__, locEid.Describe().c_str(), rmtEid.Describe().c_str());
 }
 
+// 每隔SQ_FULL_PRINT_INTERVAL秒打印一次状态, 等待超时抛出InternalException
+void UbConnLite::MakeSureAvailableSpace(u32 wqeCount) const
+{
+    if (!CheckOverflow(wqeCount)) {
+        return;
+    }
+
+    u32 sqFullTimeout = RTSQ_FULL_TIMEOUT_DEFAULT;
+#ifdef CCL_KERNEL_AICPU
+    sqFullTimeout = GetSqFullTimeOut();
+#endif
+    auto startTime = std::chrono::steady_clock::now();
+    const std::chrono::seconds printInterval(SQ_FULL_PRINT_INTERVAL);
+    auto lastPrintTime = startTime - printInterval;
+    HCCL_INFO(
+        "[%s]jetty SQ overflow wait for available space, dieId:%u, funcId:%u, jettyId:%u, sqDepth:%u, dbSendSeq:%u, "
+        "dbDoneSeq:%u, pi:%u, ci:%u, inflight:%u, wqeCount:%u, sqFullTimeout:%u s",
+        __func__, dieId_, funcId_, jettyId_, sqDepth_, dbSendSeq_, dbDoneSeq_, pi, ci, GetInflight(), wqeCount,
+        sqFullTimeout);
+    while (CheckOverflow(wqeCount)) {
+        auto curTime = std::chrono::steady_clock::now();
+        if (UNLIKELY(curTime - lastPrintTime >= printInterval)) {
+            HCCL_RUN_INFO(
+                "[%s]jetty SQ overflow while loop, dieId:%u, funcId:%u, jettyId:%u, sqDepth:%u, dbSendSeq:%u, "
+                "dbDoneSeq:%u, pi:%u, ci:%u, inflight:%u, wqeCount:%u, sqFullTimeout:%u s",
+                __func__, dieId_, funcId_, jettyId_, sqDepth_, dbSendSeq_, dbDoneSeq_, pi, ci, GetInflight(), wqeCount,
+                sqFullTimeout);
+            lastPrintTime = curTime;
+        }
+
+        if (UNLIKELY((sqFullTimeout != 0) && ((curTime - startTime) >= std::chrono::seconds(sqFullTimeout)))) {
+            HCCL_ERROR(
+                "[%s]jetty SQ overflow wait timeout, dieId:%u, funcId:%u, jettyId:%u, sqDepth:%u, dbSendSeq:%u, "
+                "dbDoneSeq:%u, pi:%u, ci:%u, inflight:%u, wqeCount:%u, sqFullTimeout:%u s",
+                __func__, dieId_, funcId_, jettyId_, sqDepth_, dbSendSeq_, dbDoneSeq_, pi, ci, GetInflight(), wqeCount,
+                sqFullTimeout);
+            THROW<InternalException>(StringFormat(
+                "[%s]jetty SQ overflow wait timeout, dieId:%u, funcId:%u, jettyId:%u, sqDepth:%u, dbSendSeq:%u, "
+                "dbDoneSeq:%u, pi:%u, ci:%u, inflight:%u, wqeCount:%u, sqFullTimeout:%u s",
+                __func__, dieId_, funcId_, jettyId_, sqDepth_, dbSendSeq_, dbDoneSeq_, pi, ci, GetInflight(), wqeCount,
+                sqFullTimeout));
+        }
+    }
+}
 } // namespace Hccl

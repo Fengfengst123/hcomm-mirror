@@ -940,6 +940,7 @@ TEST_F(AicpuTaskCacheEntryTest, RefreshSqeTasks_TaskConfigDebug)
 }
 
 // ===================== CheckWqeOverflow_ Tests =====================
+// 注意: 不构造溢出用例, 溢出路径会阻塞等待sqFullTimeout后抛出InternalException, UT环境无法快速返回
 
 TEST_F(AicpuTaskCacheEntryTest, CheckWqeOverflow_NoOverflow_ReturnsSuccess)
 {
@@ -956,30 +957,55 @@ TEST_F(AicpuTaskCacheEntryTest, CheckWqeOverflow_NoOverflow_ReturnsSuccess)
 
     ASSERT_EQ(entry.SubmitCacheEntry(), HCCL_SUCCESS);
 
-    // pi=0, ci=0, inflight=0, wqeCount=1, 0+1 <= 128
+    // pi=0, ci=0, inflight=0, wqebbCount=1, 0+1 <= 128
     EXPECT_EQ(entry.CheckWqeOverflow_(), HCCL_SUCCESS);
 }
 
-TEST_F(AicpuTaskCacheEntryTest, CheckWqeOverflow_Overflow_ReturnsAgain)
+TEST_F(AicpuTaskCacheEntryTest, BuildConnOverflowInfos_WriteWithNotifyOccupiesTwoWqebb)
 {
     hcomm::AicpuTaskCacheEntry entry;
     ASSERT_EQ(InitEntryWithTwoAddrs(entry), HCCL_SUCCESS);
 
     uint64_t locAddr = TEST_BASE_ADDR_0 + 0x10;
     uint64_t rmtAddr = TEST_BASE_ADDR_1 + 0x20;
-    std::vector<Hccl::WqeTask> wqeTasks = {MakeWqeTaskRead(locAddr, rmtAddr)};
+    // 带notify的WQE占用2个wqebb(LaunchOneWqeWithNotify中pi += 2), 普通read占用1个wqebb
+    std::vector<Hccl::WqeTask> wqeTasks
+        = {MakeWqeTaskRead(locAddr, rmtAddr), MakeWqeTaskWriteWithNotify(locAddr, rmtAddr)};
     ASSERT_EQ(
         entry.AddWqeArray(ubConnLite_.get(), ubTransport_.get(), wqeTasks, 0, 0, false, MakeDbSqeProfInfo(false)),
         HCCL_SUCCESS);
     AddUbdmaSqeToClearTmpMap(entry);
 
-    // pi=TEST_SQ_DEPTH, ci=0, inflight=128, wqeCount=1, 128+1 > 128 -> overflow
-    ubConnLite_->pi = TEST_SQ_DEPTH;
+    ASSERT_EQ(entry.SubmitCacheEntry(), HCCL_SUCCESS);
+
+    // 同一UbConnLite只有一组: 1(read) + 2(write with notify) = 3个wqebb
+    ASSERT_EQ(entry.connOverflowInfos_.size(), 1U);
+    EXPECT_EQ(entry.connOverflowInfos_[0].wqebbCount, 3U);
+}
+
+TEST_F(AicpuTaskCacheEntryTest, BuildConnOverflowInfos_SameConnAccumulatesAcrossArrays)
+{
+    hcomm::AicpuTaskCacheEntry entry;
+    ASSERT_EQ(InitEntryWithTwoAddrs(entry), HCCL_SUCCESS);
+
+    uint64_t locAddr = TEST_BASE_ADDR_0 + 0x10;
+    uint64_t rmtAddr = TEST_BASE_ADDR_1 + 0x20;
+    std::vector<Hccl::WqeTask> wqeTasks0 = {MakeWqeTaskWriteWithNotify(locAddr, rmtAddr)};
+    ASSERT_EQ(
+        entry.AddWqeArray(ubConnLite_.get(), ubTransport_.get(), wqeTasks0, 0, 0, false, MakeDbSqeProfInfo(false)),
+        HCCL_SUCCESS);
+    std::vector<Hccl::WqeTask> wqeTasks1 = {MakeWqeTaskRead(locAddr, rmtAddr)};
+    ASSERT_EQ(
+        entry.AddWqeArray(ubConnLite_.get(), ubTransport_.get(), wqeTasks1, 1, 0, false, MakeDbSqeProfInfo(false)),
+        HCCL_SUCCESS);
+    AddUbdmaSqeToClearTmpMap(entry, 0);
+    AddUbdmaSqeToClearTmpMap(entry, 1);
 
     ASSERT_EQ(entry.SubmitCacheEntry(), HCCL_SUCCESS);
 
-    EXPECT_EQ(entry.CheckWqeOverflow_(), HCCL_E_AGAIN);
-    ubConnLite_->pi = 0;
+    // 同一UbConnLite被两个WQE数组引用, 占用累加: 2(write with notify) + 1(read) = 3个wqebb
+    ASSERT_EQ(entry.connOverflowInfos_.size(), 1U);
+    EXPECT_EQ(entry.connOverflowInfos_[0].wqebbCount, 3U);
 }
 
 // ===================== ReportSqeArrayProfiling_ (profiling disabled path) =====================

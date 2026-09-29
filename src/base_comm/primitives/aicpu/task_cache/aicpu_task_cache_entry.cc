@@ -448,7 +448,7 @@ AicpuTaskCacheEntry::RefreshAndLaunch(const uint64_t* baseAddrs, const uint64_t*
     }
 
     // 下发前检查jetty SQ深度, 避免cache hit时WQE溢出
-    // 目前只有这个函数失败会返回HCCL_E_AGAIN，外面的函数收到HCCL_E_AGAIN既可以判断jetty SQ overflow
+    // 溢出时阻塞等待空间释放, 等待超时抛出InternalException
     CHK_RET(CheckWqeOverflow_());
 
     CHK_RET(RefreshTokenInfos_(baseAddrs, memSizes, count));
@@ -518,23 +518,31 @@ AicpuTaskCacheEntry::RefreshTokenInfos_(const uint64_t* baseAddrs, const uint64_
 
 inline HcclResult AicpuTaskCacheEntry::BuildConnOverflowInfos_()
 {
-    // 按UbConnLite分组, 统计每个connection的WQE总数, 预计算后供CheckWqeOverflow_使用
-    // 注意: 同一个UbConnLite可能被多个WQE数组引用, 需要累加WQE数量
+    // 按UbConnLite分组, 统计每个connection的WQE实际占用的wqebb总数, 预计算后供CheckWqeOverflow_使用
+    // 注意1: 同一个UbConnLite可能被多个WQE数组引用, 需要累加占用数量
+    // 注意2: 每个WQE占用1个wqebb, 带notify的WQE额外多占1个(参考LaunchOneWqeWithNotify中pi += 2)
     connOverflowInfos_.clear();
-    connOverflowInfos_.reserve(wqeTaskArrayInfos_.size());
     for (size_t i = 0; i < wqeTaskArrayInfos_.size(); i++) {
         UbConnLite* ubConnLitePtr = wqeTaskArrayInfos_[i].ubConnLitePtr;
-        const uint32_t wqeCount = static_cast<uint32_t>(wqeTaskArrayInfos_[i].wqeTaskArray.size());
+        const vector<WqeTask>& wqeTasks = wqeTaskArrayInfos_[i].wqeTaskArray;
+        uint32_t wqebbCount = static_cast<uint32_t>(wqeTasks.size());
+        for (size_t wqeIdx = 0; wqeIdx < wqeTasks.size(); wqeIdx++) {
+            const UdmaSqeCommon* wqeCommonPtr
+                = static_cast<const UdmaSqeCommon*>(static_cast<const void*>(&wqeTasks[wqeIdx]));
+            if (static_cast<uint8_t>(wqeCommonPtr->opcode) == WRITE_WITH_NOTIFY_OPCODE) {
+                wqebbCount += 1;
+            }
+        }
         bool found = false;
         for (auto& info : connOverflowInfos_) {
             if (info.ubConnLitePtr == ubConnLitePtr) {
-                info.wqeCount += wqeCount;
+                info.wqebbCount += wqebbCount;
                 found = true;
                 break;
             }
         }
         if (!found) {
-            connOverflowInfos_.push_back({ubConnLitePtr, wqeTaskArrayInfos_[i].ubTransportLiteImplPtr, wqeCount});
+            connOverflowInfos_.push_back({ubConnLitePtr, wqebbCount});
         }
     }
     return HCCL_SUCCESS;
@@ -543,12 +551,7 @@ inline HcclResult AicpuTaskCacheEntry::BuildConnOverflowInfos_()
 inline HcclResult AicpuTaskCacheEntry::CheckWqeOverflow_()
 {
     for (const auto& info : connOverflowInfos_) {
-        // 同步CI并检查jetty SQ深度
-        if (info.ubConnLitePtr->CheckOverflow(info.wqeCount) != HCCL_SUCCESS) {
-            HCCL_WARNING(
-                "[AicpuTaskCacheEntry][CheckWqeOverflow_] jetty SQ overflow, pendingWqeCount[%u]", info.wqeCount);
-            return HCCL_E_AGAIN;
-        }
+        EXCEPTION_CATCH(info.ubConnLitePtr->MakeSureAvailableSpace(info.wqebbCount), return HCCL_E_INTERNAL);
     }
     return HCCL_SUCCESS;
 }
