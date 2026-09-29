@@ -233,7 +233,7 @@ const std::string hcomm_g_msg = R"(
       "Arglist": "reason",
       "suggestion": {
         "Possible Cause": "N/A",
-        "Solution": "Check whether the single-card multi-process scenario is used. If yes, configure the port number using the environment variable HCCL_NPU_SOCKET_PORT_RANGE."
+        "Solution": "1. Check whether the single-card multi-process scenario is used. If yes: for communication domains initialized using root info, configure the port range using the environment variable HCCL_NPU_SOCKET_PORT_RANGE; for communication domains initialized using a rank table file, HCCL_NPU_SOCKET_PORT_RANGE does not take effect in this mode, configure different device_port values for the same device IP in the rank table file used by each process (the default port 16666 is used when device_port is not configured).\r\n2. For detailed troubleshooting guidance, search for the keyword \"EI0020\" on https://www.hiascend.com/document/."
       }
     }
   ]
