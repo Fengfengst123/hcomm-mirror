@@ -2908,7 +2908,6 @@ RS_ATTRI_VISI_DEF int RsTypicalCqCreate(unsigned int phyId, unsigned int rdevInd
     unsigned int *cqn)
 {
     struct RsTypicalCqEntry *entry;
-    struct RsTypicalCqEntry *tmp;
     int ret;
     struct RsRdevCb *rdevCb = NULL;
     struct ibv_cq *ibCq = NULL;
@@ -2926,35 +2925,23 @@ RS_ATTRI_VISI_DEF int RsTypicalCqCreate(unsigned int phyId, unsigned int rdevInd
         return ret;
     }
 
-    pthread_mutex_lock(&gRsTypicalCqMutex);
-    if (gRsTypicalCqList.next == NULL) {
-        RS_INIT_LIST_HEAD(&gRsTypicalCqList);
-    }
-
-    RS_LIST_GET_HEAD_ENTRY(tmp, entry, &gRsTypicalCqList, list, struct RsTypicalCqEntry);
-    for (; &tmp->list != &gRsTypicalCqList;
-         tmp = entry, entry = list_entry(entry->list.next, struct RsTypicalCqEntry, list)) {
-        if (tmp->phyId == phyId && tmp->rdevIndex == rdevIndex && tmp->cqn == *cqn) {
-            tmp->ibCq = ibCq;
-            tmp->deviceCqAttr = deviceCqAttr;
-            pthread_mutex_unlock(&gRsTypicalCqMutex);
-            hccp_info_rma("RsTypicalCqCreate updated: phyId[%u] rdevIndex[%u] cqn[%u] cqDepth[%u]", phyId, rdevIndex,
-                *cqn, cqDepth);
-            return 0;
-        }
-    }
-
     entry = calloc(1, sizeof(struct RsTypicalCqEntry));
     if (entry == NULL) {
-        pthread_mutex_unlock(&gRsTypicalCqMutex);
         hccp_err("RsTypicalCqCreate calloc failed, cqn[%u]", *cqn);
+        (void)RsIbvDestroyCq(ibCq);
         return -ENOMEM;
     }
+
     entry->phyId = phyId;
     entry->rdevIndex = rdevIndex;
     entry->cqn = *cqn;
     entry->ibCq = ibCq;
     entry->deviceCqAttr = deviceCqAttr;
+
+    pthread_mutex_lock(&gRsTypicalCqMutex);
+    if (gRsTypicalCqList.next == NULL) {
+        RS_INIT_LIST_HEAD(&gRsTypicalCqList);
+    }
     RsListAddTail(&entry->list, &gRsTypicalCqList);
     pthread_mutex_unlock(&gRsTypicalCqMutex);
 
@@ -2989,10 +2976,12 @@ RS_ATTRI_VISI_DEF int RsTypicalCqDestroy(unsigned int phyId, unsigned int rdevIn
                 if (ret) {
                     hccp_err("rs_ibv_destroy_cq failed cqn[%u] ret[%d]", cqn, ret);
                     free(tmp);
+                    tmp = NULL;
                     return ret;
                 }
             }
             free(tmp);
+            tmp = NULL;
             hccp_info_rma("RsTypicalCqDestroy success: phyId[%u] rdevIndex[%u] cqn[%u]", phyId, rdevIndex, cqn);
             return 0;
         }
