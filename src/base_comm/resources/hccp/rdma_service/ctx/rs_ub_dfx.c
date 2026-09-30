@@ -254,8 +254,8 @@ STATIC int RsUbAsyncEventGetJettyContext(urma_async_event_t *event, struct RsUbD
 
     ret = RsUrmaGetJettyOpt(event->element.jetty, URMA_JETTY_FULL_CTX, asyncEventCb->context, JETTY_CONTEXT_LEN);
     CHK_PRT_RETURN(ret != 0,
-        hccp_warn_rma("RsUrmaGetJettyOpt failed, ret:%d, jettyId:%u devIndex:0x%0x", ret,
-            event->element.jetty->jetty_id.id, devCb->index),
+        hccp_err("RsUrmaGetJettyOpt failed, ret:%d, jettyId:%u devIndex:0x%0x", ret, event->element.jetty->jetty_id.id,
+            devCb->index),
         ret);
     asyncEventCb->len = JETTY_CONTEXT_LEN;
     return ret;

@@ -109,7 +109,6 @@ STATIC int RsUrmaDeviceApiInit(void)
     DL_API_RET_IS_NULL_CHECK(gUrmaOps.rsUrmaUninit, "urma_uninit");
 
     gUrmaOps.rsUrmaGetAbiVersion = (uint64_t(*)(void))HccpDlsym(gUrmaApiHandle, "urma_get_abi_version");
-    DL_API_RET_IS_NULL_INFO(gUrmaOps.rsUrmaGetAbiVersion, "urma_get_abi_version");
 
     gUrmaOps.rsUrmaGetDeviceList = (urma_device_t * *(*)(int *)) HccpDlsym(gUrmaApiHandle, "urma_get_device_list");
     DL_API_RET_IS_NULL_CHECK(gUrmaOps.rsUrmaGetDeviceList, "urma_get_device_list");

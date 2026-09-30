@@ -14,6 +14,7 @@
 #include "hccp_ctx.h"
 #include "ra_hdc_ctx.h"
 #include "ra_hdc_async_ctx.h"
+#include "ra_rs_err.h"
 #include "ra_rs_ctx.h"
 #include "ra_rs_comm.h"
 #include "rs_ctx.h"
@@ -727,6 +728,7 @@ int RaRsCtxGetUbContext(char *inBuf, char *outBuf, int *outLen, int *opResult, i
     opDataOut->rxData.len = opData->txData.len;
     *opResult = gRaRsCtxOps.ctxGetUbContext(&devInfo, opData->txData.id, opData->txData.contextType,
         opDataOut->rxData.context, &opDataOut->rxData.len);
+    CHK_PRT_RETURN(*opResult == -ENOTSUPP, hccp_warn_rma("get ub context unsuccessful"), 0);
     if (*opResult != 0) {
         hccp_err("[get][jettyContext]ctxGetJettyContext failed, ret:%d, phyId:%u devIndex:0x%x", *opResult,
             devInfo.phyId, devInfo.devIndex);
