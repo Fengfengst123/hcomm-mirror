@@ -52,6 +52,8 @@ HcclResult EndpointPair::GetHostSocketWithRank(
     uint32_t connectMode = 0;
     Hccl::LinkData linkData = BuildDefaultLinkData();
     CHK_RET(EndpointDescPairToLinkData(localEndpointDesc_, remoteEndpointDesc_, linkData, reuseIdx));
+    linkData.SetLocalIpIndex(localIpIndex_);
+    linkData.SetRemoteIpIndex(remoteIpIndex_);
     std::string linkTag = socketTag;
     if (linkData.GetReuseIdx() != "0") {
         linkTag += ("_" + linkData.GetReuseIdx());
@@ -127,6 +129,8 @@ HcclResult EndpointPair::HandleHostSocketOrBuildLinkData(
     isHost = false;
     CHK_RET(EndpointDescPairToLinkDataWithRankIds(
         myRank, rmtRank, localEndpointDesc_, remoteEndpointDesc_, linkData, devicePhyId, remoteDevicePhyId, reuseIdx));
+    linkData.SetLocalIpIndex(localIpIndex_);
+    linkData.SetRemoteIpIndex(remoteIpIndex_);
     return HCCL_SUCCESS;
 }
 
@@ -169,6 +173,8 @@ HcclResult EndpointPair::ServerInit(
     Hccl::LinkData linkData = BuildDefaultLinkData();
     CHK_RET(EndpointDescPairToLinkDataWithRankIds(
         myRank, rmtRank, localEndpointDesc_, remoteEndpointDesc_, linkData, devicePhyId, remoteDevicePhyId, reuseIdx));
+    linkData.SetLocalIpIndex(localIpIndex_);
+    linkData.SetRemoteIpIndex(remoteIpIndex_);
     EXCEPTION_HANDLE_BEGIN
     CHK_RET(EnsureSocketMgrCompat(myRank, socketTag));
     Hccl::SocketConfig socketConfig = BuildSocketConfig(linkData, socketTag);

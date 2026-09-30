@@ -118,7 +118,7 @@ BaseMemTransport* MemTransportManager::CreateOpbasedMemTransport(const LinkData&
     attr.opAcceState = accelerator;
     attr.handshakeMsg = op->GetUniqueId();
 
-    SocketConfig socketConfig(linkData.GetRemoteRankId(), linkData, comm->GetEstablishLinkSocketTag());
+    SocketConfig socketConfig = comm->GetSocketManager().BuildSocketConfig(linkData);
     auto socket = comm->GetSocketManager().GetConnectedSocket(socketConfig);
     if (socket == nullptr) {
         throw std::runtime_error("CreateMemTransport GetConnectedSocket failed, socket is nullptr");
@@ -174,7 +174,7 @@ BaseMemTransport* MemTransportManager::CreateOffloadMemTransport(const std::stri
     attr.opAcceState = accelerator;
     attr.handshakeMsg = op->GetUniqueId();
 
-    SocketConfig socketConfig(linkData.GetRemoteRankId(), linkData, comm->GetEstablishLinkSocketTag());
+    SocketConfig socketConfig = comm->GetSocketManager().BuildSocketConfig(linkData);
     auto socket = comm->GetSocketManager().GetConnectedSocket(socketConfig);
     if (socket == nullptr) {
         throw std::runtime_error("CreateMemTransport GetConnectedSocket failed, socket is nullptr");
@@ -635,7 +635,7 @@ BaseMemTransport* MemTransportManager::RecoverOpbasedMemTransport(const LinkData
     attr.opAcceState = accelerator;
     attr.handshakeMsg = op.GetUniqueId();
 
-    SocketConfig socketConfig(linkData.GetRemoteRankId(), linkData, comm->GetEstablishLinkSocketTag());
+    SocketConfig socketConfig = comm->GetSocketManager().BuildSocketConfig(linkData);
     auto socket = comm->GetSocketManager().GetConnectedSocket(socketConfig);
     if (socket == nullptr) {
         throw std::runtime_error("CreateMemTransport GetConnectedSocket failed, socket is nullptr");
@@ -705,7 +705,7 @@ BaseMemTransport* MemTransportManager::RecoverOffloadMemTransport(const std::str
     attr.opAcceState = accelerator;
     attr.handshakeMsg = op.GetUniqueId();
 
-    SocketConfig socketConfig(linkData.GetRemoteRankId(), linkData, comm->GetEstablishLinkSocketTag());
+    SocketConfig socketConfig = comm->GetSocketManager().BuildSocketConfig(linkData);
     auto socket = comm->GetSocketManager().GetConnectedSocket(socketConfig);
     if (socket == nullptr) {
         throw std::runtime_error("CreateMemTransport GetConnectedSocket failed, socket is nullptr");
@@ -901,7 +901,7 @@ BaseMemTransport* MemTransportManager::CreateOneSidedTransport(const LinkData& l
     HCCL_INFO("[MemTransportManager::CreateOneSidedTransport] accelerator[%s]", accelerator.Describe().c_str());
     attr.opAcceState = accelerator;
 
-    SocketConfig socketConfig(linkData.GetRemoteRankId(), linkData, comm->GetEstablishLinkSocketTag());
+    SocketConfig socketConfig = comm->GetSocketManager().BuildSocketConfig(linkData);
     auto socket = comm->GetSocketManager().GetConnectedSocket(socketConfig);
     if (socket == nullptr) {
         throw std::runtime_error("CreateMemTransport GetConnectedSocket failed, socket is nullptr");
@@ -980,7 +980,7 @@ BaseMemTransport* MemTransportManager::CreateUrmaDirectTransport(const LinkData&
     // 握手消息定义，未来包括 cann版本号，rankTable CRC等字段
     attr.handshakeMsg = op->GetUniqueId();
 
-    SocketConfig socketConfig(linkData.GetRemoteRankId(), linkData, comm->GetEstablishLinkSocketTag());
+    SocketConfig socketConfig = comm->GetSocketManager().BuildSocketConfig(linkData);
     auto socket = comm->GetSocketManager().GetConnectedSocket(socketConfig);
     if (socket == nullptr) {
         throw std::runtime_error("CreateMemTransport GetConnectedSocket failed, socket is nullptr");

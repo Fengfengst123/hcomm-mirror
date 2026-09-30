@@ -758,11 +758,36 @@ void RankGraphBuilder::BuildRankGraph()
     // 添加绕路 绕路获取
     DetourService::GetInstance().InsertDetourLinks(rankGraph_.get(), rankTable_.get());
 
+    // 打平所有 netLayer 的 rankAddrs，按 rank 去重排序，构建 ipIndex 映射表
+    BuildIpIndexMap();
+
     // 设置endpoint
     SetEndpointDesc();
 
     // 构造完成
     rankGraph_->InitFinish();
+}
+
+void RankGraphBuilder::BuildIpIndexMap()
+{
+    // 打平所有 netLayer 的 rankAddrs，按 rank 去重排序，用排序后的下标作为 ipIndex
+    std::unordered_map<RankId, std::map<IpAddress, uint32_t>> ipIndexMap;
+    for (const auto& rankInfo : rankTable_->ranks) {
+        std::set<IpAddress> sortedAddrs;
+        for (const auto& levelInfo : rankInfo.rankLevelInfos) {
+            for (const auto& addrInfo : levelInfo.rankAddrs) {
+                if (addrInfo.addr == IpAddress()) {
+                    continue;
+                }
+                sortedAddrs.insert(addrInfo.addr);
+            }
+        }
+        uint32_t idx = 0;
+        for (const auto& addr : sortedAddrs) {
+            ipIndexMap[rankInfo.rankId][addr] = idx++;
+        }
+    }
+    rankGraph_->SetIpIndexMap(std::move(ipIndexMap));
 }
 
 std::unique_ptr<RankTableInfo> RankGraphBuilder::GetRankTableInfo() { return move(rankTable_); }

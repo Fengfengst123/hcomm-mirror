@@ -116,6 +116,9 @@ HcclResult HostCpuUrmaChannel::BuildSocket()
         = (channelDesc_.role != HCOMM_SOCKET_ROLE_RESERVED) ?
               Hccl::SocketConfig(linkData, port, socketTag, channelDesc_.role == HCOMM_SOCKET_ROLE_SERVER) :
               Hccl::SocketConfig(linkData, socketTag, true);
+    if (channelDesc_.channelName != nullptr && channelDesc_.channelName[0] != '\0') {
+        socketConfig.SetHccpTag(socketTag);
+    }
     SaveSocketConfig(socketConfig);
     CHK_RET(SocketMgr::GetInstance(devicePhyId_).GetSocket(*socketConfig_, socket_));
 

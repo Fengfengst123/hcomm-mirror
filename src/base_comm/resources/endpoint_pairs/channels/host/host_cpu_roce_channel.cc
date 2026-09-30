@@ -198,6 +198,9 @@ HcclResult HostCpuRoceChannel::BuildSocket()
         = (channelDesc_.role != HCOMM_SOCKET_ROLE_RESERVED) ?
               Hccl::SocketConfig(linkData, port, socketTag, channelDesc_.role == HCOMM_SOCKET_ROLE_SERVER) :
               Hccl::SocketConfig(linkData, port, socketTag);
+    if (channelDesc_.channelName != nullptr && channelDesc_.channelName[0] != '\0') {
+        socketConfig.SetHccpTag(socketTag);
+    }
     SaveSocketConfig(socketConfig);
     CHK_RET(SocketMgr::GetInstance(devicePhyId_).GetSocket(*socketConfig_, socket_));
     HCCL_INFO("[HostCpuRoceChannel::%s] SUCCESS. port[%u].", __func__, port);

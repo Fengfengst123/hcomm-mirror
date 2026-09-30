@@ -139,19 +139,9 @@ void SocketManager::BatchAddWhiteList(const vector<LinkData>& links)
             }
 
             RaSocketWhitelist wlistInfo{};
-            ;
             wlistInfo.connLimit = 1;
             wlistInfo.remoteIp = link.GetRemoteAddr();
-
-            std::string linkTag = socketTag_;
-            // 获取到reuseIdx不为0时，tag需要拼接_reuseIdx；为0时不拼接，不影响原socket公用
-            if (link.GetReuseIdx() != "0") {
-                linkTag += ("_" + link.GetReuseIdx());
-            }
-            SocketConfig socketConfig(link.GetRemoteRankId(), link, linkTag);
-            string hccpSocketTag = socketConfig.GetHccpTag();
-
-            wlistInfo.tag = hccpSocketTag;
+            wlistInfo.tag = BuildSocketConfig(link).GetHccpTag();
             wlistMap[link.GetLocalPort()].push_back(wlistInfo);
         }
     }
@@ -166,13 +156,7 @@ void SocketManager::BatchAddWhiteList(const vector<LinkData>& links)
 void SocketManager::BatchCreateConnectedSockets(const vector<LinkData>& links)
 {
     for (auto& link : links) {
-        auto remoteRank = link.GetRemoteRankId();
-        std::string socketTag = socketTag_;
-        if (link.GetReuseIdx() != "0") {
-            socketTag += ("_" + link.GetReuseIdx());
-        }
-        SocketConfig socketConfig(remoteRank, link, socketTag);
-        CreateConnectedSocket(socketConfig);
+        CreateConnectedSocket(BuildSocketConfig(link));
     }
 }
 
@@ -357,6 +341,28 @@ Socket* SocketManager::GetConnectedSocket(const SocketConfig& socketConfig) cons
     }
 
     return nullptr;
+}
+
+SocketConfig SocketManager::BuildSocketConfig(const LinkData& link) const
+{
+    // hccpTag 拼接使用 link 的 ipIndex，而指令/传输层持有的 LinkData 未回填（默认0），
+    // 需按 RankGraph 查询回填，保证与建链时的 SocketConfig 完全一致，否则 GetConnectedSocket 查不到
+    LinkData linkWithIpIndex = link;
+    uint32_t localIpIndex = 0;
+    uint32_t remoteIpIndex = 0;
+    if (comm != nullptr && comm->GetRankGraph() != nullptr) {
+        comm->GetRankGraph()->GetIpIndex(link.GetLocalRankId(), link.GetLocalAddr(), localIpIndex);
+        comm->GetRankGraph()->GetIpIndex(link.GetRemoteRankId(), link.GetRemoteAddr(), remoteIpIndex);
+    }
+    linkWithIpIndex.SetLocalIpIndex(localIpIndex);
+    linkWithIpIndex.SetRemoteIpIndex(remoteIpIndex);
+
+    // 获取到reuseIdx不为0时，tag需要拼接_reuseIdx；为0时不拼接，不影响原socket公用
+    std::string socketTag = socketTag_;
+    if (link.GetReuseIdx() != "0") {
+        socketTag += ("_" + link.GetReuseIdx());
+    }
+    return SocketConfig(linkWithIpIndex.GetRemoteRankId(), linkWithIpIndex, socketTag);
 }
 
 void SocketManager::DestroyAll()

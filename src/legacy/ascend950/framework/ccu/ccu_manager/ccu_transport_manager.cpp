@@ -104,8 +104,7 @@ HcclResult CcuTransportMgr::CreateTransportByLink(const LinkData& link, CcuTrans
     CHK_PTR_NULL(comm);
     CHK_RET(CheckIfLinkProtocolSupport(link));
 
-    std::string socketTag = comm->GetEstablishLinkSocketTag();
-    SocketConfig socketConfig(link.GetRemoteRankId(), link, socketTag);
+    SocketConfig socketConfig = comm->GetSocketManager().BuildSocketConfig(link);
     Socket* socket = comm->GetSocketManager().GetConnectedSocket(socketConfig);
     if (socket == nullptr) {
         HCCL_WARNING("[CcuTransportMgr::%s] Fail to get socket via link %s, ", __func__, link.Describe().c_str());

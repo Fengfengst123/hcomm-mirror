@@ -52,6 +52,7 @@ private:
     void CheckMyRankInRankTable() const;
     void CheckNetLayerFromPhyTopo(const u32 netLayer) const;
     void BuildRankGraph();
+    void BuildIpIndexMap();
     void BuildFromRankTable();
     void BuildPeer2PeerLinks();
     void BuildPcieFallbackLinks(NetInstance* innerNetInstance);

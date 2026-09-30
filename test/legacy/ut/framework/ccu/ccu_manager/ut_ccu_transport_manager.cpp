@@ -169,8 +169,7 @@ TEST_F(CcuTransportMgrTest, Ut_PrepareCreate_When_InterfaceOk_Expect_Return_Ok)
     auto commImpl = MockCommImpl();
     MockCcuTransportMgrDevs();
 
-    std::string socketTag = commImpl->GetEstablishLinkSocketTag();
-    SocketConfig socketConfig(1, link, socketTag);
+    SocketConfig socketConfig = commImpl->GetSocketManager().BuildSocketConfig(link);
     commImpl->GetSocketManager().connectedSocketMap[socketConfig] = std::make_shared<Socket>(
         nullptr, IpAddress(), 0, IpAddress(), "stub", SocketRole::CLIENT, NicType::DEVICE_NIC_TYPE);
 
@@ -231,8 +230,7 @@ TEST_F(CcuTransportMgrTest, Ut_PrepareCreateFailAndFallback_When_InterfaceUnavai
     auto commImpl = MockCommImpl();
     MockCcuTransportMgrDevs();
 
-    std::string socketTag = commImpl->GetEstablishLinkSocketTag();
-    SocketConfig socketConfig(1, link, socketTag);
+    SocketConfig socketConfig = commImpl->GetSocketManager().BuildSocketConfig(link);
     commImpl->GetSocketManager().connectedSocketMap[socketConfig] = std::make_shared<Socket>(
         nullptr, IpAddress(), 0, IpAddress(), "stub", SocketRole::CLIENT, NicType::DEVICE_NIC_TYPE);
 
@@ -274,8 +272,7 @@ TEST_F(CcuTransportMgrTest, Ut_CleanAndResume_When_InterfaceOk_Expect_Return_Ok)
     auto commImpl = MockCommImpl();
     MockCcuTransportMgrDevs();
 
-    std::string socketTag = commImpl->GetEstablishLinkSocketTag();
-    SocketConfig socketConfig(1, link, socketTag);
+    SocketConfig socketConfig = commImpl->GetSocketManager().BuildSocketConfig(link);
     commImpl->GetSocketManager().connectedSocketMap[socketConfig] = std::make_shared<Socket>(
         nullptr, IpAddress(), 0, IpAddress(), "stub", SocketRole::CLIENT, NicType::DEVICE_NIC_TYPE);
 
@@ -332,8 +329,7 @@ TEST_F(CcuTransportMgrTest, Ut_CleanAndResumeFailed_When_InterfaceError_Expect_R
     auto commImpl = MockCommImpl();
     MockCcuTransportMgrDevs();
 
-    std::string socketTag = commImpl->GetEstablishLinkSocketTag();
-    SocketConfig socketConfig(1, link, socketTag);
+    SocketConfig socketConfig = commImpl->GetSocketManager().BuildSocketConfig(link);
     commImpl->GetSocketManager().connectedSocketMap[socketConfig] = std::make_shared<Socket>(
         nullptr, IpAddress(), 0, IpAddress(), "stub", SocketRole::CLIENT, NicType::DEVICE_NIC_TYPE);
 
@@ -388,8 +384,7 @@ TEST_F(CcuTransportMgrTest, Ut_RecoverTransports_When_InterfaceOk_Expect_Return_
     auto commImpl = MockCommImpl();
     MockCcuTransportMgrDevs();
 
-    std::string socketTag = commImpl->GetEstablishLinkSocketTag();
-    SocketConfig socketConfig(1, link, socketTag);
+    SocketConfig socketConfig = commImpl->GetSocketManager().BuildSocketConfig(link);
     commImpl->GetSocketManager().connectedSocketMap[socketConfig] = std::make_shared<Socket>(
         nullptr, IpAddress(), 0, IpAddress(), "stub", SocketRole::CLIENT, NicType::DEVICE_NIC_TYPE);
 
@@ -451,8 +446,7 @@ TEST_F(CcuTransportMgrTest, Ut_RecoverTransportsFailed_When_RecoverMsgError_Expe
     auto commImpl = MockCommImpl();
     MockCcuTransportMgrDevs();
 
-    std::string socketTag = commImpl->GetEstablishLinkSocketTag();
-    SocketConfig socketConfig(1, link, socketTag);
+    SocketConfig socketConfig = commImpl->GetSocketManager().BuildSocketConfig(link);
     commImpl->GetSocketManager().connectedSocketMap[socketConfig] = std::make_shared<Socket>(
         nullptr, IpAddress(), 0, IpAddress(), "stub", SocketRole::CLIENT, NicType::DEVICE_NIC_TYPE);
 
@@ -496,8 +490,7 @@ TEST_F(CcuTransportMgrTest, Ut_Clean_And_Destory_Success_When_InterfaceOk_Expect
     ReqHandleResult result = ReqHandleResult::COMPLETED;
     MOCKER(&HrtRaGetAsyncReqResult).stubs().with().will(returnValue(result));
 
-    std::string socketTag = commImpl->GetEstablishLinkSocketTag();
-    SocketConfig socketConfig(1, link, socketTag);
+    SocketConfig socketConfig = commImpl->GetSocketManager().BuildSocketConfig(link);
     commImpl->GetSocketManager().connectedSocketMap[socketConfig] = std::make_shared<Socket>(
         nullptr, IpAddress(), 0, IpAddress(), "stub", SocketRole::CLIENT, NicType::DEVICE_NIC_TYPE);
 
@@ -620,8 +613,7 @@ TEST_F(CcuTransportMgrTest, Ut_Clean_Error_When_InterfaceOk_Expect_Return_Error_
     MockCcuTransportMgrDevs();
     MOCKER(&HrtRaGetAsyncReqResult).stubs().with().will(invoke(HrtRaGetAsyncReqResult_Uncompleted_CCU));
 
-    std::string socketTag = commImpl->GetEstablishLinkSocketTag();
-    SocketConfig socketConfig(1, link, socketTag);
+    SocketConfig socketConfig = commImpl->GetSocketManager().BuildSocketConfig(link);
     commImpl->GetSocketManager().connectedSocketMap[socketConfig] = std::make_shared<Socket>(
         nullptr, IpAddress(), 0, IpAddress(), "stub", SocketRole::CLIENT, NicType::DEVICE_NIC_TYPE);
 
@@ -710,8 +702,7 @@ TEST_F(CcuTransportMgrTest, Ut_Clean_Error_When_InterfaceOk_Expect_Return_Error_
     MOCKER(&HrtRaGetAsyncReqResult).stubs().with().will(returnValue(result));
     MOCKER(&RaCtxQpDestroyBatchAsync).stubs().with().will(invoke(RaCtxQpDestroyBatchAsync_no_delete_CCU));
 
-    std::string socketTag = commImpl->GetEstablishLinkSocketTag();
-    SocketConfig socketConfig(1, link, socketTag);
+    SocketConfig socketConfig = commImpl->GetSocketManager().BuildSocketConfig(link);
     commImpl->GetSocketManager().connectedSocketMap[socketConfig] = std::make_shared<Socket>(
         nullptr, IpAddress(), 0, IpAddress(), "stub", SocketRole::CLIENT, NicType::DEVICE_NIC_TYPE);
 
@@ -799,8 +790,7 @@ TEST_F(CcuTransportMgrTest, Ut_Clean_Error_When_InterfaceOk_Expect_Return_Error_
     MOCKER(&HrtRaGetAsyncReqResult).stubs().with().will(returnValue(result));
     MOCKER(&RaCtxQpDestroyBatchAsync).stubs().with().will(invoke(RaCtxQpDestroyBatchAsync_return_false_CCU));
 
-    std::string socketTag = commImpl->GetEstablishLinkSocketTag();
-    SocketConfig socketConfig(1, link, socketTag);
+    SocketConfig socketConfig = commImpl->GetSocketManager().BuildSocketConfig(link);
     commImpl->GetSocketManager().connectedSocketMap[socketConfig] = std::make_shared<Socket>(
         nullptr, IpAddress(), 0, IpAddress(), "stub", SocketRole::CLIENT, NicType::DEVICE_NIC_TYPE);
 
@@ -889,8 +879,7 @@ TEST_F(CcuTransportMgrTest, Ut_Clean_Error_When_InterfaceOk_Expect_Return_Error_
     MOCKER(&HrtRaGetAsyncReqResult).stubs().with().will(returnValue(result));
     MOCKER(&RaCtxQpDestroyBatchAsync).stubs().with().will(invoke(RaCtxQpDestroyBatchAsync_num_false_CCU));
 
-    std::string socketTag = commImpl->GetEstablishLinkSocketTag();
-    SocketConfig socketConfig(1, link, socketTag);
+    SocketConfig socketConfig = commImpl->GetSocketManager().BuildSocketConfig(link);
     commImpl->GetSocketManager().connectedSocketMap[socketConfig] = std::make_shared<Socket>(
         nullptr, IpAddress(), 0, IpAddress(), "stub", SocketRole::CLIENT, NicType::DEVICE_NIC_TYPE);
 
@@ -977,8 +966,7 @@ TEST_F(CcuTransportMgrTest, Ut_Clean_Error_When_InterfaceOk_Expect_Return_Error_
     MockCcuTransportMgrDevs();
     MOCKER(&HrtRaGetAsyncReqResult).stubs().with().will(invoke(HrtRaGetAsyncReqResult_TimeOut_CCU));
 
-    std::string socketTag = commImpl->GetEstablishLinkSocketTag();
-    SocketConfig socketConfig(1, link, socketTag);
+    SocketConfig socketConfig = commImpl->GetSocketManager().BuildSocketConfig(link);
     commImpl->GetSocketManager().connectedSocketMap[socketConfig] = std::make_shared<Socket>(
         nullptr, IpAddress(), 0, IpAddress(), "stub", SocketRole::CLIENT, NicType::DEVICE_NIC_TYPE);
 

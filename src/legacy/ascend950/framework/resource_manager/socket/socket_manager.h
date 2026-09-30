@@ -64,6 +64,10 @@ public:
 
     Socket* GetConnectedSocket(const SocketConfig& socketConfig) const;
 
+    // 统一的 SocketConfig 构造入口：从 RankGraph 回填 ipIndex 并拼接 reuseIdx，
+    // 建链（BatchCreateSockets）与查询（各 transport 建 transport 时取 socket）必须共用，保证 map key 一致
+    SocketConfig BuildSocketConfig(const LinkData& link) const;
+
     bool CheckServerPortListening(const PortData& portData, const uint32_t port) const;
 
     // 供通信域初始化阶段登记已抢占的 host 监听 socket，供算子下发阶段复用，避免跨阶段端口竞争

@@ -366,6 +366,7 @@ HcclResult AivUrmaChannel::BuildSocket()
     }
     std::string socketTag
         = (channelDesc_.channelName != nullptr) ? std::string(channelDesc_.channelName) : "AUTOMATIC_SOCKET_TAG";
+    bool useRawTag = (channelDesc_.channelName != nullptr && channelDesc_.channelName[0] != '\0');
     if (channelDesc_.role == HCOMM_SOCKET_ROLE_RESERVED) {
         EXCEPTION_CATCH(
             socketConfigHolder_ = std::make_unique<Hccl::SocketConfig>(linkData, port, socketTag), return HCCL_E_PTR);
@@ -375,6 +376,9 @@ HcclResult AivUrmaChannel::BuildSocket()
         EXCEPTION_CATCH(
             socketConfigHolder_ = std::make_unique<Hccl::SocketConfig>(linkData, port, socketTag, isServer),
             return HCCL_E_PTR);
+    }
+    if (useRawTag) {
+        socketConfigHolder_->SetHccpTag(socketTag);
     }
     socketConfig_ = socketConfigHolder_.get();
     CHK_RET(SocketMgr::GetInstance(devicePhyId_).GetSocket(*socketConfigHolder_, socket_));

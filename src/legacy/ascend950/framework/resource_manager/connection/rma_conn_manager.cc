@@ -104,10 +104,9 @@ RmaConnection* RmaConnManager::Create(const std::string& tag, const LinkData& li
         return rmaConnPtr;
     }
 
-    std::string socketTag = comm->GetEstablishLinkSocketTag();
-    SocketConfig socketConfig(linkData.GetRemoteRankId(), linkData, socketTag);
+    SocketConfig socketConfig = comm->GetSocketManager().BuildSocketConfig(linkData);
     Socket* socket = comm->GetSocketManager().GetConnectedSocket(socketConfig);
-    HCCL_INFO("socketTag = [%s]", socketTag.c_str());
+    HCCL_INFO("socketTag = [%s]", socketConfig.tag.c_str());
     HCCL_INFO("[RmaConnManager::%s] linkData Type[%s]", __func__, linkData.GetType().Describe().c_str());
     std::unique_ptr<RmaConnection> rmaConn = nullptr;
     if (linkData.GetType() == PortDeploymentType::P2P) {

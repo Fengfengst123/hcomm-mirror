@@ -187,6 +187,33 @@ TEST_F(SocketManagerTest, test_BatchCreateSockets_with_SocketConfig)
     socketMgr.GetConnectedSocket(socketConfig);
 }
 
+// 多IP场景：建链侧经 RankGraph 回填 ipIndex 拼接 hccpTag，查询侧未回填的 LinkData 须统一走 BuildSocketConfig 才能命中
+TEST_F(SocketManagerTest, Ut_BuildSocketConfig_When_RankGraphHasIpIndex_Expect_KeyConsistentWithCreate)
+{
+    MOCKER_CPP(&SocketManager::BatchAddWhiteList).stubs();
+
+    // 模拟多网卡 rank：rank0 本端 IP 编号为 1，rank3 对端 IP 编号为 2（非默认 0）
+    std::unordered_map<RankId, std::map<IpAddress, uint32_t>> ipIndexMap;
+    ipIndexMap[0][GetAnIpAddress(0)] = 1;
+    ipIndexMap[3][GetAnIpAddress(3)] = 2;
+    impl.rankGraph = make_unique<RankGraph>(0);
+    impl.rankGraph->SetIpIndexMap(std::move(ipIndexMap));
+
+    // 建链侧：BatchCreateSockets 内部经 BuildSocketConfig 回填真实 ipIndex 后创建 socket
+    SocketManager socketMgr(impl, localRank, devicePhyId, listenPort);
+    socketMgr.BatchCreateSockets(links);
+
+    // 查询侧：指令层持有的 LinkData 未回填 ipIndex（默认 0），经 BuildSocketConfig 后应命中
+    LinkData rawLink = links[0]; // localRank=0, remoteRank=3
+    Hccl::SocketConfig socketConfig = socketMgr.BuildSocketConfig(rawLink);
+    EXPECT_NE(socketMgr.GetConnectedSocket(socketConfig), nullptr);
+    EXPECT_NE(socketConfig.GetHccpTag().find("_1_2"), std::string::npos);
+
+    // 未回填 ipIndex 的手工构造 key 无法命中，查询侧不得绕过 BuildSocketConfig
+    Hccl::SocketConfig rawConfig(rawLink.GetRemoteRankId(), rawLink, socketMgr.socketTag_);
+    EXPECT_EQ(socketMgr.GetConnectedSocket(rawConfig), nullptr);
+}
+
 TEST_F(SocketManagerTest, test_CheckServerPortListening_When_Port_Inconsistent_Expected_False)
 {
     SocketManager socketMgr(localRank, devicePhyId, devicePhyId, "tmp");

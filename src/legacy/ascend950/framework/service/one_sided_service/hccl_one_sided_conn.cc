@@ -52,7 +52,7 @@ HcclResult HcclOneSidedConn::Connect([[maybe_unused]] const std::string& commId)
     CHK_RET(WaitOneSidedTransportReady());
 
     // 保存socket
-    SocketConfig socketConfig(linkData_.GetRemoteRankId(), linkData_, comm_->GetEstablishLinkSocketTag());
+    SocketConfig socketConfig = comm_->GetSocketManager().BuildSocketConfig(linkData_);
     socket_ = comm_->GetSocketManager().GetConnectedSocket(socketConfig);
     if (socket_ == nullptr) {
         HCCL_ERROR("[HcclOneSidedConn]socket_ is nullptr");

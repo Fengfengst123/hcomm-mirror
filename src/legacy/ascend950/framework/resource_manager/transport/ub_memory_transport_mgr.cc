@@ -95,8 +95,7 @@ HcclResult UbMemoryTransportMgr::CreateTransportByLink(const LinkData& link)
         return HcclResult::HCCL_SUCCESS;
     }
     // 创建socket
-    std::string socketTag = comm->GetEstablishLinkSocketTag();
-    SocketConfig socketConfig(link.GetRemoteRankId(), link, socketTag);
+    SocketConfig socketConfig = comm->GetSocketManager().BuildSocketConfig(link);
     Socket* socket = comm->GetSocketManager().GetConnectedSocket(socketConfig);
     if (socket == nullptr) {
         HCCL_WARNING("[UbMemoryTransportMgr::%s] Fail to get socket via link %s, ", __func__, link.Describe().c_str());
