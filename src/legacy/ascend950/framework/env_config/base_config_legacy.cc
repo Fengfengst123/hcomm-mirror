@@ -221,10 +221,11 @@ void EnvRdmaConfig::ParseMultiQpSrcPortConfig()
         inFile.close();
         multiQpSrcPortConfig_ = config;
         LogMultiQpSrcPortConfig();
-    } catch (const HcclException& e) {
-        HCCL_ERROR("[EnvRdmaConfig][Parse] LoadMultiQpSrcPortConfig failed: %s", e.what());
     } catch (const std::exception& e) {
         HCCL_ERROR("[EnvRdmaConfig][Parse] LoadMultiQpSrcPortConfig failed: %s", e.what());
+        THROW<InvalidParamsException>(StringFormat(
+            "[Init][EnvVarParam]Env config \"%s\" value is invalid.%s", qpPortConfigPath.GetEnvName().c_str(),
+            e.what()));
     }
 }
 

@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
+#include <streambuf>
 #include <string>
 #include <vector>
 
@@ -29,6 +30,13 @@ bool g_configFileReadFailed = false;
 std::string g_configFileContent;
 std::istringstream g_configFileStream;
 
+class ReadFailedStreamBuf : public std::streambuf {
+protected:
+    int_type underflow() override { throw std::ios_base::failure("simulated config file read failure"); }
+};
+
+ReadFailedStreamBuf g_readFailedStreamBuf;
+
 void StubIfstreamOpen(std::ifstream* inFile, const char* filePath, std::ios_base::openmode openMode)
 {
     EXPECT_STREQ(filePath, "/etc/hcomm.cfg");
@@ -40,10 +48,11 @@ void StubIfstreamOpen(std::ifstream* inFile, const char* filePath, std::ios_base
     g_configFileStream.clear();
     g_configFileStream.str(g_configFileContent);
     static_cast<std::istream&>(*inFile).rdbuf(g_configFileStream.rdbuf());
-    inFile->clear();
     if (g_configFileReadFailed) {
-        inFile->setstate(std::ios::badbit);
+        // 打开时保持流正常，首次读取抛出异常，由输入流设置badbit。
+        static_cast<std::istream&>(*inFile).rdbuf(&g_readFailedStreamBuf);
     }
+    inFile->clear();
 }
 
 class EnvGuard {
@@ -125,7 +134,7 @@ TEST_F(HostMultiQpConfigTest, Ut_Parse_When_EnvUnsetAndFileUnavailable_Expect_Em
     EXPECT_EQ(config.GetUdpPorts(0), nullptr);
 }
 
-TEST_F(HostMultiQpConfigTest, Ut_Parse_When_EnvInvalidAndFileUnavailable_Expect_EmptyConfig)
+TEST_F(HostMultiQpConfigTest, Ut_Parse_When_EnvInvalidAndFileUnavailable_Expect_ParseFailed)
 {
     std::string tooManyPorts = "0:1";
     for (uint32_t index = 0; index < 32U; ++index) {
@@ -141,7 +150,7 @@ TEST_F(HostMultiQpConfigTest, Ut_Parse_When_EnvInvalidAndFileUnavailable_Expect_
         SCOPED_TRACE(value);
         envGuard.Set(value);
         hccl::HostMultiQpConfig config;
-        EXPECT_EQ(config.Parse(), HCCL_SUCCESS);
+        EXPECT_EQ(config.Parse(), HCCL_E_PARA);
         EXPECT_EQ(config.GetQpCount(0), 0U);
         EXPECT_EQ(config.GetUdpPorts(0), nullptr);
     }
@@ -202,7 +211,7 @@ TEST_F(HostMultiQpConfigTest, Ut_Parse_When_FileContainsDuplicateFields_Expect_F
     EXPECT_EQ(*device9Ports, (std::vector<uint16_t>{23001}));
 }
 
-TEST_F(HostMultiQpConfigTest, Ut_Parse_When_FileModeInvalid_Expect_EnvConfigPreserved)
+TEST_F(HostMultiQpConfigTest, Ut_Parse_When_FileModeInvalid_Expect_ParseFailed)
 {
     EnvGuard envGuard(HOST_RDMA_UDP_PORTS_LIST_ENV);
     envGuard.Set("3:15001,15002");
@@ -211,36 +220,42 @@ TEST_F(HostMultiQpConfigTest, Ut_Parse_When_FileModeInvalid_Expect_EnvConfigPres
                   "multi_qp_udp_ports_3=20001,20002\n");
     hccl::HostMultiQpConfig config;
 
-    EXPECT_EQ(config.Parse(), HCCL_SUCCESS);
+    EXPECT_EQ(config.Parse(), HCCL_E_PARA);
     EXPECT_EQ(config.GetQpCount(3), 0U);
-    const auto* device3Ports = config.GetUdpPorts(3);
-    ASSERT_NE(device3Ports, nullptr);
-    EXPECT_EQ(*device3Ports, (std::vector<uint16_t>{15001, 15002}));
+    EXPECT_EQ(config.GetUdpPorts(3), nullptr);
 }
 
-TEST_F(HostMultiQpConfigTest, Ut_Parse_When_FileDeviceConfigInvalid_Expect_EnvConfigPreserved)
+TEST_F(HostMultiQpConfigTest, Ut_Parse_When_FileDeviceConfigInvalid_Expect_ParseFailed)
 {
     EnvGuard envGuard(HOST_RDMA_UDP_PORTS_LIST_ENV);
     envGuard.Set("3:15001,15002");
-    SetConfigFile("udp_port_mode_3=multi_qp\n"
-                  "multi_qp_count_3=4\n"
-                  "udp_port_mode_4=multi_qp\n"
-                  "multi_qp_count_4=2\n"
-                  "multi_qp_udp_ports_4=20001\n");
-    hccl::HostMultiQpConfig config;
+    std::vector<std::string> invalidConfigs = {"udp_port_mode_3=multi_qp\n"
+                                               "multi_qp_count_3=4\n"
+                                               "udp_port_mode_4=multi_qp\n"
+                                               "multi_qp_count_4=2\n"
+                                               "multi_qp_udp_ports_4=20001\n"};
+    const std::vector<std::string> prefixes = {"udp_port_mode_", "multi_qp_count_", "multi_qp_udp_ports_"};
+    const std::vector<std::string> invalidSuffixes = {"-1", "abc", "", "01", "4294967296"};
+    for (const auto& prefix : prefixes) {
+        for (const auto& suffix : invalidSuffixes) {
+            invalidConfigs.emplace_back(prefix + suffix + "=1\n");
+        }
+    }
 
-    EXPECT_EQ(config.Parse(), HCCL_SUCCESS);
-    EXPECT_EQ(config.GetQpCount(3), 0U);
-    const auto* device3Ports = config.GetUdpPorts(3);
-    ASSERT_NE(device3Ports, nullptr);
-    EXPECT_EQ(*device3Ports, (std::vector<uint16_t>{15001, 15002}));
-    EXPECT_EQ(config.GetQpCount(4), 2U);
-    const auto* device4Ports = config.GetUdpPorts(4);
-    ASSERT_NE(device4Ports, nullptr);
-    EXPECT_EQ(*device4Ports, (std::vector<uint16_t>{20001}));
+    for (const auto& content : invalidConfigs) {
+        SCOPED_TRACE(content);
+        SetConfigFile(content);
+        hccl::HostMultiQpConfig config;
+
+        EXPECT_EQ(config.Parse(), HCCL_E_PARA);
+        EXPECT_EQ(config.GetQpCount(3), 0U);
+        EXPECT_EQ(config.GetUdpPorts(3), nullptr);
+        EXPECT_EQ(config.GetQpCount(4), 0U);
+        EXPECT_EQ(config.GetUdpPorts(4), nullptr);
+    }
 }
 
-TEST_F(HostMultiQpConfigTest, Ut_Parse_When_FileReadFails_Expect_EnvConfigPreserved)
+TEST_F(HostMultiQpConfigTest, Ut_Parse_When_FileReadFails_Expect_ParseFailed)
 {
     EnvGuard envGuard(HOST_RDMA_UDP_PORTS_LIST_ENV);
     envGuard.Set("5:17001");
@@ -248,11 +263,9 @@ TEST_F(HostMultiQpConfigTest, Ut_Parse_When_FileReadFails_Expect_EnvConfigPreser
     g_configFileReadFailed = true;
     hccl::HostMultiQpConfig config;
 
-    EXPECT_EQ(config.Parse(), HCCL_SUCCESS);
+    EXPECT_EQ(config.Parse(), HCCL_E_PARA);
     EXPECT_EQ(config.GetQpCount(5), 0U);
-    const auto* device5Ports = config.GetUdpPorts(5);
-    ASSERT_NE(device5Ports, nullptr);
-    EXPECT_EQ(*device5Ports, (std::vector<uint16_t>{17001}));
+    EXPECT_EQ(config.GetUdpPorts(5), nullptr);
 }
 
 TEST_F(HostMultiQpConfigTest, Ut_Parse_When_CalledRepeatedly_Expect_FirstConfigKept)

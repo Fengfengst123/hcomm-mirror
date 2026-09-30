@@ -29,7 +29,7 @@ struct HostMultiQpDeviceConfig {
  * @brief Host DPU多QP配置。
  *
  * CollCommConfigMgr初始化时先解析HCCL_HOST_RDMA_UDP_PORTS_LIST，再使用/etc/hcomm.cfg中完整合法的单卡配置覆盖，
- * 最终按物理设备缓存生效配置。配置文件缺失或单卡配置非法时保留相应的环境变量配置。
+ * 最终按物理设备缓存生效配置。配置文件不可用时保留环境变量配置；解析或校验失败时返回错误，不缓存配置。
  */
 class HostMultiQpConfig {
 public:

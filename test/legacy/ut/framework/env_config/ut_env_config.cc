@@ -634,7 +634,7 @@ TEST_F(EnvConfigTest, Ut_EnvPlfDebugConfig_When_CaseInsensitive_Expect_SameResul
     unsetenv("HCCL_DEBUG_CONFIG");
 }
 
-// ==================== E1-E7: HCCL_RDMA_QP_PORT_CONFIG_PATH ====================
+// ==================== E1-E10: HCCL_RDMA_QP_PORT_CONFIG_PATH ====================
 // These cases use real filesystem (mkdtemp, write cfg file) so realpath is NOT mocked.
 // They follow the same setenv/unsetenv pattern as other EnvRdmaConfig tests above.
 static std::string CreateTempDirForQpPort()
@@ -715,15 +715,22 @@ TEST_F(EnvConfigTest, Ut_EnvRdmaConfigGetMultiQpSrcPortConfig_When_ValidDirButEm
     RemoveDirRecursive(tmpDir);
 }
 
-// E5: 环境变量指向不存在的路径 → CfgField SetRealPath postProc 抛 InvalidParamsException
-// Note: ParseMultiQpSrcPortConfig catches exceptions internally, so Parse() won't throw.
-// Instead, the CfgField's SetRealPath postProc runs before ParseMultiQpSrcPortConfig.
+// E5: 环境变量指向不存在的路径，或有效目录中缺少 cfg 文件 → 抛 InvalidParamsException
 TEST_F(EnvConfigTest, Ut_EnvRdmaConfigParse_When_InvalidPath_Expect_Throw)
 {
     setenv("HCCL_RDMA_QP_PORT_CONFIG_PATH", "/nonexistent/path/for/ut/test", 1);
     EnvRdmaConfig rdmaConfig;
     EXPECT_THROW(rdmaConfig.Parse(), InvalidParamsException);
     unsetenv("HCCL_RDMA_QP_PORT_CONFIG_PATH");
+
+    std::string tmpDir = CreateTempDirForQpPort();
+    ASSERT_FALSE(tmpDir.empty());
+    setenv("HCCL_RDMA_QP_PORT_CONFIG_PATH", tmpDir.c_str(), 1);
+    EnvRdmaConfig missingFileConfig;
+    EXPECT_THROW(missingFileConfig.Parse(), InvalidParamsException);
+    EXPECT_FALSE(missingFileConfig.GetMultiQpSrcPortConfig().IsAvailable());
+    unsetenv("HCCL_RDMA_QP_PORT_CONFIG_PATH");
+    RemoveDirRecursive(tmpDir);
 }
 
 // E6: 环境变量长度 >= PATH_MAX → CfgField CheckFilePath validate 抛 InvalidParamsException
@@ -736,25 +743,29 @@ TEST_F(EnvConfigTest, Ut_EnvRdmaConfigParse_When_PathTooLong_Expect_Throw)
     unsetenv("HCCL_RDMA_QP_PORT_CONFIG_PATH");
 }
 
-// E7: 环境变量指向有效目录，但 cfg 文件内容格式错误 → Parse() 不抛异常（内部 catch），
-// 但 IsAvailable()==false（解析失败后 multiQpSrcPortConfig_ 保持默认空值）
-TEST_F(EnvConfigTest, Ut_EnvRdmaConfigParse_When_ValidDirButCfgFileMalformed_Expect_NotAvailable)
+// E7: cfg 文件格式错误、端口越界或 IP 非法 → 抛异常，不发布部分解析结果
+TEST_F(EnvConfigTest, Ut_EnvRdmaConfigParse_When_ValidDirButCfgFileMalformed_Expect_Throw)
 {
     std::string tmpDir = CreateTempDirForQpPort();
     ASSERT_FALSE(tmpDir.empty());
-    WriteCfgFile(tmpDir, "this_is_not_a_valid_config_line\n");
-
     setenv("HCCL_RDMA_QP_PORT_CONFIG_PATH", tmpDir.c_str(), 1);
-    EnvRdmaConfig rdmaConfig;
-    EXPECT_NO_THROW(rdmaConfig.Parse());
-    EXPECT_FALSE(rdmaConfig.GetMultiQpSrcPortConfig().IsAvailable());
+    const std::vector<std::string> invalidContents
+        = {"this_is_not_a_valid_config_line\n", "192.168.1.1,192.168.1.2=65536\n",
+           "10.10.23.144.200,192.168.1.2=10001\n", "192.168.1.1,192.168.1.2=10001\n192.168.1.3,192.168.1.4=65536\n"};
+    for (const auto& content : invalidContents) {
+        SCOPED_TRACE(content);
+        WriteCfgFile(tmpDir, content);
+        EnvRdmaConfig rdmaConfig;
+        EXPECT_THROW(rdmaConfig.Parse(), InvalidParamsException);
+        EXPECT_FALSE(rdmaConfig.GetMultiQpSrcPortConfig().IsAvailable());
+    }
 
     unsetenv("HCCL_RDMA_QP_PORT_CONFIG_PATH");
     RemoveDirRecursive(tmpDir);
 }
 
-// E8: 单行源端口数 > 32 → 解析失败，IsAvailable()==false
-TEST_F(EnvConfigTest, Ut_EnvRdmaConfigParse_When_SrcPortCountExceedsMax_Expect_NotAvailable)
+// E8: 单行源端口数 > 32 → 抛 InvalidParamsException
+TEST_F(EnvConfigTest, Ut_EnvRdmaConfigParse_When_SrcPortCountExceedsMax_Expect_Throw)
 {
     std::string tmpDir = CreateTempDirForQpPort();
     ASSERT_FALSE(tmpDir.empty());
@@ -766,7 +777,7 @@ TEST_F(EnvConfigTest, Ut_EnvRdmaConfigParse_When_SrcPortCountExceedsMax_Expect_N
 
     setenv("HCCL_RDMA_QP_PORT_CONFIG_PATH", tmpDir.c_str(), 1);
     EnvRdmaConfig rdmaConfig;
-    EXPECT_NO_THROW(rdmaConfig.Parse());
+    EXPECT_THROW(rdmaConfig.Parse(), InvalidParamsException);
     EXPECT_FALSE(rdmaConfig.GetMultiQpSrcPortConfig().IsAvailable());
 
     unsetenv("HCCL_RDMA_QP_PORT_CONFIG_PATH");

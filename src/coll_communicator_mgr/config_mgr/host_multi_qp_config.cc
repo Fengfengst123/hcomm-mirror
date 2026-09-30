@@ -121,18 +121,28 @@ static HcclResult CollectConfigFileFields(std::istream& inFile, HostMultiQpRawCo
 
         const std::string key = TrimConfigFileField(line.substr(0, equalPos));
         const std::string value = TrimConfigFileField(line.substr(equalPos + 1U));
-        uint32_t devicePhyId = 0;
-        bool isDuplicateConfigKey = false;
-        if (ParseConfigFileKey(key, "udp_port_mode_", devicePhyId)) {
-            isDuplicateConfigKey = !rawConfig.modesByPhyId.emplace(devicePhyId, value).second;
-            rawConfig.configuredPhyIds.emplace(devicePhyId);
-        } else if (ParseConfigFileKey(key, "multi_qp_count_", devicePhyId)) {
-            isDuplicateConfigKey = !rawConfig.qpCountsByPhyId.emplace(devicePhyId, value).second;
-            rawConfig.configuredPhyIds.emplace(devicePhyId);
-        } else if (ParseConfigFileKey(key, "multi_qp_udp_ports_", devicePhyId)) {
-            isDuplicateConfigKey = !rawConfig.udpPortsByPhyId.emplace(devicePhyId, value).second;
-            rawConfig.configuredPhyIds.emplace(devicePhyId);
+        std::string prefix;
+        if (key.find("udp_port_mode_") == 0U) {
+            prefix = "udp_port_mode_";
+        } else if (key.find("multi_qp_count_") == 0U) {
+            prefix = "multi_qp_count_";
+        } else if (key.find("multi_qp_udp_ports_") == 0U) {
+            prefix = "multi_qp_udp_ports_";
+        } else {
+            continue;
         }
+
+        uint32_t devicePhyId = 0;
+        if (!ParseConfigFileKey(key, prefix, devicePhyId)) {
+            HCCL_ERROR(
+                "[%s] invalid physical device ID suffix in host multi qp config key[%s].", __func__, key.c_str());
+            return HCCL_E_PARA;
+        }
+        auto& fields = prefix == "udp_port_mode_"  ? rawConfig.modesByPhyId :
+                       prefix == "multi_qp_count_" ? rawConfig.qpCountsByPhyId :
+                                                     rawConfig.udpPortsByPhyId;
+        const bool isDuplicateConfigKey = !fields.emplace(devicePhyId, value).second;
+        rawConfig.configuredPhyIds.emplace(devicePhyId);
         if (isDuplicateConfigKey) {
             HCCL_WARNING(
                 "[%s] duplicated host multi qp config key[%s], phyId[%u], keep the first value.", __func__, key.c_str(),
@@ -140,13 +150,13 @@ static HcclResult CollectConfigFileFields(std::istream& inFile, HostMultiQpRawCo
         }
     }
     if (inFile.bad()) {
-        HCCL_WARNING("[%s] read host multi qp config failed.", __func__);
+        HCCL_ERROR("[%s] read host multi qp config failed.", __func__);
         return HCCL_E_PARA;
     }
     return HCCL_SUCCESS;
 }
 
-static void ParseDeviceConfigFromFile(
+static HcclResult ParseDeviceConfigFromFile(
     uint32_t devicePhyId, const HostMultiQpRawConfig& rawConfig,
     std::unordered_map<uint32_t, HostMultiQpDeviceConfig>& configs)
 {
@@ -155,25 +165,26 @@ static void ParseDeviceConfigFromFile(
     const auto udpPortsIter = rawConfig.udpPortsByPhyId.find(devicePhyId);
     if (modeIter == rawConfig.modesByPhyId.end() || qpCountIter == rawConfig.qpCountsByPhyId.end()
         || udpPortsIter == rawConfig.udpPortsByPhyId.end()) {
-        HCCL_WARNING("[%s] incomplete host multi qp config, phyId[%u].", __func__, devicePhyId);
-        return;
+        HCCL_ERROR("[%s] incomplete host multi qp config, phyId[%u].", __func__, devicePhyId);
+        return HCCL_E_PARA;
     }
     if (modeIter->second != "multi_qp") {
-        HCCL_WARNING("[%s] invalid udp_port_mode[%s], phyId[%u].", __func__, modeIter->second.c_str(), devicePhyId);
-        return;
+        HCCL_ERROR("[%s] invalid udp_port_mode[%s], phyId[%u].", __func__, modeIter->second.c_str(), devicePhyId);
+        return HCCL_E_PARA;
     }
 
     HostMultiQpDeviceConfig deviceConfig;
     if (!ParseStrictDecimal(qpCountIter->second, MULTI_QP_COUNT_MIN, MULTI_QP_COUNT_MAX, deviceConfig.qpCount)
         || !ParsePortsList(udpPortsIter->second, deviceConfig.udpPorts)) {
-        HCCL_WARNING("[%s] invalid host multi qp count or ports, phyId[%u].", __func__, devicePhyId);
-        return;
+        HCCL_ERROR("[%s] invalid host multi qp count or ports, phyId[%u].", __func__, devicePhyId);
+        return HCCL_E_PARA;
     }
 
     HCCL_RUN_INFO(
         "[%s] host multi qp config applied, phyId[%u] qpCount[%u] portCount[%zu].", __func__, devicePhyId,
         deviceConfig.qpCount, deviceConfig.udpPorts.size());
     configs[devicePhyId] = std::move(deviceConfig);
+    return HCCL_SUCCESS;
 }
 
 static HcclResult
@@ -182,7 +193,7 @@ ParseConfigFileContent(std::istream& inFile, std::unordered_map<uint32_t, HostMu
     HostMultiQpRawConfig rawConfig;
     CHK_RET(CollectConfigFileFields(inFile, rawConfig));
     for (const uint32_t devicePhyId : rawConfig.configuredPhyIds) {
-        ParseDeviceConfigFromFile(devicePhyId, rawConfig, configs);
+        CHK_RET(ParseDeviceConfigFromFile(devicePhyId, rawConfig, configs));
     }
     return HCCL_SUCCESS;
 }
@@ -258,8 +269,8 @@ HcclResult HostMultiQpConfig::Parse()
     std::unordered_map<uint32_t, HostMultiQpDeviceConfig> configs;
     const std::string envValue = hcomm::GetEnv(HOST_RDMA_UDP_PORTS_LIST_ENV);
     if (!ParseEnvUdpPortsList(envValue, configs)) {
-        HCCL_WARNING("[%s] parse HCCL_HOST_RDMA_UDP_PORTS_LIST failed, use fallback configuration.", __func__);
-        configs.clear();
+        HCCL_ERROR("[%s] parse HCCL_HOST_RDMA_UDP_PORTS_LIST failed.", __func__);
+        return HCCL_E_PARA;
     }
     HCCL_RUN_INFO(
         "[HCCL_ENV] HCCL_HOST_RDMA_UDP_PORTS_LIST set by %s, device config count[%zu]",
@@ -271,9 +282,7 @@ HcclResult HostMultiQpConfig::Parse()
         HCCL_INFO("[%s] host multi qp config file is unavailable.", __func__);
     } else {
         HCCL_INFO("[%s] open host multi qp config file success.", __func__);
-        if (ParseConfigFileContent(inFile, configs) != HCCL_SUCCESS) {
-            HCCL_WARNING("[%s] parse host multi qp config file failed, use fallback configuration.", __func__);
-        }
+        CHK_RET(ParseConfigFileContent(inFile, configs));
     }
     configs_ = std::move(configs);
     parsed_ = true;
