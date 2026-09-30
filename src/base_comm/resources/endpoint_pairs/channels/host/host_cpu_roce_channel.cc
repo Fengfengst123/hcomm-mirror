@@ -855,10 +855,10 @@ HcclResult HostCpuRoceChannel::NotifyRecord(const uint32_t remoteNotifyIdx)
         }
         if (ret == ENOMEM) {
             HCCL_WARNING(
-                "[HostCpuRoceChannel][%s] post send wqe overflow. ret:%d, badWr->wr_id[%llu], "
+                "[HostCpuRoceChannel][%s] post send wqe overflow. ret:%d, wqeNums_[%u]=%d, badWr->wr_id[%llu], "
                 "badWr->sg_list->addr[%llu], badWr->wr.rdma.remote_addr[%llu], badWr->wr.ud.remote_qpn[%u]",
-                __func__, ret, sendbadWr->wr_id, sendbadWr->sg_list->addr, sendbadWr->wr.rdma.remote_addr,
-                sendbadWr->wr.ud.remote_qpn);
+                __func__, ret, i, wqeNums_[i], sendbadWr->wr_id, sendbadWr->sg_list->addr,
+                sendbadWr->wr.rdma.remote_addr, sendbadWr->wr.ud.remote_qpn);
             return HCCL_E_AGAIN;
         }
         if (ret != 0) {
