@@ -23,6 +23,7 @@
 #include <iostream>
 #include <unistd.h>
 #include "invalid_params_exception.h"
+#include "adapter_error_manager_pub.h"
 #include "env_func.h"
 #include "plf_debug_config.h"
 #include "config_plf_log_v2.h"
@@ -171,6 +172,54 @@ TEST_F(EnvConfigTest, Ut_EnvAlgoConfigParse_WhenDeterministicInvalid_ExpectThrow
     EnvAlgoConfig algoConfig;
 
     EXPECT_THROW(algoConfig.Parse(), InvalidParamsException);
+}
+
+TEST_F(EnvConfigTest, Ut_EnvConfigParse_WhenEnvironmentInvalid_ExpectEI0001Report)
+{
+    static std::string reportedErrorCode;
+    static std::vector<std::string> reportedKeys;
+    static std::vector<std::string> reportedValues;
+    MOCKER(getenv).stubs().with(mockcpp::any()).will(invoke(getenv_stub));
+    MOCKER(RptInputErr)
+        .stubs()
+        .will(invoke(+[](std::string errorCode, std::vector<std::string> keys, std::vector<std::string> values) {
+            reportedErrorCode = errorCode;
+            reportedKeys = keys;
+            reportedValues = values;
+        }));
+    struct InvalidEnvCase {
+        const char* name;
+        const char* value;
+        const char* expectedReason;
+    };
+    constexpr InvalidEnvCase invalidEnvCases[]
+        = {{"HCCL_RDMA_TIMEOUT", "-1", "contains non-digit char"},
+           {"HCCL_BUFFSIZE", "-1", "contains non-digit char"},
+           {"HCCL_DETERMINISTIC", "invalid", "Should be false, true or strict"}};
+
+    for (const auto& envCase : invalidEnvCases) {
+        ResetEnvCfgMap();
+        envCfgMap[envCase.name] = envCase.value;
+        reportedErrorCode.clear();
+        reportedKeys.clear();
+        reportedValues.clear();
+
+        if (std::string(envCase.name) == "HCCL_RDMA_TIMEOUT") {
+            EnvRdmaConfig config;
+            EXPECT_THROW(config.Parse(), InvalidParamsException);
+        } else {
+            EnvAlgoConfig config;
+            EXPECT_THROW(config.Parse(), InvalidParamsException);
+        }
+
+        EXPECT_EQ(reportedErrorCode, "EI0001");
+        EXPECT_EQ(reportedKeys, std::vector<std::string>({"value", "env", "expect"}));
+        ASSERT_EQ(reportedValues.size(), 3U);
+        EXPECT_EQ(reportedValues[0], envCase.value);
+        EXPECT_EQ(reportedValues[1], envCase.name);
+        EXPECT_NE(reportedValues[2].find(envCase.expectedReason), std::string::npos);
+    }
+    ResetEnvCfgMap();
 }
 
 TEST_F(EnvConfigTest, Ut_EnvAlgoConfigSet_WhenDeterministicUnset_ExpectDefaultThenUpdated)

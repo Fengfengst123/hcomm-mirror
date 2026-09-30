@@ -122,7 +122,7 @@ std::map<HcclReduceOp, ReduceOp> HCCL_OP_REDUCE_MAP
 static HcclResult GetEffectiveHcclDeterministic(uint32_t configuredDeterministic, uint32_t& effectiveDeterministic)
 {
     if (configuredDeterministic == HCCL_COMM_DETERMINISTIC_CONFIG_NOT_SET) {
-        effectiveDeterministic = EnvConfig::GetInstance().GetAlgoConfig().GetDeterministic();
+        TRY_CATCH_RETURN(effectiveDeterministic = EnvConfig::GetInstance().GetAlgoConfig().GetDeterministic());
         return HCCL_SUCCESS;
     }
 
@@ -3071,20 +3071,21 @@ HcclResult HcclGetCommAsyncErrorV2() { return HCCL_SUCCESS; }
 HcclResult HcclSetConfigV2(HcclConfig config, HcclConfigValue configValue)
 {
     if (config == HCCL_DETERMINISTIC) {
-        EnvConfig& envConfig = EnvConfig::GetInstance();
-        if (envConfig.GetAlgoConfig().IsDeterministicSetByEnvironment()) {
-            HCCL_WARNING(
-                "[HcclSetConfigV2] HCCL_DETERMINISTIC has been set by environment and will not be overwritten.");
-            return HCCL_SUCCESS;
-        }
-
         CHK_PRT_RET(
             configValue.value != HCCL_DETERMINISTIC_DISABLE && configValue.value != HCCL_DETERMINISTIC_ENABLE
                 && configValue.value != HCCL_DETERMINISTIC_STRICT,
             HCCL_ERROR("[HcclSetConfigV2] HCCL_DETERMINISTIC only supports 0, 1 or 2, value[%d].", configValue.value),
             HCCL_E_PARA);
 
-        envConfig.SetDeterministic(static_cast<u8>(configValue.value));
+        EnvConfig* envConfig = nullptr;
+        TRY_CATCH_RETURN(envConfig = &EnvConfig::GetInstance());
+        if (envConfig->GetAlgoConfig().IsDeterministicSetByEnvironment()) {
+            HCCL_WARNING(
+                "[HcclSetConfigV2] HCCL_DETERMINISTIC has been set by environment and will not be overwritten.");
+            return HCCL_SUCCESS;
+        }
+
+        envConfig->SetDeterministic(static_cast<u8>(configValue.value));
         HCCL_INFO("[HcclSetConfigV2] Set HCCL_DETERMINISTIC to [%d].", configValue.value);
     }
     return HCCL_SUCCESS;
@@ -3096,7 +3097,8 @@ HcclResult HcclGetConfigV2(HcclConfig config, HcclConfigValue* configValue)
         config != HCCL_DETERMINISTIC,
         HCCL_ERROR("[HcclGetConfigV2] unsupported config type[%d].", static_cast<int32_t>(config)), HCCL_E_PARA);
 
-    configValue->value = static_cast<int32_t>(EnvConfig::GetInstance().GetAlgoConfig().GetDeterministic());
+    TRY_CATCH_RETURN(
+        configValue->value = static_cast<int32_t>(EnvConfig::GetInstance().GetAlgoConfig().GetDeterministic()));
     HCCL_INFO("[HcclGetConfigV2] HCCL_DETERMINISTIC is [%d].", configValue->value);
     return HCCL_SUCCESS;
 }

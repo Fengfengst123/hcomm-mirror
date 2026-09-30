@@ -17,6 +17,8 @@
 #include <map>
 #include <fstream>
 #include <string>
+#include <cstdlib>
+#include <unistd.h>
 #include <nlohmann/json.hpp>
 #define private public
 #include "cfg_field.h"
@@ -149,6 +151,18 @@ TEST_F(OpbaseTestV2, Ut_HcclSetConfigV2_WhenLevelIsInvalid_ExpectErrorAndValueUn
     HcclConfigValue output{};
     ASSERT_EQ(HcclGetConfigV2(HCCL_DETERMINISTIC, &output), HCCL_SUCCESS);
     EXPECT_EQ(output.value, validValue.value);
+}
+
+TEST_F(OpbaseTestV2, Ut_HcclSetConfigV2_WhenEnvironmentSetAndLevelInvalid_ExpectError)
+{
+    SetDeterministicState(2, true);
+    HcclConfigValue input{};
+    input.value = 3;
+    EXPECT_EQ(HcclSetConfigV2(HCCL_DETERMINISTIC, input), HCCL_E_PARA);
+
+    HcclConfigValue output{};
+    ASSERT_EQ(HcclGetConfigV2(HCCL_DETERMINISTIC, &output), HCCL_SUCCESS);
+    EXPECT_EQ(output.value, 2);
 }
 
 TEST_F(OpbaseTestV2, Ut_HcclGetConfigV2_WhenOutputIsNull_ExpectPointerError)
@@ -656,6 +670,99 @@ TEST_F(OpbaseTestV2, HcclCommInitClusterInfoConfigV2_CONFIGNOTSET)
     EXPECT_EQ(ret, HCCL_SUCCESS);
     ASSERT_NE(comm, nullptr);
     EXPECT_EQ(static_cast<HcclCommunicator*>(comm)->config.hcclDeterministic, 2U);
+}
+
+class OpbaseInvalidEnvDeathTest : public testing::Test {};
+
+TEST_F(OpbaseInvalidEnvDeathTest, Ut_HcclCommInitClusterInfoConfigV2_WhenEnvironmentInvalid_ExpectParameterError)
+{
+    struct InvalidEnvCase {
+        const char* name;
+        const char* value;
+    };
+    constexpr InvalidEnvCase invalidEnvCases[]
+        = {{"HCCL_RDMA_TIMEOUT", "-1"}, {"HCCL_BUFFSIZE", "-1"}, {"HCCL_DETERMINISTIC", "invalid"}};
+    constexpr char rankTableFile[] = "./ut_hcomm_invalid_env_ranktable.json";
+    std::ofstream file(rankTableFile);
+    ASSERT_TRUE(file.is_open());
+    file << R"({"rank_count":1})";
+    file.close();
+
+    // threadsafe 模式会重新启动进程，保证 EnvConfig 首次读取非法环境变量。
+    const auto oldStyle = ::testing::GTEST_FLAG(death_test_style);
+    ::testing::GTEST_FLAG(death_test_style) = "threadsafe";
+    for (const auto& envCase : invalidEnvCases) {
+        EXPECT_EXIT(
+            {
+                for (const auto& candidate : invalidEnvCases) {
+                    unsetenv(candidate.name);
+                }
+                setenv(envCase.name, envCase.value, 1);
+                MOCKER(CallSingletons).stubs().will(returnValue(HCCL_SUCCESS));
+
+                HcclCommConfig config{};
+                HcclCommConfigInit(&config);
+                HcclComm comm = nullptr;
+                HcclResult ret = HcclCommInitClusterInfoConfigV2(rankTableFile, 0, &config, &comm);
+                _exit(ret == HCCL_E_PARA ? 0 : 1);
+            },
+            ::testing::ExitedWithCode(0), "");
+    }
+    ::testing::GTEST_FLAG(death_test_style) = oldStyle;
+    unlink(rankTableFile);
+}
+
+TEST_F(OpbaseInvalidEnvDeathTest, Ut_HcclSetConfigV2_WhenEnvironmentInvalid_ExpectParameterError)
+{
+    struct InvalidEnvCase {
+        const char* name;
+        const char* value;
+    };
+    constexpr InvalidEnvCase invalidEnvCases[]
+        = {{"HCCL_RDMA_TIMEOUT", "-1"}, {"HCCL_BUFFSIZE", "-1"}, {"HCCL_DETERMINISTIC", "invalid"}};
+    const auto oldStyle = ::testing::GTEST_FLAG(death_test_style);
+    ::testing::GTEST_FLAG(death_test_style) = "threadsafe";
+    for (const auto& envCase : invalidEnvCases) {
+        EXPECT_EXIT(
+            {
+                for (const auto& candidate : invalidEnvCases) {
+                    unsetenv(candidate.name);
+                }
+                setenv(envCase.name, envCase.value, 1);
+                HcclConfigValue configValue{};
+                configValue.value = 1;
+                HcclResult ret = HcclSetConfigV2(HCCL_DETERMINISTIC, configValue);
+                _exit(ret == HCCL_E_PARA ? 0 : 1);
+            },
+            ::testing::ExitedWithCode(0), "");
+    }
+    ::testing::GTEST_FLAG(death_test_style) = oldStyle;
+}
+
+TEST_F(OpbaseInvalidEnvDeathTest, Ut_HcclGetConfigV2_WhenEnvironmentInvalid_ExpectParameterError)
+{
+    struct InvalidEnvCase {
+        const char* name;
+        const char* value;
+    };
+    constexpr InvalidEnvCase invalidEnvCases[]
+        = {{"HCCL_RDMA_TIMEOUT", "-1"}, {"HCCL_BUFFSIZE", "-1"}, {"HCCL_DETERMINISTIC", "invalid"}};
+    const auto oldStyle = ::testing::GTEST_FLAG(death_test_style);
+    ::testing::GTEST_FLAG(death_test_style) = "threadsafe";
+    for (const auto& envCase : invalidEnvCases) {
+        EXPECT_EXIT(
+            {
+                for (const auto& candidate : invalidEnvCases) {
+                    unsetenv(candidate.name);
+                }
+                setenv(envCase.name, envCase.value, 1);
+                HcclConfigValue configValue{};
+                HcclResult ret = HcclGetConfigV2(HCCL_DETERMINISTIC, &configValue);
+                _exit(ret == HCCL_E_PARA ? 0 : 1);
+            },
+            ::testing::ExitedWithCode(0), "");
+    }
+    ::testing::GTEST_FLAG(death_test_style) = oldStyle;
 }
 
 TEST_F(OpbaseTestV2, HcclGetRankIdV2)

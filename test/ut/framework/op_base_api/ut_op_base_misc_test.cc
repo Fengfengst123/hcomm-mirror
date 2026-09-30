@@ -158,6 +158,7 @@ TEST_F(OpBaseMiscTest, Ut_HcclSetConfig_When_A5CommExists_Expect_UpdateUnlessEnv
     const TestCase testCases[] = {
         {nullptr, 0U},
         {"strict", 2U},
+        {"", 0U},
     };
     for (const auto& testCase : testCases) {
         if (testCase.environmentValue == nullptr) {

@@ -1173,7 +1173,7 @@ HcclResult HcclSetConfig(HcclConfig config, HcclConfigValue configValue)
         std::string hcclDeterministicEnv = (mmSysGetEnvValue != nullptr) ? mmSysGetEnvValue : "EmptyString";
         if (isSupportV2) {
             CHK_RET(HcclSetConfigV2(config, configValue));
-            if (hcclDeterministicEnv != "EmptyString") {
+            if (!hcclDeterministicEnv.empty() && hcclDeterministicEnv != "EmptyString") {
                 return HCCL_SUCCESS;
             }
         } else {
