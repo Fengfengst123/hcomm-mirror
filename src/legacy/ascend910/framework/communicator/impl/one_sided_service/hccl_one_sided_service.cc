@@ -1113,8 +1113,13 @@ HcclResult HcclOneSidedService::ReportProfilingCommInfo(const Stream& kfcStream,
         profCommInfo.groupName, aicpuStream.id());
     profCommInfo.commStreamIds[0] = aicpuStream.id();
     profCommInfo.commStreamSize = 1; // 只有1条执行流
-    return ProfilingManagerPub::CallMsprofReportMc2CommInfo(
+    HcclResult mc2Ret = ProfilingManagerPub::CallMsprofReportMc2CommInfo(
         hrtMsprofSysCycleTime(), &profCommInfo, sizeof(profCommInfo));
+    CHK_PRT_CONT(
+        mc2Ret != HCCL_SUCCESS,
+        HCCL_WARNING(
+            "Report mc2 comm info fail, commStreamSize[%u], hcclRet[%d]", profCommInfo.commStreamSize, mc2Ret));
+    return HCCL_SUCCESS;
 }
 
 HcclResult HcclOneSidedService::AicpuInitKernelLaunch()
@@ -1147,7 +1152,10 @@ HcclResult HcclOneSidedService::AicpuInitKernelLaunch()
     const u64 endTime = hrtMsprofSysCycleTime();
     s32 threadId = SalGetTid();
     std::string profName = "OneSideCommAicpuInit";
-    CHK_RET(ProfilingManagerPub::CallMsprofReportNodeInfo(beginTime, endTime, profName, threadId));
+    HcclResult profRet = ProfilingManagerPub::CallMsprofReportNodeInfo(beginTime, endTime, profName, threadId);
+    CHK_PRT_CONT(
+        profRet != HCCL_SUCCESS,
+        HCCL_WARNING("Report node info fail, profName[%s], hcclRet[%d]", profName.c_str(), profRet));
 
     return HCCL_SUCCESS;
 }
@@ -1283,7 +1291,10 @@ HcclResult HcclOneSidedService::AicpuKernelLaunch(
 
     const u64 endTime = hrtMsprofSysCycleTime();
     const s32 threadId = SalGetTid();
-    CHK_RET(ProfilingManagerPub::CallMsprofReportNodeInfo(beginTime, endTime, profName, threadId));
+    HcclResult profRet = ProfilingManagerPub::CallMsprofReportNodeInfo(beginTime, endTime, profName, threadId);
+    CHK_PRT_CONT(
+        profRet != HCCL_SUCCESS,
+        HCCL_WARNING("Report node info fail, profName[%s], hcclRet[%d]", profName.c_str(), profRet));
 
     if (conn != nullptr) {
         if (tilingInfo.useRdma) {

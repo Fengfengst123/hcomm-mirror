@@ -64,7 +64,10 @@ HcclResult ParallelTaskLoader::StartTaskLoad()
         tidInfo_[streamIndex] = streamTaskLoader_[streamIndex]->GetTid();
     }
 #ifndef OPEN_HCCL_TEST
-    CHK_RET(hccl::ProfilingManagerPub::CallMsprofReportMultiThreadInfo(tidInfo_));
+    HcclResult profRet = hccl::ProfilingManagerPub::CallMsprofReportMultiThreadInfo(tidInfo_);
+    CHK_PRT_CONT(
+        profRet != HCCL_SUCCESS,
+        HCCL_WARNING("Report multi thread info fail, tidNum[%zu], hcclRet[%d]", tidInfo_.size(), profRet));
 #endif
 
     // 通知流线程执行

@@ -706,7 +706,10 @@ HcclResult hcclImpl::CreateMutiStreamRes(
         HCCL_ERROR("[Create][MutiStreamRes]tag[%s] init multi ring resource failed, return[%d]", tag.c_str(), ret),
         ret);
 
-    CHK_RET(hccl::ProfilingManagerPub::CallMsprofReportMultiThreadInfo(streamInfo.tidInfo));
+    HcclResult profRet = hccl::ProfilingManagerPub::CallMsprofReportMultiThreadInfo(streamInfo.tidInfo);
+    CHK_PRT_CONT(
+        profRet != HCCL_SUCCESS,
+        HCCL_WARNING("Report multi thread info fail, tidNum[%zu], hcclRet[%d]", streamInfo.tidInfo.size(), profRet));
 
     if (GetWorkflowMode() == HcclWorkflowMode::HCCL_WORKFLOW_MODE_OPS_KERNEL_INFO_LIB) {
         // GE OffloadStreamManager中set的流都是从流

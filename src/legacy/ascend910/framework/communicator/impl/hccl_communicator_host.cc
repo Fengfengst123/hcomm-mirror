@@ -6617,16 +6617,22 @@ HcclResult HcclCommunicator::GetReportHcclMC2Info(const Stream& kfcStream, const
         hcclMc2Info_.commStreamIds[reportId++] = aicpuStreams[streamIndex].id();
         if (reportId == ONCE_REPORT_STREAM_NUM_MAX) {
             hcclMc2Info_.commStreamSize = reportId;
-            CHK_RET(ProfilingManagerPub::CallMsprofReportMc2CommInfo(
-                hrtMsprofSysCycleTime(), &hcclMc2Info_, sizeof(hcclMc2Info_)));
+            HcclResult mc2Ret = ProfilingManagerPub::CallMsprofReportMc2CommInfo(
+                hrtMsprofSysCycleTime(), &hcclMc2Info_, sizeof(hcclMc2Info_));
+            CHK_PRT_CONT(
+                mc2Ret != HCCL_SUCCESS,
+                HCCL_WARNING("Report mc2 comm info fail, reportId[%u], hcclRet[%d]", reportId, mc2Ret));
             reportId = 0;
         }
         if (streamIndex == (aicpuStreams.size() - 1)) {
             HCCL_INFO("streamIndex:%u, reportId:%u, streamId:%d", streamIndex, reportId, opMainStream_.id());
             hcclMc2Info_.commStreamIds[reportId++] = opMainStream_.id();
             hcclMc2Info_.commStreamSize = reportId;
-            CHK_RET(ProfilingManagerPub::CallMsprofReportMc2CommInfo(
-                hrtMsprofSysCycleTime(), &hcclMc2Info_, sizeof(hcclMc2Info_)));
+            HcclResult mc2Ret = ProfilingManagerPub::CallMsprofReportMc2CommInfo(
+                hrtMsprofSysCycleTime(), &hcclMc2Info_, sizeof(hcclMc2Info_));
+            CHK_PRT_CONT(
+                mc2Ret != HCCL_SUCCESS,
+                HCCL_WARNING("Report mc2 comm info fail, reportId[%u], hcclRet[%d]", reportId, mc2Ret));
             reportId = 0;
         }
     }
@@ -6634,8 +6640,12 @@ HcclResult HcclCommunicator::GetReportHcclMC2Info(const Stream& kfcStream, const
         HCCL_INFO("only exist main stream, streamId:%d", opMainStream_.id());
         hcclMc2Info_.commStreamIds[0] = opMainStream_.id();
         hcclMc2Info_.commStreamSize = 1; // 只有主流1条
-        CHK_RET(ProfilingManagerPub::CallMsprofReportMc2CommInfo(
-            hrtMsprofSysCycleTime(), &hcclMc2Info_, sizeof(hcclMc2Info_)));
+        HcclResult mc2Ret = ProfilingManagerPub::CallMsprofReportMc2CommInfo(
+            hrtMsprofSysCycleTime(), &hcclMc2Info_, sizeof(hcclMc2Info_));
+        CHK_PRT_CONT(
+            mc2Ret != HCCL_SUCCESS,
+            HCCL_WARNING(
+                "Report mc2 comm info fail, commStreamSize[%u], hcclRet[%d]", hcclMc2Info_.commStreamSize, mc2Ret));
     }
     return HCCL_SUCCESS;
 }
@@ -7600,8 +7610,11 @@ HcclResult HcclCommunicator::AicpuResourceInit(
             true, timeOut));
         uint64_t customEndTime = hrtMsprofSysCycleTime();
         s32 customthreadId = SalGetTid();
-        CHK_RET(ProfilingManagerPub::CallMsprofReportNodeInfo(
-            customBeginTime, customEndTime, customProfName, customthreadId));
+        HcclResult profRet = ProfilingManagerPub::CallMsprofReportNodeInfo(
+            customBeginTime, customEndTime, customProfName, customthreadId);
+        CHK_PRT_CONT(
+            profRet != HCCL_SUCCESS,
+            HCCL_WARNING("Report node info fail, profName[%s], hcclRet[%d]", customProfName.c_str(), profRet));
         CHK_RET(hcclStreamSynchronize(aicpuStream, commConfig_.GetConfigExecTimeOut()));
     }
 
@@ -7632,7 +7645,10 @@ HcclResult HcclCommunicator::AiCpuKernelLaunch(const rtStream_t stm, u64 addr, c
         stm, static_cast<void*>(&initTask), sizeof(initTask), binHandle_, kernelName, true, timeOut));
     uint64_t endTime = hrtMsprofSysCycleTime();
     s32 threadId = SalGetTid();
-    CHK_RET(ProfilingManagerPub::CallMsprofReportNodeInfo(beginTime, endTime, profName, threadId));
+    HcclResult profRet = ProfilingManagerPub::CallMsprofReportNodeInfo(beginTime, endTime, profName, threadId);
+    CHK_PRT_CONT(
+        profRet != HCCL_SUCCESS,
+        HCCL_WARNING("Report node info fail, profName[%s], hcclRet[%d]", profName.c_str(), profRet));
     return HCCL_SUCCESS;
 }
 
@@ -8044,7 +8060,10 @@ HcclResult HcclCommunicator::AicpuKfcTilingDataLaunchIn(
 
     uint64_t endTime = hrtMsprofSysCycleTime();
     s32 threadId = SalGetTid();
-    CHK_RET(ProfilingManagerPub::CallMsprofReportNodeInfo(beginTime, endTime, profName, threadId));
+    HcclResult profRet = ProfilingManagerPub::CallMsprofReportNodeInfo(beginTime, endTime, profName, threadId);
+    CHK_PRT_CONT(
+        profRet != HCCL_SUCCESS,
+        HCCL_WARNING("Report node info fail, profName[%s], hcclRet[%d]", profName.c_str(), profRet));
     CHK_RET(LocalNotify::Wait(
         mainStream, dispatcher_, localAiCpuOpNotify_[static_cast<u32>(AicpuLocalNotifyIdx::HOST_TO_AICPU_1)],
         INVALID_VALUE_STAGE, timeOut));
@@ -8700,8 +8719,12 @@ HcclResult HcclCommunicator::SetCommResource(
         "commStreamSize[%u]",
         identifier_.c_str(), hcclMc2Info_.groupName, rankSize, curRankId, usrRankId, static_cast<uint32_t>(stream.id()),
         rankSize);
-    CHK_RET(
-        ProfilingManagerPub::CallMsprofReportMc2CommInfo(hrtMsprofSysCycleTime(), &hcclMc2Info_, sizeof(hcclMc2Info_)));
+    HcclResult mc2Ret = ProfilingManagerPub::CallMsprofReportMc2CommInfo(
+        hrtMsprofSysCycleTime(), &hcclMc2Info_, sizeof(hcclMc2Info_));
+    CHK_PRT_CONT(
+        mc2Ret != HCCL_SUCCESS,
+        HCCL_WARNING(
+            "Report mc2 comm info fail, commStreamSize[%u], hcclRet[%d]", hcclMc2Info_.commStreamSize, mc2Ret));
     return HCCL_SUCCESS;
 }
 

@@ -38,8 +38,11 @@ HcclResult HcclStreamProfilingReport(HcclComm comm, u32 threadNum, const u32* th
         hcclMc2Info.commStreamIds[reportId++] = id;
         if (reportId == ONCE_REPORT_STREAM_NUM_MAX) {
             hcclMc2Info.commStreamSize = reportId;
-            CHK_RET(hccl::ProfilingManagerPub::CallMsprofReportMc2CommInfo(
-                hrtMsprofSysCycleTime(), &hcclMc2Info, sizeof(hcclMc2Info)));
+            HcclResult mc2Ret = hccl::ProfilingManagerPub::CallMsprofReportMc2CommInfo(
+                hrtMsprofSysCycleTime(), &hcclMc2Info, sizeof(hcclMc2Info));
+            CHK_PRT_CONT(
+                mc2Ret != HCCL_SUCCESS,
+                HCCL_WARNING("Report mc2 comm info fail, reportId[%u], hcclRet[%d]", reportId, mc2Ret));
             reportId = 0;
         }
     }
@@ -47,8 +50,11 @@ HcclResult HcclStreamProfilingReport(HcclComm comm, u32 threadNum, const u32* th
     if (reportId > 0) {
         HCCL_DEBUG("[%s] last reportId[%u]", __func__, reportId);
         hcclMc2Info.commStreamSize = reportId;
-        CHK_RET(hccl::ProfilingManagerPub::CallMsprofReportMc2CommInfo(
-            hrtMsprofSysCycleTime(), &hcclMc2Info, sizeof(hcclMc2Info)));
+        HcclResult mc2Ret = hccl::ProfilingManagerPub::CallMsprofReportMc2CommInfo(
+            hrtMsprofSysCycleTime(), &hcclMc2Info, sizeof(hcclMc2Info));
+        CHK_PRT_CONT(
+            mc2Ret != HCCL_SUCCESS,
+            HCCL_WARNING("Report mc2 comm info fail, reportId[%u], hcclRet[%d]", reportId, mc2Ret));
         reportId = 0;
     }
     HCCL_INFO("[%s] success", __func__);
