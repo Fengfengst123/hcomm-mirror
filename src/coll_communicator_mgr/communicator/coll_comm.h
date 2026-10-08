@@ -126,7 +126,6 @@ public:
     HcclResult GetParentRankId(u32& parentRankId) const;
     uint32_t UpdateIndex();
 
-    // Todo:在这里做N秒快恢
     HcclCommStatus GetCommStatus() const;
     HcclResult Suspend();
     HcclResult Clean();

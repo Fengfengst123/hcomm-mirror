@@ -14,7 +14,7 @@
 
 #include "hcomm_adapter_rts.h"
 
-#include "exception_util.h" // todo: 需要统一整改为不抛异常
+#include "exception_util.h"
 #include "ccu_api_exception.h"
 
 namespace hcomm {

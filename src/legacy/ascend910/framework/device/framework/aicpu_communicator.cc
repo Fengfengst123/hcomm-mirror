@@ -5742,7 +5742,7 @@ HcclResult HcclCommAicpu::InitP2pChannel(HcclIndOpChannelRemoteResV3* commParam,
         return HCCL_E_PARA;
     }
     // 获取Notify资源
-    CHK_RET(SetChannelP2pNotify(transDevP2pData, remoteResV2.p2pNotifyNum, channelP2p)); // 待确认notify是否
+    CHK_RET(SetChannelP2pNotify(transDevP2pData, remoteResV2.p2pNotifyNum, channelP2p));
     //  获取transportAttr信息
     transDevP2pData.transportAttr = channelP2p.transportAttr;
     //  创建Transport对象
@@ -5838,7 +5838,7 @@ HcclResult HcclCommAicpu::InitRoceChannel(HcclIndOpChannelRemoteResV3* commParam
 
     // 创建Transport对象
     MachinePara machinePara;
-    CHK_RET(SetTransportMachinePara(machinePara, remoteResV2.remoteRank, commParam->channelTag)); // 待确认是否填充完毕
+    CHK_RET(SetTransportMachinePara(machinePara, remoteResV2.remoteRank, commParam->channelTag));
     machinePara.notifyNum = remoteResV2.roceNotifyNum;
     // 获取localMem & remoteMem
     TransportDeviceIbverbsData transDevIbverbsData;
@@ -5866,7 +5866,7 @@ HcclResult HcclCommAicpu::InitRoceChannel(HcclIndOpChannelRemoteResV3* commParam
     transDevIbverbsData.qpsPerConnection = channelRoce.qpsPerConnection;
 
     // 获取notify
-    u64& roceNotifyNum = remoteResV2.roceNotifyNum; // 是否需要待确认
+    u64& roceNotifyNum = remoteResV2.roceNotifyNum;
     CHK_RET(SetChannelRoceNotify(transDevIbverbsData, roceNotifyNum, channelRoce));
 
     // 创建Transport对象

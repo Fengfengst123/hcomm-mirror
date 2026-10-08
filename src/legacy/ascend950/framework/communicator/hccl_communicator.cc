@@ -216,11 +216,7 @@ HcclResult HcclCcuTaskKillPreProcess(u32 deviceLogicId)
 
 HcclResult HcclCcuTaskKillPostProcess(u32 deviceLogicId) { return CcuSetTaskKillDone(deviceLogicId); }
 
-HcclResult HcclCcuResumePfeTableProcess([[maybe_unused]] u32 deviceLogicId)
-{
-    // 待修改
-    return HcclResult::HCCL_SUCCESS;
-}
+HcclResult HcclCcuResumePfeTableProcess([[maybe_unused]] u32 deviceLogicId) { return HcclResult::HCCL_SUCCESS; }
 
 HcclResult HcclCommunicator::GetSnapShotDynamicBuf(void* buf)
 {

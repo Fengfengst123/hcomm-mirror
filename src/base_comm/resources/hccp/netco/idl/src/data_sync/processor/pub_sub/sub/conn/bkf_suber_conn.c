@@ -283,7 +283,6 @@ uint32_t BkfSuberConnMngSetSelfUrl(BkfSuberConnMng *connMng, BkfUrl *selfUrl)
     tableTypeMng->selfUrl = *selfUrl;
 
     if (selfUrl->type == BKF_URL_TYPE_V8TLS || selfUrl->type == BKF_URL_TYPE_V8TCP) {
-        /* v8tls类型,不依赖selfurl:todo:可以整体url封装，mesh suber也不依赖selfurl */
         return BKF_OK;
     }
     if (connMng->isEnable) {

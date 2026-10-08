@@ -37,7 +37,6 @@ HcclResult AivUbMemChannel::BuildTransport()
 
 HcclResult AivUbMemChannel::Init()
 {
-    // TODO: 处理抛异常
     CHK_RET(ParseInputParam());
     CHK_RET(BuildTransport());
     return HCCL_SUCCESS;

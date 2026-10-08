@@ -13,7 +13,6 @@
 using namespace AscendC;
 
 template <typename T>
-// todo 简化参数
 class AivAlltoAllMesh1D : public AivCommBase {
 public:
     __aicore__ inline AivAlltoAllMesh1D() {}

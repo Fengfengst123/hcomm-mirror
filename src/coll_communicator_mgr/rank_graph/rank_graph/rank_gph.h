@@ -31,7 +31,7 @@ constexpr u32 MAX_NET_LAYER = 8;
 class RankGraph {
 public:
     explicit RankGraph(RankId myRank) : netInsts_(MAX_NET_LAYER), myRank_(myRank) {}
-    friend class VirtualTopoStub; // 声明虚拟拓扑打桩类为友元类 todo 修改类名
+    friend class VirtualTopoStub;
 
     // 修改接口
     void AddPeer(const std::shared_ptr<NetInstance::Peer>& peer);

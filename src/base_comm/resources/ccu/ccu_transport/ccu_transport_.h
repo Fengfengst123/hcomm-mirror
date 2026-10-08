@@ -34,7 +34,7 @@ public:
         SEND_FIN, RECV_FIN, RECVING_FIN, RECVING_TRANS_RES, READY, CONNECT_FAILED, SOCKET_TIMEOUT)
 
     enum class CcuResStatus : uint8_t {
-        RES_UNKNOWN = 0, // 待确认（初始值）
+        RES_UNKNOWN = 0, // 初始值
         RES_OK = 1,      // 资源充足
         RES_UNAVAIL = 2, // 资源不足
         RES_FAILED = 3,  // 资源创建硬失败

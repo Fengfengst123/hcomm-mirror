@@ -188,7 +188,7 @@ void Interpret(const InsLocalCopy& ins, const StreamLite& stream, ResMgrFetcher*
         }
 
         auto taskId = stream.GetRtsq()->GetTaskId();
-        stream.GetRtsq()->SdmaCopy(src, dst, blockSize, 0); // 待确认， PART_ID是否固定设置为 0
+        stream.GetRtsq()->SdmaCopy(src, dst, blockSize, 0); // PART_ID是否固定设置为 0
         HCCL_INFO("InsLocalCopy srcA:0x%llx dstA:0x%llx,size=0x%llx", src, dst, blockSize);
         TaskParam taskParam{};
         taskParam.taskType = TaskParamType::TASK_SDMA;
@@ -229,7 +229,7 @@ void Interpret(const InsLocalCopyExtend& ins, const StreamLite& stream, ResMgrFe
         }
 
         auto taskId = stream.GetRtsq()->GetTaskId();
-        stream.GetRtsq()->SdmaCopy(src, dst, blockSize, 0); // 待确认， PART_ID是否固定设置为 0
+        stream.GetRtsq()->SdmaCopy(src, dst, blockSize, 0); // PART_ID是否固定设置为 0
         HCCL_INFO("InsLocalCopyExtend srcA:0x%llx dstA:0x%llx,size=0x%llx", src, dst, blockSize);
         TaskParam taskParam{};
         taskParam.taskType = TaskParamType::TASK_SDMA;
@@ -285,8 +285,7 @@ void Interpret(const InsLocalReduce& ins, const StreamLite& stream, ResMgrFetche
     ReduceIn reduceIn(ins.GetDataType(), ins.GetReduceOp());
 
     auto taskId = stream.GetRtsq()->GetTaskId();
-    stream.GetRtsq()->SdmaReduce(
-        src, dst, ins.GetSrcSlice().GetSize(), 0, reduceIn); // 待确认， PART_ID是否固定设置为 0
+    stream.GetRtsq()->SdmaReduce(src, dst, ins.GetSrcSlice().GetSize(), 0, reduceIn); // PART_ID是否固定设置为 0
 
     HCCL_INFO("InsLocalReduce srcA:0x%llx dstA:0x%llx,size=0x%llx", src, dst, ins.GetSrcSlice().GetSize());
     TaskParam taskParam{};

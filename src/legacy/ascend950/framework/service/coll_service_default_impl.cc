@@ -206,7 +206,6 @@ void CollServiceDefaultImpl::AllocNotifies(const vector<LinkData>& links)
     }
 
     for (auto& link : pendingLinks) {
-        // 待修改: 申请数量
         comm->GetConnLocalNotifyManager().ApplyFor(link.GetRemoteRankId(), link);
     }
 

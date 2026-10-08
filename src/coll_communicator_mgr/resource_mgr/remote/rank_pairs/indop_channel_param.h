@@ -24,8 +24,8 @@ struct HcclIndOpChannelRemoteResV2 {
 };
 
 struct HcclIndOpChannelRemoteResV3 {
-    char hcomId[HCOMID_MAX_LENGTH]{};                   // 通信域ID 最大长度待修改
-    char channelTag[TAG_MAX_LENGTH]{};                  // channelTag 最大长度待修改
+    char hcomId[HCOMID_MAX_LENGTH]{};                   // 通信域ID 最大长度
+    char channelTag[TAG_MAX_LENGTH]{};                  // channelTag 最大长度
     CommEngine engine{};                                // 通信引擎类型
     u32 localUserRank{0};                               // 本地rankId
     u32 multiQpThreshold{0};                            // 多QP每个QP分担数据量最小阈值

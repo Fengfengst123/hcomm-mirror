@@ -152,7 +152,6 @@ void UpdaterFor64Plus1::AddPeer2BackupLinks(
     std::string peer2PlanePort = GetPortFromSet(peer2PlanePorts, 0);
 
     // 匹配了对应的端口后，去ranktableinfo中查对应端口的地址信息
-    // todo 加一下peer->GetPortAddrMapLayer0()是否能找到port对应的地址。
     IpAddress backD2PlaneAddr = backupPeer->GetPortAddrMapLayer0()[backD2PlanePort][0];
     IpAddress peer2PlaneAddr = peer->GetPortAddrMapLayer0()[peer2PlanePort][0];
 

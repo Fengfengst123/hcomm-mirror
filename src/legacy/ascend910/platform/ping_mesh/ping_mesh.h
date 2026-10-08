@@ -46,7 +46,7 @@ struct RpingInput {
     int tc;       // 主要是修改DSCP
     int port;     // 监听端口
     u32 len;
-    u32 addrType; /* address type, 0: ip, 1: eid */ // todo: 是否要添加需要确定
+    u32 addrType; /* address type, 0: ip, 1: eid */
     char payload[RPING_PAYLOAD_LEN_MAX];
 };
 

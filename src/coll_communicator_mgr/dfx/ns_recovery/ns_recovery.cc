@@ -106,7 +106,7 @@ HcclResult NsRecoveryProcessor::StopLaunch()
             HCCL_INFO(
                 "[NsRecovery][Suspend] send KfcCommand[%d] success, which is NS_STOP_LAUNCH.", static_cast<int>(opCmd));
 
-            auto ret = PollStopStatus(); // todo：多CommEngine的管理存在问题
+            auto ret = PollStopStatus();
             if (ret != HcclResult::HCCL_E_SUSPENDING) {
                 HCCL_ERROR("[NsRecovery][Suspend] PollStopStatus failed, ret[%d]", ret);
                 return ret;

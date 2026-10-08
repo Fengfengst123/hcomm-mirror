@@ -78,14 +78,12 @@ void AddDetourLink(
                     linkType.Describe().c_str(), det2dstLink->GetType().Describe().c_str());
                 continue;
             };
-            // todo 是不是应该改为判断两个set是否有交集,取绕路的协议集合？ 修改了一下，llt再check一下
             std::set<LinkProtocol> newLinkProtocols;
             std::set_intersection(
                 linkProtocols.begin(), linkProtocols.end(), det2dstLink->GetLinkProtocols().begin(),
                 det2dstLink->GetLinkProtocols().end(), std::inserter(newLinkProtocols, newLinkProtocols.begin()));
 
             if (newLinkProtocols.empty()) {
-                // todo 先改编译，后面再实现日志打印
                 continue;
             };
 
@@ -102,7 +100,6 @@ void AddDetourLink(
             }
 
             // 取出对应的端口，然后去ranktableInfo中查对应端口的地址信息
-            // todo 逻辑判断一下只取第一个端口是否正确？
             IpAddress src2detAddr = data.srcNetInstPeer->GetPortAddrMapLayer0()[*src2detPorts.begin()][0];
             IpAddress det2dstAddr = data.dstNetInstPeer->GetPortAddrMapLayer0()[*det2dstPorts.begin()][0];
 

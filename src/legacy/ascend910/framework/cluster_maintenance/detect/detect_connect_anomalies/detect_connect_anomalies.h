@@ -21,7 +21,6 @@
 #include "common.h"
 
 namespace hccl {
-// todo 本端和对端的都得保存，并打印
 constexpr size_t DEST_MAX_LEN = 128;
 constexpr u32 MAX_WHITE_LIST_ENTRY = 16;
 constexpr u32 ACCEPT_TIME_OF_USLEEP = 100000;

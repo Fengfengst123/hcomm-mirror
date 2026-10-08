@@ -21,7 +21,7 @@ public:
     void* GetTlvHandle(s32 deviceLogicId);
     HccpTlvHdcManager(const HccpTlvHdcManager& HccpTlvHdcManager) = delete;
     HccpTlvHdcManager& operator=(const HccpTlvHdcManager& HccpTlvHdcManager) = delete;
-    // 测试使用，待修改: 添加编译宏，仅在单元测试时提供此接口
+    // 测试使用，添加编译宏，仅在单元测试时提供此接口
     std::set<s32> GetSet() { return instances; }
     ~HccpTlvHdcManager();
 

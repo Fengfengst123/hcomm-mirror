@@ -164,9 +164,9 @@ std::vector<char> DevUbConnection::GetUniqueId() const
     binaryStream << funcId;
     binaryStream << jettyId;
 
-    u32 jfcPollMode = 0;          // 待修改，0代表STARS POLL，1代表software Poll
-    bool dwqeCacheLocked = false; // 待修改，该jetty是否支持dwqeCachedLocked，默认不支持
-    u64 sqCiAddr = 0; // 待修改，软件poll CQ情况下，需要AICPU从该地址中读取CI,依赖UB驱动支持
+    u32 jfcPollMode = 0;          // 0代表STARS POLL，1代表software Poll
+    bool dwqeCacheLocked = false; // 该jetty是否支持dwqeCachedLocked，默认不支持
+    u64 sqCiAddr = 0;             // 软件poll CQ情况下，需要AICPU从该地址中读取CI,依赖UB驱动支持
     binaryStream << jfcPollMode;
     binaryStream << dwqeCacheLocked;
     binaryStream << dbAddr;

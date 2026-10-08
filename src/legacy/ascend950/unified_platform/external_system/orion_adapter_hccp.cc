@@ -534,7 +534,7 @@ static void HRaSocketListenStop(struct SocketListenInfoT conn[], u32 num)
     auto timeout = std::chrono::seconds(EnvLinkTimeoutGet());
     while (true) {
         ret = RaSocketListenStop(conn, num);
-        if (!ret || ret == 228202) { // 待修改: 同步版本后 228202 修改为 SOCK_ENODEV
+        if (!ret || ret == 228202) { // 同步版本后 228202 修改为 SOCK_ENODEV
             HCCL_INFO("socket listen stop success, ret=%d", ret);
             break; // 成功跳出
         } else if (ret == SOCK_EAGAIN) {

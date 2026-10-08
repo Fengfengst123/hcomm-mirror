@@ -474,8 +474,7 @@ HcclResult InsAllGatherParallelExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTem
         // 数据0的server内的mesh算法
         GenTemplateAlgParamsIntra0(dataOffset0, dataCountPerLoopAixs0, intraScratchOffset, tempAlgParamsIntra0);
         // 把每个template需要的queue传进去，比如stars的mesh要传多条queue
-        CHK_RET(tempAlgIntra.GenExtIns(
-            tempFuncs, tempAlgParamsIntra0, intraLinks_, intraQue_)); // Todo: 这里要把tempFuncs去掉
+        CHK_RET(tempAlgIntra.GenExtIns(tempFuncs, tempAlgParamsIntra0, intraLinks_, intraQue_));
         // 数据1的server间的nhr算法
         GenTemplateAlgParamsInter1(dataOffset1, dataCountPerLoopAixs1, interScratchOffset, tempAlgParamsInter1);
         CHK_RET(tempAlgInter.GenExtIns(tempFuncs, tempAlgParamsInter1, interLinks_, interQue_));

@@ -167,7 +167,6 @@ HcclResult InsTempAllReduceNHR::GenExtIns(
     CHK_RET(PreSyncQues(tempInsQues, mainQueIdx));
 
     // 主从流执行nhr
-    // 待修改数据切分方式
     for (uint32_t linkIdx = 0; linkIdx < linkNum; linkIdx++) {
         CHK_RET(RunReduceScatter(sliceInfoVecForAllLinks[linkIdx], tempLinks, tempInsQues, linkIdx));
         CHK_RET(PrepareDataForAllGather(sliceInfoVecForAllLinks[linkIdx], tempInsQues, linkIdx));

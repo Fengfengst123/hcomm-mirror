@@ -74,7 +74,7 @@ LocalRmaBuffer* LocalRmaBufManager::Reg(
             }
             return bufs[opTag][portData][bufferType].get();
         }
-        // 待修改: 仅支持 P2P 和 RDMA
+        // 仅支持 P2P 和 RDMA
         string msg = StringFormat("PortData=%s is error", portData.Describe().c_str());
         MACRO_THROW(InternalException, msg);
     }

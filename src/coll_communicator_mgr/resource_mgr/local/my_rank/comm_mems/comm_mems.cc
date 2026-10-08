@@ -113,7 +113,7 @@ HcclResult CommMems::CommRegMem(const std::string& memTag, const CommMem& mem, v
     return HCCL_SUCCESS;
 }
 
-HcclResult CommMems::CommUnregMem(const std::string& memTag, const void* memHandle) // 待确认是否要解注册
+HcclResult CommMems::CommUnregMem(const std::string& memTag, const void* memHandle)
 {
     CHK_PRT_RET(memHandle == nullptr, HCCL_ERROR("[CommUnregMem] memHandle is null"), HCCL_E_PARA);
     CHK_PRT_RET(memTag.empty(), HCCL_ERROR("[CommUnregMem] memTag is null or empty"), HCCL_E_PARA);

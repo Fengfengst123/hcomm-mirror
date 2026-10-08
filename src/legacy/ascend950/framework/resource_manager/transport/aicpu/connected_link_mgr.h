@@ -21,7 +21,7 @@ class ConnectedLinkMgr {
 public:
     const std::vector<LinkData>& GetLinks(RankId dstRank);
 
-    const std::vector<LinkData>& GetLinks(u32 level, RankId dstRank); // 待修改, 搞成迭代器
+    const std::vector<LinkData>& GetLinks(u32 level, RankId dstRank);
 
     void Reset();
 

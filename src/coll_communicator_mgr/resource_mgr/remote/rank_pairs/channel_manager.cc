@@ -392,7 +392,6 @@ HcclResult ChannelManager::BuildOpRemoteChannelP2pResParam(const LINK& link, Hcc
 {
     remoteRes.isUsedRdma = false;
     HcclChannelP2p& linkp2p = remoteRes.channelP2p;
-    // remoteMem, 独立算子localmem是否需要传待确认
     void* bufferPtr = nullptr;
     CHK_RET(link->GetRemoteMem(UserMemType::INPUT_MEM, &bufferPtr));
     linkp2p.remoteHcclbuffer.addr = reinterpret_cast<void*>(bufferPtr);

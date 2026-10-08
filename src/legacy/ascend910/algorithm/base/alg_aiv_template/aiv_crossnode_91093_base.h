@@ -808,7 +808,6 @@ AivCrossNode91093Base::RecordNv1(uint32_t tag, GM_ADDR waitAddr, bool ifCoreLeve
 __aicore__ inline void
 AivCrossNode91093Base::localMultiRecord(uint32_t tag, int32_t blockGroup, AivNotifyType notifyType)
 {
-    // todo
 #ifndef OPEN_HCCL_TEST
     localSetTensor.SetValue(0, tag);
 #endif
@@ -821,7 +820,6 @@ AivCrossNode91093Base::localMultiRecord(uint32_t tag, int32_t blockGroup, AivNot
 __aicore__ inline void
 AivCrossNode91093Base::LocalMultiWaitRecord(uint32_t tag, AivNotifyType notifyType, int32_t blockGroup, bool ifClear)
 {
-    // todo
     int32_t waitOffset = localOffset + (int32_t(notifyType) % 3) * MAX_NUM_BLOCKS * FLAG_SIZE
                          + (int32_t(notifyType) / 3) * 2560 * 1024;
     __gm__ int32_t* ctrlFlagGM = (__gm__ int32_t*)(flagAddrSelf_ + waitOffset);
@@ -983,7 +981,6 @@ __aicore__ inline void AivCrossNode91093Base::ClearGM()
 __aicore__ inline void
 AivCrossNode91093Base::SyncAllCycle(AivNotifyType notifyType, int32_t blockGroup, bool ifSyncCore)
 {
-    // todo
     LocalRecord(1, blockIdx_, notifyType);
     if (ifSyncCore) {
         LocalMultiWaitRecord(1, notifyType, blockGroup, false);
@@ -993,7 +990,6 @@ AivCrossNode91093Base::SyncAllCycle(AivNotifyType notifyType, int32_t blockGroup
 
 __aicore__ inline void AivCrossNode91093Base::ClearCycle()
 {
-    // todo
     if (blockIdxInGroup == 0) {
         Barrier(buffersOut, 1);
         pipe_barrier(PIPE_ALL);

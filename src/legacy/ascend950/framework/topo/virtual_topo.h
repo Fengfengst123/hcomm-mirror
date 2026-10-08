@@ -32,7 +32,7 @@ static constexpr u32 MAX_LINK_PATH_NUM = 2;
 
 class LinkData {
 public:
-    // 待修改 构造函数不对外开发，LinkData只能由Link生成
+    // 构造函数不对外开发，LinkData只能由Link生成
     LinkData(BasePortType portType, RankId localRankId, RankId remoteRankId, u32 localPortId, u32 remotePortId)
         : type(portType.GetType()),
           linkProtocol_(ConnProto2LinkProtocol(portType.GetProto())),

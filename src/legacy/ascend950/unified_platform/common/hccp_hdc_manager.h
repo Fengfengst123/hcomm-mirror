@@ -22,7 +22,7 @@ public:
     void DeInit(u32 deviceLogicId);
     HccpHdcManager(const HccpHdcManager& hccpHdcManager) = delete;
     HccpHdcManager& operator=(const HccpHdcManager& hccpHdcManager) = delete;
-    // 测试使用，待修改: 添加编译宏，仅在单元测试时提供此接口
+    // 测试使用，添加编译宏，仅在单元测试时提供此接口
     std::set<u32> GetSet() { return instances; }
     ~HccpHdcManager();
 

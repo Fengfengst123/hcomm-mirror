@@ -13,7 +13,7 @@
 
 #include <stdint.h>
 #include <hccl/hccl_types.h>
-// 参照 2.0 task_params.h 定义, 待补充 ccu
+// 参照 2.0 task_params.h 定义
 typedef enum {
     HCCL_TASK_TYPE_SDMA = 0,
     HCCL_TASK_TYPE_RDMA = 1,
@@ -73,7 +73,6 @@ typedef struct {
         HcclDfxParaDMA DMA;
         HcclDfxParaReduce Reduce;
         HcclDfxParaNotify Notify;
-        // CCU待补充
     } taskPara;
 } HcclTaskParam;
 

@@ -35,7 +35,7 @@ public:
 
     void Post(const Stream& stream) const override;
 
-    std::unique_ptr<Serializable> GetExchangeDto() override; // 先实现UB Notify的exchange dto，IPC/RDMA待补充
+    std::unique_ptr<Serializable> GetExchangeDto() override;
 
     ~UbLocalNotify() override;
 

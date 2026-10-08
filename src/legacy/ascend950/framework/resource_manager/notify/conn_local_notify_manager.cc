@@ -39,7 +39,7 @@ void ConnLocalNotifyManager::ApplyFor(RankId remoteRankId, const LinkData& linkD
         return;
     }
 
-    u32 count = 3; // 待修改: 需要定义GetCount()
+    u32 count = 3; // 需要定义GetCount()
     notifyPool[remoteRankId][linkData].resize(count);
 
     for (u32 i = 0; i < count; ++i) {
@@ -63,13 +63,13 @@ void ConnLocalNotifyManager::ApplyFor(RankId remoteRankId, const LinkData& linkD
                 notifyPool[remoteRankId][linkData][i]
                     = make_unique<UbLocalNotify>(rdmaHandle, comm->GetOpAiCpuTSFeatureFlag()); // 算子粒度
             } else {
-                // 待修改: 仅支持 P2P 和 RDMA 申请 notify
+                // 仅支持 P2P 和 RDMA 申请 notify
                 string msg = StringFormat(
                     "Unsupported %s of link %s", linkProtocol.Describe().c_str(), linkData.Describe().c_str());
                 THROW<InvalidParamsException>(msg);
             }
         } else {
-            // 待修改: 仅支持 P2P 和 RDMA 申请 notify
+            // 仅支持 P2P 和 RDMA 申请 notify
             string msg = StringFormat(
                 "Unsupported %s of link %s", linkData.GetType().Describe().c_str(), linkData.Describe().c_str());
             THROW<InvalidParamsException>(msg);

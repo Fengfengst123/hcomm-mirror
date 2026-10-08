@@ -290,7 +290,7 @@ ChannelStatus CcuUrmaChannel::GetStatus()
         }
         isFirstPrintChannelInfo_ = false;
     }
-    return channelStatus_; // todo: AICPU 重新定义基类的状态后，需要修改为CONNECTING
+    return channelStatus_;
 }
 
 uint32_t CcuUrmaChannel::GetDieId() const

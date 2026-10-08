@@ -544,7 +544,6 @@ urma_status_t urma_unimport_jetty(urma_target_jetty_t *tjetty);
  * Return: 0 on success, URMA_EEXIST if the jetty has been advised, other value on error
  * Note: A local jetty can be advised with several remote jetties. A connectionless jetty is free to call the advise API
  */
-/* todo: available after implementing URMA_TM_RM(IB_RC) */
 urma_status_t urma_advise_jetty(urma_jetty_t *jetty, urma_target_jetty_t *tjetty);
 
 /**
@@ -553,7 +552,6 @@ urma_status_t urma_advise_jetty(urma_jetty_t *jetty, urma_target_jetty_t *tjetty
  * @param[in] [Required] tjetty: target jetty imported before;
  * Return: 0 on success, other value on error
  */
-/* todo: available after implementing URMA_TM_RM(IB_RC) */
 urma_status_t urma_unadvise_jetty(urma_jetty_t *jetty, urma_target_jetty_t *tjetty);
 
 /**

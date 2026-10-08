@@ -146,7 +146,6 @@ HcclResult CcuChannelCtxPool::GetAvailableBatch(const BatchKey& batchKey, Resour
 HcclResult CcuChannelCtxPool::CreateAndSaveNewBatch(
     const BatchKey& batchKey, const std::vector<CcuChannelInfo> channelInfos, ResourceBatch*& batchPtr)
 {
-    // todo: 需要检查资源管理是否存在泄露可能
     auto& batches = batchMap_[batchKey];
     std::unique_ptr<ResourceBatch> newBatch{nullptr};
     newBatch.reset(new (std::nothrow) ResourceBatch(batchKey));

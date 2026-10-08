@@ -13,7 +13,6 @@
 using namespace AscendC;
 
 template <typename T>
-// todo 简化参数
 class AivSendMesh1D : public AivCommBase { // 单核、多核都能运行
 public:
     __aicore__ inline AivSendMesh1D() {}

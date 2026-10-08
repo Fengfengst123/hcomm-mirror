@@ -735,7 +735,7 @@ typedef struct urma_target_jetty {
     uint64_t handle;
     urma_transport_mode_t trans_mode;
     urma_tp_t tp;
-    urma_target_type_t type; // todo supplementary target type
+    urma_target_type_t type;
     urma_import_jetty_flag_t flag;
     urma_jetty_grp_policy_t policy;
     urma_tp_type_t tp_type;

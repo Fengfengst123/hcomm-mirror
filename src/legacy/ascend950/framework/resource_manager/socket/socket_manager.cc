@@ -285,7 +285,7 @@ void SocketManager::ServerDeInit(PortData& localPort) const
     std::lock_guard<std::mutex> lock(socketLock);
     auto& serverSocketMap = SocketManager::GetServerSocketMap();
     auto res = GetServerListenSocket(localPort);
-    // 待修改 stop listen maybe needed
+    // stop listen maybe needed
     if (res != nullptr) {
         serverSocketMap.erase(localPort);
     }

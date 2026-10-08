@@ -13,7 +13,6 @@
 using namespace AscendC;
 
 template <typename T>
-// todo 简化参数
 class AivAllReduceMesh1DOneShot : public AivCommBase {
     constexpr static uint64_t CORE_NUMS_PER_STAGE = 16; // 每个阶段提供的最大核数
     constexpr static uint64_t STAGE_NUM = 2;            // 生产者 消费者

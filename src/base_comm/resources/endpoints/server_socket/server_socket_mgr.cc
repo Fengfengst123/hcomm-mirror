@@ -68,7 +68,6 @@ HcclResult ServerSocketMgr::ListenStart_(const CommAddr& commAddr, const Hccl::N
 
     EXCEPTION_HANDLE_BEGIN
     const Hccl::DevNetPortType portType = Hccl::DevNetPortType(Hccl::ConnectProtoType::UB); // 不能写死
-    // todo: 暂时使用devPhyId构造rankId，id存疑？
     Hccl::PortData localPort = Hccl::PortData(static_cast<Hccl::RankId>(devPhyId_), portType, 0, ipAddr);
 
     HCCL_INFO(

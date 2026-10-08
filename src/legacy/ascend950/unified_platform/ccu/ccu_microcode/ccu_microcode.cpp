@@ -984,7 +984,6 @@ namespace CcuRep {
 
     static std::string ParseMSList(const CcuInstr* instr)
     {
-        // 待实现，检查sqe类型
         uint16_t msId[CCU_REDUCE_MAX_MS];
         uint16_t count = instr->v1.add.count;
         for (uint16_t index = 0; index < CCU_REDUCE_MAX_MS; index++) {

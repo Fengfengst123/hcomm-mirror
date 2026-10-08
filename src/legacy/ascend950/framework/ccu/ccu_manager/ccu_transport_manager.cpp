@@ -423,7 +423,7 @@ void CcuTransportMgr::RecoverConfirm()
 
 void CcuTransportMgr::WaitTransportsRecoverReady(vector<std::pair<CcuTransport*, LinkData>>& transports) const
 {
-    constexpr u32 waitTransportReadyTimeoutMs = 10 * 1000; // 待修改，定义最大等待10秒
+    constexpr u32 waitTransportReadyTimeoutMs = 10 * 1000; // 定义最大等待10秒
 
     auto timeout = std::chrono::milliseconds(waitTransportReadyTimeoutMs);
     HcclUs startTime = std::chrono::steady_clock::now();

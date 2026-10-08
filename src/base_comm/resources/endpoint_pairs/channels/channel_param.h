@@ -53,7 +53,7 @@ struct DevAicpuChannelConfig {
 };
 
 struct HcclChannelUrmaRes {
-    char hcomId[HCOMID_MAX_LENGTH]{};    // 通信域ID 最大长度待修改
+    char hcomId[HCOMID_MAX_LENGTH]{};    // 通信域ID 最大长度
     void* channelList{nullptr};          // 反序列后返回给host侧的device侧handle地址
     u32 listNum = 0;                     // 建链channel的总数量
     void* uniqueIdAddr{nullptr};         // 序列化后device侧地址
@@ -85,7 +85,7 @@ struct HcommRoceChannelRes {
 
 // for A2/A3 endpoint with transport
 struct HcclChannelHccsRes {
-    char channelTag[TAG_MAX_LENGTH]{}; // channelTag 最大长度待修改
+    char channelTag[TAG_MAX_LENGTH]{}; // channelTag 最大长度
     HcclChannelP2p channelP2p;         // P2p资源
     u64 p2pNotifyNum{0};               // 用于linkp2p添加notify信息
     u32 deviceType{0};                 // 基础通信使用

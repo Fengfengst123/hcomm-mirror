@@ -224,7 +224,7 @@ HcclResult TransportManager::createSubCommLinkThreads(
             transportRequest.isUsedRdma, std::ref(link), isAicpuModeEn, std::ref(subCommLinkPara.linkResult[i]),
             netDevCtx, transportRequest.notifyNum, chooseBackup, isCapture, expMem, transportRequest.linkType, isIndOp,
             indOpMem, opType, isNpuDirectRoce));
-        CHK_SMART_PTR_NULL(subCommLinkPara.linkThreads[i]);            // 异常时其他线程待处理
+        CHK_SMART_PTR_NULL(subCommLinkPara.linkThreads[i]);
         singleSubCommTransport.status[index] = TransportStatus::READY; // 建链后 transport设置为ready状态
     }
 
@@ -783,7 +783,7 @@ HcclResult TransportManager::Alloc(
                         transportRequest.isUsedRdma, std::ref(singleSubCommTransport.links[linkIdx]), isAicpuModeEn,
                         std::ref(linkResult[threadsRapplyNum]), netDevCtx, transportRequest.notifyNum, chooseBackup,
                         isCapture, expMem, transportRequest.linkType, isIndOp, indOpMem, opType, chooseAivRoceDirect));
-                    CHK_SMART_PTR_NULL(linkThreads[threadsRapplyNum]);               // 异常时其他线程待处理
+                    CHK_SMART_PTR_NULL(linkThreads[threadsRapplyNum]);
                     singleSubCommTransport.status[linkIdx] = TransportStatus::READY; // 建链后 transport设置为ready状态
                     threadsRapplyNum++;
                 }
@@ -956,7 +956,7 @@ HcclResult TransportManager::IncreAlloc(
                         transportRequest.isUsedRdma, std::ref(respSingleSubComm.links[rankIndex]), isAicpuModeEn,
                         std::ref(linkResult[threadsRapplyNum]), netDevCtx, transportRequest.notifyNum, chooseBackup,
                         isCapture, expMem, transportRequest.linkType, isIndOp, indOpMem, opType, false));
-                    CHK_SMART_PTR_NULL(linkThreads[threadsRapplyNum]);            // 异常时其他线程待处理
+                    CHK_SMART_PTR_NULL(linkThreads[threadsRapplyNum]);
                     respSingleSubComm.status[rankIndex] = TransportStatus::READY; // 建链后 transport设置为ready状态
                     threadsRapplyNum++;
                 }
@@ -1680,7 +1680,7 @@ bool TransportManager::IsSupportInterHccs(const u32 dstRank)
     return isInterHccs;
 }
 
-void TransportManager::UpdateIsInterRdma(const u32 remoteRank, bool& isInterRdma, bool forceRdma) // 待确认判断是否完善
+void TransportManager::UpdateIsInterRdma(const u32 remoteRank, bool& isInterRdma, bool forceRdma)
 {
     // 超节点内节点间采用HCCS通信的, 放至dstIntraClientVec_, 采用p2p建链
     bool isInterHccs = IsSupportInterHccs(remoteRank);

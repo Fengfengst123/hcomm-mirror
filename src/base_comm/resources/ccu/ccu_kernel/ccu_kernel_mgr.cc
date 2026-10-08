@@ -309,7 +309,6 @@ static bool CheckResIfAvailable(const CcuResReq& totalRes, const CcuResReq& resR
     DumpResReqInfo(resReq);
 
     CcuResReq needResReq{};
-    // todo: 优化为遍历数组
     for (u32 i = 0; i < CCU_MAX_IODIE_NUM; i++) {
         needResReq.msReq[i] = GetReqResNum(resReq.msReq[i], totalRes.msReq[i]);
         needResReq.blockMsReq[i] = GetReqResNum(resReq.blockMsReq[i], totalRes.blockMsReq[i]);
@@ -380,7 +379,7 @@ static void LoadRes(std::unique_ptr<CcuKernel>& kernel, CcuResPack& resPack)
     CcuResRepository& totalResRepo = resPack.GetCcuResRepo();
     CcuResRepository kernelResRepo{};
 
-    for (uint8_t i = 0; i < CCU_MAX_IODIE_NUM; i++) { // todo: 建议改成dieId
+    for (uint8_t i = 0; i < CCU_MAX_IODIE_NUM; i++) {
         MoveResInfo(kernelResRepo.loopEngine[i], totalResRepo.loopEngine[i], resReq.loopEngineReq[i]);
         MoveResInfo(kernelResRepo.blockLoopEngine[i], totalResRepo.blockLoopEngine[i], resReq.blockLoopEngineReq[i]);
         MoveResInfo(kernelResRepo.ms[i], totalResRepo.ms[i], resReq.msReq[i]);
@@ -492,7 +491,6 @@ CcuResult CcuKernelMgr::AllocRes(CcuResPack& resPack)
     GetResNumFromResPack(resPack, leftRes);
 
     const CcuResReq& resReq = currKernel_->GetResourceRequest();
-    // todo： 需要整改，传递资源不足的信息
     if (!CheckResIfAvailable(leftRes, resReq)) {
         HCCL_WARNING("[CcuKernelMgr][%s] resource is not enough.", __func__);
         return CcuResult::CCU_E_UNAVAIL;

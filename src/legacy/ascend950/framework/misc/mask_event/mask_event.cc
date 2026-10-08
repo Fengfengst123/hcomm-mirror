@@ -15,7 +15,7 @@ namespace Hccl {
 
 MaskEvent::MaskEvent() : eventPtr(HrtEventCreateWithFlag(ACL_EVENT_CAPTURE_STREAM_PROGRESS))
 {
-    // 待修改: flag暂时只用STREAM_MARK
+    // flag暂时只用STREAM_MARK
 }
 
 MaskEvent::~MaskEvent() { DECTOR_TRY_CATCH("MaskEvent", HrtEventDestroy(eventPtr)); }

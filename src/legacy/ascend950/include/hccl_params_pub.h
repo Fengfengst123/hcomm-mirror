@@ -169,9 +169,7 @@ private:
         {OpType::BROADCAST, std::bind(&CollOpParams::DescBroadcast, this, std::placeholders::_1)},
         {OpType::BATCHSENDRECV, std::bind(&CollOpParams::DescBatchSendRecv, this, std::placeholders::_1)},
         {OpType::ALLGATHERV, std::bind(&CollOpParams::DescAllGatherV, this, std::placeholders::_1)},
-        {OpType::REDUCESCATTERV, std::bind(&CollOpParams::DescReduceScatterV, this, std::placeholders::_1)}
-        // 后续待补充其他算子信息
-    };
+        {OpType::REDUCESCATTERV, std::bind(&CollOpParams::DescReduceScatterV, this, std::placeholders::_1)}};
 };
 
 struct CollOffloadOpResReq {

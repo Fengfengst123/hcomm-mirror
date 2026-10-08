@@ -26,7 +26,7 @@ public:
 
     virtual string Describe() const = 0;
 
-    virtual void Post(const Stream& stream) const = 0; // 待修改: will move this method to synchronizer
+    virtual void Post(const Stream& stream) const = 0; // will move this method to synchronizer
 
 protected:
     RmaType type;

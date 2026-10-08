@@ -113,7 +113,11 @@ struct MsprofHcclInfo {
     uint64_t dstAddr;
     uint64_t dataSize;      // bytes
     uint32_t opType;        // {0: sum, 1: mul, 2: max, 3: min}
-    uint32_t dataType;      // data type {0: INT8, 1: INT16, 2: INT32, 3: FP16, 4:FP32, 5:INT64, 6:UINT64}
+    uint32_t dataType;      // data type {0: INT8, 1: INT16, 2: INT32, 3: FP16, 4:FP32, 5:INT64, 6:UINT64,
+                            // 7:HCCL_DATA_TYPE_UINT8, 8:HCCL_DATA_TYPE_UINT16, 9:HCCL_DATA_TYPE_UINT32,
+                            // 10:HCCL_DATA_TYPE_FP64, 11:HCCL_DATA_TYPE_BFP16, 12:HCCL_DATA_TYPE_INT128,
+                            // 14:HCCL_DATA_TYPE_HIF8, 15:HCCL_DATA_TYPE_FP8E4M3, 16:HCCL_DATA_TYPE_FP8E5M2,
+                            // 17:HCCL_DATA_TYPE_FP8E8M0, 255:HCCL_DATA_TYPE_RESERVED}
     uint32_t linkType;      // link type {0: 'OnChip', 1: 'HCCS', 2: 'PCIe', 3: 'RoCE'}
     uint32_t transportType; // transport type {0: SDMA, 1: RDMA, 2:LOCAL}
     uint32_t rdmaType;      // RDMA type {0: RDMASendNotify, 1:RDMASendPayload}
@@ -154,7 +158,11 @@ struct MsprofDpuHcclTrack {
     uint16_t npuDevId;
     uint16_t dpuDevId;
     uint8_t opType;        // {0: sum, 1: mul, 2: max, 3: min}
-    uint8_t dataType;      // data type {0: INT8, 1: INT16, 2: INT32, 3: FP16, 4:FP32, 5:INT64, 6:UINT64}
+    uint8_t dataType;      // data type {0: INT8, 1: INT16, 2: INT32, 3: FP16, 4:FP32, 5:INT64, 6:UINT64,
+                           // 7:HCCL_DATA_TYPE_UINT8, 8:HCCL_DATA_TYPE_UINT16, 9:HCCL_DATA_TYPE_UINT32,
+                           // 10:HCCL_DATA_TYPE_FP64, 11:HCCL_DATA_TYPE_BFP16, 12:HCCL_DATA_TYPE_INT128,
+                           // 14:HCCL_DATA_TYPE_HIF8, 15:HCCL_DATA_TYPE_FP8E4M3, 16:HCCL_DATA_TYPE_FP8E5M2,
+                           // 17:HCCL_DATA_TYPE_FP8E8M0, 255:HCCL_DATA_TYPE_RESERVED}
     uint8_t linkType;      // link type {0: 'OnChip', 1: 'HCCS', 2: 'PCIe', 3: 'RoCE'}
     uint8_t transportType; // transport type {0: SDMA, 1: RDMA, 2:LOCAL}
     uint8_t rdmaType;      // RDMA type {0: RDMASendNotify, 1:RDMASendPayload}

@@ -75,7 +75,6 @@ private:
     EndpointHandle endpointHandle_;
     HcommChannelDesc channelDesc_;
 
-    // TODO: 成员变量全部初始化
     // --------------------- 转换参数 ---------------------
     EndpointDesc localEp_{};
     EndpointDesc remoteEp_{};

@@ -131,6 +131,7 @@ struct ErrcodeInfo {
 #define HCCP_MODULE_ID 28
 #define ACL_ERRCODE_DIGIT 100000
 
+// Combine a 6-digit ACL error code.
 #define CONVER_ERROR_CODE(module, err_type, module_errcode)                                                            \
     ((err_type) * 100000 + (HCCP_MODULE_ID) * 1000 + (module) * 100 +                                                  \
         (module_errcode)) /* Combine a 6-digit ACL error code. */

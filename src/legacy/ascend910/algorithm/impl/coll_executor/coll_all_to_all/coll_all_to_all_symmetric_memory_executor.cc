@@ -66,7 +66,7 @@ HcclResult CollRunAlltoAllFullMeshSymmetricMemory::CalcStreamNum(u32& streamNum)
     u32 rankIdxInPod = INVALID_VALUE_RANKID;
     CHK_RET(GetLocalSDMAGroupInfo(devNumInlocalPod, rankIdxInPod));
 
-    // 单超节点场景需要的从流数量，待确认是否需要减去一条主流
+    // 单超节点场景需要的从流数量
     streamNum = (devNumInlocalPod > ALLTOALLV_DIRECT_FULLMESH_SDMA_CONCURRENT_SIZE) ?
                     (ALLTOALLV_DIRECT_FULLMESH_SDMA_CONCURRENT_SIZE) :
                     (devNumInlocalPod);

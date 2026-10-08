@@ -28,7 +28,7 @@ void AicpuInsPreprocessor::Preprocess(std::shared_ptr<InsQueue>& insQueue)
     // 对每个queue中每个aicpuIns进行预处理
     for (auto slaveIter = insQueue->IterSlaves(); slaveIter.HasNext(); ++slaveIter) {
         for (auto ins = slaveIter->Iter(); ins.HasNext(); ++ins) {
-            if (ins->GetType() != InstructionType::AICPU_INS) { // todo:InstructionType
+            if (ins->GetType() != InstructionType::AICPU_INS) {
                 HCCL_INFO(
                     "[AicpuInsPreprocessor::%s] slave insQueue ins type[%s] not aicpu type.", __func__,
                     ins->GetType().Describe().c_str());
@@ -172,7 +172,6 @@ void AicpuInsPreprocessor::AllocInterRankNotifies(const vector<LinkData>& links)
     }
 
     for (auto& link : pendingLinks) {
-        // 待修改: 申请数量
         comm->GetConnLocalNotifyManager().ApplyFor(link.GetRemoteRankId(), link);
     }
 

@@ -2454,7 +2454,7 @@ HcclResult CommunicatorImpl::RecoverTransportData(
 
 void CommunicatorImpl::WaitReady() const
 {
-    constexpr u32 loadWaitTimeOut = 10 * 1000; // 待修改，定义最大等待10秒
+    constexpr u32 loadWaitTimeOut = 10 * 1000; // 定义最大等待10秒
     auto timeout = std::chrono::milliseconds(loadWaitTimeOut);
 
     HCCL_INFO("[CommunicatorImpl][%s] start", __func__);

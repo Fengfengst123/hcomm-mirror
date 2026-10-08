@@ -41,7 +41,7 @@ public:
 
     virtual shared_ptr<SubQueue> Fork()
     {
-        // 待修改 Fork() can only be called by master queue!;
+        // Fork() can only be called by master queue!;
         auto slave = make_shared<SubQueue>();
         slave->masterFlag = false;
         slave->id = slaves.size() + 1;

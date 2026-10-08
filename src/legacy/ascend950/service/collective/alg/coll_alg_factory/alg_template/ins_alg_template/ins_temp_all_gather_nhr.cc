@@ -210,8 +210,7 @@ HcclResult InsTempAllGatherNHR::RunNHR(std::vector<InsQuePtr>& tempInsQues)
             return HcclResult::HCCL_E_INTERNAL;
         }
         std::vector<float> dataSplitRate(linkNum);
-        CHK_RET(CalcDataSplitRateForLinks(
-            linkRecv, dataSplitRate)); // todo, 修改CalcDataSplitRateForLinks接口，变为对每个对端分别计算
+        CHK_RET(CalcDataSplitRateForLinks(linkRecv, dataSplitRate));
         for (u32 j = 0; j < linkNum; j++) {
             std::vector<DataSlice> txSrcSlices;
             std::vector<DataSlice> txDstSlices;

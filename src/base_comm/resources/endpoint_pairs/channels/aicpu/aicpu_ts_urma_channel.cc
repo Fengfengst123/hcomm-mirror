@@ -46,7 +46,6 @@ AicpuTsUrmaChannel::~AicpuTsUrmaChannel()
 HcclResult AicpuTsUrmaChannel::ParseInputParam()
 {
     // 1. 从 endpointHandle_，获得 localEp_ 和 rdmaHandle_
-    // TODO: 使用 HcommEndpointGet
     Endpoint* localEpPtr = static_cast<Endpoint*>(endpointHandle_);
     CHK_PTR_NULL(localEpPtr);
     localEp_ = localEpPtr->GetEndpointDesc();
@@ -257,7 +256,6 @@ HcclResult AicpuTsUrmaChannel::Init()
         Argue result: make_unique 配合一场捕获的宏 EXCEPTION CATCH
         Attention: const 和引用
     */
-    // TODO: 处理抛异常
     s32 devLogicId;
     CHK_RET(ParseInputParam());
     CHK_RET(hrtGetDevice(&devLogicId));

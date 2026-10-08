@@ -16,7 +16,7 @@
 #include "orion_adapter_rts.h"
 
 namespace Hccl {
-// 待删除 CCU 重构完成后不再需要该文件
+// CCU 重构完成后不再需要该文件
 struct IpcRmaBufferExchangeData {
     char_t name[RTS_IPC_MEM_NAME_LEN]{0};
     u64 addr{0};

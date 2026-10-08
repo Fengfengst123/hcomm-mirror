@@ -241,7 +241,7 @@ if(BUILD_OPEN_PROJECT)
     )
 
     set(CCL_KERNEL_PLF_OPEN_INCLUDE_LIST
-        # 临时依赖头文件，待删除
+        # 临时依赖头文件
         ${HCOMM_DIR}/external_depends/tsch/
     )
     target_include_directories(ccl_kernel_plf PRIVATE

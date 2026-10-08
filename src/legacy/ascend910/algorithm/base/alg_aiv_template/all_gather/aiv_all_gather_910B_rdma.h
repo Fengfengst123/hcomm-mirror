@@ -40,7 +40,6 @@ public:
         }
         pipe_barrier(PIPE_ALL);
 
-        // todo:1、serverNum需要赋值。 2、len是inputCount 还是inputSize还是 output相关？
         for (int i = 0; i < serverNum; i++) {
             int64_t sendSize = len * sizeof(T);
             int64_t sendSizeOffset = i * len * sizeof(T);
