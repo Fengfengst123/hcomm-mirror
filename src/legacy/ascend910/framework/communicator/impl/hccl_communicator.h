@@ -779,7 +779,8 @@ private:
     u32 numBlocks_ = 0;
     std::map<OpParam, HcclCacheInfo> hcclCacheMap_; // 存储aiv cache信息
     std::string cclBuffName_;
-    bool isShareComm_ = false; // 是否共享cclbuffer
+    bool isShareComm_ = false;       // 是否共享cclbuffer
+    bool isCreateAirmaInfo_ = false; // 是否创建aiv资源
 private:
     bool IsAtomicInit();
     HcclResult MigrateLinkToStopOrResume(LINK& link, bool isStop);
@@ -900,8 +901,9 @@ private:
     HcclResult AicpuResourceInit(
         const std::string& algName, const AlgResourceResponse& algResource, const std::string& newTag,
         const rtStream_t& aicpuStream, const HcclCMDType opType, bool isCustom = false);
-    HcclResult
-    AicpuResourceRefresh(const AlgResourceResponse& algResource, const std::string& newTag, const HcclCMDType opType);
+    HcclResult AicpuResourceRefresh(
+        const std::string& algName, const AlgResourceResponse& algResource, const std::string& newTag,
+        const rtStream_t& aicpuStream, const HcclCMDType opType);
     HcclResult OrchestrateAicpu(
         const HcclCMDType& opType, const std::string& algName, const OpParam& param,
         const AlgResourceResponse& algResource, const std::string& newTag, AlgType algType, bool isCustom = false,

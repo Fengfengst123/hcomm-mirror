@@ -6444,6 +6444,7 @@ HcclResult HcclCommunicator::CopyHostAirmaInfoToDeviceParam(
     CHK_RET(hrtMemAsyncCopy(
         aiRMAInfoDev_.ptr(), aiRMAInfoDev_.size(), aiRMAInfoMem_->ptr(), aiRMAInfoDev_.size(),
         HcclRtMemcpyKind::HCCL_RT_MEMCPY_KIND_HOST_TO_DEVICE, aiCpuStream));
+    isCreateAirmaInfo_ = true;
     HCCL_INFO(
         "[%s] tag[%s] curRankId[%u] rankNum[%u] qpNum[%u] aiRMAInfo[%p] sizeOfAiRMAInfo[%llu] "
         "sizeOfAiRMAWQ[%u] sizeOfAiRMACQ[%u] sizeOfAiRMAMem[%u] sqPtr[%p] sqSize[%llu] sqCount[%zu] "
@@ -6675,7 +6676,7 @@ HcclResult HcclCommunicator::OrchestrateAicpu(
         CHK_PRT_RET(
             guard.IsLockFailed(), HCCL_ERROR("[HcclCommunicator][OrchestrateAicp] hostDeviceLock lock failed"),
             HCCL_E_INTERNAL);
-        CHK_RET(AicpuResourceRefresh(algResource, newTag, opType));
+        CHK_RET(AicpuResourceRefresh(algName, algResource, newTag, aicpuStream, opType));
     }
     HCCL_DEBUG(
         "%s isContextLaunched[%u], needRecreateAlltoallComm[%u]", __func__, isContextLaunched_,
@@ -7293,7 +7294,7 @@ HcclResult HcclCommunicator::AllocComResource(
         // 通信域内非首次，但是有新的newTag
         PetersonLockGuard guard(hostDeviceLock_.get());
         CHK_PRT_RET(guard.IsLockFailed(), HCCL_ERROR("[%s] hostDeviceLock lock failed", __func__), HCCL_E_INTERNAL);
-        CHK_RET(AicpuResourceRefresh(resMap_[newTag], newTag, commType));
+        CHK_RET(AicpuResourceRefresh(algName, resMap_[newTag], newTag, stream, commType));
     }
     return HCCL_SUCCESS;
 }

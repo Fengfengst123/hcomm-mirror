@@ -1255,7 +1255,8 @@ HcclResult HcclCommunicator::CopyHostOpRemoteResToDeviceParam(const std::string&
 }
 
 HcclResult HcclCommunicator::AicpuResourceRefresh(
-    const AlgResourceResponse& algResource, const std::string& newTag, const HcclCMDType opType)
+    const std::string& algName, const AlgResourceResponse& algResource, const std::string& newTag,
+    const rtStream_t& aicpuStream, const HcclCMDType opType)
 {
     HCCL_INFO(
         "[HcclCommunicator][AicpuResourceRefresh] start refresh aicpu resources newTag[%s] local rankId[%u]",
@@ -1264,6 +1265,13 @@ HcclResult HcclCommunicator::AicpuResourceRefresh(
     opResPara_.winSize = algResource.cclInputMem.size();
     opResPara_.localWindowsIn = reinterpret_cast<u64>(algResource.cclInputMem.ptr());
     opResPara_.localWindowsOut = reinterpret_cast<u64>(algResource.cclOutputMem.ptr());
+    // aicpuInit时未创建aiv资源时，才需要创建
+    if (!isCreateAirmaInfo_ && algName == "RunAlltoAllAivDirect") {
+        // AIV直驱ROCE
+        CHK_RET(BuildAiRmaInfoParam(newTag, algName, opType));
+        CHK_RET(CopyHostAirmaInfoToDeviceParam(newTag, opType, aicpuStream));
+        CHK_RET(hcclStreamSynchronize(aicpuStream, commConfig_.GetConfigExecTimeOut()));
+    }
     CHK_RET(BuildOpLocalScratchMemResParam(algResource, newTag, localResHostPtr));
     CHK_RET(BuildOpRemoteResParam(algResource, newTag, opType));
     CHK_RET(BuildZeroCopyParam());
