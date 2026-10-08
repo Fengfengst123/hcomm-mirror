@@ -66,7 +66,7 @@ HcclResult CcuWqeBBMgr::Alloc(const uint32_t sqSize, ResInfo& wqeBBInfo)
     vector<ResInfo> resInfo;
     auto ret = idAllocator->Alloc(wqeBBReqSize, true, resInfo, "ResType::WqeBB"); // wqebb资源要求连续
     if (ret != HcclResult::HCCL_SUCCESS) {
-        HCCL_WARNING("[CcuWqeBBMgr][%s] failed, sqSize[%u], wqeBBSize[%u]", __func__, sqSize, wqeBBReqSize);
+        HCCL_WARNING("[CcuWqeBBMgr][%s] is unsuccessful, sqSize[%u], wqeBBSize[%u]", __func__, sqSize, wqeBBReqSize);
         return ret;
     }
 

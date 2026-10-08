@@ -320,7 +320,8 @@ HcclResult TpMgr::AdvanceGetTpInfoWaitList(
         qosMap.erase(it);
         reqCtxLock.unlock();
         HCCL_WARNING(
-            "[TpMgr][%s] failed to find tp info, tpInfoNum is 0, param[%s].", __func__, param.Describe().c_str());
+            "[TpMgr][%s] is unsuccessful in finding tp info, tpInfoNum is 0, param[%s].", __func__,
+            param.Describe().c_str());
         return HcclResult::HCCL_E_NOT_FOUND;
     }
     bool isPcieStd = false;
@@ -643,7 +644,7 @@ HcclResult TpMgr::GetTpTotalTimeout(const TpAttrInfo& tpAttrInfo, uint32_t& tpTi
     if (rawAtGear > AT_GEAR_MAX) {
         finalAtGear = AT_GEAR_DEFAULT;
         HCCL_WARNING(
-            "[TpMgr][%s] Invalid at gear[%u], expect [%u, %u], use default gear[%u].", __func__,
+            "[TpMgr][%s] at gear[%u] is not valid, expect [%u, %u], use default at gear[%u].", __func__,
             static_cast<unsigned>(rawAtGear), static_cast<unsigned>(AT_GEAR_MIN), static_cast<unsigned>(AT_GEAR_MAX),
             static_cast<unsigned>(finalAtGear));
     }
@@ -797,7 +798,8 @@ HcclResult TpMgr::HandleCompletedRequest(RequestCtx reqCtx, const GetTpInfoParam
     const uint32_t tpInfoNum = reqCtx.tpInfoNum;
     if (tpInfoNum == 0U) {
         HCCL_WARNING(
-            "[TpMgr][%s] failed to find tp info, tpInfoNum is 0, param[%s].", __func__, param.Describe().c_str());
+            "[TpMgr][%s] is unsuccessful in finding tp info, tpInfoNum is 0, param[%s].", __func__,
+            param.Describe().c_str());
         return HcclResult::HCCL_E_NOT_FOUND;
     }
 

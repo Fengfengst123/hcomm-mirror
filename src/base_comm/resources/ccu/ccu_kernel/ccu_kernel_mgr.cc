@@ -155,7 +155,7 @@ CcuResult CcuKernelMgr::Register(
 
     CcuResult ret = AllocRes(resPack);
     if (ret != CcuResult::CCU_SUCCESS) {
-        HCCL_WARNING("[%s] AllocRes failed, maybe resource not enough, please check ret[%d]", __func__, ret);
+        HCCL_WARNING("[%s] AllocRes is unsuccessful, maybe resource not enough, please check ret[%d]", __func__, ret);
         return ret;
     }
 

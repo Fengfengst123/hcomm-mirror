@@ -386,7 +386,7 @@ HcclResult ChannelProcess::GetChannelsInfo(
             return ret;
         }
         if (statusList[i] == ChannelStatus::FAILED || statusList[i] == ChannelStatus::SOCKET_TIMEOUT) {
-            HCCL_RUN_WARNING("[%s] FAILED, channel idx[%u], status[%d]", __func__, i, statusList[i]);
+            HCCL_RUN_WARNING("[%s] channel idx[%u] status is abnormal, status[%d]", __func__, i, statusList[i]);
         }
     }
     PrintChannelStatusDistribution(channelList, listNum, statusList);

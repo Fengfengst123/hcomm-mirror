@@ -125,7 +125,7 @@ CommManager& CommManager::GetInstance(s32 deviceLogicId)
     static CommManager commManager[::MAX_MODULE_DEVICE_NUM + 1]; // 使用全局命名空间变量
 
     if (deviceLogicId < 0 || static_cast<uint32_t>(deviceLogicId) > ::MAX_MODULE_DEVICE_NUM) {
-        HCCL_WARNING("[GetInstance] deviceLogicId[%d] is invalid, use backup comm instead.", deviceLogicId);
+        HCCL_WARNING("[GetInstance] deviceLogicId[%d] is not valid, use backup comm instead.", deviceLogicId);
         deviceLogicId = ::MAX_MODULE_DEVICE_NUM;
     }
     commManager[deviceLogicId].deviceLogicId = deviceLogicId;
@@ -144,7 +144,8 @@ void CommManager::PrintChannelInfo()
         auto ret = CcuGetChannelSpecNum(logicDevId, dieId, channelNum);
         if (ret != HCCL_SUCCESS) {
             HCCL_WARNING(
-                "[CommManager][PrintChannelInfo]Get channel num failed, devId[%d], dieId[%u]", logicDevId, dieId);
+                "[CommManager][PrintChannelInfo]Get channel num unsuccessfully, devId[%d], dieId[%u]", logicDevId,
+                dieId);
             return;
         }
         HCCL_RUN_INFO(
@@ -200,7 +201,7 @@ HcclCommInfoV2& GetCommInfoV2(void)
         }
     }
 
-    HCCL_WARNING("[GetCommInfoV2] HrtGetDevice fail.");
+    HCCL_WARNING("[GetCommInfoV2] HrtGetDevice is unsuccessful.");
     /* 当前线程没有获取到deviceId, 使用兜底Ctx */
     HcclCommInfoV2& backupCommInfoV2 = CommManager::GetInstance(::MAX_MODULE_DEVICE_NUM).GetCommInfoV2();
     backupCommInfoV2.isUsed = true;

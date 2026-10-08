@@ -56,7 +56,7 @@ HcclResult CcuJettyMgr::PrepareCreate(const std::vector<LinkData>& links)
         CHK_PRT_RET(
             ret == HcclResult::HCCL_E_UNAVAIL,
             HCCL_WARNING(
-                "[CcuJettyMgr][%s] failed to alloc ccu channels, ccu resources "
+                "[CcuJettyMgr][%s] is unsuccessful in allocating ccu channels, ccu resources "
                 "are unavailable, locAddr[%s], devLogicId[%d].",
                 __func__, locAddr.Describe().c_str(), devLogicId_),
             ret);
@@ -99,7 +99,7 @@ HcclResult CcuJettyMgr::GetAvailableBatch(const BatchKey& batchKey, ResourceBatc
     CHK_PRT_RET(
         ret == HcclResult::HCCL_E_UNAVAIL,
         HCCL_WARNING(
-            "[CcuJettyMgr][%s] failed to alloc ccu channels, ccu resources "
+            "[CcuJettyMgr][%s] is unsuccessful in allocating ccu channels, ccu resources "
             "are unavailable, locAddr[%s], sqSize[%u], devLogicId[%d].",
             __func__, batchKey.Describe().c_str(), sqSize, devLogicId_),
         ret);

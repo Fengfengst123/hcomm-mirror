@@ -20,7 +20,7 @@ CcuEidInfo& CcuEidInfo::GetInstance(int32_t logicDeviceId)
     static CcuEidInfo ccuEidInfo[MAX_MODULE_DEVICE_NUM + 1];
 
     if (static_cast<u32>(logicDeviceId) > MAX_MODULE_DEVICE_NUM) {
-        HCCL_WARNING("[CcuEidInfo] GetInstance failed, logicDeviceId=%d, ret=%d", logicDeviceId, HCCL_E_PARA);
+        HCCL_WARNING("[CcuEidInfo] GetInstance is unsuccessful, logicDeviceId=%d, ret=%d", logicDeviceId, HCCL_E_PARA);
         return ccuEidInfo[0];
     }
 
@@ -38,7 +38,7 @@ HcclResult CcuEidInfo::GetEidInfo(int32_t logicDeviceId, std::vector<HrtDevEidIn
         vector<HrtDevEidInfo> eidInfoList = HrtRaGetDevEidInfoList(info);
 
         if (eidInfoList.empty()) {
-            HCCL_WARNING("[GetEidInfo] Get EidInfo failed, logicDeviceId=%d", logicDeviceId);
+            HCCL_WARNING("[GetEidInfo] Get EidInfo unsuccessfully, logicDeviceId=%d", logicDeviceId);
             return HCCL_E_DRV;
         }
 

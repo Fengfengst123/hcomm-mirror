@@ -46,21 +46,22 @@ GlobalNetDevMgr& GlobalNetDevMgr::GetInstance(u32 devicePhyId)
     HcclResult hcclRet = hrtGetDeviceIndexByPhyId(devicePhyId, deviceLogicId);
     if (hcclRet != HCCL_SUCCESS) {
         HCCL_RUN_WARNING(
-            "GlobalNetDevMgr::GetInstance hrtGetDeviceIndexByPhyId failed, ret[%d], "
+            "GlobalNetDevMgr::GetInstance hrtGetDeviceIndexByPhyId is unsuccessful, ret[%d], "
             "return reserve instance",
             hcclRet);
         return netDevMgrInstance[MAX_MODULE_DEVICE_NUM];
     }
 
     if (deviceLogicId >= MAX_MODULE_DEVICE_NUM) {
-        HCCL_RUN_WARNING("[Get][Instance]deviceLogicId[%u] is invalid, return reserve instance", deviceLogicId);
+        HCCL_RUN_WARNING("[Get][Instance]deviceLogicId[%u] is not valid, return reserve instance", deviceLogicId);
         return netDevMgrInstance[MAX_MODULE_DEVICE_NUM];
     }
 
     if (!netDevMgrInstance[deviceLogicId].isInited_.load(std::memory_order_acquire)) {
         hcclRet = Init(devicePhyId, deviceLogicId);
         if (hcclRet != HCCL_SUCCESS) {
-            HCCL_RUN_WARNING("[Get][Instance]Init deviceLogicId[%u]fail, return reserve instance", deviceLogicId);
+            HCCL_RUN_WARNING(
+                "[Get][Instance]Init deviceLogicId[%u] unsuccessfully, return reserve instance", deviceLogicId);
             return netDevMgrInstance[MAX_MODULE_DEVICE_NUM];
         }
     }

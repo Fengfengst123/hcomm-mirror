@@ -95,8 +95,8 @@ static HcommResult ApplyRoceQosCompatToSlTc(HcommChannelDesc& channelDesc, Endpo
     s32 phyDevId = 0;
     if (hrtGetDevice(&userDevId) != HCCL_SUCCESS || aclrtGetPhyDevIdByUserDevId(userDevId, &phyDevId) != ACL_SUCCESS) {
         HCCL_RUN_WARNING(
-            "[ApplyRoceQosCompatToSlTc] get phyDevId failed, userDevId[%d], fallback to default dscp[%u].", userDevId,
-            static_cast<unsigned>(dscp));
+            "[ApplyRoceQosCompatToSlTc] get phyDevId unsuccessfully, userDevId[%d], fallback to default dscp[%u].",
+            userDevId, static_cast<unsigned>(dscp));
     } else {
         CHK_RET(Hccl::GetDscpByQos(static_cast<uint32_t>(phyDevId), sl, dscp, networkMode));
     }
@@ -118,7 +118,7 @@ void DestroyPluginCtx(const HcommNicChannelOps* ops, void* pluginCtx)
     if (ops != nullptr && ops->destroy != nullptr) {
         int32_t ret = ops->destroy(pluginCtx);
         if (ret != HCCL_SUCCESS) {
-            HCCL_WARNING("[%s] plugin channel destroy failed, ret[%d].", __func__, ret);
+            HCCL_WARNING("[%s] plugin channel destroy unsuccessfully, ret[%d].", __func__, ret);
         }
     }
 }
@@ -170,7 +170,7 @@ HcommResult CreateOnePluginChannel(
     if (ret != HCCL_SUCCESS) {
         int32_t destroyRet = filledOps->destroy(pluginCtx);
         if (destroyRet != HCCL_SUCCESS) {
-            HCCL_WARNING("[%s] plugin channel destroy failed after init failure, ret[%d].", __func__, destroyRet);
+            HCCL_WARNING("[%s] plugin channel destroy unsuccessfully after init fault, ret[%d].", __func__, destroyRet);
         }
         delete filledOps;
         HCCL_ERROR("[NicPlugin][%s] plugin channel init failed, ret[%d].", __func__, ret);
@@ -625,7 +625,8 @@ static HcclResult DestroyBuiltinChannels(std::vector<ChannelHandle>& builtinChan
     // 成功时正常清理；失败时 channel 已不可用，若不注销会永久阻塞 Endpoint 销毁。
     if (builtinRet != HCCL_SUCCESS) {
         HCCL_WARNING(
-            "[%s] ChannelDestroy failed, ret[%d], force unregister shared jetty channels.", __func__, builtinRet);
+            "[%s] ChannelDestroy is unsuccessful, ret[%d], force unregister shared jetty channels.", __func__,
+            builtinRet);
     }
     (void)hcomm::SharedJettyMgr::GetInstance().UnregisterChannels(builtinChannels.data(), builtinChannels.size());
     return builtinRet;

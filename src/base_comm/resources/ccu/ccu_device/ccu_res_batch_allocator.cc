@@ -74,7 +74,7 @@ HcclResult CcuResBatchAllocator::Init()
     dieEnableFlags_ = CcuComponent::GetInstance(userDevId_).GetDieEnableFlags();
     if (!dieEnableFlags_[0] && !dieEnableFlags_[1]) {
         HCCL_WARNING(
-            "[CcuResBatchAllocator][%s] failed but passed, "
+            "[CcuResBatchAllocator][%s] was unsuccessful but passed, "
             "userDevId[%d] no usable die.",
             __func__, userDevId_);
         return HcclResult::HCCL_E_UNAVAIL;
@@ -83,7 +83,7 @@ HcclResult CcuResBatchAllocator::Init()
     auto ret = PreAllocBlockRes();
     if (ret == HcclResult::HCCL_E_UNAVAIL) {
         HCCL_WARNING(
-            "[CcuResBatchAllocator][%s] pre alloc block res failed but passed, "
+            "[CcuResBatchAllocator][%s] pre alloc block res was unsuccessful but passed, "
             "some sources are not enough, userDevId[%d].",
             __func__, userDevId_);
         return ret;
@@ -93,7 +93,7 @@ HcclResult CcuResBatchAllocator::Init()
     ret = missionMgr_.PreAlloc(userDevId_, resStrategies_[0].missionNum, dieEnableFlags_);
     if (ret == HcclResult::HCCL_E_UNAVAIL) {
         HCCL_WARNING(
-            "[CcuResBatchAllocator][%s] pre alloc mission res failed but passed, "
+            "[CcuResBatchAllocator][%s] pre alloc mission res was unsuccessful but passed, "
             "some sources are not enough, userDevId[%d].",
             __func__, userDevId_);
         return ret;
@@ -234,8 +234,8 @@ HcclResult CcuResBatchAllocator::PreAllocBlockRes()
             auto ret = ccuComponent.AllocRes(dieId, resType, reqNum, true, tempResInfos);
             if (ret == HcclResult::HCCL_E_UNAVAIL) {
                 HCCL_WARNING(
-                    "[CcuResBatchAllocator][%s] failed, userDevId[%d] dieId[%u], "
-                    "failed to pre allocate block type resource, resType[%s], num[%u].",
+                    "[CcuResBatchAllocator][%s] is unsuccessful, userDevId[%d] dieId[%u], "
+                    "unsuccessful in pre-allocating block type resource, resType[%s], num[%u].",
                     __func__, userDevId_, dieId, resType.Describe().c_str(), reqNum);
                 return ret;
             }
@@ -318,8 +318,8 @@ HcclResult CcuResBatchAllocator::AllocResHandle(const CcuResReq& resReq, CcuResH
     if (ret != HcclResult::HCCL_SUCCESS) {
         resHandle = nullptr;
         HCCL_WARNING(
-            "[CcuResBatchAllocator][%s] failed, userDevId[%d], failed to "
-            "allocate resource handle, release temporary resources of this request.",
+            "[CcuResBatchAllocator][%s] is unsuccessful, userDevId[%d], unsuccessful in "
+            "allocating resource handle, release temporary resources of this request.",
             __func__, userDevId_);
 
         // 释放申请的临时资源，由CcuResRepo对象对应的智能指针管理
@@ -442,8 +442,8 @@ HcclResult CcuResBatchAllocator::AllocBlockRes(
             auto ret = HandleBlockRes(handleKey, num, blockSize, blocks, resInfos);
             if (ret != HcclResult::HCCL_SUCCESS) {
                 HCCL_WARNING(
-                    "[CcuResBatchAllocator][%s] failed, userDevId[%d] dieId[%u], "
-                    "failed to allocate [%s] block resource, remaining block resources are "
+                    "[CcuResBatchAllocator][%s] is unsuccessful, userDevId[%d] dieId[%u], "
+                    "unsuccessful in allocating [%s] block resource, remaining block resources are "
                     "not enough, request num[%u].",
                     __func__, userDevId_, dieId, resType.Describe().c_str(), num);
                 DumpBlockResInfo(resType, resBlocks_[dieId][resType]);
@@ -481,8 +481,8 @@ CcuResBatchAllocator::AllocConsecutiveRes(const CcuResReq& resReq, std::unique_p
             auto ret = ccuComponent.AllocRes(dieId, std::get<0>(req), std::get<1>(req), true, resInfos);
             if (ret == HcclResult::HCCL_E_UNAVAIL) {
                 HCCL_WARNING(
-                    "[CcuResBatchAllocator][%s] failed, userDevId[%d] dieId[%u], "
-                    "failed to allocate %s resource, num[%u].",
+                    "[CcuResBatchAllocator][%s] is unsuccessful, userDevId[%d] dieId[%u], "
+                    "unsuccessful in allocating %s resource, num[%u].",
                     __func__, userDevId_, dieId, std::get<0>(req).Describe().c_str(), std::get<1>(req));
                 return ret;
             }
@@ -525,8 +525,8 @@ CcuResBatchAllocator::AllocDiscreteRes(const CcuResReq& resReq, std::unique_ptr<
             auto ret = ccuComponent.AllocRes(dieId, std::get<0>(req), std::get<1>(req), false, resInfos);
             if (ret == HcclResult::HCCL_E_UNAVAIL) {
                 HCCL_WARNING(
-                    "[CcuResBatchAllocator][%s] failed, userDevId[%d] dieId[%u], "
-                    "failed to allocate %s resource, num[%u].",
+                    "[CcuResBatchAllocator][%s] is unsuccessful, userDevId[%d] dieId[%u], "
+                    "unsuccessful in allocating %s resource, num[%u].",
                     __func__, userDevId_, dieId, std::get<0>(req).Describe().c_str(), std::get<1>(req));
                 return ret;
             }
@@ -547,8 +547,8 @@ HcclResult CcuResBatchAllocator::TryAllocResHandle(
     HcclResult ret = AllocBlockRes(handleKey, resReq, resRepoPtr);
     if (ret == HcclResult::HCCL_E_UNAVAIL) {
         HCCL_WARNING(
-            "[CcuResBatchAllocator][%s] failed, userDevId[%d], "
-            "failed to allocate block type resource.",
+            "[CcuResBatchAllocator][%s] is unsuccessful, userDevId[%d], "
+            "unsuccessful in allocating block type resource.",
             __func__, userDevId_);
         return ret;
     }
@@ -557,7 +557,7 @@ HcclResult CcuResBatchAllocator::TryAllocResHandle(
     ret = missionMgr_.Alloc(handleKey, resReq.missionReq, resRepoPtr->mission);
     if (ret == HcclResult::HCCL_E_UNAVAIL) {
         HCCL_WARNING(
-            "[CcuResBatchAllocator][%s] userDevId[%d], failed to allocate "
+            "[CcuResBatchAllocator][%s] userDevId[%d], unsuccessful in allocating "
             "mission resource, remaining block resources are not enough.",
             __func__, userDevId_);
         return ret;
@@ -567,7 +567,7 @@ HcclResult CcuResBatchAllocator::TryAllocResHandle(
     ret = AllocConsecutiveRes(resReq, resRepoPtr);
     if (ret == HcclResult::HCCL_E_UNAVAIL) {
         HCCL_WARNING(
-            "[CcuResBatchAllocator][%s] userDevId[%d], failed to allocate "
+            "[CcuResBatchAllocator][%s] userDevId[%d], unsuccessful in allocating "
             "consecutive resource.",
             __func__, userDevId_);
         return ret;
@@ -577,7 +577,7 @@ HcclResult CcuResBatchAllocator::TryAllocResHandle(
     ret = AllocDiscreteRes(resReq, resRepoPtr);
     if (ret == HcclResult::HCCL_E_UNAVAIL) {
         HCCL_WARNING(
-            "[CcuResBatchAllocator][%s] userDevId[%d], failed to allocate "
+            "[CcuResBatchAllocator][%s] userDevId[%d], unsuccessful in allocating "
             "discrete resource.",
             __func__, userDevId_);
         return ret;
@@ -773,8 +773,8 @@ static HcclResult PreAllocMissionRes(
         auto ret = ccuComponent.AllocRes(i, ResType::MISSION, missionNums[i], true, tempResInfos);
         if (ret == HcclResult::HCCL_E_UNAVAIL) {
             HCCL_WARNING(
-                "[CcuMissionMgr][%s] userDevId[%d] dieId[%u], failed[%u] "
-                "to pre allocate mission resource, num[%u]",
+                "[CcuMissionMgr][%s] userDevId[%d] dieId[%u], is unsuccessful[%u] "
+                "in pre-allocating mission resource, num[%u]",
                 __func__, userDevId, i, ret, missionNums[i]);
             return ret;
         }
@@ -885,7 +885,7 @@ HcclResult CcuResBatchAllocator::CcuMissionMgr::Alloc(
     auto ret = HandleBlockRes(handleKey, reqNum, strategy_, blocks_, resInfos);
     if (ret == HcclResult::HCCL_E_UNAVAIL) {
         HCCL_WARNING(
-            "[CcuMissionMgr][%s] failed, mission block resources are unavailable, "
+            "[CcuMissionMgr][%s] is unsuccessful, mission block resources are unavailable, "
             "reqNum[%u], strategy[%u], reqType[%d].",
             __func__, reqNum, strategy_, reqType);
         DumpBlockResInfo(ResType::MISSION, blocks_);

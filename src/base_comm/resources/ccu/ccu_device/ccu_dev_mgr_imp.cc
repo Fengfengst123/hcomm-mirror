@@ -87,7 +87,7 @@ CcuResult CcuInitFeature(const int32_t userDevId, std::shared_ptr<CcuDrvHandle>&
     auto ret = drvHandle->Init();
     if (ret == CcuResult::CCU_E_DRV_BUSY) {
         HCCL_RUN_WARNING(
-            "[%s] failed but passed, userDevId[%d] ccu driver has been "
+            "[%s] was unsuccessful but passed, userDevId[%d] ccu driver has been "
             "inited by another process, this process will not try to init anymore.",
             __func__, userDevId);
         ccuDriverInitAgainFlag = true; // 记录该进程ccu驱动已拉起失败
@@ -378,7 +378,7 @@ CcuResult CcuAllocResHandleByInsType(int32_t userDevId, CcuInstanceType ccuInsTy
     CCU_CHK_RET(CcuDevMgrImp::GetCcuVersion(userDevId, ccuVersion));
     if (ccuVersion == CcuVersion::INVALID) {
         HCCL_RUN_WARNING(
-            "[%s] failed, userDevId[%d] ccu version is invalid, "
+            "[%s] is unsuccessful, userDevId[%d] ccu version is not valid, "
             "should fallback to aicpu.",
             __func__, userDevId);
         return CcuResult::CCU_E_UNAVAIL;

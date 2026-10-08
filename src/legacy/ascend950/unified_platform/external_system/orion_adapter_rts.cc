@@ -1219,7 +1219,7 @@ std::pair<u32, u32> HrtUbDevQueryToken(u64 addr, u64 size)
     info.size = size;
     auto ret = rtUbDevQueryInfo(QUERY_PROCESS_TOKEN, &info);
     if (ret != RT_ERROR_NONE) {
-        HCCL_WARNING("query(va=0x%llx, size=0x%llx) token failed, ret=%d", addr, size, ret);
+        HCCL_WARNING("query(va=0x%llx, size=0x%llx) token unsuccessfully, ret=%d", addr, size, ret);
         return std::make_pair(0, 0);
     }
 

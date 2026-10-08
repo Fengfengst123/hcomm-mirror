@@ -98,7 +98,8 @@ HcclResult UbMemoryTransportMgr::CreateTransportByLink(const LinkData& link)
     SocketConfig socketConfig = comm->GetSocketManager().BuildSocketConfig(link);
     Socket* socket = comm->GetSocketManager().GetConnectedSocket(socketConfig);
     if (socket == nullptr) {
-        HCCL_WARNING("[UbMemoryTransportMgr::%s] Fail to get socket via link %s, ", __func__, link.Describe().c_str());
+        HCCL_WARNING(
+            "[UbMemoryTransportMgr::%s] Unsuccessful in getting socket via link %s", __func__, link.Describe().c_str());
 
         return HcclResult::HCCL_E_INTERNAL;
     }

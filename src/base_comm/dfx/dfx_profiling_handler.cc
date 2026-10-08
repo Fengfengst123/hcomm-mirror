@@ -443,7 +443,7 @@ void DfxProfilingHandler::DumpHCCLReportData(const TaskInfo& taskInfo, const Msp
         HCCL_INFO(
             "MsprofAdditionalInfo profInfo: timeStamp[%llu], itemId[%llu], cclTag[%llu], groupName[%llu], "
             "localRank[%u], remoteRank[%u], rankSize[%u], workFlowMode[%u], planeID[%u], ctxId[%u], "
-            "stage[%u], role[%u], durationEstimated[%f], taskType[%d]",
+            "stage[%u], role[%u], durationEstimated[%f us], taskType[%d]",
             reporterData.timeStamp, profInfo->itemId, profInfo->cclTag, profInfo->groupName, profInfo->localRank,
             profInfo->remoteRank, profInfo->rankSize, profInfo->workFlowMode, profInfo->planeID, profInfo->ctxId,
             profInfo->stage, profInfo->role, profInfo->durationEstimated,
@@ -459,7 +459,7 @@ void DfxProfilingHandler::DumpHCCLReportData(const TaskInfo& taskInfo, const Msp
         HCCL_INFO(
             "MsprofAdditionalInfo dpuProfInfo: timeStamp[%llu], itemId[%llu], cclTag[%llu], groupName[%llu], "
             "localRank[%u], remoteRank[%u], rankSize[%u], workFlowMode[%u], planeID[%u], "
-            "stage[%u], role[%u], durationEstimated[%f], taskType[%d]",
+            "stage[%u], role[%u], durationEstimated[%f us], taskType[%d]",
             reporterData.timeStamp, dpuProfInfo->itemId, dpuProfInfo->cclTag, dpuProfInfo->groupName,
             dpuProfInfo->localRank, dpuProfInfo->remoteRank, dpuProfInfo->rankSize, dpuProfInfo->workFlowMode,
             dpuProfInfo->planeID, dpuProfInfo->stage, dpuProfInfo->role, dpuProfInfo->durationEstimated,

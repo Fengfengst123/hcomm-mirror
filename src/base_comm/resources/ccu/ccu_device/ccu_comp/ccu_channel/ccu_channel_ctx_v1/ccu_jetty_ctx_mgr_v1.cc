@@ -38,7 +38,7 @@ HcclResult CcuJettyCtxMgrV1::Alloc(
     CHK_PRT_RET(
         ret != HcclResult::HCCL_SUCCESS,
         HCCL_WARNING(
-            "[CcuJettyCtxMgrV1][%s] failed, failed to get jetty allocator handle, "
+            "[CcuJettyCtxMgrV1][%s] is unsuccessful in getting jetty allocator handle, "
             "userDevId[%d], dieId[%u], feId[%u].",
             __func__, userDevId_, dieId_, feId),
         HcclResult::HCCL_E_INTERNAL);
@@ -48,7 +48,7 @@ HcclResult CcuJettyCtxMgrV1::Alloc(
     CHK_PRT_RET(
         ret != HcclResult::HCCL_SUCCESS,
         HCCL_WARNING(
-            "[CcuJettyCtxMgrV1][%s] failed, allocator failed to allocate, "
+            "[CcuJettyCtxMgrV1][%s] is unsuccessful, allocator cannot allocate, "
             "userDevId[%d], dieId[%u], feId[%u].",
             __func__, userDevId_, dieId_, feId),
         ret);
@@ -70,7 +70,7 @@ HcclResult CcuJettyCtxMgrV1::Alloc(
     ret = TryAllocWqeBBResource(sqSize, jettyCtxStartId, taJettyStartId, type_, jettyInfos);
     if (ret != HcclResult::HCCL_SUCCESS) {
         HCCL_WARNING(
-            "[CcuJettyCtxMgrV1][%s] failed, try to release temp resource, "
+            "[CcuJettyCtxMgrV1][%s] is unsuccessful, try to release temp resource, "
             "userDevId[%d], dieId[%u], feId[%u].",
             __func__, userDevId_, dieId_, feId);
         CHK_RET(ReleaseWqeBBResource(jettyInfos)); // jettyInfos已分配的wqeBB资源信息

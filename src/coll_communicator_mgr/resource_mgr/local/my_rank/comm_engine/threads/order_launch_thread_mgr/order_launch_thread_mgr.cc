@@ -32,7 +32,8 @@ static u32 GetAicpuBlockNum(s32 deviceLogicId)
         "[GetAicpuBlockNum] deviceLogicId[%d], aclrtGetDeviceInfo ret[%d], coreNum[%lld]", deviceLogicId, ret, coreNum);
     if (ret != ACL_SUCCESS || coreNum <= 0) {
         HCCL_WARNING(
-            "[GetAicpuBlockNum] aclrtGetDeviceInfo failed, ret[%d], coreNum[%lld], use default 1", ret, coreNum);
+            "[GetAicpuBlockNum] aclrtGetDeviceInfo is unsuccessful, ret[%d], coreNum[%lld], use default 1", ret,
+            coreNum);
         return 1U;
     }
     return static_cast<u32>(coreNum);
@@ -47,7 +48,7 @@ static void FreeGeThread(ThreadHandle handle)
     }
     HcommResult ret = HcommThreadFree(&handle, 1);
     if (ret != HCCL_SUCCESS) {
-        HCCL_WARNING("[OrderLaunchThreadMgr] HcommThreadFree GE thread[0x%llx] failed, ret[%d]", handle, ret);
+        HCCL_WARNING("[OrderLaunchThreadMgr] HcommThreadFree GE thread[0x%llx] is unsuccessful, ret[%d]", handle, ret);
     }
 }
 
@@ -59,7 +60,8 @@ void OrderLaunchContextRes::DestroyResources()
         HcommResult ret = HcommThreadFree(&opbaseThread, 1);
         if (ret != HCCL_SUCCESS) {
             HCCL_WARNING(
-                "[OrderLaunchContextRes] HcommThreadFree opbaseThread[0x%llx] failed, ret[%d]", opbaseThread, ret);
+                "[OrderLaunchContextRes] HcommThreadFree opbaseThread[0x%llx] is unsuccessful, ret[%d]", opbaseThread,
+                ret);
         }
         opbaseThread = 0;
     }
@@ -67,7 +69,8 @@ void OrderLaunchContextRes::DestroyResources()
         HcommResult ret = HcommThreadFree(&aclgraphThread, 1);
         if (ret != HCCL_SUCCESS) {
             HCCL_WARNING(
-                "[OrderLaunchContextRes] HcommThreadFree aclgraphThread[0x%llx] failed, ret[%d]", aclgraphThread, ret);
+                "[OrderLaunchContextRes] HcommThreadFree aclgraphThread[0x%llx] is unsuccessful, ret[%d]",
+                aclgraphThread, ret);
         }
         aclgraphThread = 0;
     }
@@ -480,7 +483,7 @@ HcclResult OrderLaunchThreadMgr::RegisterDfx(
               };
         int ret = HcommThreadRegisterDfx(thread, dfxCallback);
         if (ret != 0) {
-            HCCL_WARNING("[%s] HcommThreadRegisterDfx failed, ret[%d], thread[0x%llx]", __func__, ret, thread);
+            HCCL_WARNING("[%s] HcommThreadRegisterDfx is unsuccessful, ret[%d], thread[0x%llx]", __func__, ret, thread);
         }
     }
     return HCCL_SUCCESS;

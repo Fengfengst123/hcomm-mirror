@@ -114,7 +114,7 @@ bool FindHostIpByIfName(
         }
     }
 
-    HCCL_WARNING("[%s] find host ip fail by family[%d] ifName.", __func__, family);
+    HCCL_WARNING("[%s] find host ip unsuccessfully by family[%d] ifName.", __func__, family);
     return false;
 }
 
@@ -179,7 +179,7 @@ bool FindHostIPByNicClass(
         return true;
     }
 
-    HCCL_WARNING("[%s] find hostIp by nic class[normal_docker_lo] fail.", __func__);
+    HCCL_WARNING("[%s] find hostIp by nic class[normal_docker_lo] unsuccessfully.", __func__);
     return false;
 }
 

@@ -507,7 +507,7 @@ void TaskExceptionHandler::ProcessCcuMC2Exception(rtExceptionInfo_t* exceptionIn
     for (uint32_t i = 0; i < ccuExDetailInfo.ccuMissionNum; ++i) {
         const auto& missionInfo = ccuExDetailInfo.missionInfo[i]; // 异常sqe
         HCCL_INFO(
-            "[%s] Exception missionInfo: dieId[%u], missionId[%u], startInstrId[%u], status[0x%x], subStatus[0x%x]",
+            "[%s] Abnormal missionInfo: dieId[%u], missionId[%u], startInstrId[%u], status[0x%x], subStatus[0x%x]",
             __func__, missionInfo.dieId, missionInfo.missionId, missionInfo.instrId, missionInfo.status,
             missionInfo.subStatus);
         exDieIds.insert(missionInfo.dieId);
@@ -539,7 +539,7 @@ void TaskExceptionHandler::ProcessCcuMC2Exception(rtExceptionInfo_t* exceptionIn
         }
 
         if (!serverErrorInfos.empty()) {
-            HCCL_INFO("Exception instr is in MC2 Server.");
+            HCCL_INFO("Abnormal instr is in MC2 Server.");
             PrintCcuErrorLog(serverErrorInfos, *serverTaskInfo);
             continue;
         }
@@ -827,7 +827,8 @@ void TaskExceptionHandler::PrintAicpuErrorMessage(rtExceptionInfo_t* exceptionIn
     if (Hccl::g_commHadCallbackArrayV2[exceptionInfo->deviceid]) {
         // 防止同一个device上出现通信主流和kernel流均出现task exception时runtime调用两次callback
         // HDC通道信息不是读清，防止aicpu task exception重复上报
-        HCCL_WARNING("aicpu error message has been reported. deviceid[%u]", exceptionInfo->deviceid);
+        HCCL_WARNING(
+            "aicpu error message has been reported. Skip duplicated report, deviceid[%u]", exceptionInfo->deviceid);
         return;
     }
     lock.unlock();

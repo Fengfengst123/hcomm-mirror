@@ -541,7 +541,7 @@ HcclResult CcuConnection::ReleaseConnRes()
         if (item.outParam.handle != 0) {
             if (!ctxValid) {
                 HCCL_WARNING(
-                    "[CcuConnection][%s] skip RaCtxQpUnimport, ctxHandle=%p invalid, "
+                    "[CcuConnection][%s] skip RaCtxQpUnimport, ctxHandle=%p is not valid, "
                     "remoteJettyHandle=%p",
                     __func__, ctxHandle_, item.outParam.handle);
                 item.outParam.handle = 0;

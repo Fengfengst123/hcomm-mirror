@@ -516,7 +516,8 @@ HcclResult HcclTeamDestroy(HcommTeamHandle team)
         CHK_PTR_NULL(commMem);
         HcclResult unregRet = commMem->CommUnregMem(syncMemTag, syncMemHandle);
         if (unregRet != HCCL_SUCCESS && unregRet != HCCL_E_NOT_FOUND) {
-            HCCL_WARNING("[%s] CommUnregMem syncMem failed, tag[%s] ret[%d]", __func__, syncMemTag.c_str(), unregRet);
+            HCCL_WARNING(
+                "[%s] CommUnregMem syncMem is unsuccessful, tag[%s] ret[%d]", __func__, syncMemTag.c_str(), unregRet);
         }
     }
 

@@ -22,7 +22,7 @@ HcclResult CcuWqeBBMgrV2::Init()
     (void)CcuResSpecifications::GetInstance(userDevId_).GetWqeBBNum(dieId_, wqeBBNum);
     (void)CcuResSpecifications::GetInstance(userDevId_).GetJettyNum(dieId_, jettyNum);
     if (jettyNum == 0) {
-        HCCL_WARNING("[CcuWqeBBMgrV2][%s] failed, jettyNum is [%u].", __func__, jettyNum);
+        HCCL_WARNING("[CcuWqeBBMgrV2][%s] is unsuccessful, jettyNum is [%u].", __func__, jettyNum);
         return HcclResult::HCCL_E_UNAVAIL;
     }
 

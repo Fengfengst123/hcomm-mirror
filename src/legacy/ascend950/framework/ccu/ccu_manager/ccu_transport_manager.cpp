@@ -75,8 +75,8 @@ HcclResult CcuTransportMgr::PrepareCreate(const LinkData& link, CcuTransport*& t
     auto ret = CreateTransportByLink(link, transport);
     if (ret == HcclResult::HCCL_E_UNAVAIL) {
         HCCL_WARNING(
-            "[CcuTransportMgr::%s]Fail to create CcuTransport. "
-            "The above error log can be ignored.",
+            "[CcuTransportMgr::%s]Unsuccessful in creating CcuTransport. "
+            "The above ERROR logs can be ignored.",
             __func__);
         comm->PrintChannelInfoCallback();
     }
@@ -107,7 +107,8 @@ HcclResult CcuTransportMgr::CreateTransportByLink(const LinkData& link, CcuTrans
     SocketConfig socketConfig = comm->GetSocketManager().BuildSocketConfig(link);
     Socket* socket = comm->GetSocketManager().GetConnectedSocket(socketConfig);
     if (socket == nullptr) {
-        HCCL_WARNING("[CcuTransportMgr::%s] Fail to get socket via link %s, ", __func__, link.Describe().c_str());
+        HCCL_WARNING(
+            "[CcuTransportMgr::%s] Unsuccessful in getting socket via link %s", __func__, link.Describe().c_str());
         return HcclResult::HCCL_E_INTERNAL;
     }
 
@@ -145,7 +146,7 @@ HcclResult CcuTransportMgr::CreateTransportByLink(const LinkData& link, CcuTrans
     auto ret = CcuCreateTransport(socket, connectionInfo, locCclBufInfo, transportPtr);
     if (ret == HcclResult::HCCL_E_UNAVAIL) {
         HCCL_WARNING(
-            "[CcuTransportMgr][%s] failed, some ccu resources are unavailable, "
+            "[CcuTransportMgr][%s] is unsuccessful, some ccu resources are unavailable, "
             "locAddr[%s] rmtAddr[%s].",
             __func__, locAddr.Describe().c_str(), rmtAddr.Describe().c_str());
         return ret;

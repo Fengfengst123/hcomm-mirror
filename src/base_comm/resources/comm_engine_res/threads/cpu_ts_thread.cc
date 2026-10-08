@@ -268,7 +268,7 @@ HcclResult CpuTsThread::LocalNotifyWait([[maybe_unused]] uint32_t notifyIdx, [[m
 {
 #ifndef CCL_KERNEL_AICPU
     u64 beginTime = Hccl::DfxDlProfFunction::GetInstance().dlMsprofSysCycleTime();
-    HCCL_INFO("[%s]notifyIdx[%u], timeOut[%u s].", __func__, notifyIdx, timeOut);
+    HCCL_INFO("[%s]notifyIdx[%u], timeOut[%u]s.", __func__, notifyIdx, timeOut);
     CHK_PRT_RET(
         !IsDeviceA5(), HCCL_ERROR("[CpuTsThread][%s]only support A5", __func__),
         HCCL_E_NOT_SUPPORT); // 只支持A5, 其他场景调用HcclLocalNotifyWait
@@ -280,7 +280,7 @@ HcclResult CpuTsThread::LocalNotifyWait([[maybe_unused]] uint32_t notifyIdx, [[m
 
     HcclResult ret = notify->Wait(*stream, timeOut);
     CHK_PRT_RET(
-        ret != HCCL_SUCCESS, HCCL_ERROR("[%s]fail, notifyIdx[%u], timeOut[%u s].", __func__, notifyIdx, timeOut), ret);
+        ret != HCCL_SUCCESS, HCCL_ERROR("[%s]fail, notifyIdx[%u], timeOut[%u]s.", __func__, notifyIdx, timeOut), ret);
 
     HcclSignalInfo signalInfo;
     CHK_RET(notify->GetNotifyData(signalInfo));

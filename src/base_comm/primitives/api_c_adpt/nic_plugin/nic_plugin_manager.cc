@@ -106,7 +106,8 @@ namespace {
         const char* dlsymErr = dlerror();
         if (dlsymErr != nullptr || addr == nullptr) {
             HCCL_RUN_WARNING(
-                "[NicPlugin] dlsym %s from %s failed: %s.", symbol, soPath, dlsymErr == nullptr ? "unknown" : dlsymErr);
+                "[NicPlugin] dlsym %s from %s unsuccessfully: %s.", symbol, soPath,
+                dlsymErr == nullptr ? "unknown" : dlsymErr);
             return nullptr;
         }
         return addr;
@@ -125,7 +126,7 @@ namespace {
         }
         void* soHandle = dlopen(canonicalPath, RTLD_NOW | RTLD_LOCAL);
         if (soHandle == nullptr) {
-            HCCL_RUN_WARNING("[NicPlugin] dlopen %s failed: %s.", path.c_str(), dlerror());
+            HCCL_RUN_WARNING("[NicPlugin] dlopen %s unsuccessfully: %s.", path.c_str(), dlerror());
             return;
         }
 
@@ -150,7 +151,7 @@ namespace {
         try {
             plugin = std::make_unique<NicPluginEntry>(NicPluginEntry{soHandle, info, createEndpoint, createChannel});
         } catch (const std::bad_alloc&) {
-            HCCL_RUN_WARNING("[NicPlugin] allocate plugin entry for %s failed.", path.c_str());
+            HCCL_RUN_WARNING("[NicPlugin] allocate plugin entry for %s unsuccessfully.", path.c_str());
             dlclose(soHandle);
             return;
         }
@@ -262,7 +263,7 @@ bool ValidatePluginInfo(
         return false;
     }
     if (info->protocolCount == 0 || info->protocolCount > HCOMM_NIC_PLUGIN_MAX_PROTOCOLS) {
-        HCCL_RUN_WARNING("[NicPlugin] %s invalid protocolCount[%u].", soPath, info->protocolCount);
+        HCCL_RUN_WARNING("[NicPlugin] %s protocolCount[%u] is not valid.", soPath, info->protocolCount);
         return false;
     }
     if (createEndpoint == nullptr || createChannel == nullptr) {
@@ -272,7 +273,7 @@ bool ValidatePluginInfo(
     for (uint32_t idx = 0; idx < info->protocolCount; ++idx) {
         const CommProtocol protocol = info->protocols[idx];
         if ((protocol < COMM_PROTOCOL_HCCS || protocol > COMM_PROTOCOL_UBG) && protocol < COMM_PROTOCOL_CUSTOM_BASE) {
-            HCCL_RUN_WARNING("[NicPlugin] %s invalid protocol[%d].", soPath, info->protocols[idx]);
+            HCCL_RUN_WARNING("[NicPlugin] %s protocol[%d] is not valid.", soPath, info->protocols[idx]);
             return false;
         }
     }

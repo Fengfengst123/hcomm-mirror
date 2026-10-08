@@ -256,7 +256,7 @@ CcuResult CcuInstance::EndRegister()
     }
     if (registerState_ == RegisterState::REGISTER_ABORTED) {
         HCCL_WARNING(
-            "[CcuInstance][%s] previous register round was aborted due to error, "
+            "[CcuInstance][%s] previous register round was interrupted due to fault, "
             "close it to keep Start/End paired, no kernel will be translated.",
             __func__);
     }

@@ -1566,7 +1566,7 @@ HcclResult
 CcuTaskException::GetCcuJettys(const CcuErrorInfo& errorInfo, std::pair<CcuChannelInfo, std::vector<CcuJetty*>>& ctx)
 {
     uint16_t channelId = GetChannleIdByCcuErrorInfo(errorInfo);
-    CHK_PRT_RET(channelId == INVALID_U16, HCCL_RUN_INFO("[%s]channelId is invalid, skip", __func__), HCCL_SUCCESS);
+    CHK_PRT_RET(channelId == INVALID_U16, HCCL_RUN_INFO("[%s]channelId is not valid, skip", __func__), HCCL_SUCCESS);
 
     // channelId -> channelHandle
     u64 channelHandle = DFX_INVALID_U64;

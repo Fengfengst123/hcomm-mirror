@@ -83,7 +83,7 @@ static HcclResult CheckChannelRangeAllocatable(
     for (uint32_t i = startChannelId; i < endChannelId; i++) {
         if (channelResInfos[i].allocated) {
             HCCL_WARNING(
-                "[CcuChannelCtxMgrV2][%s] failed, channel id[%u] is already allocated, "
+                "[CcuChannelCtxMgrV2][%s] is unsuccessful, channel id[%u] is already allocated, "
                 "channel group range[%u, %u).",
                 __func__, i, startChannelId, endChannelId);
             return HcclResult::HCCL_E_UNAVAIL;
@@ -106,7 +106,7 @@ HcclResult CcuChannelCtxMgrV2::Alloc(const ChannelPara& channelPara, std::vector
     CHK_PRT_RET(
         ret != HcclResult::HCCL_SUCCESS,
         HCCL_WARNING(
-            "[CcuChannelCtxMgrV2][%s] failed to allocate jetty contexts of feId[%u], "
+            "[CcuChannelCtxMgrV2][%s] is unsuccessful in allocating jetty contexts of feId[%u], "
             "userDevId[%d], dieId[%u].",
             __func__, feId, userDevId_, dieId_),
         ret);
@@ -119,7 +119,7 @@ HcclResult CcuChannelCtxMgrV2::Alloc(const ChannelPara& channelPara, std::vector
     ret = CheckChannelRangeAllocatable(startChannelId, channelGroupSize, channelResInfos_);
     if (ret != HcclResult::HCCL_SUCCESS) {
         HCCL_WARNING(
-            "[CcuChannelCtxMgrV2][%s] failed to find free channels, "
+            "[CcuChannelCtxMgrV2][%s] is unsuccessful in finding free channels, "
             "jettyCtxStartId[%u], jettyNum[%u], need to release temp jetty contexts.",
             __func__, jettyCtxStartId, jettyNum);
 
@@ -263,7 +263,7 @@ HcclResult CcuChannelCtxMgrV2::Release(const uint32_t channelId)
     CHK_PRT_RET(
         ret != HcclResult::HCCL_SUCCESS,
         HCCL_WARNING(
-            "[CcuChannelCtxMgrV2][%s] failed to release jetty contexts "
+            "[CcuChannelCtxMgrV2][%s] is unsuccessful in releasing jetty contexts "
             "of channelId[%u], feId[%u], userDevId[%d], dieId[%u].",
             __func__, channelId, channelResInfos_[channelId].feId, userDevId_, dieId_),
         ret);

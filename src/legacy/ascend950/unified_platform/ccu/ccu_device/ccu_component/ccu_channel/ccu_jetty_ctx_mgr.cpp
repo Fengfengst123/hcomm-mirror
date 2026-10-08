@@ -186,7 +186,7 @@ HcclResult CcuJettyCtxMgr::TryAllocWqeBBResource(
     const uint32_t jettyNum = jettyInfos.size();
     if (jettyNum == 0) {
         HCCL_WARNING(
-            "[CcuJettyCtxMgr][%s] failed, jettyInfos size is 0, "
+            "[CcuJettyCtxMgr][%s] is unsuccessful, jettyInfos size is 0, "
             "devLogicId[%d], dieId[%u].",
             __func__, devLogicId, dieId);
         return HcclResult::HCCL_E_PARA;
@@ -197,7 +197,7 @@ HcclResult CcuJettyCtxMgr::TryAllocWqeBBResource(
         HcclResult ret = wqeBBMgr.Alloc(sqSize, wqeBBInfo);
         if (ret != HcclResult::HCCL_SUCCESS) {
             HCCL_WARNING(
-                "[CcuJettyCtxMgr][%s] failed to alloc wqe basic block resource, "
+                "[CcuJettyCtxMgr][%s] is unsuccessful in allocating wqe basic block resource, "
                 "devLogicId[%d], dieId[%u].",
                 __func__, devLogicId, dieId);
             return ret;

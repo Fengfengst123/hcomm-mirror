@@ -101,7 +101,7 @@ public:
         if (enginePos != std::string::npos) {
             commTag = commTag.substr(0, enginePos);
         } else {
-            HCCL_WARNING("[SocketConfig] socketTag[%s] format error, using original tag as commTag", tag.c_str());
+            HCCL_WARNING("[SocketConfig] socketTag[%s] format abnormal, using original tag as commTag", tag.c_str());
         }
         remoteRank = rmtRank;
         role = myRank < rmtRank ? SocketRole::SERVER : SocketRole::CLIENT;

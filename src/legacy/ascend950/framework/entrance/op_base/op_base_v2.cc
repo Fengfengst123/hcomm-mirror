@@ -71,7 +71,8 @@ static HcclResult HcclGetDeviceId(void)
     if (g_hcclDeviceId == INVALID_INT) {
         aclError ret = aclrtGetDevice(&g_hcclDeviceId);
         CHK_PRT_RET(
-            ret != ACL_SUCCESS, HCCL_WARNING("[HcclGetDeviceId]aclrtGetDevice failed, ret[%d]", ret), HCCL_E_INTERNAL);
+            ret != ACL_SUCCESS, HCCL_WARNING("[HcclGetDeviceId]aclrtGetDevice is unsuccessful, ret[%d]", ret),
+            HCCL_E_INTERNAL);
     }
     CHK_PRT_RET(
         static_cast<u32>(g_hcclDeviceId) >= MAX_MODULE_DEVICE_NUM,
@@ -87,7 +88,7 @@ static s32 HcclGetThreadDeviceId()
 {
     CHK_PRT_RET(
         HcclGetDeviceId() != HCCL_SUCCESS,
-        HCCL_WARNING("[HcclGetThreadDeviceId] get fail userDevId[%d]", g_hcclDeviceId), INVALID_INT);
+        HCCL_WARNING("[HcclGetThreadDeviceId] get userDevId[%d] unsuccessfully", g_hcclDeviceId), INVALID_INT);
     return g_hcclDeviceId;
 }
 
@@ -609,7 +610,7 @@ HcclResult HcclGetDpuSteamIdV2(HcclComm comm, u32& dpuStreamId)
     Hccl::HcclCommunicator* communicator = static_cast<Hccl::HcclCommunicator*>(comm);
     auto ret = communicator->GetStreamId(dpuStreamId);
     if (ret != HCCL_SUCCESS) {
-        HCCL_WARNING("[HcclGetDpuSteamIdV2] GetStreamId failed, ret[0x%016llx]", HCCL_ERROR_CODE(ret));
+        HCCL_WARNING("[HcclGetDpuSteamIdV2] GetStreamId is unsuccessful, ret[0x%016llx]", HCCL_ERROR_CODE(ret));
         return ret;
     }
     return HCCL_SUCCESS;
@@ -833,7 +834,7 @@ HcclResult HcclAlltoAllV2(
             tag.c_str(), sendBuf, recvBuf, sendCount, recvCount, GetDataTypeEnumStrV2(sendType).c_str(),
             GetDataTypeEnumStrV2(recvType).c_str(), localRank, streamId, deviceLogicId);
 
-        CHK_PRT_CONT(ret == -1, HCCL_WARNING("Failed to build log info, tag[%s].", tag.c_str()));
+        CHK_PRT_CONT(ret == -1, HCCL_WARNING("Unsuccessful in building log info, tag[%s].", tag.c_str()));
         std::string logInfo = "Entry-HcclAlltoAllV2:" + std::string(stackLogBufferV2);
         if (isCapture) {
             CHK_PTR_NULL(rtModel);
@@ -906,7 +907,7 @@ HcclResult HcclAlltoAllVV2(
             tag.c_str(), sendBuf, recvBuf, sendCounts, recvCounts, GetDataTypeEnumStrV2(sendType).c_str(),
             GetDataTypeEnumStrV2(recvType).c_str(), localRank, streamId, deviceLogicId);
 
-        CHK_PRT_CONT(ret == -1, HCCL_WARNING("Failed to build log info, tag[%s].", tag.c_str()));
+        CHK_PRT_CONT(ret == -1, HCCL_WARNING("Unsuccessful in building log info, tag[%s].", tag.c_str()));
         std::string logInfo = "Entry-HcclAlltoAllVV2:" + std::string(stackLogBufferV2);
         if (isCapture) {
             CHK_PTR_NULL(rtModel);
@@ -1215,7 +1216,7 @@ HcclResult HcclAlltoAllVCV2(
             tag.c_str(), sendBuf, sendCountMatrixHash, GetDataTypeEnumStrV2(sendType).c_str(), recvBuf,
             GetDataTypeEnumStrV2(recvType).c_str(), localRank, streamId, deviceLogicId);
 
-        CHK_PRT_CONT(ret == -1, HCCL_WARNING("Failed to build log info, tag[%s].", tag.c_str()));
+        CHK_PRT_CONT(ret == -1, HCCL_WARNING("Unsuccessful in building log info, tag[%s].", tag.c_str()));
         std::string logInfo = "Entry-HcclAlltoAllVCV2:" + std::string(stackLogBufferV2);
         if (isCapture) {
             CHK_PTR_NULL(rtModel);
@@ -1283,7 +1284,7 @@ HcclResult HcclReduceV2(
             tag.c_str(), sendBuf, recvBuf, count, GetDataTypeEnumStrV2(dataType).c_str(),
             GetReduceOpEnumStrV2(op).c_str(), root, localRank, streamId, deviceLogicId);
 
-        CHK_PRT_CONT(ret == -1, HCCL_WARNING("Failed to build log info, tag[%s].", tag.c_str()));
+        CHK_PRT_CONT(ret == -1, HCCL_WARNING("Unsuccessful in building log info, tag[%s].", tag.c_str()));
         std::string logInfo = "Entry-HcclReduceV2:" + std::string(stackLogBufferV2);
         if (isCapture) {
             CHK_PTR_NULL(rtModel);
@@ -1348,7 +1349,7 @@ HcclResult HcclAllReduceV2(
             tag.c_str(), sendBuf, recvBuf, count, GetDataTypeEnumStrV2(dataType).c_str(),
             GetReduceOpEnumStrV2(op).c_str(), localRank, streamId, comm, deviceLogicId);
 
-        CHK_PRT_CONT(ret == -1, HCCL_WARNING("Failed to build log info, tag[%s].", tag.c_str()));
+        CHK_PRT_CONT(ret == -1, HCCL_WARNING("Unsuccessful in building log info, tag[%s].", tag.c_str()));
 
         std::string logInfo = "Entry-HcclAllReduceV2: " + std::string(stackLogBufferV2);
         if (isCapture) {
@@ -1412,7 +1413,7 @@ HcclBroadcastV2(void* buf, uint64_t count, HcclDataType dataType, uint32_t root,
             "tag[%s], buf[%p], count[%llu], dataType[%s], root[%u], localRank[%u], streamId[%d], deviceLogicId[%d]",
             tag.c_str(), buf, count, GetDataTypeEnumStrV2(dataType).c_str(), root, localRank, streamId, deviceLogicId);
 
-        CHK_PRT_CONT(ret == -1, HCCL_WARNING("Failed to build log info, tag[%s].", tag.c_str()));
+        CHK_PRT_CONT(ret == -1, HCCL_WARNING("Unsuccessful in building log info, tag[%s].", tag.c_str()));
         std::string logInfo = "Entry-HcclBroadcastV2:" + std::string(stackLogBufferV2);
         if (isCapture) {
             CHK_PTR_NULL(rtModel);
@@ -1526,7 +1527,8 @@ HcclResult HcclAllocComResourceByTilingV2(HcclComm comm, const void* stream, voi
         s32 ret = snprintf_s(
             stackLogBufferV2, LOG_TMPBUF_SIZE, LOG_TMPBUF_SIZE - 1U, "commIdentifier[%s], version[%u]",
             commIdentifier.c_str(), *pVersion);
-        CHK_PRT_CONT(ret == -1, HCCL_WARNING("Failed to build log info, commIdentifier[%s].", commIdentifier.c_str()));
+        CHK_PRT_CONT(
+            ret == -1, HCCL_WARNING("Unsuccessful in building log info, commIdentifier[%s].", commIdentifier.c_str()));
 
         std::string logInfo = "MC2 create resource by tiling: localRank[" + std::to_string(localRank) + "]"
                               + std::string(stackLogBufferV2);
@@ -2084,7 +2086,7 @@ HcclResult HcclScatterV2(
             tag.c_str(), sendBuf, recvBuf, recvCount, GetDataTypeEnumStrV2(dataType).c_str(), root, localRank, streamId,
             deviceLogicId);
 
-        CHK_PRT_CONT(ret == -1, HCCL_WARNING("Failed to build log info, tag[%s].", tag.c_str()));
+        CHK_PRT_CONT(ret == -1, HCCL_WARNING("Unsuccessful in building log info, tag[%s].", tag.c_str()));
         std::string logInfo = "Entry-HcclScatterV2:" + std::string(stackLogBufferV2);
         if (isCapture) {
             CHK_PTR_NULL(rtModel);
@@ -2145,7 +2147,7 @@ HcclResult HcclAllGatherV2(
             tag.c_str(), sendBuf, recvBuf, sendCount, GetDataTypeEnumStrV2(dataType).c_str(), localRank, streamId,
             deviceLogicId);
 
-        CHK_PRT_CONT(ret == -1, HCCL_WARNING("Failed to build log info, tag[%s].", tag.c_str()));
+        CHK_PRT_CONT(ret == -1, HCCL_WARNING("Unsuccessful in building log info, tag[%s].", tag.c_str()));
         std::string logInfo = "Entry-HcclAllGatherV2:" + std::string(stackLogBufferV2);
         if (isCapture) {
             CHK_PTR_NULL(rtModel);
@@ -2228,7 +2230,7 @@ HcclResult HcclAllGatherVV2(
             tag.c_str(), sendBuf, recvBuf, sendCount, recvCounts, recvDispls, GetDataTypeEnumStrV2(dataType).c_str(),
             localRank, streamId, deviceLogicId);
 
-        CHK_PRT_CONT(ret == -1, HCCL_WARNING("Failed to build log info, tag[%s].", tag.c_str()));
+        CHK_PRT_CONT(ret == -1, HCCL_WARNING("Unsuccessful in building log info, tag[%s].", tag.c_str()));
         std::string logInfo = "Entry-HcclAllGatherVV2:" + std::string(stackLogBufferV2);
         if (isCapture) {
             CHK_PTR_NULL(rtModel);
@@ -2323,7 +2325,7 @@ HcclSendV2(void* sendBuf, uint64_t count, HcclDataType dataType, uint32_t destRa
             "tag[%s], sendBuf[%p], count[%llu], dataType[%s], localRank[%u], streamId[%d], deviceLogicId[%d]",
             tag.c_str(), sendBuf, count, GetDataTypeEnumStrV2(dataType).c_str(), localRank, streamId, deviceLogicId);
 
-        CHK_PRT_CONT(ret == -1, HCCL_WARNING("Failed to build log info, tag[%s].", tag.c_str()));
+        CHK_PRT_CONT(ret == -1, HCCL_WARNING("Unsuccessful in building log info, tag[%s].", tag.c_str()));
         std::string logInfo = "Entry-HcclSendV2:" + std::string(hcclSendStackLogBufferV2);
         if (isCapture) {
             CHK_PTR_NULL(rtModel);
@@ -2385,7 +2387,7 @@ HcclRecvV2(void* recvBuf, uint64_t count, HcclDataType dataType, uint32_t srcRan
             "tag[%s], recvBuf[%p], count[%llu], dataType[%s], localRank[%u], streamId[%d], deviceLogicId[%d]",
             tag.c_str(), recvBuf, count, GetDataTypeEnumStrV2(dataType).c_str(), localRank, streamId, deviceLogicId);
 
-        CHK_PRT_CONT(ret == -1, HCCL_WARNING("Failed to build log info, tag[%s].", tag.c_str()));
+        CHK_PRT_CONT(ret == -1, HCCL_WARNING("Unsuccessful in building log info, tag[%s].", tag.c_str()));
         std::string logInfo = "Entry-HcclRecvV2:" + std::string(hcclRecvStackLogBufferV2);
         if (isCapture) {
             CHK_PTR_NULL(rtModel);
@@ -2450,7 +2452,7 @@ HcclResult HcclReduceScatterV2(
             tag.c_str(), sendBuf, recvBuf, recvCount, GetDataTypeEnumStrV2(dataType).c_str(),
             GetReduceOpEnumStrV2(op).c_str(), localRank, streamId, deviceLogicId);
 
-        CHK_PRT_CONT(ret == -1, HCCL_WARNING("Failed to build log info, tag[%s].", tag.c_str()));
+        CHK_PRT_CONT(ret == -1, HCCL_WARNING("Unsuccessful in building log info, tag[%s].", tag.c_str()));
         std::string logInfo = "Entry-HcclReduceScatterV2:" + std::string(stackLogBufferV2);
         if (isCapture) {
             CHK_PTR_NULL(rtModel);
@@ -2538,7 +2540,7 @@ HcclResult HcclReduceScatterVV2(
             tag.c_str(), sendBuf, recvBuf, sendCounts, sendDispls, recvCount, GetDataTypeEnumStrV2(dataType).c_str(),
             GetReduceOpEnumStrV2(op).c_str(), localRank, streamId, deviceLogicId);
 
-        CHK_PRT_CONT(ret == -1, HCCL_WARNING("Failed to build log info, tag[%s].", tag.c_str()));
+        CHK_PRT_CONT(ret == -1, HCCL_WARNING("Unsuccessful in building log info, tag[%s].", tag.c_str()));
         std::string logInfo = "Entry-HcclReduceScatterVV2:" + std::string(stackLogBufferV2);
         if (isCapture) {
             CHK_PTR_NULL(rtModel);
@@ -2637,7 +2639,7 @@ HcclResult HcclBatchSendRecvV2(HcclSendRecvItem* sendRecvInfo, uint32_t itemNum,
             "tag[%s], itemNum[%u], localRank[%u], streamId[%d], deviceLogicId[%d]", tag.c_str(), itemNum, localRank,
             streamId, deviceLogicId);
 
-        CHK_PRT_CONT(ret == -1, HCCL_WARNING("Failed to build log info, tag[%s].", tag.c_str()));
+        CHK_PRT_CONT(ret == -1, HCCL_WARNING("Unsuccessful in building log info, tag[%s].", tag.c_str()));
         std::string logInfo = "Entry-HcclBatchSendRecvV2:" + std::string(stackLogBufferV2);
         if (isCapture) {
             CHK_PTR_NULL(rtModel);

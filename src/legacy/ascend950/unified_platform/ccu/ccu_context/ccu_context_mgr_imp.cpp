@@ -412,7 +412,7 @@ HcclResult CtxMgrImp::InstantiationTranslator(uint16_t dieId)
     if (ret != HcclResult::HCCL_SUCCESS) {
         // 当前验证环境为单die环境，获取die间ChannelId会失败，打印WARNING日志。
         HCCL_WARNING(
-            "Failed to get inter die channel id. deviceLogicId = %d, srcDieId = %u, dstDieId = %u, ret = %d",
+            "Unsuccessful in getting inter die channel id. deviceLogicId = %d, srcDieId = %u, dstDieId = %u, ret = %d",
             deviceLogicId_, dieId, dstDieId, ret);
     }
     tmpChannelId[1] = chaneelId;

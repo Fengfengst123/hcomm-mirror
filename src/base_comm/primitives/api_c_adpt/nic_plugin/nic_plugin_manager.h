@@ -164,7 +164,7 @@ void DestroyPluginCtx(PluginOps* ops, void* pluginCtx)
         && ops->destroy != nullptr) {
         int32_t ret = ops->destroy(pluginCtx);
         if (ret != HCCL_SUCCESS) {
-            HCCL_WARNING("[%s] plugin destroy failed, ret[%d].", __func__, ret);
+            HCCL_WARNING("[%s] plugin destroy unsuccessfully, ret[%d].", __func__, ret);
         }
     }
 }

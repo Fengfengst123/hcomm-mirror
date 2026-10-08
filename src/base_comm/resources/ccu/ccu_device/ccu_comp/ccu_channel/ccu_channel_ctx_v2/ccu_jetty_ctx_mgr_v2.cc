@@ -60,7 +60,7 @@ HcclResult CcuJettyCtxMgrV2::CheckCtxGroupsByFeId(const uint32_t feId)
     CHK_PRT_RET(
         jettyNum < jettyGroupSize || jettyGroupSize == 0, // fe策略不够分1个jetty组，认为资源不足
         HCCL_WARNING(
-            "[CcuJettyCtxMgrV2][%s] failed, jettyNum[%u] of feId[%u] is too small to "
+            "[CcuJettyCtxMgrV2][%s] is unsuccessful, jettyNum[%u] of feId[%u] is too small to "
             "allocate a jetty group, groupSize[%u], userDevId[%d], dieId[%u].",
             __func__, jettyNum, feId, jettyGroupSize, userDevId_, dieId_),
         HcclResult::HCCL_E_UNAVAIL);
@@ -89,7 +89,7 @@ static HcclResult FindFreeCtxGroup(const std::vector<JettyCtxGroup>& ctxGroups, 
         }
     }
 
-    HCCL_WARNING("[CcuJettyCtxMgrV2][%s] failed, no free ctxGroup left.", __func__);
+    HCCL_WARNING("[CcuJettyCtxMgrV2][%s] is unsuccessful, no free ctxGroup left.", __func__);
     return HcclResult::HCCL_E_UNAVAIL;
 }
 
@@ -101,7 +101,7 @@ HcclResult CcuJettyCtxMgrV2::Alloc(
     CHK_PRT_RET(
         ret != HcclResult::HCCL_SUCCESS,
         HCCL_WARNING(
-            "[CcuJettyCtxMgrV2][%s] failed to find jetty contexts by feId[%u], "
+            "[CcuJettyCtxMgrV2][%s] is unsuccessful in finding jetty contexts by feId[%u], "
             "userDevId[%d], dieId[%u].",
             __func__, feId, userDevId_, dieId_),
         ret);
@@ -111,7 +111,7 @@ HcclResult CcuJettyCtxMgrV2::Alloc(
     CHK_PRT_RET(
         ret != HcclResult::HCCL_SUCCESS,
         HCCL_WARNING(
-            "[CcuJettyCtxMgrV2][%s] failed to find free jetty contexts of feId[%u], "
+            "[CcuJettyCtxMgrV2][%s] is unsuccessful in finding free jetty contexts of feId[%u], "
             "userDevId[%d], dieId[%u].",
             __func__, feId, userDevId_, dieId_),
         ret);
@@ -124,7 +124,7 @@ HcclResult CcuJettyCtxMgrV2::Alloc(
     uint32_t allocSqSize = sqSize;
     if (allocSqSize != CCU_V2_FIXED_SQ_SIZE) {
         HCCL_RUN_WARNING(
-            "[CcuJettyCtxMgr][%s] failed, sqSize is not equal to 32, "
+            "[CcuJettyCtxMgr][%s] is unsuccessful, sqSize is not equal to 32, "
             "sqSize is [%u]",
             __func__, allocSqSize);
         allocSqSize = CCU_V2_FIXED_SQ_SIZE;
@@ -133,7 +133,7 @@ HcclResult CcuJettyCtxMgrV2::Alloc(
     ret = TryAllocWqeBBResource(allocSqSize, jettyCtxStartId, taJettyStartId, jettyType_, jettyInfos);
     if (ret != HCCL_SUCCESS) {
         HCCL_RUN_WARNING(
-            "[CcuJettyCtxMgrV2][%s] failed to alloc wqebb resource to jetty contexts "
+            "[CcuJettyCtxMgrV2][%s] is unsuccessful in allocating wqebb resource to jetty contexts "
             "of feId[%u], request sq size[%u], userDevId[%d], dieId[%u].",
             __func__, feId, allocSqSize, userDevId_, dieId_);
         CHK_RET(ReleaseWqeBBResource(jettyInfos));

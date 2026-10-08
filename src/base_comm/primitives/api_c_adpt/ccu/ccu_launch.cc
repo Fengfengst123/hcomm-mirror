@@ -104,7 +104,7 @@ CcuResult HcommCcuKernelRegister(
         ccuIns->AbortRegister();
         if (CCU_CHK_RES_UNAVAIL(ret)) {
             HCCL_WARNING(
-                "[%s] register kernel resource unavailable[%d], current register round aborted.", __func__, ret);
+                "[%s] register kernel resource unavailable[%d], current register round interrupted.", __func__, ret);
             return CcuResult::CCU_E_UNAVAIL;
         } else {
             HCCL_ERROR("[%s] failed, register kernel failed[%d], current register round aborted.", __func__, ret);

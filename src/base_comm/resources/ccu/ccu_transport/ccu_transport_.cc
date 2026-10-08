@@ -73,7 +73,7 @@ HcclResult CcuCreateTransport(
     // 可能申请xn cke失败，需要回退
     auto ret = ccuTransport->Init();
     if (ret == HcclResult::HCCL_E_UNAVAIL) {
-        HCCL_WARNING("[%s] ccuTransport init failed, ccu transport resources unavailable.", __func__);
+        HCCL_WARNING("[%s] ccuTransport init unsuccessfully, ccu transport resources unavailable.", __func__);
         return ret;
     }
     CHK_RET(ret);
@@ -140,7 +140,7 @@ HcclResult CcuTransport::AppendCkes(uint32_t ckesNum)
     auto ret = CcuDevMgrImp::AllocCke(userDevId_, dieId_, ckesNum, resInfo);
     CHK_PRT_RET(
         ret == HcclResult::HCCL_E_UNAVAIL,
-        HCCL_WARNING("[CcuTransport][%s] failed, the resource is not enough.", __func__), ret);
+        HCCL_WARNING("[CcuTransport][%s] is unsuccessful, the resource is not enough.", __func__), ret);
     CHK_RET(ret);
 
     const uint32_t resSize = resInfo.size();
@@ -161,7 +161,7 @@ HcclResult CcuTransport::AppendXns(uint32_t xnsNum)
     auto ret = CcuDevMgrImp::AllocXn(userDevId_, dieId_, xnsNum, resInfo);
     CHK_PRT_RET(
         ret == HcclResult::HCCL_E_UNAVAIL,
-        HCCL_WARNING("[CcuTransport][%s] failed, the resource is not enough.", __func__), ret);
+        HCCL_WARNING("[CcuTransport][%s] is unsuccessful, the resource is not enough.", __func__), ret);
     CHK_RET(ret);
 
     const uint32_t resSize = resInfo.size();

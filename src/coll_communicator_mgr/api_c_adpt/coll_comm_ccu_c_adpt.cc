@@ -25,7 +25,7 @@ static HcclResult CreateCcuInsByFixedResNum(
     auto ccuInsType = hccl::OpExpansionModeToCcuInstanceType(opExpansionMode);
     if (ccuInsType == CcuInstanceType::CCU_UNUSED) {
         HCCL_WARNING(
-            "[%s] failed to get ccu instance, commId[%s] op expansion mode[%u].", funcName, commId.c_str(),
+            "[%s] is unsuccessful in getting ccu instance, commId[%s] op expansion mode[%u].", funcName, commId.c_str(),
             opExpansionMode);
         return HcclResult::HCCL_E_UNAVAIL;
     }
@@ -45,7 +45,7 @@ static HcclResult CreateCcuInsByFixedResNum(
     }
     if (ccuRet == CcuResult::CCU_E_UNAVAIL) {
         HCCL_WARNING(
-            "[%s] failed to create ccu instance, resources are unavailable, "
+            "[%s] is unsuccessful in creating ccu instance, resources are unavailable, "
             "commId[%s] insType[%d] ret[%d].",
             funcName, commId.c_str(), ccuInsType, ccuRet);
         return static_cast<HcclResult>(ccuRet);
@@ -93,7 +93,8 @@ HcclResult HcclCommQueryCcuIns(HcclComm comm, CcuInsHandle* insHandles, uint32_t
     if (ccuInsHandle == 0) {
         auto ret = CreateCcuInsByFixedResNum(__func__, commId, myRank, ccuInsHandle);
         if (ret != HcclResult::HCCL_SUCCESS) {
-            HCCL_WARNING("[%s] failed to get ccu instance, commId[%s] ret[%d]", __func__, commId.c_str(), ret);
+            HCCL_WARNING(
+                "[%s] is unsuccessful in getting ccu instance, commId[%s] ret[%d]", __func__, commId.c_str(), ret);
             return ret;
         }
     }

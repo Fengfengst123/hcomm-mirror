@@ -510,7 +510,7 @@ private:
         uint32_t ownerIdQpn = cqeReadback_.owner_id_qpn;
         auto cqeType = static_cast<RoceCqeType>((opSrWqebb >> ROCE_CQE_OPCODE_SHIFT) & ROCE_CQE_OPCODE_MASK);
         if (cqeType == RoceCqeType::INVALID) {
-            HCCL_INFO("[Rdma1825Ops::%s][Poll cq] CQE invalid, consIndex[%u], slot[%u]", __func__, consIndex, cqeSlot);
+            HCCL_INFO("[Rdma1825Ops::%s][Poll cq] no valid CQE, consIndex[%u], slot[%u]", __func__, consIndex, cqeSlot);
             return nullptr;
         }
 

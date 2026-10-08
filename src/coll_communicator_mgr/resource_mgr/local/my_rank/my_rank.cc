@@ -335,7 +335,7 @@ HcclResult MyRank::TryInitCcuInstanceOnDemand()
             opExpansionMode_ = AICPU_TS_MODE;
             ccuInsHandle_ = 0;
             HCCL_RUN_WARNING(
-                "[MyRank][%s] failed to init ccu driver, "
+                "[MyRank][%s] is unsuccessful in initializing ccu driver, "
                 "fallback to aicpu, rankId[%u].",
                 __func__, rankId_);
             return HcclResult::HCCL_SUCCESS;
@@ -892,7 +892,8 @@ HcclResult MyRank::BatchCreateChannels(
         if (ret == HCCL_E_UNAVAIL) {
             // 申请channel因资源不足失败，清理已申请的channel
             HCCL_RUN_WARNING(
-                "[%s] create channel failed, channelIndex[%u], remoteRank[%u], engine[%s], reuseIdx[%u], need clean "
+                "[%s] create channel unsuccessfully, channelIndex[%u], remoteRank[%u], engine[%s], reuseIdx[%u], need "
+                "clean "
                 "new channels",
                 __func__, i + 1, remoteRank, GetEnumToString(GetCommEngineStatusStrMap(), engine).c_str(), reuseIdx);
             isAllSuccess = false;
@@ -927,8 +928,8 @@ HcclResult MyRank::BatchCreateChannels(
     // 如果申请失败，清理endpoint pair中记录的channel handle
     if (!isAllSuccess) {
         HCCL_RUN_WARNING(
-            "[%s] create channel failed, destroy new channels num[%zu], engine[%s]", __func__, newChannels_.size(),
-            GetEnumToString(GetCommEngineStatusStrMap(), engine).c_str());
+            "[%s] create channel unsuccessfully, destroy new channels num[%zu], engine[%s]", __func__,
+            newChannels_.size(), GetEnumToString(GetCommEngineStatusStrMap(), engine).c_str());
         CHK_RET(DestroyNewChannels(engine, channelDescs, newChannels_));
         return HCCL_E_UNAVAIL;
     }
@@ -1373,7 +1374,7 @@ HcclResult MyRank::CreateChannels(
         if (connRet == HCCL_E_UNAVAIL && engine == COMM_ENGINE_CCU) {
             // CCU 场景额外回滚本次新建的 channel，避免资源残留
             HCCL_RUN_WARNING(
-                "[%s] BatchConnectChannels failed[%d], engine[%s], new channels num[%u]", __func__, connRet,
+                "[%s] BatchConnectChannels is unsuccessful[%d], engine[%s], new channels num[%u]", __func__, connRet,
                 GetEnumToString(GetCommEngineStatusStrMap(), engine).c_str(), newChannelsSnapshot.size());
             std::lock_guard<std::mutex> lock(channelIndexMtx_);
             HcclResult destroyRet = DestroyNewChannels(engine, channelDescs, newChannelsSnapshot);

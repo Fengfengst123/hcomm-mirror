@@ -29,7 +29,7 @@ static bool CreateCcuJettys(CcuCommunicator& ccuComm, const std::vector<LinkData
     if (ret == HcclResult::HCCL_E_UNAVAIL) {
         createStatus = false; // 预留处理资源不足回退情况，当前不支持回退
         HCCL_WARNING(
-            "[CcuInsPreprocessor][%s] create ccu jettys failed, "
+            "[CcuInsPreprocessor][%s] create ccu jettys unsuccessfully, "
             "ccu resource is unavailable, please check.",
             __func__);
         return false;
@@ -57,7 +57,7 @@ static bool CreateCcuTransports(
         if (ret == HcclResult::HCCL_E_UNAVAIL) {
             createStatus = false; // 预留处理资源不足回退情况，当前不支持回退
             HCCL_WARNING(
-                "[CcuInsPreprocessor][%s] create ccu transports failed, "
+                "[CcuInsPreprocessor][%s] create ccu transports unsuccessfully, "
                 "ccu resource is unavailable, please check.",
                 __func__);
             return false;
@@ -110,7 +110,7 @@ std::unique_ptr<CcuContext> CcuInsPreprocessor::CreateCcuCtx(const CcuInstructio
     if (transportGrp == nullptr) {
         createStatus = false; // transportGroup当前未适配资源不足场景，需重构
         HCCL_WARNING(
-            "[CcuInsPreprocessor::%s] transportGrp alloc resource fail, but fallback, "
+            "[CcuInsPreprocessor::%s] transportGrp alloc resource unsuccessfully, but fallback, "
             "transports size[%zu],rankGroup size[%zu], cntCkeNum[%u]",
             __func__, transports.size(), linkGroup.GetLinks().size(), cntCkeNum);
         return nullptr;
@@ -161,7 +161,7 @@ bool CcuInsPreprocessor::CheckCtxTransportStatus(bool resAllocSuccess)
 {
     if (!resAllocSuccess) {
         HCCL_WARNING(
-            "[CcuInsPreprocessor::%s] CreateCcuCtx alloc local resource fail, ccuCtxGroups"
+            "[CcuInsPreprocessor::%s] CreateCcuCtx alloc local resource unsuccessfully, ccuCtxGroups"
             " size[%zu], resPackIdxs size[%zu], ctxSignatures size[%zu], insPtrs size[%zu]",
             __func__, ccuCtxGroups.size(), resPackIdxs.size(), ctxSignatures.size(), insPtrs.size());
         return false;
@@ -218,7 +218,7 @@ void CcuInsPreprocessor::InsPreprocess(InsIterator& insIter, u32 resPackIndex, b
             if (res != HcclResult::HCCL_E_UNAVAIL) {
                 THROW<InternalException>("[CcuCtxMgr::AllocRes]AllocRes failed, unexpected error, please check.");
             }
-            HCCL_WARNING("[CcuInsPreprocessor::%s] AllocRes failed, ret[%u]", __func__, res);
+            HCCL_WARNING("[CcuInsPreprocessor::%s] AllocRes is unsuccessful, ret[%u]", __func__, res);
             resAllocSuccess = false;
         }
     } else {
@@ -245,7 +245,7 @@ void CcuInsPreprocessor::PrepareCcuCtx(std::shared_ptr<InsQueue>& insQueue, bool
             InsPreprocess(ins, resPackIndex, isMc2);
             if (needHandShake && !resAllocSuccess) {
                 HCCL_WARNING(
-                    "[CcuInsPreprocessor::%s] slave insQueue ins alloc local resource fail, "
+                    "[CcuInsPreprocessor::%s] slave insQueue ins alloc local resource unsuccessfully, "
                     "resPackIndex[%u], ins[%s].",
                     __func__, resPackIndex, ins->Describe().c_str());
                 return;
@@ -265,7 +265,7 @@ void CcuInsPreprocessor::PrepareCcuCtx(std::shared_ptr<InsQueue>& insQueue, bool
         InsPreprocess(ins, resPackIndex, isMc2);
         if (needHandShake && !resAllocSuccess) {
             HCCL_WARNING(
-                "[CcuInsPreprocessor::%s] master insQueue ins alloc local resource fail, "
+                "[CcuInsPreprocessor::%s] master insQueue ins alloc local resource unsuccessfully, "
                 "resPackIndex[%u], ins[%s].",
                 __func__, resPackIndex, ins->Describe().c_str());
             return;
@@ -352,13 +352,13 @@ void CcuInsPreprocessor::Preprocess(std::shared_ptr<InsQueue>& insQueue, bool is
 
     HCCL_INFO("[CcuInsPreprocessor::%s] resAllocSuccess is[%d]", __func__, resAllocSuccess);
     if (!resAllocSuccess) {
-        HCCL_INFO("[CcuInsPreprocessor::%s] ResAlloc unsuccessful, accelerator fall back.", __func__);
+        HCCL_INFO("[CcuInsPreprocessor::%s] ResAlloc is unsuccessful, accelerator fall back.", __func__);
         if (isMc2) {
             // mc2场景，CCU资源不足时不支持回退
             THROW<InternalException>(StringFormat("[CcuInsPreprocessor::%s] Alloc local resource failed", __func__));
         }
         // CCU资源不足时warning
-        HCCL_WARNING("[CcuInsPreprocessor::%s] Alloc local resource failed", __func__);
+        HCCL_WARNING("[CcuInsPreprocessor::%s] Alloc local resource unsuccessfully", __func__);
         // 若本地资源申请失败,且非用户显式配置CCU模式，则进行握手回退
         Fallback();
         ClearTmpResRecords();

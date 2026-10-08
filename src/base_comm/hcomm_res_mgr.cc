@@ -173,7 +173,8 @@ static void OnDeviceResetPre(int32_t deviceId, aclrtDeviceState state, [[maybe_u
         u32 devPhyId = 0;
         HcclResult ret = hrtGetDevicePhyIdByIndex(static_cast<u32>(deviceId), devPhyId);
         if (ret != HCCL_SUCCESS) {
-            HCCL_WARNING("[%s] hrtGetDevicePhyIdByIndex failed, deviceId[%d] ret[%d]", __func__, deviceId, ret);
+            HCCL_WARNING(
+                "[%s] hrtGetDevicePhyIdByIndex is unsuccessful, deviceId[%d] ret[%d]", __func__, deviceId, ret);
             return;
         }
         SocketMgr::DeInit(devPhyId);
@@ -197,7 +198,7 @@ void HcommResMgr::RegisterDeviceResetCallback()
     }
     aclError ret = aclrtRegDeviceStateCallback("hcomm_res_mgr", OnDeviceResetPre, nullptr);
     if (ret != ACL_SUCCESS) {
-        HCCL_WARNING("[RegisterDeviceResetCallback] aclrtRegDeviceStateCallback failed, ret[%d]", ret);
+        HCCL_WARNING("[RegisterDeviceResetCallback] aclrtRegDeviceStateCallback is unsuccessful, ret[%d]", ret);
         return;
     }
     g_deviceResetCallbackRegistered = true;
@@ -215,21 +216,22 @@ static void OnDeviceStateRefresh(int32_t deviceId, aclrtDeviceState state, [[may
         s32 deviceLogicId = 0;
         HcclResult ret = hrtGetDeviceRefresh(&deviceLogicId);
         if (ret != HCCL_SUCCESS) {
-            HCCL_WARNING("[%s] hrtGetDeviceRefresh failed, deviceId[%d] ret[%d]", __func__, deviceId, ret);
+            HCCL_WARNING("[%s] hrtGetDeviceRefresh is unsuccessful, deviceId[%d] ret[%d]", __func__, deviceId, ret);
             return;
         }
 
         u32 devicePhyId = 0;
         ret = hrtGetDevicePhyIdByIndex(static_cast<u32>(deviceLogicId), devicePhyId, true);
         if (ret != HCCL_SUCCESS) {
-            HCCL_WARNING("[%s] hrtGetDevicePhyIdByIndex failed, deviceId[%d] ret[%d]", __func__, deviceId, ret);
+            HCCL_WARNING(
+                "[%s] hrtGetDevicePhyIdByIndex is unsuccessful, deviceId[%d] ret[%d]", __func__, deviceId, ret);
             return;
         }
 
         DevType deviceType = DevType::DEV_TYPE_COUNT;
         ret = hrtGetDeviceType(deviceType);
         if (ret != HCCL_SUCCESS) {
-            HCCL_WARNING("[%s] hrtGetDeviceType failed, deviceId[%d] ret[%d]", __func__, deviceId, ret);
+            HCCL_WARNING("[%s] hrtGetDeviceType is unsuccessful, deviceId[%d] ret[%d]", __func__, deviceId, ret);
             return;
         }
         HCCL_INFO(
@@ -250,7 +252,7 @@ void HcommResMgr::RegisterDeviceRefreshCallback()
     }
     aclError ret = aclrtRegDeviceStateCallback("hcomm_refresh_device", OnDeviceStateRefresh, nullptr);
     if (ret != ACL_SUCCESS) {
-        HCCL_WARNING("[%s] aclrtRegDeviceStateCallback failed, ret[%d]", __func__, ret);
+        HCCL_WARNING("[%s] aclrtRegDeviceStateCallback is unsuccessful, ret[%d]", __func__, ret);
         return;
     }
     g_deviceRefreshCallbackRegistered = true;
@@ -262,7 +264,7 @@ void HcommResMgr::UnregisterDeviceRefreshCallback()
     aclError ret = aclrtRegDeviceStateCallback("hcomm_refresh_device", nullptr, nullptr);
     if (ret != ACL_SUCCESS) {
         HCCL_WARNING(
-            "[%s] aclrtRegDeviceStateCallback unregister failed, "
+            "[%s] aclrtRegDeviceStateCallback unregister is unsuccessful, "
             "regName[%s] ret[%d]",
             __func__, "hcomm_refresh_device", ret);
     }

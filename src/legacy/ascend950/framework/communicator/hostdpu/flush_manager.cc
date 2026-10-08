@@ -33,7 +33,7 @@ HcclResult FlushManager::initFlushHandle(IpAddress ip, u32 devPhyId)
     auto flushHandlePtr = std::make_shared<FlushHandle>();
     HcclResult ret = flushHandlePtr->Init(ip, devPhyId);
     if (ret != HCCL_SUCCESS) {
-        HCCL_INFO("[initFlushHandle]FlushHandle init fail.");
+        HCCL_INFO("[initFlushHandle]FlushHandle init unsuccessfully.");
         return ret;
     }
 
@@ -85,7 +85,7 @@ HcclResult FlushManager::Flush()
         swr.sg_list = &sg_list;
         HcclResult paramsRet = FlushParamPrepare(flushHandlePtr, &swr);
         if (paramsRet != HCCL_SUCCESS) {
-            HCCL_INFO("[Flush] Set work request failed.");
+            HCCL_INFO("[Flush] Set work request unsuccessfully.");
             return paramsRet;
         }
         HCCL_DEBUG("[FlushParamPrepare] Posting RDMA_READ operation... ");
@@ -94,7 +94,7 @@ HcclResult FlushManager::Flush()
         HcclResult loopQpRet
             = ExecuteRdmaRead(loopbackqp0, cq, swr, Hccl::EnvConfig::GetInstance().GetRtsConfig().GetExecTimeOut());
         if (loopQpRet != HCCL_SUCCESS) {
-            HCCL_INFO("[Flush] RDMA_READ operation failed.");
+            HCCL_INFO("[Flush] RDMA_READ operation is unsuccessful.");
             return loopQpRet;
         }
     }

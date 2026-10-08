@@ -2752,7 +2752,8 @@ u32 CommunicatorImpl::GetUsedChannelCount(u32 dieId)
         = dynamic_cast<CollServiceDeviceMode*>(collService)->GetCcuInsPreprocessor()->GetCcuComm()->GetCcuJettyMgr();
 
     if (ccuJettyMgr == nullptr) {
-        HCCL_WARNING("[CommunicatorImpl][%s] failed, ccuJettyMgr is nullptr, commId[%s].", __func__, id.c_str());
+        HCCL_WARNING(
+            "[CommunicatorImpl][%s] is unsuccessful, ccuJettyMgr is nullptr, commId[%s].", __func__, id.c_str());
         return 0;
     }
     return ccuJettyMgr->GetUsedChannelCount(dieId);

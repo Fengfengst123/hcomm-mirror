@@ -273,7 +273,7 @@ void DevUbConnection::GetTimeOut() // 基于调用方按协议从环境变量获
         HcclResult ret = CalcTotalTimeout(tpTimeOutMs);
         if (ret != HCCL_SUCCESS) {
             HCCL_RUN_WARNING(
-                "[DevUbConnection][%s] CalcTotalTimeout failed[%d], tpTimeOutMs remains 0.", __func__, ret);
+                "[DevUbConnection][%s] CalcTotalTimeout is unsuccessful[%d], tpTimeOutMs remains 0.", __func__, ret);
         }
     }
     jettyTimeOut = TpManager::CalcTaTimeout(tpProtocol, taTimeOut_, tpTimeOutMs);
@@ -805,7 +805,7 @@ void DevUbConnection::ReleaseRemoteJettyIfImported(bool ctxValid)
     if (!ctxValid) {
         HCCL_WARNING(
             "[DevUbConnection][%s] skip HrtRaUbUnimportJetty, "
-            "rdmaHandle=%p invalid (DeInit/DestroyAll done), remoteJettyHandle=0x%llx",
+            "rdmaHandle=%p is not valid (DeInit/DestroyAll done), remoteJettyHandle=0x%llx",
             __func__, rdmaHandle, static_cast<unsigned long long>(remoteJettyHandle));
     } else {
         HrtRaUbUnimportJetty(rdmaHandle, remoteJettyHandle);
@@ -834,7 +834,7 @@ void DevUbConnection::ReleaseOwnedJettyAndJfc(bool ctxValid)
         if (!ctxValid) {
             HCCL_WARNING(
                 "[DevUbConnection][%s] skip HrtRaUbDestroyJetty, "
-                "rdmaHandle=%p invalid, jettyHandle=0x%llx",
+                "rdmaHandle=%p is not valid, jettyHandle=0x%llx",
                 __func__, rdmaHandle, static_cast<unsigned long long>(jettyHandle));
         } else {
             HrtRaUbDestroyJetty(jettyHandle);
@@ -848,7 +848,7 @@ void DevUbConnection::ReleaseOwnedJettyAndJfc(bool ctxValid)
         if (!ctxValid) {
             HCCL_WARNING(
                 "[DevUbConnection][%s] skip HrtRaUbDestroyJfc, "
-                "rdmaHandle=%p invalid, jfcHandle=0x%llx",
+                "rdmaHandle=%p is not valid, jfcHandle=0x%llx",
                 __func__, rdmaHandle, static_cast<unsigned long long>(jfcHandle));
         } else {
             HrtRaUbDestroyJfc(rdmaHandle, jfcHandle);
@@ -1334,7 +1334,7 @@ HcclResult DevUbConnection::Describe(std::string& dfxMsg)
 void DevUbConnection::AddNop(const Stream& stream)
 {
     if (opMode != OpMode::OFFLOAD) {
-        HCCL_WARNING("[DevUbConnection][AddNop]Invalid OpMode[%s]", opMode.Describe().c_str());
+        HCCL_WARNING("[DevUbConnection][AddNop]OpMode[%s] is not valid", opMode.Describe().c_str());
         return;
     }
     if (sqDepth < piVal) {

@@ -301,8 +301,8 @@ void AivUrmaChannel::ReleaseDeviceChannelEntity()
         HcclResult ret = hrtFree(devChannelEntitySlab_);
         if (ret != HCCL_SUCCESS) {
             HCCL_WARNING(
-                "[AivUrmaChannel::%s] hrtFree devChannelEntitySlab failed, ptr[%p], size[%zu], ret[%d]", __func__,
-                devChannelEntitySlab_, devChannelEntitySlabSize_, ret);
+                "[AivUrmaChannel::%s] hrtFree devChannelEntitySlab is unsuccessful, ptr[%p], size[%zu], ret[%d]",
+                __func__, devChannelEntitySlab_, devChannelEntitySlabSize_, ret);
         }
         devChannelEntitySlab_ = nullptr;
         devChannelEntitySlabSize_ = 0;

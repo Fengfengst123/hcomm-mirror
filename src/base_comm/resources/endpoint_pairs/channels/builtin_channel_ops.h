@@ -139,7 +139,7 @@ inline int32_t BuiltinNotifyWaitOnThread(void* ctx, ThreadHandle thread, uint32_
 {
     (void)thread;
     HCCL_INFO(
-        "[%s] START. thread[0x%llx], channel[0x%llx], localNotifyIdx[%u], timeOut[%u].", __func__, thread, ctx,
+        "[%s] START. thread[0x%llx], channel[0x%llx], localNotifyIdx[%u], timeOut[%u]s.", __func__, thread, ctx,
         localNotifyIdx, timeOut);
     auto* const channelPtr = static_cast<hcomm::Channel*>(ctx);
     CHK_PTR_NULL(channelPtr);
@@ -147,7 +147,7 @@ inline int32_t BuiltinNotifyWaitOnThread(void* ctx, ThreadHandle thread, uint32_
     CHK_PRT_RET(
         ret != HCCL_SUCCESS,
         HCCL_ERROR(
-            "[%s] FAIL. thread[0x%llx], channel[0x%llx], localNotifyIdx[%u], timeOut[%u].", __func__, thread, ctx,
+            "[%s] FAIL. thread[0x%llx], channel[0x%llx], localNotifyIdx[%u], timeOut[%u]s.", __func__, thread, ctx,
             localNotifyIdx, timeOut),
         ret);
     HCCL_INFO("[%s] SUCCESS.", __func__);

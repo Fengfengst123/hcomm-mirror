@@ -384,7 +384,7 @@ HcclResult CheckTpProtocol(const TpProtocol tpProtocol)
 {
     if (tpProtocol != TpProtocol::CTP && tpProtocol != TpProtocol::TP && tpProtocol != TpProtocol::UBOE
         && tpProtocol != TpProtocol::UB_RTP) {
-        HCCL_WARNING("[TpManager][%s] failed, tpProtocol[%d] is not supported.", __func__, tpProtocol);
+        HCCL_WARNING("[TpManager][%s] is unsuccessful, tpProtocol[%d] is not supported.", __func__, tpProtocol);
         return HcclResult::HCCL_E_NOT_SUPPORT;
     }
 
@@ -782,7 +782,7 @@ HcclResult TpManager::GetTpTotalTimeout(const TpAttrInfo& tpAttrInfo, uint32_t& 
     if (rawAtGear > AT_GEAR_MAX) {
         finalAtGear = AT_GEAR_DEFAULT;
         HCCL_WARNING(
-            "[TpManager][%s] Invalid at gear[%u], expect [%u, %u], use default gear[%u].", __func__, rawAtGear,
+            "[TpManager][%s] at gear[%u] is not valid, expect [%u, %u], use default at gear[%u].", __func__, rawAtGear,
             AT_GEAR_MIN, AT_GEAR_MAX, finalAtGear);
     }
 

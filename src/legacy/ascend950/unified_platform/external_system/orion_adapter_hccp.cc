@@ -229,7 +229,8 @@ static void SetHccpDebugConfig(HrtNetworkMode mode, uint32_t phyId)
     }
     s32 ret = RaSetDebugConfig(&debugInfo, hccpDebugConfig);
     if (ret != 0) {
-        HCCL_WARNING("[SetHccpDebugConfig] RaSetDebugConfig failed, ret[%d], mode[%u], phyId[%u].", ret, mode, phyId);
+        HCCL_WARNING(
+            "[SetHccpDebugConfig] RaSetDebugConfig is unsuccessful, ret[%d], mode[%u], phyId[%u].", ret, mode, phyId);
     }
 }
 
@@ -772,8 +773,8 @@ HcclResult HrtRaSocketNonBlockSendHeart(const FdHandle fdHandle, void* data, u64
         return HCCL_E_INTERNAL; // 暂时用这个错误码表示hccp进程异常退出
     } else {
         HCCL_WARNING(
-            "[HrtRaSocketNonBlockSend]ra socket send failed, data[%p], size[%llu], send size[%llu], ret[%d]", data,
-            size, *sentSize, ret);
+            "[HrtRaSocketNonBlockSend]ra socket send is unsuccessful, data[%p], size[%llu], send size[%llu], ret[%d]",
+            data, size, *sentSize, ret);
         return HCCL_E_NETWORK;
     }
 }
@@ -796,7 +797,7 @@ HcclResult HrtRaSocketNonBlockRecvHeart(const FdHandle fdHandle, void* data, u64
         return HCCL_E_INTERNAL; // 暂时用这个错误码表示hccp进程异常退出
     } else {
         HCCL_WARNING(
-            "[HrtRaSocketNonBlockRecv]ra socket recv failed, data[%p], size[%llu], "
+            "[HrtRaSocketNonBlockRecv]ra socket recv is unsuccessful, data[%p], size[%llu], "
             "recv[%llu], ret[%d], errno[%d][%s]",
             data, size, recvSize, ret, errno, strerror(errno));
         return HCCL_E_TCP_TRANSFER;
@@ -1552,7 +1553,7 @@ RdmaHandle HrtRaUbCtxInit(const HrtRaUbCtxInitParam& in)
         }
     } catch (const NetworkApiException&) {
         HCCL_WARNING(
-            "[HrtRaUbCtxInit] HrtRaGetDevEidInfoList failed, fallback eidIndex[0], addr[%s].",
+            "[HrtRaUbCtxInit] HrtRaGetDevEidInfoList is unsuccessful, fallback eidIndex[0], addr[%s].",
             in.addr.Describe().c_str());
     }
     HCCL_INFO("[HrtRaUbCtxInit] use eid[%s] eidIndex[%u]", in.addr.Describe().c_str(), ctxInfo.ub.eidIndex);
@@ -3329,7 +3330,7 @@ HcclResult HrtRaGetEidByIp(RdmaHandle handle, const vector<IpAddress>& ipV4AddrL
     union HccpEid eidList[num] = {};
     s32 ret = RaGetEidByIp(handle, ipInfoList, eidList, &num);
     if (ret != 0) {
-        HCCL_WARNING("call RaGetEidByIp failed, error code =%d.", ret);
+        HCCL_WARNING("call RaGetEidByIp unsuccessfully, error code =%d.", ret);
         return HCCL_E_INTERNAL;
     }
 

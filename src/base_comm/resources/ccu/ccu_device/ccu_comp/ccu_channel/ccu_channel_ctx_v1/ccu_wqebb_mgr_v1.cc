@@ -72,7 +72,7 @@ HcclResult CcuWqeBBMgrV1::Alloc(const WqeBBReq& wqeBBReq, ResInfo& wqeBBInfo)
     auto ret = idAllocator_->Alloc(wqeBBReqSize, true, resInfo, "ResType::WqeBB"); // wqebb资源要求连续
     if (ret == HcclResult::HCCL_E_UNAVAIL) {
         HCCL_WARNING(
-            "[CcuWqeBBMgrV1][%s] failed, left resources are not enough, "
+            "[CcuWqeBBMgrV1][%s] is unsuccessful, left resources are not enough, "
             "wqeBBReq.sqSize[%u], wqeBBSize[%u]",
             __func__, wqeBBReq.sqSize, wqeBBReqSize);
         return ret;

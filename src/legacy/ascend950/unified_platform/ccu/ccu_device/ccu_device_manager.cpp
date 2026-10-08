@@ -254,7 +254,7 @@ HcclResult CheckDieValid(
 
     CHK_PRT_RET(
         !dieEnableFlags[dieId],
-        HCCL_WARNING("[%s] failed, dieId[%u] is disable, devLogicId[%d].", funcName, dieId, devLogicId),
+        HCCL_WARNING("[%s] is unsuccessful, dieId[%u] is disable, devLogicId[%d].", funcName, dieId, devLogicId),
         HcclResult::HCCL_E_PARA);
 
     return HcclResult::HCCL_SUCCESS;

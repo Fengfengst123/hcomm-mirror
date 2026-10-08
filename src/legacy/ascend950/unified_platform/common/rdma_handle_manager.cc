@@ -379,7 +379,7 @@ GetEidByAnyEidInfo(s32 deviceLogicId, const HrtDevEidInfo& eidInfo, const IpAddr
     CHK_RET(HrtRaGetEidByIp(rdmaHandle, {ipV4Address}, eidAddrList));
     if (eidAddrList.empty()) {
         HCCL_WARNING(
-            "[RdmaHandleManager::%s] Get Eid failed, deviceLogicId=%d, ipV4Address=%s", __func__, deviceLogicId,
+            "[RdmaHandleManager::%s] Get Eid unsuccessfully, deviceLogicId=%d, ipV4Address=%s", __func__, deviceLogicId,
             ipV4Address.Describe().c_str());
         return HCCL_E_NOT_FOUND;
     }
@@ -425,14 +425,14 @@ void RdmaHandleManager::UboeIpv4ToEid(const IpAddress& ipV4Address, IpAddress& e
             return;
         }
     }
-    HCCL_WARNING("[RdmaHandleManager::%s] Get EidInfo failed, deviceLogicId=%d", __func__, deviceLogicId);
+    HCCL_WARNING("[RdmaHandleManager::%s] Get EidInfo unsuccessfully, deviceLogicId=%d", __func__, deviceLogicId);
 }
 
 HcclResult RdmaHandleManager::GetEidByIpv4Addr(const IpAddress& addr, IpAddress& eidAddr)
 {
     auto it = uboeIpv4EidMap.find(addr);
     if (it == uboeIpv4EidMap.end()) {
-        HCCL_WARNING("[RdmaHandleManager::%s] Find Eid failed, addr[%s]", __func__, addr.Describe().c_str());
+        HCCL_WARNING("[RdmaHandleManager::%s] Find Eid unsuccessfully, addr[%s]", __func__, addr.Describe().c_str());
         return HCCL_E_PARA;
     }
     eidAddr = it->second;

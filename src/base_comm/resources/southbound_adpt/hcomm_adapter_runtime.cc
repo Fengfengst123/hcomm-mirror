@@ -22,7 +22,7 @@ HcclResult ResolveRuntimeDevicePhyId(uint32_t& devicePhyId, bool& noDevice)
     HcclResult ret = hrtGetDeviceCount(&deviceCount);
     if (ret != HCCL_SUCCESS) {
         HCCL_WARNING(
-            "[HcommAdapterRuntime][%s] get device count failed, ret[%d], use resource id[%u].", __func__, ret,
+            "[HcommAdapterRuntime][%s] get device count unsuccessfully, ret[%d], use resource id[%u].", __func__, ret,
             kDefaultResourceId);
         devicePhyId = kDefaultResourceId;
         noDevice = true;

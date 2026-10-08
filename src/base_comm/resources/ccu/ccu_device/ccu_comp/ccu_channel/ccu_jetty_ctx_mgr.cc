@@ -202,7 +202,7 @@ HcclResult CcuJettyCtxMgr::TryAllocWqeBBResource(
         HcclResult ret = wqeBBMgr_->Alloc(wqeBBReq, wqeBBInfo);
         if (ret == HcclResult::HCCL_E_UNAVAIL) {
             HCCL_WARNING(
-                "[CcuJettyCtxMgr][%s] failed to alloc wqe basic block resource, "
+                "[CcuJettyCtxMgr][%s] is unsuccessful in allocating wqe basic block resource, "
                 "left resources are not enough, userDevId[%d], dieId[%u].",
                 __func__, userDevId_, dieId_);
             return ret;

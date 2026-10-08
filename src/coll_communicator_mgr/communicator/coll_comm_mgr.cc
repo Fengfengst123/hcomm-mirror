@@ -34,13 +34,13 @@ CollCommMgr& CollCommMgr::GetInstance()
             // phyId 正确性是次要的。后续 LegacyGetOpHcomInfo 中会用正确的 devId 重新调用
             // InitBaseCommRes 覆盖初始化。
             HCCL_WARNING(
-                "[CollCommMgr][%s] get deviceId failed, ret[%d], use default devPhyId[0].", func,
+                "[CollCommMgr][%s] get deviceId unsuccessfully, ret[%d], use default devPhyId[0].", func,
                 static_cast<s32>(ret));
         }
         HcommResult hRet = HcommResMgrInit(devPhyId);
         if (hRet != HCCL_SUCCESS) {
             HCCL_WARNING(
-                "[CollCommMgr][%s] HcommResMgrInit failed, ret[%d], "
+                "[CollCommMgr][%s] HcommResMgrInit is unsuccessful, ret[%d], "
                 "base_comm singleton construct-order not guaranteed.",
                 func, static_cast<s32>(hRet));
         }
@@ -77,7 +77,7 @@ hcomm::ClusterMonitor& CollCommMgr::GetClusterMonitor(s32 deviceLogicId)
 {
     if (static_cast<u32>(deviceLogicId) >= MAX_MODULE_DEVICE_NUM) {
         HCCL_WARNING(
-            "[ClusterMonitor][%s]deviceLogicId[%d] >= %u, invalid", __func__, deviceLogicId, MAX_MODULE_DEVICE_NUM);
+            "[ClusterMonitor][%s]deviceLogicId[%d] >= %u, not valid", __func__, deviceLogicId, MAX_MODULE_DEVICE_NUM);
         return clusterMonitor_[0];
     }
     return clusterMonitor_[deviceLogicId];
@@ -106,7 +106,7 @@ void CollCommMgr::ReleaseCcuMsComm(s32 deviceLogicId, const std::string& commId)
 {
     if (deviceLogicId < 0 || static_cast<u32>(deviceLogicId) >= MAX_MODULE_DEVICE_NUM) {
         HCCL_WARNING(
-            "[%s] deviceLogicId[%d] is invalid, max device num[%u].", __func__, deviceLogicId, MAX_MODULE_DEVICE_NUM);
+            "[%s] deviceLogicId[%d] is not valid, max device num[%u].", __func__, deviceLogicId, MAX_MODULE_DEVICE_NUM);
         return;
     }
 
@@ -121,7 +121,7 @@ OrderLaunchThreadMgr& CollCommMgr::GetOrderLaunchThreadMgr(s32 deviceLogicId)
 {
     if (deviceLogicId < 0 || static_cast<u32>(deviceLogicId) >= MAX_MODULE_DEVICE_NUM) {
         HCCL_WARNING(
-            "[CollCommMgr][%s]deviceLogicId[%d] >= %u, invalid", __func__, deviceLogicId, MAX_MODULE_DEVICE_NUM);
+            "[CollCommMgr][%s]deviceLogicId[%d] >= %u, not valid", __func__, deviceLogicId, MAX_MODULE_DEVICE_NUM);
         return orderLaunchThreadMgrs_[0];
     }
     return orderLaunchThreadMgrs_[deviceLogicId];

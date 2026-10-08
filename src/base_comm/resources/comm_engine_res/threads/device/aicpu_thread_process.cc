@@ -50,7 +50,8 @@ HcclResult AicpuThreadProcess::InitThreads(ThreadMgrAicpuParam* param)
         int32_t ret = HcommThreadRegisterDfx(threadArray[i], defaultDfxCallback_);
         if (ret != 0) {
             HCCL_WARNING(
-                "[AicpuThreadProcess][%s] HcommThreadRegisterDfx failed, ret[%d], threadArray[%zu]", __func__, ret, i);
+                "[AicpuThreadProcess][%s] HcommThreadRegisterDfx is unsuccessful, ret[%d], threadArray[%zu]", __func__,
+                ret, i);
         }
     }
     threads_.insert(

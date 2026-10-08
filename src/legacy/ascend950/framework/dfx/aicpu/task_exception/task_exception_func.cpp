@@ -157,7 +157,7 @@ uint32_t TaskExceptionFunc::GetReporterInfo(const StreamLite* curStream, std::sh
         return 1;
     }
     if (ret != DRV_ERROR_NONE) {
-        HCCL_WARNING("[TaskExceptionFunc]halCqReportRecv failed, ret:%d", ret);
+        HCCL_WARNING("[TaskExceptionFunc]halCqReportRecv is unsuccessful, ret:%d", ret);
         return 1;
     }
     if (recvInfo->type != DRV_LOGIC_TYPE) { // 非DRV_LOGIC_TYPE不支持解析

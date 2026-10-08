@@ -55,7 +55,7 @@ HcclResult CcuChannelMgrV1::Alloc(const ChannelPara& channelPara, std::vector<Ch
     CHK_PRT_RET(
         ret != HcclResult::HCCL_SUCCESS,
         HCCL_WARNING(
-            "[CcuChannelMgrV1][%s] failed to find free channel, channel strategy[%zu], "
+            "[CcuChannelMgrV1][%s] is unsuccessful in finding free channel, channel strategy[%zu], "
             "feId[%u], devLogicId[%d], dieId[%u].",
             __func__, channelResInfos.size(), feId, devLogicId, dieId),
         ret);
@@ -65,7 +65,7 @@ HcclResult CcuChannelMgrV1::Alloc(const ChannelPara& channelPara, std::vector<Ch
     CHK_PRT_RET(
         ret != HcclResult::HCCL_SUCCESS,
         HCCL_WARNING(
-            "[CcuChannelMgrV1][%s] failed to allocate jetty contexts to channelId[%u], "
+            "[CcuChannelMgrV1][%s] is unsuccessful in allocating jetty contexts to channelId[%u], "
             "feId[%u], devLogicId[%d], dieId[%u].",
             __func__, channelId, feId, devLogicId, dieId),
         ret);
@@ -212,7 +212,7 @@ HcclResult CcuChannelMgrV1::Release(const uint32_t channelId)
     CHK_PRT_RET(
         ret != HcclResult::HCCL_SUCCESS,
         HCCL_WARNING(
-            "[CcuChannelMgrV1][%s] failed to release jetty contexts "
+            "[CcuChannelMgrV1][%s] is unsuccessful in releasing jetty contexts "
             "of channelId[%u], feId[%u], devLogicId[%d], dieId[%u].",
             __func__, channelId, channelResInfos[channelId].feId, devLogicId, dieId),
         ret);

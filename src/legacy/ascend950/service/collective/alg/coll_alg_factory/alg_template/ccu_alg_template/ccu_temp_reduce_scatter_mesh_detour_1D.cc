@@ -56,7 +56,9 @@ HcclResult CcuTempReduceScatterMeshDetour1D::CalcResDetour(const RankGraph* rank
     // 当前仅支持2P或4P
     CHK_PRT_RET(
         tempRankSize_ != DETOUR_RANK_SIZE_2P && tempRankSize_ != 4,
-        HCCL_INFO("[CcuTempReduceScatterMeshDetour1D] Invalid RankSize[%u].", tempRankSize_),
+        HCCL_INFO(
+            "[CcuTempReduceScatterMeshDetour1D] RankSize[%u] is not supported (only 2P or 4P supported).",
+            tempRankSize_),
         HcclResult::HCCL_E_INTERNAL);
 
     tempResReq.queNum = 1; // 当前只有一个ccu mission，暂定1条流

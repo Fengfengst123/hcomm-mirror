@@ -460,7 +460,7 @@ void CollComm::UnregisterSymmetricMemoryResource(const SymmetricMemoryResource& 
 {
     if (resource.memHandle == nullptr || resource.memTag.empty()) {
         HCCL_WARNING(
-            "[CollComm][UnregisterSymmetricMemoryResource] invalid resource, tag[%s], memHandle[%p].",
+            "[CollComm][UnregisterSymmetricMemoryResource] resource is empty, tag[%s], memHandle[%p].",
             resource.memTag.c_str(), resource.memHandle);
         return;
     }
@@ -482,7 +482,7 @@ void CollComm::UnregisterSymmetricMemoryResource(const SymmetricMemoryResource& 
     HcclResult ret = commMems->CommUnregMem(resource.memTag, resource.memHandle);
     if (ret != HCCL_SUCCESS) {
         HCCL_WARNING(
-            "[CollComm][UnregisterSymmetricMemoryResource] CommUnregMem failed, tag[%s], "
+            "[CollComm][UnregisterSymmetricMemoryResource] CommUnregMem is unsuccessful, tag[%s], "
             "memHandle[%p], ret[%d].",
             resource.memTag.c_str(), resource.memHandle, ret);
     }
@@ -636,7 +636,7 @@ void CollComm::RemoveHcommWindow(HcclCommSymWindow devWin)
     void* devLegacySymWin = nullptr;
     HcclResult ret = UnregisterHcommWindowMapping(devWin, devLegacySymWin);
     if (ret != HCCL_SUCCESS) {
-        HCCL_WARNING("[%s] unregister HcommWindow[%p] mapping failed, ret[%d]", __func__, devWin, ret);
+        HCCL_WARNING("[%s] unregister HcommWindow[%p] mapping unsuccessfully, ret[%d]", __func__, devWin, ret);
         return;
     }
     (void)HcommTeamWindowDeregister(devWin);
@@ -743,7 +743,7 @@ HcclResult CollComm::DeregisterWindow(HcclCommSymWindow winHandle)
         tagToHcommMap_.erase(resource.memTag);
     } else if (getResourceRet != HCCL_SUCCESS && getResourceRet != HCCL_E_NOT_FOUND) {
         HCCL_WARNING(
-            "[CollComm][DeregisterWindow] get registered symmetric memory resource failed, "
+            "[CollComm][DeregisterWindow] get registered symmetric memory resource unsuccessfully, "
             "devLegacySymWin[%p], ret[%d].",
             devLegacySymWin, getResourceRet);
     }
@@ -1215,7 +1215,7 @@ HcclResult CollComm::HcclBinaryUnLoad()
     aclError ret = aclrtBinaryUnLoad(binHcclHandle_);
     binHcclHandle_ = nullptr;
     if (ret != 0) {
-        HCCL_RUN_WARNING("[%s]aclrtBinaryUnLoad failed, aclRet[%d]", __func__, ret);
+        HCCL_RUN_WARNING("[%s]aclrtBinaryUnLoad is unsuccessful, aclRet[%d]", __func__, ret);
         return HCCL_E_INTERNAL;
     }
     return HCCL_SUCCESS;

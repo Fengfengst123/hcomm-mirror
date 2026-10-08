@@ -161,7 +161,8 @@ HcommResult CreatePluginEndpointHolder(
     if (ret != HCCL_SUCCESS) {
         int32_t destroyRet = pluginHolderOps->destroy(pluginCtx);
         if (destroyRet != HCCL_SUCCESS) {
-            HCCL_WARNING("[%s] plugin endpoint destroy failed after init failure, ret[%d].", __func__, destroyRet);
+            HCCL_WARNING(
+                "[%s] plugin endpoint destroy unsuccessfully after init fault, ret[%d].", __func__, destroyRet);
         }
         delete pluginHolderOps;
         HCCL_ERROR("[NicPlugin][%s] plugin endpoint init failed, ret[%d].", __func__, ret);

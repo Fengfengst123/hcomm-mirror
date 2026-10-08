@@ -49,7 +49,8 @@ CcuUrmaChannel::~CcuUrmaChannel()
         if (pool != nullptr) {
             HcclResult releaseRet = pool->ReleaseChannel(linkData);
             if (releaseRet != HCCL_SUCCESS) {
-                HCCL_WARNING("[CcuUrmaChannel][%s] release channel to pool failed, ret[%d].", __func__, releaseRet);
+                HCCL_WARNING(
+                    "[CcuUrmaChannel][%s] release channel to pool unsuccessfully, ret[%d].", __func__, releaseRet);
             }
         }
     }
@@ -95,7 +96,7 @@ static HcclResult CreateCcuTransport(
     ret = channelCtxPool->PrepareCreate({linkData}, sqSize);
     if (ret == HCCL_E_UNAVAIL) {
         HCCL_WARNING(
-            "[CcuUrmaChannel][%s] prepare ccu channel ctx failed, "
+            "[CcuUrmaChannel][%s] prepare ccu channel ctx unsuccessfully, "
             "ccu resources unavailable.",
             __func__);
         return ret;
@@ -127,7 +128,7 @@ static HcclResult CreateCcuTransport(
     // 申请 xn cke可能失败，需要回退
     ret = CcuCreateTransport(socket, connectionInfo, bufferInfos, impl);
     if (ret == HCCL_E_UNAVAIL) {
-        HCCL_WARNING("[CcuUrmaChannel][%s] failed, ccu resources unavailable.", __func__);
+        HCCL_WARNING("[CcuUrmaChannel][%s] is unsuccessful, ccu resources unavailable.", __func__);
         return ret;
     }
     CHK_RET(ret);
@@ -213,7 +214,7 @@ ChannelStatus CcuUrmaChannel::TryPrepareAndConstruct()
     CcuTransport::CcuResStatus failStatus
         = (ret == HCCL_E_UNAVAIL) ? CcuTransport::CcuResStatus::RES_UNAVAIL : CcuTransport::CcuResStatus::RES_FAILED;
     HCCL_RUN_WARNING(
-        "[CcuUrmaChannel][%s] CreateCcuTransport failed[%d], construct msg-only transport.", __func__, ret);
+        "[CcuUrmaChannel][%s] CreateCcuTransport is unsuccessful[%d], construct msg-only transport.", __func__, ret);
     HcclResult transRet = CcuTransport::ConstructMsgOnlyTransport(socket_, impl_, failStatus);
     if (transRet != HCCL_SUCCESS) {
         HCCL_ERROR("[CcuUrmaChannel][%s] ConstructMsgOnlyTransport failed[%d].", __func__, transRet);

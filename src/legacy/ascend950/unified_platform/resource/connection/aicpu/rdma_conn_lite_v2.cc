@@ -100,7 +100,7 @@ void RdmaConnLiteV2::GetVendorOps()
             break;
         }
         default: {
-            HCCL_INFO("[RdmaConnLiteV2::%s] Now dmaMode is invalid !", __func__);
+            HCCL_INFO("[RdmaConnLiteV2::%s] Now dmaMode is unsupported !", __func__);
             rdmaOps_ = nullptr;
             break;
         }

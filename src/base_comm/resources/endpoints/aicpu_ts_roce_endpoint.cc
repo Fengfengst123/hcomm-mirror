@@ -129,7 +129,7 @@ void AicpuTsRoceEndpoint::ReleaseNicSocketHandle(HcclNetDev netDev) const
     const HcclResult ret = hccl::NetworkManager::GetInstance(netDevCtx->GetLogicId()).StopNicSocketHandle(localIp);
     if (ret != HCCL_SUCCESS) {
         HCCL_WARNING(
-            "[AicpuTsRoceEndpoint][%s] StopNicSocketHandle failed, ip[%s], ret[%d]", __func__,
+            "[AicpuTsRoceEndpoint][%s] StopNicSocketHandle is unsuccessful, ip[%s], ret[%d]", __func__,
             localIp.GetReadableAddress(), ret);
     }
 }

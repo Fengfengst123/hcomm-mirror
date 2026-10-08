@@ -85,7 +85,7 @@ void HccpHdcManager::UnregisterDeviceResetCallback() const
 {
     aclError ret = aclrtRegDeviceStateCallback("hcomm_res_mgr", nullptr, nullptr);
     if (ret != ACL_SUCCESS) {
-        HCCL_WARNING("[HccpHdcManager] aclrtRegDeviceStateCallback unregister failed, ret[%d]", ret);
+        HCCL_WARNING("[HccpHdcManager] aclrtRegDeviceStateCallback unregister is unsuccessful, ret[%d]", ret);
         return;
     }
     HCCL_INFO("[HccpHdcManager] aclrtRegDeviceStateCallback unregister success");

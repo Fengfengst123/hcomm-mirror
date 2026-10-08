@@ -102,7 +102,7 @@ static CcuResSpecInfo ParseOutBuffToResSpecInfo(const CcuVersion ccuVersion, con
 {
     if (ccuVersion != CcuVersion::CCU_V1) {
         HCCL_WARNING(
-            "[CcuResSpecifications][%s] failed to parse out buff, ccu driver "
+            "[CcuResSpecifications][%s] is unsuccessful in parsing out buff, ccu driver "
             "version[%s] is not expected.",
             __func__, ccuVersion.Describe().c_str());
         return {};
@@ -207,7 +207,7 @@ HcclResult CcuResSpecifications::GetXnBaseAddr(const uint8_t dieId, uint64_t& xn
     const uint64_t ccuResAddr = resSpecs[dieId].resourceAddr;
     if (ccuResAddr == 0) {
         HCCL_WARNING(
-            "[CcuResSpecifications][%s] failed, CCU resource base address is 0, "
+            "[CcuResSpecifications][%s] is unsuccessful, CCU resource base address is 0, "
             "devLogicId[%d] dieId[%u].",
             __func__, devLogicId, dieId);
         return HcclResult::HCCL_E_INTERNAL;

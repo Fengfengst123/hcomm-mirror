@@ -49,7 +49,7 @@ bool Socket::Listen(u32& port)
     CHK_PRT_RET(
         !ret,
         HCCL_WARNING(
-            "[Socket::%s] socket[%s] listen unsuccessful, port[%u] is in use", __func__, Describe().c_str(), port),
+            "[Socket::%s] socket[%s] listen unsuccessfully, port[%u] is in use", __func__, Describe().c_str(), port),
         ret);
 
     port = port == AUTO_LISTEN_PORT ? param.port : port;

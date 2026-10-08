@@ -71,7 +71,7 @@ void DestroyNicPluginOpsAndCtx(Ops*& nicOps, void* nicCtx)
         if (nicOps->destroy != nullptr) {
             int32_t ret = nicOps->destroy(nicCtx);
             if (ret != HCCL_SUCCESS) {
-                HCCL_WARNING("[%s] plugin destroy failed, ret[%d].", __func__, ret);
+                HCCL_WARNING("[%s] plugin destroy unsuccessfully, ret[%d].", __func__, ret);
             }
         }
         delete nicOps;

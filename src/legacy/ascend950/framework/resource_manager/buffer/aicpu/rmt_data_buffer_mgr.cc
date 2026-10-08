@@ -37,7 +37,7 @@ DataBuffer RmtDataBufferMgr::GetBuffer(const LinkData& linkData, BufferType buff
     } else {
         THROW<NullPtrException>("[%s] ERROR no support offload mode", __func__);
     }
-    HCCL_WARNING("[%s] linkData[%p] getDatabuffer failed", __func__, linkData);
+    HCCL_WARNING("[%s] linkData[%p] getDatabuffer is unsuccessful", __func__, linkData);
     std::size_t bufferSize = 0;
     return DataBuffer(bufferSize);
 }

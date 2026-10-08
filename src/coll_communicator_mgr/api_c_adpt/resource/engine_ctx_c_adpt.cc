@@ -112,7 +112,7 @@ HcclResult HcclEngineCtxGet(HcclComm comm, const char* ctxTag, CommEngine engine
         CHK_PRT_RET(
             ret != HCCL_SUCCESS,
             HCCL_WARNING(
-                "[%s] Failed to get CommEngineCtx with ctxTag[%s], engine[%s], ret[%d]", __func__, ctxTagTmp,
+                "[%s] Unsuccessful in getting CommEngineCtx with ctxTag[%s], engine[%s], ret[%d]", __func__, ctxTagTmp,
                 GetEnumToString(GetCommEngineStatusStrMap(), engine).c_str(), ret),
             ret);
         return HCCL_SUCCESS;
@@ -124,7 +124,7 @@ HcclResult HcclEngineCtxGet(HcclComm comm, const char* ctxTag, CommEngine engine
     HcclResult ret = contextMgr.GetCommEngineCtx(std::string(ctxTagTmp), engine, ctx, size);
     if (ret != HCCL_SUCCESS) {
         HCCL_WARNING(
-            "[%s] Failed to get CommEngineCtx with ctxTag[%s], engine[%s], ret[%d]", __func__, ctxTagTmp,
+            "[%s] Unsuccessful in getting CommEngineCtx with ctxTag[%s], engine[%s], ret[%d]", __func__, ctxTagTmp,
             GetEnumToString(GetCommEngineStatusStrMap(), engine).c_str(), ret);
         return ret;
     }
@@ -168,7 +168,8 @@ HcclResult HcclEngineCtxCopy(
         CHK_PRT_RET(
             ret != HCCL_SUCCESS,
             HCCL_WARNING(
-                "[%s] Failed to copy CommEngineCtx with ctxTag[%s], engine[%s], size[%llu], dstCtxOffset[%llu],"
+                "[%s] Unsuccessful in copying CommEngineCtx with ctxTag[%s], engine[%s], size[%llu], "
+                "dstCtxOffset[%llu],"
                 " ret[%d]",
                 __func__, ctxTagTmp, GetEnumToString(GetCommEngineStatusStrMap(), engine).c_str(),
                 static_cast<unsigned long long>(size), static_cast<unsigned long long>(dstCtxOffset), ret),

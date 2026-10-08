@@ -248,7 +248,8 @@ void AivUrmaTransport::ResolveLocalBufferTokens()
         aclError ret = aclrtPointerGetAttributes(ReinterpretAs<const void*>(localBuffer->GetAddr()), &attributes);
         if (ret != ACL_SUCCESS) {
             HCCL_WARNING(
-                "[AivUrmaTransport::%s] get buffer attributes failed, use registered token, addr[0x%llx], ret[%d]",
+                "[AivUrmaTransport::%s] get buffer attributes unsuccessfully, use registered token, addr[0x%llx], "
+                "ret[%d]",
                 __func__, static_cast<unsigned long long>(localBuffer->GetAddr()), ret);
             continue;
         }

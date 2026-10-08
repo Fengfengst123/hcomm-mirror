@@ -157,7 +157,7 @@ void RollbackDestroy(DevAicpuTsChannelMgr& mgr, const std::vector<ChannelHandle>
         if (mgr.DestroyChannel(h)) {
             HCCL_DEBUG("[AicpuChannelProcess][%s] rollback destroyed handle[0x%llx]", __func__, h);
         } else {
-            HCCL_WARNING("[AicpuChannelProcess][%s] rollback failed to destroy handle[0x%llx]", __func__, h);
+            HCCL_WARNING("[AicpuChannelProcess][%s] rollback unsuccessful in destroying handle[0x%llx]", __func__, h);
         }
     }
 }

@@ -72,13 +72,13 @@ void Trace::Save(std::string& buffer)
         // 截断成功/尾行直接提交
         ret = ret && TraceSubmit(traceHandle, startPos, submitLen);
         if (!ret) {
-            HCCL_WARNING("trace submit failed, ret[%d], traceInfo = [%s]", ret, startPos);
+            HCCL_WARNING("trace submit unsuccessfully, ret[%d], traceInfo = [%s]", ret, startPos);
         }
         startPos += submitLen;
         pos += submitLen;
     }
     if (!ret) {
-        HCCL_WARNING("trace submit failed, ret[%d], traceInfo = [%s]", ret, startPos);
+        HCCL_WARNING("trace submit unsuccessfully, ret[%d], traceInfo = [%s]", ret, startPos);
     }
 }
 

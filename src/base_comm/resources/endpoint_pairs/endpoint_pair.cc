@@ -254,7 +254,8 @@ HcclResult EndpointPair::DestroyChannel(CommEngine engine, u32 reuseIdx)
     HcclResult destroyRet = static_cast<HcclResult>(HcommChannelDestroy(&channelHandle, 1));
     if (destroyRet != HCCL_SUCCESS) {
         HCCL_WARNING(
-            "EndpointPair::DestroyChannel: HcommChannelDestroy failed, ret[%d], still clean host index.", destroyRet);
+            "EndpointPair::DestroyChannel: HcommChannelDestroy is unsuccessful, ret[%d], still clean host index.",
+            destroyRet);
     }
     // 先删反查索引再 erase 向量: erase 会使后续元素下标前移
     handleToLoc_.erase(channelHandle);

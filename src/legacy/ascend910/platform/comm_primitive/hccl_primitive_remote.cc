@@ -111,7 +111,7 @@ HcclResult HcclRemoteNotifyWait(
     CHK_PTR_NULL(streamHandle);
     CHK_PTR_NULL(memTransport);
     HCCL_DEBUG(
-        "[HcclRemoteNotifyWait]streamHandle[%p], memTransport[%p], notifyIndex[%u], timeOut[%u s].", streamHandle,
+        "[HcclRemoteNotifyWait]streamHandle[%p], memTransport[%p], notifyIndex[%u], timeOut[%u]s.", streamHandle,
         memTransport, notifyIndex, timeOut);
     Stream* stream = reinterpret_cast<Stream*>(streamHandle);
     return reinterpret_cast<Transport*>(memTransport)->Wait(notifyIndex, *stream, timeOut);

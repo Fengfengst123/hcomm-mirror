@@ -111,7 +111,7 @@ int AicpuUtils::GetException(
     const char* typeStr = (flag == GET_TASK_STATUS) ? "HcclGetTaskStatus" : "HcclPrintTaskExceptionAllComm";
 
     if (TaskExceptionFunc::GetInstance().GetReporterInfo(curStream, recvInfo) == 1) {
-        HCCL_WARNING("[%s]GetReporterInfo execute failed", typeStr);
+        HCCL_WARNING("[%s]GetReporterInfo execute unsuccessfully", typeStr);
         return 1;
     }
     uint32_t reportNum = recvInfo->report_cqe_num;

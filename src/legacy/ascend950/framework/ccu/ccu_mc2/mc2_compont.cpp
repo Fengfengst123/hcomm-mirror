@@ -280,7 +280,7 @@ void Mc2Compont::MC2AllocCommRes(
     // 对insQueue中ccuIns进行预处理(创建transport、ccuCtx、分配资源、注册等)
     collService->GetCcuInsPreprocessor()->Preprocess(insQueue, true);
     if (collService->GetCcuInsPreprocessor()->IsRollback()) { // mc2暂不能回退到aicpu
-        THROW<InternalException>("[Mc2Compont][%s]ResAlloc unsuccessful.", __func__);
+        THROW<InternalException>("[Mc2Compont][%s]ResAlloc is unsuccessful.", __func__);
     }
 }
 
@@ -818,13 +818,13 @@ std::vector<CcuTaskParam> Mc2Compont::GetAlgoCcuTaskInfo(InsExeQue::ExtInsExeEnt
     std::vector<CcuTaskParam> ccuTaskParam{};
     auto serverItor = ccuServerMap.find(execId);
     if (serverItor == ccuServerMap.end()) {
-        HCCL_WARNING("[Mc2Compont]Failed to find ccuServer by executeId[%llu]", execId);
+        HCCL_WARNING("[Mc2Compont]Unsuccessful in finding ccuServer by executeId[%llu]", execId);
         return ccuTaskParam;
     }
     for (uint64_t algoSign : serverItor->second) {
         auto algoTemplateItor = algoTemplateMap.find(algoSign);
         if (algoTemplateItor == algoTemplateMap.end()) {
-            HCCL_WARNING("[Mc2Compont]Failed to find ccuTaskParam by algoSign[%llu]", algoSign);
+            HCCL_WARNING("[Mc2Compont]Unsuccessful in finding ccuTaskParam by algoSign[%llu]", algoSign);
             continue;
         }
         for (const auto& taskParam : algoTemplateItor->second) {

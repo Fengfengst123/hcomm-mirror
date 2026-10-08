@@ -159,7 +159,7 @@ bool ProfilingHandlerLite::FillBatchReporterData(
     addInfo.dataLen = sizeof(MsprofAicpuHcclTaskInfo) * batchId;
     s32 sret = memcpy_s(addInfo.data, sizeof(addInfo.data), taskInfos, addInfo.dataLen);
     if (sret != 0) {
-        HCCL_WARNING("[ProfilingHandlerLite][FillBatchReporterData] memcpy failed, sret[%d]", sret);
+        HCCL_WARNING("[ProfilingHandlerLite][FillBatchReporterData] memcpy unsuccessfully, sret[%d]", sret);
         return false;
     }
     return true;
@@ -175,7 +175,7 @@ bool ProfilingHandlerLite::ReportBatchAddInfo(
     addInfoIndx++;
     if (addInfoIndx == maxBatchNum || isLastBatch) {
         if (reportBatchAdditionalInfo_(aging, addInfoVec, addInfoIndx * sizeof(MsprofAdditionalInfo)) != 0) {
-            HCCL_WARNING("[ProfilingHandlerLite][ReportHcclTaskDetails] reportBatchAdditionalInfo failed");
+            HCCL_WARNING("[ProfilingHandlerLite][ReportHcclTaskDetails] reportBatchAdditionalInfo is unsuccessful");
             return false;
         }
         addInfoIndx = 0;

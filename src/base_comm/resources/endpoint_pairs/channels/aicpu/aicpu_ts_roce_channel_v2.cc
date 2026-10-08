@@ -1015,8 +1015,8 @@ void AicpuTsRoceChannelV2::ReleaseDeviceEntitySlab()
         HcclResult ret = hrtFree(devChannelEntitySlab_);
         if (ret != HCCL_SUCCESS) {
             HCCL_WARNING(
-                "[AicpuTsRoceChannelV2::%s] hrtFree devChannelEntitySlab failed, ptr[%p], size[%zu], ret[%d]", __func__,
-                devChannelEntitySlab_, devChannelEntitySlabSize_, ret);
+                "[AicpuTsRoceChannelV2::%s] hrtFree devChannelEntitySlab is unsuccessful, ptr[%p], size[%zu], ret[%d]",
+                __func__, devChannelEntitySlab_, devChannelEntitySlabSize_, ret);
         }
         devChannelEntitySlab_ = nullptr;
         devChannelEntitySlabSize_ = 0;

@@ -130,7 +130,7 @@ SelectorStatus AllGatherVAutoSelector::SelectAicpuAlgo(
     (void)primQueueGenName;
 
     // 暂时没有 aicpu 算法
-    HCCL_WARNING("[Algo][AllGatherVAutoSelector] No aicpu algorithm for aicpu mode. Auto select failed.");
+    HCCL_WARNING("[Algo][AllGatherVAutoSelector] No aicpu algorithm for aicpu mode. Auto selection is unsuccessful.");
     return SelectorStatus::NOT_MATCH;
 }
 

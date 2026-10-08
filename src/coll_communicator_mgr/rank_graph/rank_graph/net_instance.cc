@@ -110,7 +110,7 @@ void NetInstance::AddLink(const shared_ptr<NetInstance::Link>& link)
 
     if (hasLink) {
         HCCL_WARNING(
-            "[NetInstance::AddLink] failed to add %s to %s, "
+            "[NetInstance::AddLink] unsuccessful in adding %s to %s, "
             "the fabric group already has the same link.",
             link->Describe().c_str(), this->Describe().c_str());
         return;

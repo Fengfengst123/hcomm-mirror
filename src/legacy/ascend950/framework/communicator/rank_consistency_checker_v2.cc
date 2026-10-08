@@ -23,7 +23,8 @@ RankConsistencyCheckerV2& RankConsistencyCheckerV2::GetInstance(const s32& devic
     HCCL_INFO("[RankConsistencyCheckerV2][GetInstance] get deviceLogicId[%d]", deviceLogicId);
     CHK_PRT_RET(
         (static_cast<u32>(deviceLogicId) >= MAX_MODULE_DEVICE_NUM || deviceLogicId < 0),
-        HCCL_WARNING("[RankConsistencyCheckerV2::RankConsistencyCheckerV2]deviceLogicId[%d] is invalid", deviceLogicId),
+        HCCL_WARNING(
+            "[RankConsistencyCheckerV2::RankConsistencyCheckerV2]deviceLogicId[%d] is not valid", deviceLogicId),
         instance[0]);
     return instance[deviceLogicId];
 }
@@ -43,7 +44,7 @@ HcclResult RankConsistencyCheckerV2::RecordCannVersionV2(const std::string& vers
     CHK_PRT_RET(
         sRet != EOK,
         HCCL_WARNING(
-            "[RankConsistencyCheckerV2::RecordCannVersionV2]memory set 0 fail for version str "
+            "[RankConsistencyCheckerV2::RecordCannVersionV2]memory set 0 unsuccessfully for version str "
             "array. return[%d].",
             sRet),
         HCCL_SUCCESS);
@@ -60,7 +61,8 @@ HcclResult RankConsistencyCheckerV2::RecordCannVersionV2(const std::string& vers
     sRet = strncpy_s(cannVersion_, CANN_VERSION_MAX_LEN + 1, version.c_str(), strLen);
     CHK_PRT_RET(
         sRet != EOK,
-        HCCL_WARNING("[RankConsistencyCheckerV2::RecordCannVersionV2] call strncpy_s failed, return [%d].", sRet),
+        HCCL_WARNING(
+            "[RankConsistencyCheckerV2::RecordCannVersionV2] call strncpy_s unsuccessfully, return [%d].", sRet),
         HCCL_SUCCESS);
     HCCL_INFO("[RankConsistencyCheckerV2::RecordCannVersionV2] version[%s] recorded.", version.c_str());
     return HCCL_SUCCESS;

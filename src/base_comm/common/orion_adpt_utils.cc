@@ -45,11 +45,11 @@ HcclResult CommAddrToIpAddress(const CommAddr& commAddr, Hccl::IpAddress& ipAddr
         && commAddr.type != COMM_ADDR_TYPE_EID) {
         if (commAddr.type == COMM_ADDR_TYPE_ID || commAddr.type == COMM_ADDR_TYPE_RESERVED) {
             HCCL_WARNING(
-                "[%s] failed, comm address type[%d][%s] is not supported.", __func__, commAddr.type,
+                "[%s] is unsuccessful, comm address type[%d][%s] is not supported.", __func__, commAddr.type,
                 CommAddrTypeToStr(commAddr.type));
         } else {
             HCCL_WARNING(
-                "[%s] failed, comm address type[%d][%s] is invalid.", __func__, commAddr.type,
+                "[%s] is unsuccessful, comm address type[%d][%s] is not valid.", __func__, commAddr.type,
                 CommAddrTypeToStr(commAddr.type));
         }
         return HCCL_E_NOT_SUPPORT;
@@ -233,8 +233,8 @@ HcclResult PrepareUbConnBuildContext(
     Hccl::TpManager::GetInstance(ctx.deviceLogicId).Init();
     if (channelDesc.qos > 7U) {
         HCCL_WARNING(
-            "[PrepareUbConnBuildContext] invalid channelQos[%u], expect [0, 7], use default qos[%u].", channelDesc.qos,
-            Hccl::kRaUbGetTpInfoParamDefaultQos);
+            "[PrepareUbConnBuildContext] channelQos[%u] is not valid, expect [0, 7], use default qos[%u].",
+            channelDesc.qos, Hccl::kRaUbGetTpInfoParamDefaultQos);
         ctx.qosPre = static_cast<u8>(Hccl::kRaUbGetTpInfoParamDefaultQos);
     } else {
         ctx.qosPre = static_cast<u8>(channelDesc.qos);

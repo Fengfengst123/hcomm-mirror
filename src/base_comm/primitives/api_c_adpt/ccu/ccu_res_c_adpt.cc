@@ -93,7 +93,7 @@ CcuResult HcommCcuQueryRemainResDesc(HcommCcuResDescHandle resDesc)
 
     // CCU 驱动未拉起时无法查询硬件资源, 提前返回
     if (!hcomm::CcuIsInited(userDevId)) {
-        HCCL_WARNING("[%s] failed, CCU feature is not inited, userDevId[%d].", __func__, userDevId);
+        HCCL_WARNING("[%s] is unsuccessful, CCU feature is not inited, userDevId[%d].", __func__, userDevId);
         return CcuResult::CCU_E_UNAVAIL;
     }
 
@@ -106,7 +106,7 @@ CcuResult HcommCcuQueryRemainResDesc(HcommCcuResDescHandle resDesc)
     // CcuGetDieEnableInfo 中会做dieId合法性校验以及查询是否使能
     CCU_CHK_RET(hcomm::CcuGetDieEnableInfo(userDevId, static_cast<uint8_t>(dieId), enableFlag));
     if (!enableFlag) {
-        HCCL_WARNING("[%s] failed, dieId[%u] is not enabled.", __func__, dieId);
+        HCCL_WARNING("[%s] is unsuccessful, dieId[%u] is not enabled.", __func__, dieId);
         return CcuResult::CCU_E_UNAVAIL;
     }
 

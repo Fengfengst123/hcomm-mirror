@@ -21,7 +21,7 @@ void SaluSleep(u32 usec)
     /* usleep()可能会因为进程收到信号(比如alarm)而提前返回EINTR, 后续优化  */
     s32 iRet = usleep(usec);
     if (iRet != 0) {
-        HCCL_WARNING("Sleep: usleep failed[%d]: %s [%d]", iRet, strerror(errno), errno);
+        HCCL_WARNING("Sleep: usleep unsuccessfully[%d]: %s [%d]", iRet, strerror(errno), errno);
     }
 }
 
@@ -30,7 +30,7 @@ void SalSleep(u32 sec)
     /* sleep()可能会因为进程收到信号(比如alarm)而提前返回EINTR, 后续优化  */
     s32 iRet = sleep(sec);
     if (iRet != 0) {
-        HCCL_WARNING("Sleep: sleep failed[%d]: %s [%d]", iRet, strerror(errno), errno);
+        HCCL_WARNING("Sleep: sleep unsuccessfully[%d]: %s [%d]", iRet, strerror(errno), errno);
     }
 }
 
@@ -94,7 +94,7 @@ void SetThreadName(const std::string& threadStr)
 {
     // 线程名应限制在15个字符内，防止被截断
     s32 sRet = pthread_setname_np(pthread_self(), threadStr.c_str());
-    CHK_PRT_CONT(sRet != 0, HCCL_WARNING("err[%d] link[%s] nameSet failed.", sRet, threadStr.c_str()));
+    CHK_PRT_CONT(sRet != 0, HCCL_WARNING("err[%d] link[%s] nameSet unsuccessfully.", sRet, threadStr.c_str()));
 }
 
 } // namespace Hccl

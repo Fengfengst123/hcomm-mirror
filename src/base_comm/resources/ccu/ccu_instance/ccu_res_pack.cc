@@ -74,7 +74,7 @@ CcuResult CcuResPack::InitByInsType(const CcuInstanceType insType)
     auto ret = CcuAllocResHandleByInsType(userDevId_, insType, resHandle_);
     if (ret == CcuResult::CCU_E_UNAVAIL) {
         HCCL_RUN_WARNING(
-            "[%s] failed but passed, resource is not enough, "
+            "[%s] was unsuccessful but passed, resource is not enough, "
             "userDevId[%d], ccuInsType[%d].",
             __func__, userDevId_, insType);
         return ret;
@@ -127,7 +127,7 @@ CcuResult CcuResPack::InitByResDescs(const CcuResDesc* descs[], uint32_t descNum
     auto ret = CcuAllocResHandleByResDescs(userDevId_, descs, descNum, resHandle_);
     if (ret == CcuResult::CCU_E_UNAVAIL) {
         HCCL_RUN_WARNING(
-            "[%s] failed but passed, resource is not enough, "
+            "[%s] was unsuccessful but passed, resource is not enough, "
             "userDevId[%d], descNum[%u].",
             __func__, userDevId_, descNum);
         return ret;

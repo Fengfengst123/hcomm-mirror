@@ -163,7 +163,7 @@ static HcclResult FindOneUsableEid(
     auto ret = EidInfoMgr::GetInstance(devPhyId).GetEidInfos(eidInfos);
     CHK_PRT_RET(
         ret != HCCL_SUCCESS,
-        HCCL_WARNING("[CcuComponent][%s] failed, userDevId[%d], dieId[%u].", __func__, userDevId, dieId), ret);
+        HCCL_WARNING("[CcuComponent][%s] is unsuccessful, userDevId[%d], dieId[%u].", __func__, userDevId, dieId), ret);
 
     std::string name;
     bool findFlag = false;
@@ -228,7 +228,7 @@ HcclResult CcuComponent::ChooseLoopEids(const std::array<bool, CCU_MAX_IODIE_NUM
         if (FindOneUsableEid(userDevId_, devPhyId_, dieId, feId, commAddr) != HcclResult::HCCL_SUCCESS) {
             dieEnableFlags_[dieId] = false;
             HCCL_WARNING(
-                "[CcuComponent][%s] failed to find feId eid, but passed, "
+                "[CcuComponent][%s] is unsuccessful in finding feId eid, but passed, "
                 "userDevId[%d], dieId[%u].",
                 __func__, userDevId_, dieId);
             continue;
@@ -247,7 +247,7 @@ HcclResult CcuComponent::GetLoopFeIpByDieId(const uint8_t dieId, uint32_t& feId,
     CHK_PRT_RET(
         dieIter == loopFeCommAddrMap_.end(),
         HCCL_WARNING(
-            "[CcuComponent][%s] failed but passed, "
+            "[CcuComponent][%s] was unsuccessful but passed, "
             "dieId[%u] doesn't have usable loop feId, userDevId[%d].",
             __func__, dieId, userDevId_),
         HcclResult::HCCL_E_NOT_FOUND);
@@ -278,7 +278,7 @@ HcclResult CcuComponent::CreateCcuRmaBuffer()
         (void)ccuResSpecs.GetResourceAddr(dieId, ccuResAddr);
         if (ccuResAddr == 0) {
             HCCL_WARNING(
-                "[CcuComponent][%s] failed, ccu resource space address[0] is invalid, "
+                "[CcuComponent][%s] is unsuccessful, ccu resource space address[0] is not obtained, "
                 "userDevId[%d] dieId[%u]",
                 __func__, userDevId_, dieId);
             continue;
@@ -354,7 +354,7 @@ HcclResult CcuComponent::CreateLoopChannels()
 
         if (loopChannelIds_[dieId] == INVAILD_LOOP_CHANNEL_ID) {
             HCCL_RUN_WARNING(
-                "[CcuComponent][%s] failed but passed, loop channel id[%u], "
+                "[CcuComponent][%s] was unsuccessful but passed, loop channel id[%u], "
                 "userDevId[%d], dieId[%u].",
                 __func__, loopChannelIds_[dieId], userDevId_, dieId);
             continue;
@@ -385,7 +385,7 @@ HcclResult CcuComponent::CreateLoopChannel(const uint8_t dieId, uint32_t& channe
     if (GetLoopFeIpByDieId(dieId, feId, commAddr) != HcclResult::HCCL_SUCCESS) {
         channelId = INVAILD_LOOP_CHANNEL_ID;
         HCCL_WARNING(
-            "[CcuComponent][%s] failed but passed, dieId[%u] doesn't have loop feId, "
+            "[CcuComponent][%s] was unsuccessful but passed, dieId[%u] doesn't have loop feId, "
             "userDevId[%d].",
             __func__, dieId, userDevId_);
         return HcclResult::HCCL_SUCCESS;
@@ -398,7 +398,7 @@ HcclResult CcuComponent::CreateLoopChannel(const uint8_t dieId, uint32_t& channe
     CHK_PRT_RET(
         ret != HCCL_SUCCESS,
         HCCL_WARNING(
-            "[CcuComponent][%s] failed to alloc channel, "
+            "[CcuComponent][%s] is unsuccessful in allocating channel, "
             "userDevId[%d], dieId[%u].",
             __func__, userDevId_, dieId),
         ret);
@@ -408,7 +408,7 @@ HcclResult CcuComponent::CreateLoopChannel(const uint8_t dieId, uint32_t& channe
     CHK_PRT_RET(
         ret != HCCL_SUCCESS,
         HCCL_WARNING(
-            "[CcuComponent][%s] failed to create or import loop jettys, "
+            "[CcuComponent][%s] is unsuccessful in creating or importing loop jettys, "
             "userDevId[%d], dieId[%u].",
             __func__, userDevId_, dieId),
         ret);
@@ -417,7 +417,7 @@ HcclResult CcuComponent::CreateLoopChannel(const uint8_t dieId, uint32_t& channe
     CHK_PRT_RET(
         ret != HCCL_SUCCESS,
         HCCL_WARNING(
-            "[CcuComponent][%s] failed to config the loop channel, "
+            "[CcuComponent][%s] is unsuccessful in configuring the loop channel, "
             "userDevId[%d], dieId[%u].",
             __func__, userDevId_, dieId),
         ret);
@@ -456,7 +456,7 @@ HcclResult CcuComponent::CreateAndImportLoopJettys(
     CHK_PRT_RET(
         rmaBufferIter == ccuRmaBufferMap_.end(),
         HCCL_RUN_WARNING(
-            "[CcuComponent][%s] failed, ccu rma buffer of die[%u] is not existed, "
+            "[CcuComponent][%s] is unsuccessful, ccu rma buffer of die[%u] is not existed, "
             "userDevId[%d].",
             __func__, dieId, userDevId_),
         HcclResult::HCCL_E_NOT_FOUND);
@@ -642,7 +642,7 @@ CcuComponent::ConfigLoopChannel(const uint8_t dieId, const CommAddr& commAddr, c
     CHK_PRT_RET(
         rmaBufferIter == ccuRmaBufferMap_.end(),
         HCCL_WARNING(
-            "[CcuComponent][%s] failed, ccu rma buffer of die[%u] is not existed, "
+            "[CcuComponent][%s] is unsuccessful, ccu rma buffer of die[%u] is not existed, "
             "userDevId[%d].",
             __func__, dieId, userDevId_),
         HcclResult::HCCL_E_NOT_FOUND);
@@ -681,7 +681,7 @@ HcclResult CcuComponent::ConfigMsIdToken()
         const auto& dieIter = ccuRmaBufferMap_.find(dieId);
         if (dieIter == ccuRmaBufferMap_.end()) {
             HCCL_WARNING(
-                "[CcuComponent][%s] failed but passed, ccu rma buffer of die[%u] "
+                "[CcuComponent][%s] was unsuccessful but passed, ccu rma buffer of die[%u] "
                 "is not existed, userDevId[%d].",
                 __func__, dieId, userDevId_);
             continue;
@@ -727,7 +727,7 @@ HcclResult CcuComponent::GetCcuResourceSpaceBufInfo(const uint8_t dieId, uint64_
     CHK_PRT_RET(
         res == ccuRmaBufferMap_.end(),
         HCCL_WARNING(
-            "[CcuComponent][%s] failed, ccu rma buffer of die[%u] is not existed, "
+            "[CcuComponent][%s] is unsuccessful, ccu rma buffer of die[%u] is not existed, "
             "userDevId[%d].",
             __func__, dieId, userDevId_),
         HcclResult::HCCL_E_NOT_FOUND);
@@ -747,7 +747,7 @@ CcuComponent::GetCcuResourceSpaceTokenInfo(const uint8_t dieId, uint64_t& tokenI
     CHK_PRT_RET(
         res == ccuRmaBufferMap_.end(),
         HCCL_WARNING(
-            "[CcuComponent][%s] failed, ccu rma buffer of die[%u] is not existed, "
+            "[CcuComponent][%s] is unsuccessful, ccu rma buffer of die[%u] is not existed, "
             "userDevId[%d].",
             __func__, dieId, userDevId_),
         HcclResult::HCCL_E_NOT_FOUND);
@@ -768,8 +768,8 @@ CcuComponent::AllocChannels(const uint8_t dieId, const ChannelPara& channelPara,
     CHK_PRT_RET(
         ret != HcclResult::HCCL_SUCCESS,
         HCCL_WARNING(
-            "[CcuComponent][%s] failed, feId[%u], userDevId[%d], dieId[%u].", __func__, channelPara.feId, userDevId_,
-            dieId),
+            "[CcuComponent][%s] is unsuccessful, feId[%u], userDevId[%d], dieId[%u].", __func__, channelPara.feId,
+            userDevId_, dieId),
         ret);
 
     return HcclResult::HCCL_SUCCESS;
@@ -783,7 +783,7 @@ HcclResult CcuComponent::ConfigChannel(const uint8_t dieId, const ChannelCfg& cf
     CHK_PRT_RET(
         channelId == loopChannelIds_[dieId],
         HCCL_WARNING(
-            "[CcuComponent][%s] failed, refused to config loop channel[%u], "
+            "[CcuComponent][%s] is unsuccessful, refused to config loop channel[%u], "
             "userDevId[%d], dieId[%u].",
             __func__, channelId, userDevId_, dieId),
         HcclResult::HCCL_E_PARA);
@@ -793,8 +793,8 @@ HcclResult CcuComponent::ConfigChannel(const uint8_t dieId, const ChannelCfg& cf
     CHK_PRT_RET(
         ret != HcclResult::HCCL_SUCCESS,
         HCCL_WARNING(
-            "[CcuComponent][%s] failed, channelId[%u], userDevId[%d], dieId[%u].", __func__, channelId, userDevId_,
-            dieId),
+            "[CcuComponent][%s] is unsuccessful, channelId[%u], userDevId[%d], dieId[%u].", __func__, channelId,
+            userDevId_, dieId),
         ret);
 
     return HcclResult::HCCL_SUCCESS;
@@ -806,7 +806,7 @@ HcclResult CcuComponent::ReleaseChannel(const uint8_t dieId, const uint32_t chan
     CHK_PRT_RET(
         channelId == loopChannelIds_[dieId],
         HCCL_WARNING(
-            "[CcuComponent][%s] failed, refused to release loop channel[%u], "
+            "[CcuComponent][%s] is unsuccessful, refused to release loop channel[%u], "
             "userDevId[%d], dieId[%u].",
             __func__, channelId, userDevId_, dieId),
         HcclResult::HCCL_E_PARA);
@@ -816,8 +816,8 @@ HcclResult CcuComponent::ReleaseChannel(const uint8_t dieId, const uint32_t chan
     CHK_PRT_RET(
         ret != HcclResult::HCCL_SUCCESS,
         HCCL_WARNING(
-            "[CcuComponent][%s] failed, channelId[%u], userDevId[%d], dieId[%u].", __func__, channelId, userDevId_,
-            dieId),
+            "[CcuComponent][%s] is unsuccessful, channelId[%u], userDevId[%d], dieId[%u].", __func__, channelId,
+            userDevId_, dieId),
         ret);
 
     return HcclResult::HCCL_SUCCESS;
@@ -863,7 +863,7 @@ HcclResult CcuComponent::AllocRes(
     CHK_PRT_RET(
         ret != HcclResult::HCCL_SUCCESS,
         HCCL_WARNING(
-            "[CcuComponent][%s] failed, resType[%s], num[%u], userDevId[%d], dieId[%u].", __func__,
+            "[CcuComponent][%s] is unsuccessful, resType[%s], num[%u], userDevId[%d], dieId[%u].", __func__,
             resType.Describe().c_str(), num, userDevId_, dieId),
         ret);
 
@@ -880,7 +880,7 @@ CcuComponent::ReleaseRes(const uint8_t dieId, const ResType resType, const uint3
     CHK_PRT_RET(
         ret != HcclResult::HCCL_SUCCESS,
         HCCL_WARNING(
-            "[CcuComponent][%s] failed, resType[%s], startId[%u], num[%u], "
+            "[CcuComponent][%s] is unsuccessful, resType[%s], startId[%u], num[%u], "
             "userDevId[%d], dieId[%u].",
             __func__, resType.Describe().c_str(), startId, num, userDevId_, dieId),
         ret);
@@ -917,7 +917,8 @@ HcclResult CcuComponent::AllocIns(const uint8_t dieId, const uint32_t num, ResIn
     auto ret = resAllocators_[dieId]->Alloc(ResType::INS, num, true, resInfos);
     CHK_PRT_RET(
         ret != HcclResult::HCCL_SUCCESS,
-        HCCL_WARNING("[CcuComponent][%s] failed, num[%u], userDevId[%d], dieId[%u].", __func__, num, userDevId_, dieId),
+        HCCL_WARNING(
+            "[CcuComponent][%s] is unsuccessful, num[%u], userDevId[%d], dieId[%u].", __func__, num, userDevId_, dieId),
         ret);
 
     insInfo = resInfos[0]; // 申请连续资源只会有一份
@@ -933,8 +934,8 @@ HcclResult CcuComponent::ReleaseIns(const uint8_t dieId, const ResInfo& insInfo)
     CHK_PRT_RET(
         ret != HcclResult::HCCL_SUCCESS,
         HCCL_WARNING(
-            "[CcuComponent][%s] failed, resInfo[%s], userDevId[%d], dieId[%u].", __func__, insInfo.Describe().c_str(),
-            userDevId_, dieId),
+            "[CcuComponent][%s] is unsuccessful, resInfo[%s], userDevId[%d], dieId[%u].", __func__,
+            insInfo.Describe().c_str(), userDevId_, dieId),
         ret);
 
     return HcclResult::HCCL_SUCCESS;
@@ -948,7 +949,8 @@ HcclResult CcuComponent::AllocCke(const uint8_t dieId, const uint32_t num, std::
     auto ret = resAllocators_[dieId]->Alloc(ResType::CKE, num, false, ckeInfos);
     CHK_PRT_RET(
         ret != HcclResult::HCCL_SUCCESS,
-        HCCL_WARNING("[CcuComponent][%s] failed, num[%u], userDevId[%d], dieId[%u].", __func__, num, userDevId_, dieId),
+        HCCL_WARNING(
+            "[CcuComponent][%s] is unsuccessful, num[%u], userDevId[%d], dieId[%u].", __func__, num, userDevId_, dieId),
         ret);
 
     return HcclResult::HCCL_SUCCESS;
@@ -964,7 +966,7 @@ HcclResult CcuComponent::ReleaseCke(const uint8_t dieId, const std::vector<ResIn
         CHK_PRT_RET(
             ret != HcclResult::HCCL_SUCCESS,
             HCCL_WARNING(
-                "[CcuComponent][%s] failed, resInfo[%s], userDevId[%d], dieId[%u].", __func__,
+                "[CcuComponent][%s] is unsuccessful, resInfo[%s], userDevId[%d], dieId[%u].", __func__,
                 ckeInfo.Describe().c_str(), userDevId_, dieId),
             ret);
     }
@@ -980,7 +982,8 @@ HcclResult CcuComponent::AllocXn(const uint8_t dieId, const uint32_t num, std::v
     auto ret = resAllocators_[dieId]->Alloc(ResType::XN, num, false, xnInfos);
     CHK_PRT_RET(
         ret != HcclResult::HCCL_SUCCESS,
-        HCCL_WARNING("[CcuComponent][%s] failed, num[%u], userDevId[%d], dieId[%u].", __func__, num, userDevId_, dieId),
+        HCCL_WARNING(
+            "[CcuComponent][%s] is unsuccessful, num[%u], userDevId[%d], dieId[%u].", __func__, num, userDevId_, dieId),
         ret);
 
     return HcclResult::HCCL_SUCCESS;
@@ -996,7 +999,7 @@ HcclResult CcuComponent::ReleaseXn(const uint8_t dieId, const std::vector<ResInf
         CHK_PRT_RET(
             ret != HcclResult::HCCL_SUCCESS,
             HCCL_WARNING(
-                "[CcuComponent][%s] failed, resInfo[%s], userDevId[%d], dieId[%u].", __func__,
+                "[CcuComponent][%s] is unsuccessful, resInfo[%s], userDevId[%d], dieId[%u].", __func__,
                 xnInfo.Describe().c_str(), userDevId_, dieId),
             ret);
     }
@@ -1280,7 +1283,7 @@ HcclResult CcuComponent::UnimportAllJettys()
             }
             if (!Hccl::RdmaHandleManager::GetInstance().IsHandleValid(ctxHandle)) {
                 HCCL_WARNING(
-                    "[CcuComponent][%s] skip RaCtxQpUnimport, ctxHandle=%p invalid, "
+                    "[CcuComponent][%s] skip RaCtxQpUnimport, ctxHandle=%p is not valid, "
                     "remoteJettyHandle=%p, userDevId[%d].",
                     __func__, ctxHandle, remoteJettyHandle, userDevId_);
                 paramPair.second.handle = nullptr;
@@ -1477,7 +1480,7 @@ HcclResult CcuComponent::CleanDieCkes(const uint8_t dieId) const
     CHK_PRT_RET(
         dieId >= MAX_CCU_IODIE_NUM,
         HCCL_WARNING(
-            "[%s] failed, dieId[%u] is invalid, should be in [0-%u), userDevId[%d].", __func__, dieId,
+            "[%s] is unsuccessful, dieId[%u] is not valid, should be in [0-%u), userDevId[%d].", __func__, dieId,
             MAX_CCU_IODIE_NUM, userDevId_),
         HcclResult::HCCL_E_PARA);
 
@@ -1550,7 +1553,7 @@ HcclResult CcuComponent::QueryTokenInfo(uint64_t srcVa, uint64_t size, uint64_t&
             }
         }
     }
-    HCCL_WARNING("[%s] failed, srcVa[%llu], size[%llu] not found", __func__, srcVa, size);
+    HCCL_WARNING("[%s] is unsuccessful, srcVa[%llu], size[%llu] not found", __func__, srcVa, size);
     return HcclResult::HCCL_E_NOT_FOUND;
 }
 }; // namespace hcomm

@@ -40,17 +40,17 @@ bool IsSupportReduce(HcommDataType dataType, HcommReduceOp op)
 int32_t HcommSetNotifyWaitTimeOut(float timeOut)
 {
     if (std::isnan(timeOut) || timeOut < 0.0f || timeOut > static_cast<float>(UINT32_MAX)) {
-        HCCL_ERROR("[%s] in cpu timeOut[%f s] is invalid.", __func__, timeOut);
+        HCCL_ERROR("[%s] in cpu timeOut[%f]s is invalid.", __func__, timeOut);
         return HCCL_E_PARA;
     }
     uint32_t timeOutInt = static_cast<uint32_t>(timeOut);
-    HCCL_INFO("[%s] START in cpu. timeOut[%u s].", __func__, timeOutInt);
+    HCCL_INFO("[%s] START in cpu. timeOut[%u]s.", __func__, timeOutInt);
     return g_threadLaunchCtx.SetNotifyWaitTimeOut(timeOutInt);
 }
 
 int32_t HcommThreadResAcquireTimeOut(float timeOut)
 {
-    HCCL_ERROR("[%s] timeOut[%f s], not support in cpu.", __func__, timeOut);
+    HCCL_ERROR("[%s] timeOut[%f]s, not support in cpu.", __func__, timeOut);
     return HCCL_E_NOT_SUPPORT;
 }
 
@@ -168,7 +168,7 @@ int32_t HcommThreadNotifyRecordOnThread(ThreadHandle thread, ThreadHandle dstThr
 
 int32_t HcommThreadNotifyWaitOnThread(ThreadHandle thread, uint32_t notifyIdx, uint32_t timeOut)
 {
-    HCCL_INFO("[%s] START. thread[0x%llx], notifyIdx[%u], timeOut[%u s].", __func__, thread, notifyIdx, timeOut);
+    HCCL_INFO("[%s] START. thread[0x%llx], notifyIdx[%u], timeOut[%u]s.", __func__, thread, notifyIdx, timeOut);
 
     AddThreadWithTag(thread);
 
@@ -179,8 +179,7 @@ int32_t HcommThreadNotifyWaitOnThread(ThreadHandle thread, uint32_t notifyIdx, u
         HcclResult ret = threadPtr->LocalNotifyWait(notifyIdx, timeOut);
         CHK_PRT_RET(
             ret != HCCL_SUCCESS,
-            HCCL_ERROR(
-                "[%s] FAIL. thread[0x%llx], notifyIdx[%u], timeOut[%u s].", __func__, thread, notifyIdx, timeOut),
+            HCCL_ERROR("[%s] FAIL. thread[0x%llx], notifyIdx[%u], timeOut[%u]s.", __func__, thread, notifyIdx, timeOut),
             ret);
     } else {
         Stream* stream = GetStream(thread);
@@ -191,8 +190,7 @@ int32_t HcommThreadNotifyWaitOnThread(ThreadHandle thread, uint32_t notifyIdx, u
         HcclResult ret = HcclLocalNotifyWait(stream, notify, timeOut);
         CHK_PRT_RET(
             ret != HCCL_SUCCESS,
-            HCCL_ERROR(
-                "[%s] FAIL. thread[0x%llx], notifyIdx[%u], timeOut[%u s].", __func__, thread, notifyIdx, timeOut),
+            HCCL_ERROR("[%s] FAIL. thread[0x%llx], notifyIdx[%u], timeOut[%u]s.", __func__, thread, notifyIdx, timeOut),
             ret);
     }
     HCCL_INFO("[%s] SUCCESS.", __func__);
@@ -221,7 +219,7 @@ int32_t HcommAclrtNotifyRecordOnThread(ThreadHandle thread, uint64_t dstNotifyId
 
 int32_t HcommAclrtNotifyWaitOnThread(ThreadHandle thread, uint64_t notifyId, uint32_t timeOut)
 {
-    HCCL_INFO("[%s] START. thread[0x%llx], notifyId[%llu], timeOut[%u s].", __func__, thread, notifyId, timeOut);
+    HCCL_INFO("[%s] START. thread[0x%llx], notifyId[%llu], timeOut[%u]s.", __func__, thread, notifyId, timeOut);
 
     AddThreadWithTag(thread);
 
@@ -234,7 +232,7 @@ int32_t HcommAclrtNotifyWaitOnThread(ThreadHandle thread, uint64_t notifyId, uin
     HcclResult ret = HcclLocalBareNotifyWait(stream, notifyId, timeOut);
     CHK_PRT_RET(
         ret != HCCL_SUCCESS,
-        HCCL_ERROR("[%s] FAIL. thread[0x%llx], notifyId[%llu], timeOut[%u s].", __func__, thread, notifyId, timeOut),
+        HCCL_ERROR("[%s] FAIL. thread[0x%llx], notifyId[%llu], timeOut[%u]s.", __func__, thread, notifyId, timeOut),
         ret);
     HCCL_INFO("[%s] SUCCESS.", __func__);
     return HCCL_SUCCESS;
@@ -674,7 +672,7 @@ HcommChannelNotifyWaitOnThread(ThreadHandle thread, ChannelHandle channel, uint3
         return ch->GetNicOps()->notifyWaitOnThread(ch->GetNicCtx(), thread, localNotifyIdx, timeOut);
     }
     HCCL_INFO(
-        "[%s] START. thread[0x%llx], channel[0x%llx], localNotifyIdx[%u], timeOut[%u].", __func__, thread, channel,
+        "[%s] START. thread[0x%llx], channel[0x%llx], localNotifyIdx[%u], timeOut[%u]s.", __func__, thread, channel,
         localNotifyIdx, timeOut);
 
     HcclResult ret = HCCL_SUCCESS;

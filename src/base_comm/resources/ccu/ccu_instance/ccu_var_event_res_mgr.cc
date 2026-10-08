@@ -278,7 +278,7 @@ CcuResult CcuVarEventResMgr::Acquire(
     CcuResult regRet = RegisterAddrs(type, newHandle, num);
     if (regRet != CCU_SUCCESS) {
         HCCL_RUN_WARNING(
-            "[CcuVarEventResMgr][%s] register addrs failed[%d], release acquired "
+            "[CcuVarEventResMgr][%s] register addrs unsuccessfully[%d], release acquired "
             "handle[0x%llx] insHandle[0x%llx] dieId[%u] type[%d] num[%u].",
             __func__, static_cast<int32_t>(regRet), newHandle, insHandle, dieId, static_cast<int32_t>(type), num);
         (void)ReleaseByHandle(newHandle);
@@ -475,7 +475,7 @@ CcuResult CcuVarEventResMgr::ReleaseByHandle(uint64_t handle)
     CcuResult unmapRet = UnmapSavedAddrs(res);
     if (unmapRet != CCU_SUCCESS) {
         HCCL_RUN_WARNING(
-            "[CcuVarEventResMgr][%s] unmap failed[%d], continue to return resources, "
+            "[CcuVarEventResMgr][%s] unmap unsuccessfully[%d], continue to return resources, "
             "handle[0x%llx].",
             __func__, static_cast<int32_t>(unmapRet), handle);
     }

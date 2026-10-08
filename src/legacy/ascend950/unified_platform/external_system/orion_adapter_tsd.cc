@@ -26,7 +26,7 @@ HcclResult HrtOpenTsdProcess(u32 deviceLogicId)
     openArgs.extParamList = &extParam;
     rtError_t aclret = rtOpenNetService(&openArgs);
     if (aclret != 0) {
-        HCCL_INFO("deviceLogicId = %u TsdProcessOpen fail aclret:%d", deviceLogicId, aclret);
+        HCCL_INFO("deviceLogicId = %u TsdProcessOpen is unsuccessful aclret:%d", deviceLogicId, aclret);
         return HcclResult::HCCL_E_UNAVAIL;
     } else {
         HCCL_INFO("deviceLogicId = %u TsdProcessOpen success", deviceLogicId);

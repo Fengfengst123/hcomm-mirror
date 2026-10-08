@@ -28,7 +28,7 @@ HcclResult CcuResIdAllocator::Alloc(
     const uint32_t freeSize = capacity_ - allocatedSize_;
     if (num > freeSize) {
         HCCL_WARNING(
-            "[CcuResIdAllocator][%s] failed, resType[%s], requested num[%u] exceeds "
+            "[CcuResIdAllocator][%s] is unsuccessful, resType[%s], requested num[%u] exceeds "
             "currently free size[%u].",
             __func__, dfxInfo.c_str(), num, freeSize);
         HCCL_RUN_INFO("Insufficient CCU Resource: %s, requestNum[%u], freeNum[%u].", dfxInfo.c_str(), num, freeSize);
@@ -59,7 +59,7 @@ HcclResult CcuResIdAllocator::Alloc(
     // 只有连续要求的资源才可能剩余，此时分配失败，新块为空
     if (leftNum != 0) {
         HCCL_WARNING(
-            "[CcuResIdAllocator][%s] failed, no enough consecutive free "
+            "[CcuResIdAllocator][%s] is unsuccessful, no enough consecutive free "
             "resource ids for requested num[%u].",
             __func__, num);
         HCCL_RUN_INFO(
@@ -313,7 +313,7 @@ HcclResult CcuResAllocator::AllocCountXn(const uint32_t num, ResInfo& resInfo)
     auto ret = resTypeIter->second->Alloc(num, true, resInfos);
     if (ret == HcclResult::HCCL_E_UNAVAIL) {
         HCCL_WARNING(
-            "[CcuResAllocator][%s] failed, count xn resources are unavailable, ",
+            "[CcuResAllocator][%s] is unsuccessful, count xn resources are unavailable, ",
             "retry to allocate with normal xn resources, num[%u], userDevId[%d].", __func__, num, userDevId_);
         ret = Alloc(ResType::XN, num, true, resInfos);
         if (ret == HcclResult::HCCL_SUCCESS) {

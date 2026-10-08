@@ -104,7 +104,7 @@ static CcuResSpecInfo ParseOutBuffToResSpecInfo(const CcuVersion ccuVersion, con
 {
     if (ccuVersion == CcuVersion::CCU_INVALID || ccuVersion == CcuVersion::INVALID) {
         HCCL_WARNING(
-            "[CcuResSpecifications][%s] failed to parse out buff, ccu driver "
+            "[CcuResSpecifications][%s] is unsuccessful in parsing out buff, ccu driver "
             "version[%s] is not expected.",
             __func__, ccuVersion.Describe().c_str());
         return {};
@@ -281,7 +281,7 @@ HcclResult CcuResSpecifications::Init()
     CHK_RET(CheckServeMode(userDevId_, serveMode_));
     ccuVersion_ = CheckCcuVersion(userDevId_);
     if (ccuVersion_ == CcuVersion::CCU_INVALID) {
-        HCCL_WARNING("[CcuResSpecifications][%s] check ccu version failed.", __func__);
+        HCCL_WARNING("[CcuResSpecifications][%s] check ccu version unsuccessfully.", __func__);
         return HcclResult::HCCL_E_UNAVAIL;
     }
     for (uint8_t dieId = 0; dieId < CCU_MAX_IODIE_NUM; dieId++) {
@@ -325,7 +325,7 @@ HcclResult CcuResSpecifications::CheckDieValid(
 
     CHK_PRT_RET(
         !dieEnableFlags[dieId],
-        HCCL_WARNING("[%s] failed, dieId[%u] is disable, userDevId[%d].", funcName.c_str(), dieId, userDevId),
+        HCCL_WARNING("[%s] is unsuccessful, dieId[%u] is disable, userDevId[%d].", funcName.c_str(), dieId, userDevId),
         HcclResult::HCCL_E_PARA);
 
     return HcclResult::HCCL_SUCCESS;
