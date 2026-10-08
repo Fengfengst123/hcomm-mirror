@@ -26,12 +26,12 @@
 namespace hcomm {
 
 // ==================== TA 档位映射表 ====================
-// TA 芯片挡位 = hw_value / 8
-// 挡位 0 (0-7):   512ms
-// 挡位 1 (8-15):  1000ms (1s)
-// 挡位 2 (16-23): 8000ms (8s)
-// 挡位 3 (24-31): 32000ms (32s)
-// 各挡位对应的最小硬件配置值
+// TA 芯片档位 = hw_value / 8
+// 档位 0 (0-7):   512ms
+// 档位 1 (8-15):  1000ms (1s)
+// 档位 2 (16-23): 8000ms (8s)
+// 档位 3 (24-31): 32000ms (32s)
+// 各档位对应的最小硬件配置值
 constexpr uint8_t TA_HW_GEAR0_BASE = 0;
 constexpr uint8_t TA_HW_GEAR1_BASE = 8;
 constexpr uint8_t TA_HW_GEAR2_BASE = 16;
@@ -47,10 +47,11 @@ static constexpr uint32_t TA_TIMEOUT_MS_GEAR1 = 4000;
 static constexpr uint32_t TA_TIMEOUT_MS_GEAR2 = 8000;
 static constexpr uint32_t TA_TIMEOUT_MS_GEAR3 = 32000;
 
+// ack timeout存在0档档位, 对应tp无超时动作，TA超时以自身配置为准，因此对应AT_TIMEOUT_MAP[0]=0
 constexpr uint8_t AT_GEAR_MIN = 0;
-constexpr uint8_t AT_GEAR_MAX = 3;
-constexpr uint8_t AT_GEAR_DEFAULT = 2;
-constexpr uint32_t AT_TIMEOUT_MAP[4] = {16, 128, 1000, 4000};
+constexpr uint8_t AT_GEAR_MAX = 4;
+constexpr uint8_t AT_GEAR_DEFAULT = 3;
+constexpr uint32_t AT_TIMEOUT_MAP[5] = {0, 16, 128, 1000, 4000};
 
 /// 与 GetTpInfo / ReleaseTpInfo 中 info、req 两级 map 的 qos 键一致（param.qos 低 8 位）
 using QosKey = uint32_t;
@@ -138,9 +139,9 @@ public:
     /// 哨兵值：调用方未传入 TA 超时值，CalcTaTimeout 将回退到协议默认值
     static constexpr uint8_t TA_TIMEOUT_NOT_SET = 0xFFU;
 
-    /// 计算 Jetty 异步创建超时挡位（hw_value, 0-31）
+    /// 计算 Jetty 异步创建超时档位（hw_value, 0-31）
     /// 入参 taTimeOut 由调用方按协议从环境变量获取后传入；TA_TIMEOUT_NOT_SET 表示未传入，使用协议默认值
-    /// 入参 tpTimeOutMs 由 GetTpTotalTimeout 计算得到，用于环境变量时间 < TP 总超时时的自动升挡
+    /// 入参 tpTimeOutMs 由 GetTpTotalTimeout 计算得到，用于环境变量时间 < TP 总超时时的自动升档
     static uint8_t CalcTaTimeout(TpProtocol tpProtocol, uint8_t taTimeOut, uint32_t tpTimeOutMs);
 
 private:

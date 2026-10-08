@@ -559,14 +559,14 @@ TEST_F(TpMgrTest, Ut_TpMgr_GetTpInfo_UnsupportedProtocol_Expect_NotSupport)
 TEST_F(TpMgrTest, GetTpTotalTimeout_ValidAtGear_ReturnsCorrectTimeout)
 {
     TpAttrInfo tpAttrInfo{};
-    tpAttrInfo.tpAttr.at = 0;
+    tpAttrInfo.tpAttr.at = 1;
     tpAttrInfo.tpAttr.retryTimesInit = 0;
 
     uint32_t tpTimeOutMs = 0;
     EXPECT_EQ(TpMgr::GetTpTotalTimeout(tpAttrInfo, tpTimeOutMs), HCCL_SUCCESS);
     EXPECT_EQ(tpTimeOutMs, 16U);
 
-    tpAttrInfo.tpAttr.at = 3;
+    tpAttrInfo.tpAttr.at = 4;
     tpAttrInfo.tpAttr.retryTimesInit = 0;
     EXPECT_EQ(TpMgr::GetTpTotalTimeout(tpAttrInfo, tpTimeOutMs), HCCL_SUCCESS);
     EXPECT_EQ(tpTimeOutMs, 4000U);

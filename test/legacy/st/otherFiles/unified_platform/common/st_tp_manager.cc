@@ -202,19 +202,24 @@ TEST_F(TpManagerTest, St_GetTpTotalTimeout_ValidAtGear_ReturnsCorrectTimeout)
 
     uint32_t tpTimeOutMs = 0;
     EXPECT_EQ(TpManager::GetTpTotalTimeout(tpAttrInfo, tpTimeOutMs), HCCL_SUCCESS);
-    EXPECT_EQ(tpTimeOutMs, 16);
+    EXPECT_EQ(tpTimeOutMs, 0);
 
     tpAttrInfo.tpAttr.at = 1;
     tpAttrInfo.tpAttr.retryTimesInit = 0;
     EXPECT_EQ(TpManager::GetTpTotalTimeout(tpAttrInfo, tpTimeOutMs), HCCL_SUCCESS);
-    EXPECT_EQ(tpTimeOutMs, 128);
+    EXPECT_EQ(tpTimeOutMs, 16);
 
     tpAttrInfo.tpAttr.at = 2;
     tpAttrInfo.tpAttr.retryTimesInit = 0;
     EXPECT_EQ(TpManager::GetTpTotalTimeout(tpAttrInfo, tpTimeOutMs), HCCL_SUCCESS);
-    EXPECT_EQ(tpTimeOutMs, 1000);
+    EXPECT_EQ(tpTimeOutMs, 128);
 
     tpAttrInfo.tpAttr.at = 3;
+    tpAttrInfo.tpAttr.retryTimesInit = 0;
+    EXPECT_EQ(TpManager::GetTpTotalTimeout(tpAttrInfo, tpTimeOutMs), HCCL_SUCCESS);
+    EXPECT_EQ(tpTimeOutMs, 1000);
+
+    tpAttrInfo.tpAttr.at = 4;
     tpAttrInfo.tpAttr.retryTimesInit = 0;
     EXPECT_EQ(TpManager::GetTpTotalTimeout(tpAttrInfo, tpTimeOutMs), HCCL_SUCCESS);
     EXPECT_EQ(tpTimeOutMs, 4000);
@@ -234,7 +239,7 @@ TEST_F(TpManagerTest, St_GetTpTotalTimeout_InvalidAtGear_UsesDefault)
 TEST_F(TpManagerTest, St_GetTpTotalTimeout_WithRetryTimes_ReturnsCorrectTimeout)
 {
     TpAttrInfo tpAttrInfo{};
-    tpAttrInfo.tpAttr.at = 2;
+    tpAttrInfo.tpAttr.at = 3;
     tpAttrInfo.tpAttr.retryTimesInit = 3;
 
     uint32_t tpTimeOutMs = 0;
@@ -245,7 +250,7 @@ TEST_F(TpManagerTest, St_GetTpTotalTimeout_WithRetryTimes_ReturnsCorrectTimeout)
 TEST_F(TpManagerTest, St_CalcTaTimeout_Tp_DefaultGeTpTimeout_Expect_Default16)
 {
     TpAttrInfo tpAttrInfo{};
-    tpAttrInfo.tpAttr.at = 0;
+    tpAttrInfo.tpAttr.at = 1;
     tpAttrInfo.tpAttr.retryTimesInit = 0;
     uint32_t tpTimeOutMs = 0;
     (void)TpManager::GetTpTotalTimeout(tpAttrInfo, tpTimeOutMs);
@@ -255,7 +260,7 @@ TEST_F(TpManagerTest, St_CalcTaTimeout_Tp_DefaultGeTpTimeout_Expect_Default16)
 TEST_F(TpManagerTest, St_CalcTaTimeout_Tp_Boundary_8000msEqual_Expect_Upgrade24)
 {
     TpAttrInfo tpAttrInfo{};
-    tpAttrInfo.tpAttr.at = 2;
+    tpAttrInfo.tpAttr.at = 3;
     tpAttrInfo.tpAttr.retryTimesInit = 7;
     uint32_t tpTimeOutMs = 0;
     (void)TpManager::GetTpTotalTimeout(tpAttrInfo, tpTimeOutMs);
@@ -265,7 +270,7 @@ TEST_F(TpManagerTest, St_CalcTaTimeout_Tp_Boundary_8000msEqual_Expect_Upgrade24)
 TEST_F(TpManagerTest, St_CalcTaTimeout_Tp_DefaultLessTpTimeout_Expect_Upgrade24)
 {
     TpAttrInfo tpAttrInfo{};
-    tpAttrInfo.tpAttr.at = 3;
+    tpAttrInfo.tpAttr.at = 4;
     tpAttrInfo.tpAttr.retryTimesInit = 2;
     uint32_t tpTimeOutMs = 0;
     (void)TpManager::GetTpTotalTimeout(tpAttrInfo, tpTimeOutMs);
@@ -285,7 +290,7 @@ TEST_F(TpManagerTest, St_CalcTaTimeout_Tp_InvalidAtGear_Expect_Default16)
 TEST_F(TpManagerTest, St_CalcTaTimeout_Ctp_DefaultGeTpTimeout_Expect_Default8)
 {
     TpAttrInfo tpAttrInfo{};
-    tpAttrInfo.tpAttr.at = 0;
+    tpAttrInfo.tpAttr.at = 1;
     tpAttrInfo.tpAttr.retryTimesInit = 0;
     uint32_t tpTimeOutMs = 0;
     (void)TpManager::GetTpTotalTimeout(tpAttrInfo, tpTimeOutMs);
@@ -295,7 +300,7 @@ TEST_F(TpManagerTest, St_CalcTaTimeout_Ctp_DefaultGeTpTimeout_Expect_Default8)
 TEST_F(TpManagerTest, St_CalcTaTimeout_Ctp_Boundary_4000msEqual_Expect_Default8)
 {
     TpAttrInfo tpAttrInfo{};
-    tpAttrInfo.tpAttr.at = 1;
+    tpAttrInfo.tpAttr.at = 2;
     tpAttrInfo.tpAttr.retryTimesInit = 30;
     uint32_t tpTimeOutMs = 0;
     (void)TpManager::GetTpTotalTimeout(tpAttrInfo, tpTimeOutMs);
@@ -305,7 +310,7 @@ TEST_F(TpManagerTest, St_CalcTaTimeout_Ctp_Boundary_4000msEqual_Expect_Default8)
 TEST_F(TpManagerTest, St_CalcTaTimeout_Ctp_DefaultLessTpTimeout_Expect_Default8)
 {
     TpAttrInfo tpAttrInfo{};
-    tpAttrInfo.tpAttr.at = 3;
+    tpAttrInfo.tpAttr.at = 4;
     tpAttrInfo.tpAttr.retryTimesInit = 1;
     uint32_t tpTimeOutMs = 0;
     (void)TpManager::GetTpTotalTimeout(tpAttrInfo, tpTimeOutMs);

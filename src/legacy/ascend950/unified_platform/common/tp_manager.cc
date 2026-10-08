@@ -786,6 +786,7 @@ HcclResult TpManager::GetTpTotalTimeout(const TpAttrInfo& tpAttrInfo, uint32_t& 
             AT_GEAR_MIN, AT_GEAR_MAX, finalAtGear);
     }
 
+    // ack timeout存在0档档位, 对应tp无超时动作，TA超时以自身配置为准, 通过tpTimeOutMs计算得到0实现
     uint32_t singleAtTimeoutMs = AT_TIMEOUT_MAP[finalAtGear];
     tpTimeOutMs = singleAtTimeoutMs * static_cast<uint32_t>(rawRetryTimes + 1);
 
@@ -840,16 +841,17 @@ uint8_t TpManager::CalcTaTimeout(TpProtocol tpProtocol, uint8_t taTimeOut, uint3
         return envValue;
     }
 
-    // UBOE / UBG / TP 协议：需要与 TP 总超时比较决定是否自动升挡
+    // UBOE / UBG / TP 协议：需要与 TP 总超时比较决定是否自动升档
     uint8_t jettyTimeOut = envValue;
     if (envTimeOutMs <= tpTimeOutMs) {
-        // 规则: 如果环境变量时间 <= TP总超时，选择大于TP总超时的最小TA挡位
+        // 规则: 如果环境变量时间 <= TP总超时，选择大于TP总超时的最小TA档位
         jettyTimeOut = FindMinTaHwValue(tpTimeOutMs);
         HCCL_WARNING(
             "[TpManager][%s] Env timeout [%ums] <= TP timeout [%ums]. Auto upgrade TA to hw_val[%u] (%ums).", __func__,
             envTimeOutMs, tpTimeOutMs, jettyTimeOut, TaHwValueToMs(jettyTimeOut));
     } else {
-        // 规则: 否则，直接使用环境变量对应的挡位
+        // 规则: 否则，直接使用环境变量对应的档位
+        // 当ack timeout配置为0档时, tp无超时动作, tpTimeOutMs计算得到0, 直接使用环境变量对应的档位
         HCCL_INFO(
             "[TpManager][%s] Env timeout [%ums] > TP timeout [%ums]. Use env gear base hw_val[%u] (%ums).", __func__,
             envTimeOutMs, tpTimeOutMs, envValue, envTimeOutMs);
