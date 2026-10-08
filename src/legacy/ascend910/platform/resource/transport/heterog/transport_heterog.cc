@@ -302,6 +302,7 @@ HcclResult TransportHeterog::PrepareSocketInfo(s32 type, s32 linkNum, const stri
             tmpConnInfo.remoteIp.addr = peerAddr.addr;
             tmpConnInfo.remoteIp.addr6 = peerAddr.addr6;
             tmpConnInfo.port = peerPort_;
+            tmpConnInfo.tagChkDis = true;
             CHK_SAFETY_FUNC_RET(strncpy_s(tmpConnInfo.tag, SOCK_CONN_TAG_SIZE, tag.c_str(), tag.length() + 1));
             initSM_.locInitInfo.socketConnInfo.emplace_back(tmpConnInfo);
         } else {
