@@ -247,6 +247,7 @@ protected:
     {
         remove("/tmp/ut_virtualTopology.xml");
         TeardownFakeHca();
+        system("rm -rf /tmp/ut_hca_sym_target"); /* 符号链接用例的真实目录 */
         TeardownFakeNet();
         g_topo_DlogRecord = NULL;
         g_topo_CheckLogLevel = NULL;
@@ -1627,36 +1628,42 @@ static void BuildFakeNetChain(
     *outHead = head;
 }
 
-/* 多 NPU 多 NIC 全正常：驱动全量查询，轮询分发各 NPU 拿到不同 IP */
+/* 多 NPU 多 HCA 全正常：驱动全量查询，轮询把各列 IP 分给不同 NPU */
 TEST_F(NpuNicAffinityTest, Fallback_MultiNpuMultiNic)
 {
     S(4, 0);
-    TeardownFakeNet();
-    const char* nicNames[] = {"eth0", "eth1", "eth2"};
-    const char* fakeIps[] = {"10.0.0.1", "10.0.0.2", "10.0.0.3"};
-    BuildFakeNetChain(&g_fakeIfaddr, nicNames, fakeIps, 3);
+    TeardownFakeHca();
+    SetupFakeHca("hca0", "eth0");
+    SetupFakeHca("hca1", "eth1");
+    SetupFakeHca("hca2", "eth2");
+    const char* eths[] = {"eth0", "eth1", "eth2"};
+    const char* ips[] = {"10.0.0.1", "10.0.0.2", "10.0.0.3"};
+    BuildFakeNetChain(&g_fakeIfaddr, eths, ips, 3);
 
-    /* 全连接亲和：每个 NPU 与每个 NIC 均亲和 */
+    /* 全连接亲和：每个 NPU 与每个 HCA 均亲和 */
     for (int phyId = 0; phyId < 4; phyId++) {
-        Affine(phyId, "eth0");
-        Affine(phyId, "eth1");
-        Affine(phyId, "eth2");
+        Affine(phyId, "hca0");
+        Affine(phyId, "hca1");
+        Affine(phyId, "hca2");
     }
 
-    /* 无排序，列序即枚举（链序）：头插后链序为 eth2→eth1→eth0；
-       轮询：NPU0→eth2，NPU1→eth1，NPU2→eth0，NPU3→eth2(回绕) */
-    AssertRoceIpOk(0, "10.0.0.3");
-    EXPECT_EQ(g_driverCallCount, 12); /* 4 NPU × 3 NIC */
-    AssertRoceIpOk(1, "10.0.0.2");
-    AssertRoceIpOk(2, "10.0.0.1");
-    AssertRoceIpOk(3, "10.0.0.3");
+    /* 枚举序即矩阵列序（生产不排序），3 列 IP 轮询分给 4 个 NPU：
+       4 个 NPU 拿到的 IP 集合必为全部 3 个列 IP（第 4 个回绕重复） */
+    std::set<std::string> got;
+    for (unsigned int i = 0; i < 4; i++) {
+        char ip[64] = {0};
+        ASSERT_EQ(GetRoceIpFromXml(i, ip, sizeof(ip)), 0);
+        got.insert(ip);
+    }
+    EXPECT_EQ(got, (std::set<std::string>{"10.0.0.1", "10.0.0.2", "10.0.0.3"}));
+    EXPECT_EQ(g_driverCallCount, 48); /* 4 次调用 × 4 NPU × 3 HCA */
 }
 
 /* XML 文件不存在 → 回退驱动接口 */
 TEST_F(NpuNicAffinityTest, Fallback_NoXml_Basic)
 {
     S(1, 0);
-    Affine(0, "eth0");
+    Affine(0, "hrn5_0"); /* SetUp 已造出 /tmp/ut_hca/hrn5_0/device/net/eth0 → 10.0.0.1 */
     AssertRoceIpOk(0, "10.0.0.1");
 }
 
@@ -1664,7 +1671,7 @@ TEST_F(NpuNicAffinityTest, Fallback_NoXml_Basic)
 TEST_F(NpuNicAffinityTest, Fallback_XmlNoNic)
 {
     S(1, 0);
-    Affine(0, "eth0");
+    Affine(0, "hrn5_0");
     W("<system version=\"1.0\">\n<cpu numaid=\"0\">\n"
       "<pci busid=\"0000:01:00.0\">\n"
       "<pci busid=\"0000:03:00.0\"/>\n"
@@ -1676,86 +1683,95 @@ TEST_F(NpuNicAffinityTest, Fallback_XmlNoNic)
 TEST_F(NpuNicAffinityTest, Fallback_EmptyFile)
 {
     S(1, 0);
-    Affine(0, "eth0");
+    Affine(0, "hrn5_0");
     W("");
     AssertRoceIpOk(0, "10.0.0.1");
 }
 
-/* 乱序网卡链：枚举列序即链序（不再排序），轮询分配按链序列序进行 */
-TEST_F(NpuNicAffinityTest, Fallback_RoundRobinChainOrder)
+/* 轮询按枚举列序分发：2 列 HCA 分给 4 个 NPU，必然回绕（偶数 NPU 同列、奇数 NPU 同列） */
+TEST_F(NpuNicAffinityTest, Fallback_RoundRobinWrapAround)
 {
     S(4, 0);
-    Affine(0, "eth0");
-    Affine(0, "eth1");
-    Affine(1, "eth0");
-    Affine(1, "eth1");
-    Affine(2, "eth1");
-    Affine(3, "eth0");
+    TeardownFakeHca();
+    SetupFakeHca("hca0", "eth0");
+    SetupFakeHca("hca1", "eth1");
+    const char* eths[] = {"eth0", "eth1"};
+    const char* ips[] = {"10.0.0.1", "10.0.0.2"};
+    BuildFakeNetChain(&g_fakeIfaddr, eths, ips, 2);
 
-    /* 头插后链序为 eth1→eth2→eth0→eth3，即矩阵列序 [eth1, eth2, eth0, eth3] */
-    const char* nicNames[] = {"eth3", "eth0", "eth2", "eth1"};
-    const char* fakeIps[] = {"10.0.0.4", "10.0.0.1", "10.0.0.3", "10.0.0.2"};
-    BuildFakeNetChain(&g_fakeIfaddr, nicNames, fakeIps, 4);
+    for (int phyId = 0; phyId < 4; phyId++) {
+        Affine(phyId, "hca0");
+        Affine(phyId, "hca1");
+    }
 
-    /* 轮询：NPU0→eth1，NPU1→eth0，NPU2→eth1，NPU3→eth0 */
-    AssertRoceIpOk(0, "10.0.0.2");
-    AssertRoceIpOk(1, "10.0.0.1");
-    AssertRoceIpOk(2, "10.0.0.2");
-    AssertRoceIpOk(3, "10.0.0.1");
+    std::string got[4];
+    for (unsigned int i = 0; i < 4; i++) {
+        char ip[64] = {0};
+        ASSERT_EQ(GetRoceIpFromXml(i, ip, sizeof(ip)), 0);
+        got[i] = ip;
+    }
+    EXPECT_EQ(g_driverCallCount, 32); /* 4 次调用 × 4 NPU × 2 HCA */
+    EXPECT_TRUE(got[0] == "10.0.0.1" || got[0] == "10.0.0.2");
+    EXPECT_NE(got[0], got[1]); /* 相邻 NPU 分到不同列 */
+    EXPECT_EQ(got[0], got[2]); /* 2 列 → 第 3 个 NPU 回绕到第 1 列 */
+    EXPECT_EQ(got[1], got[3]);
 }
 
-/* 枚举去重与过滤：重复 NIC 只查询一次；NULL 名与超长名被跳过 */
-TEST_F(NpuNicAffinityTest, Fallback_DedupAndSkip)
+/* 枚举过滤：. 开头的目录项与超长名（≥64）不进 nicNames，不产生驱动查询 */
+TEST_F(NpuNicAffinityTest, Fallback_SkipHiddenAndLongName)
 {
     S(1, 0);
-    Affine(0, "eth0");
+    Affine(0, "hrn5_0");
 
-    /* 目标链序：eth0 → 名字为空 → 超长名(≥64) → eth0(重复) → eth1；
-       helper 头插，数组反序书写 */
     char longName[80];
     memset_s(longName, sizeof(longName), 'x', sizeof(longName) - 1);
     longName[sizeof(longName) - 1] = '\0';
-    const char* nicNames[] = {"eth1", "eth0", longName, NULL, "eth0"};
-    const char* fakeIps[] = {"10.0.0.2", "10.0.0.1", NULL, NULL, "10.0.0.1"};
-    BuildFakeNetChain(&g_fakeIfaddr, nicNames, fakeIps, 5);
+    char cmd[512];
+    sprintf_s(cmd, sizeof(cmd), "mkdir -p /tmp/ut_hca/.hidden_hca/device/net/ethH");
+    system(cmd);
+    sprintf_s(cmd, sizeof(cmd), "mkdir -p /tmp/ut_hca/%s/device/net/ethL", longName);
+    system(cmd);
 
     AssertRoceIpOk(0, "10.0.0.1");
-    /* 去重后只查询 eth0、eth1 各一次 */
-    EXPECT_EQ(g_driverCallCount, 2);
+    EXPECT_EQ(g_driverCallCount, 1); /* 仅 hrn5_0 被查询：隐藏项与超长名在枚举期被过滤 */
 }
 
-/* 枚举上限：超过 MAX_HCA_COUNT(64) 的 NIC 被丢弃 */
-TEST_F(NpuNicAffinityTest, Fallback_NicCountCap)
+/* 枚举上限：超过 MAX_HCA_COUNT(64) 的 HCA 被截断 */
+TEST_F(NpuNicAffinityTest, Fallback_HcaCountCap)
 {
     S(1, 0);
-    Affine(0, "nic63"); /* 在枚举上限内，应被查询 */
-    Affine(0, "nic00"); /* 枚举序第 65 个，超出上限被丢弃，不应被查询 */
-
-    struct ifaddrs* head = NULL;
-    for (int i = 0; i < 65; i++) {
-        char name[16];
-        char ipStr[16];
-        sprintf_s(name, sizeof(name), "nic%02d", i);
-        sprintf_s(ipStr, sizeof(ipStr), "10.0.0.%d", i + 1);
-        struct ifaddrs* ifa = (struct ifaddrs*)calloc(1, sizeof(struct ifaddrs));
-        ASSERT_NE(ifa, nullptr);
-        ifa->ifa_next = head;
-        ifa->ifa_name = strdup(name);
-        ASSERT_NE(ifa->ifa_name, nullptr);
-        ifa->ifa_flags = IFF_UP;
-        struct sockaddr_in* sin = (struct sockaddr_in*)calloc(1, sizeof(struct sockaddr_in));
-        ASSERT_NE(sin, nullptr);
-        sin->sin_family = AF_INET;
-        inet_pton(AF_INET, ipStr, &sin->sin_addr);
-        ifa->ifa_addr = (struct sockaddr*)sin;
-        head = ifa;
+    TeardownFakeHca(); /* 清掉默认 hrn5_0，只保留本用例构造的 65 个 HCA */
+    const int total = 65;
+    char buf[32];
+    char cmd[512];
+    std::vector<std::string> hcas(total);
+    std::vector<std::string> eths(total);
+    std::vector<std::string> ips(total);
+    std::vector<const char*> ethPtrs(total);
+    std::vector<const char*> ipPtrs(total);
+    for (int i = 0; i < total; i++) {
+        sprintf_s(buf, sizeof(buf), "cap%02d", i);
+        hcas[i] = buf;
+        sprintf_s(buf, sizeof(buf), "cape%02d", i);
+        eths[i] = buf;
+        sprintf_s(buf, sizeof(buf), "10.0.0.%d", i + 1);
+        ips[i] = buf;
+        SetupFakeHca(hcas[i].c_str(), eths[i].c_str());
+        ethPtrs[i] = eths[i].c_str();
+        ipPtrs[i] = ips[i].c_str();
+        Affine(0, hcas[i].c_str());
     }
-    TeardownFakeNet();
-    g_fakeIfaddr = head;
+    BuildFakeNetChain(&g_fakeIfaddr, ethPtrs.data(), ipPtrs.data(), total);
 
-    /* 枚举按链序取前 64 个（nic64..nic01），nic00 被丢弃；无排序，列序即链序，nic63 保留 */
-    AssertRoceIpOk(0, "10.0.0.64");
+    /* 只查询前 64 个（readdir 序），第 65 个被上限截断；枚举序不可控，不断言具体 IP */
+    char ip[64] = {0};
+    ASSERT_EQ(GetRoceIpFromXml(0, ip, sizeof(ip)), 0);
     EXPECT_EQ(g_driverCallCount, 64);
+    const char* lastDot = strrchr(ip, '.');
+    ASSERT_NE(lastDot, nullptr);
+    int octet = atoi(lastDot + 1);
+    EXPECT_GE(octet, 1);
+    EXPECT_LE(octet, total);
 }
 
 /* 非连续可见设备：只查询可见 NPU，不可见 NPU 拿不到 IP */
@@ -1763,18 +1779,21 @@ TEST_F(NpuNicAffinityTest, Fallback_InvisibleNpu)
 {
     S(8, 0);
     SetVisibleDevices({0, 3, 7});
-    const char* nicNames[] = {"eth0", "eth1"};
-    const char* fakeIps[] = {"10.0.0.1", "10.0.0.2"};
-    BuildFakeNetChain(&g_fakeIfaddr, nicNames, fakeIps, 2);
+    TeardownFakeHca();
+    SetupFakeHca("hca0", "eth0");
+    SetupFakeHca("hca1", "eth1");
+    const char* eths[] = {"eth0", "eth1"};
+    const char* ips[] = {"10.0.0.1", "10.0.0.2"};
+    BuildFakeNetChain(&g_fakeIfaddr, eths, ips, 2);
 
-    Affine(0, "eth0");
-    Affine(3, "eth1");
-    Affine(7, "eth0");
-    Affine(1, "eth0"); /* 不可见，不应被查询 */
-    Affine(2, "eth0");
+    Affine(0, "hca0");
+    Affine(3, "hca1");
+    Affine(7, "hca0");
+    Affine(1, "hca0"); /* 不可见，不应被查询 */
+    Affine(2, "hca0");
 
     AssertRoceIpOk(0, "10.0.0.1");
-    EXPECT_EQ(g_driverCallCount, 6); /* 3 个可见 NPU × 2 个 NIC */
+    EXPECT_EQ(g_driverCallCount, 6); /* 3 个可见 NPU × 2 个 HCA */
     AssertRoceIpOk(3, "10.0.0.2");
     AssertRoceIpOk(7, "10.0.0.1");
     AssertRoceIpFail(1);
@@ -1785,46 +1804,74 @@ TEST_F(NpuNicAffinityTest, Fallback_InvisibleNpu)
 TEST_F(NpuNicAffinityTest, Fallback_NoUbAffinity)
 {
     S(1, 0);
-    Affine(0, "eth0", DCMI_TOPO_TYPE_PHB);
-    Affine(0, "eth1", DCMI_TOPO_TYPE_SELF);
-    const char* nicNames[] = {"eth0", "eth1"};
-    const char* fakeIps[] = {"10.0.0.1", "10.0.0.2"};
-    BuildFakeNetChain(&g_fakeIfaddr, nicNames, fakeIps, 2);
+    TeardownFakeHca();
+    SetupFakeHca("hca0", "eth0");
+    SetupFakeHca("hca1", "eth1");
+    const char* eths[] = {"eth0", "eth1"};
+    const char* ips[] = {"10.0.0.1", "10.0.0.2"};
+    BuildFakeNetChain(&g_fakeIfaddr, eths, ips, 2);
+    Affine(0, "hca0", DCMI_TOPO_TYPE_PHB);
+    Affine(0, "hca1", DCMI_TOPO_TYPE_SELF);
     AssertRoceIpFail(0);
 }
 
-/* 无任何网卡（空链）→ 回退构建失败 */
-TEST_F(NpuNicAffinityTest, Fallback_NoNics_EmptyChain)
+/* HCA 枚举目录为空 → 回退构建失败 */
+TEST_F(NpuNicAffinityTest, Fallback_HcaListEmptyDir)
 {
     S(1, 0);
-    TeardownFakeNet();
-    AssertRoceIpFail(0);
+    char cmd[256];
+    sprintf_s(cmd, sizeof(cmd), "rm -rf /tmp/ut_hca && mkdir -p /tmp/ut_hca");
+    system(cmd);
+    AssertRoceIpFail(0, TOPO_ERR_NOT_FOUND);
+    EXPECT_EQ(g_driverCallCount, 0);
 }
 
-/* 无任何网卡（仅 lo 回环）→ 回退构建失败 */
-TEST_F(NpuNicAffinityTest, Fallback_NoNics_LoopbackOnly)
+/* HCA 枚举目录不可打开（普通文件，opendir 得 ENOTDIR）→ 回退构建失败 */
+TEST_F(NpuNicAffinityTest, Fallback_HcaListOpenFail)
 {
     S(1, 0);
-    TeardownFakeNet();
-    const char* nicNames[] = {"lo"};
-    const char* fakeIps[] = {"127.0.0.1"};
-    BuildFakeNetChain(&g_fakeIfaddr, nicNames, fakeIps, 1);
-    AssertRoceIpFail(0);
+    char cmd[256];
+    sprintf_s(cmd, sizeof(cmd), "rm -rf /tmp/ut_hca && touch /tmp/ut_hca");
+    system(cmd);
+    AssertRoceIpFail(0, TOPO_ERR_SYSCALL);
+    EXPECT_EQ(g_driverCallCount, 0);
 }
 
-/* getifaddrs 系统调用失败 → 回退构建失败 */
-TEST_F(NpuNicAffinityTest, Fallback_GetifaddrsFail)
+/* 枚举不按 d_type 过滤：sysfs 下 HCA 目录项是符号链接，链接项仍须可枚举并解析出 IP */
+TEST_F(NpuNicAffinityTest, Fallback_HcaEntrySymlink)
 {
     S(1, 0);
+    TeardownFakeHca(); /* 清掉默认 hrn5_0，枚举目录里只留符号链接项 */
+    char cmd[512];
+    sprintf_s(
+        cmd, sizeof(cmd), "rm -rf /tmp/ut_hca_sym_target && mkdir -p /tmp/ut_hca_sym_target/real_hca/device/net/eth0");
+    system(cmd);
+    sprintf_s(cmd, sizeof(cmd), "mkdir -p /tmp/ut_hca");
+    system(cmd);
+    sprintf_s(cmd, sizeof(cmd), "ln -s /tmp/ut_hca_sym_target/real_hca /tmp/ut_hca/sym_hca");
+    system(cmd);
+    SetupFakeNet("eth0", "10.0.0.1");
+    Affine(0, "sym_hca");
+
+    AssertRoceIpOk(0, "10.0.0.1");
+    EXPECT_EQ(g_driverCallCount, 1);
+}
+
+/* 枚举成功但所有 HCA 都解不出 IP（getifaddrs 失败）→ 构建成功但分配不到 IP */
+TEST_F(NpuNicAffinityTest, Fallback_HcaIpGetifaddrsFail)
+{
+    S(1, 0);
+    Affine(0, "hrn5_0");
     g_fakeIfaddrsFail = true;
-    AssertRoceIpFail(0);
+    AssertRoceIpFail(0, TOPO_ERR_NOT_FOUND);
+    EXPECT_EQ(g_driverCallCount, 1);
 }
 
 /* NPU 计数为 0 → 回退构建失败 */
 TEST_F(NpuNicAffinityTest, Fallback_NpuCountZero)
 {
     MOCKER(hal_get_npu_count).stubs().will(returnValue(0));
-    Affine(0, "eth0");
+    Affine(0, "hrn5_0");
     AssertRoceIpFail(0);
 }
 
@@ -1832,25 +1879,28 @@ TEST_F(NpuNicAffinityTest, Fallback_NpuCountZero)
 TEST_F(NpuNicAffinityTest, Fallback_NpuCountTooLarge)
 {
     MOCKER(hal_get_npu_count).stubs().will(returnValue((int)MAX_NPU_COUNT + 1));
-    Affine(0, "eth0");
+    Affine(0, "hrn5_0");
     AssertRoceIpFail(0);
 }
 
-/* 可枚举但解不出 IP 的 NIC：不参与分配，只亲和该 NIC 的 NPU 拿不到 IP */
+/* 可枚举但解不出 IP 的 HCA：不参与分配，只亲和该 HCA 的 NPU 拿不到 IP */
 TEST_F(NpuNicAffinityTest, Fallback_NicNoIp)
 {
     S(2, 0);
-    Affine(0, "eth0");
-    Affine(1, "eth1");
+    /* hca1 的 net 目录存在，但 eth1 不在 getifaddrs 链中 → 解不出 IP */
+    TeardownFakeHca();
+    SetupFakeHca("hca0", "eth0");
+    SetupFakeHca("hca1", "eth1");
+    const char* eths[] = {"eth0", "eth1"};
+    const char* ips[] = {"10.0.0.1", NULL}; /* hca1 的 eth1 无地址 → 解不出 IP */
+    BuildFakeNetChain(&g_fakeIfaddr, eths, ips, 2);
 
-    TeardownFakeNet();
-    /* eth1（ips=NULL → 无地址）先入链，eth0（有 IP）后入 */
-    const char* nicNames[] = {"eth1", "eth0"};
-    const char* fakeIps[] = {NULL, "10.0.0.1"};
-    BuildFakeNetChain(&g_fakeIfaddr, nicNames, fakeIps, 2);
+    Affine(0, "hca0");
+    Affine(1, "hca1");
 
     AssertRoceIpOk(0, "10.0.0.1");
     AssertRoceIpFail(1);
+    EXPECT_EQ(g_driverCallCount, 8); /* 两次调用 × 2 NPU × 2 HCA */
 }
 
 /* XML 可用时优先 XML 路径，驱动接口不被调用 */
@@ -1865,14 +1915,9 @@ TEST_F(NpuNicAffinityTest, Fallback_PriorityOverXml)
     g_pi[1].bdf_busid = 4;
     g_pi[1].bdf_deviceid = 0;
     g_pi[1].bdf_funcid = 0;
-    /* 若误走回退，驱动会收到查询；XML 优先 → 计数应保持 0 */
-    Affine(0, "eth0");
-    Affine(0, "eth1");
-    Affine(1, "eth0");
-    Affine(1, "eth1");
-    const char* nicNames[] = {"eth0", "eth1"};
-    const char* fakeIps[] = {"10.0.0.1", "10.0.0.2"};
-    BuildFakeNetChain(&g_fakeIfaddr, nicNames, fakeIps, 2);
+    /* 若误走回退，驱动会收到查询；XML 优先 → 计数应保持 0（hrn5_0 来自 SetUp 默认 fixture） */
+    Affine(0, "hrn5_0");
+    Affine(1, "hrn5_0");
 
     W("<system version=\"1.0\">\n<cpu numaid=\"0\">\n"
       "<pci busid=\"0000:01:00.0\">\n"
@@ -1888,7 +1933,7 @@ TEST_F(NpuNicAffinityTest, Fallback_DriverQueryFail)
 {
     S(1, 0);
     SetDriverMode(DRIVER_LOAD_FAIL);
-    Affine(0, "eth0"); /* 驱动接口不可用，登记项也不生效 */
+    Affine(0, "hrn5_0"); /* 驱动接口不可用，登记项也不生效 */
     AssertRoceIpFail(0, TOPO_ERR_INTERNAL);
     EXPECT_EQ(g_driverCallCount, 1); /* 查询已发出，因全部失败而整体报错 */
 }
@@ -1904,51 +1949,35 @@ TEST_F(NpuNicAffinityTest, Fallback_LogicIdMapping)
         .with(mockcpp::any(), mockcpp::any())
         .will(mockcpp::invoke(mock_logicidShifted));
     /* 登记在 phyId 上：logicId 查询找不到 → 分配失败 */
-    Affine(0, "eth0");
+    Affine(0, "hrn5_0");
     AssertRoceIpFail(0);
 
-    /* 同一网口再登记到 logicId 上 → 分配成功（遗留的 phyId 登记项不影响 logicId 查询） */
-    Affine(100, "eth0");
+    /* 同一 HCA 再登记到 logicId 上 → 分配成功（遗留的 phyId 登记项不影响 logicId 查询） */
+    Affine(100, "hrn5_0");
     AssertRoceIpOk(0, "10.0.0.1");
     EXPECT_EQ(g_driverCallCount, 2); /* 两次构建各查询一次 */
 }
 
-/* 部分网口驱动不识别（查询失败）：跳过失败网口，其余网口仍正常建亲和 */
+/* 部分 HCA 驱动不识别（查询失败）：跳过失败 HCA，其余 HCA 仍正常建亲和 */
 TEST_F(NpuNicAffinityTest, Fallback_PartialQueryFail)
 {
     S(2, 0);
-    SetDriverMode(DRIVER_UNKNOWN_NIC_FAIL); /* 未登记的网口一律返回 -1，模拟驱动不识别的虚拟网口 */
-    Affine(0, "eth0");
-    Affine(0, "eth1");
-    Affine(1, "eth0");
-    Affine(1, "eth1");
+    SetDriverMode(DRIVER_UNKNOWN_NIC_FAIL); /* 未登记的 HCA 一律返回 -1，模拟驱动不认识的 IB 设备 */
+    TeardownFakeHca();
+    SetupFakeHca("hca0", "eth0");
+    SetupFakeHca("hca1", "eth1");
+    SetupFakeHca("unknown0", "eth2");
+    SetupFakeHca("unknown1", "eth3");
+    const char* eths[] = {"eth0", "eth1", "eth2", "eth3"};
+    const char* ips[] = {"10.0.0.1", "10.0.0.2", "172.17.0.2", "172.17.0.1"};
+    BuildFakeNetChain(&g_fakeIfaddr, eths, ips, 4);
+    Affine(0, "hca0");
+    Affine(1, "hca0");
 
-    /* 头插后链序为 docker0→veth0→eth0→eth1：docker0/veth0 会被查询但失败跳过，
-       且作为哑列排在枚举头部——NPU0 需先跳过它们才能命中 eth0 */
-    const char* nicNames[] = {"eth1", "eth0", "veth0", "docker0"};
-    const char* fakeIps[] = {"10.0.0.2", "10.0.0.1", "172.17.0.2", "172.17.0.1"};
-    BuildFakeNetChain(&g_fakeIfaddr, nicNames, fakeIps, 4);
-
-    /* 轮询：NPU0→eth0，NPU1→eth1，失败网口不进亲和矩阵 */
+    /* 未登记的 HCA 会被查询但失败跳过，不进亲和矩阵；NPU0/NPU1 只亲和 hca0 */
     AssertRoceIpOk(0, "10.0.0.1");
-    EXPECT_EQ(g_driverCallCount, 8); /* 单次构建 2 NPU × 4 网口（其中 4 次查询失败被跳过） */
-    AssertRoceIpOk(1, "10.0.0.2");
-}
-
-/* 枚举过滤：点对点（tunnel/PPP）与未 UP 的网口不进 nicNames，不产生驱动查询 */
-TEST_F(NpuNicAffinityTest, Fallback_EnumFilterNonPhysical)
-{
-    S(1, 0);
-    Affine(0, "eth0");
-
-    /* 头插后链序为 eth0(UP) → ethDown(未 UP) → ppp0(IFF_POINTOPOINT) */
-    const char* nicNames[] = {"ppp0", "ethDown", "eth0"};
-    const char* fakeIps[] = {NULL, NULL, "10.0.0.1"};
-    const unsigned int flags[] = {IFF_UP | IFF_POINTOPOINT, IFF_BROADCAST, IFF_UP | IFF_BROADCAST};
-    BuildFakeNetChain(&g_fakeIfaddr, nicNames, fakeIps, 3, flags);
-
-    AssertRoceIpOk(0, "10.0.0.1");
-    EXPECT_EQ(g_driverCallCount, 1); /* 仅 eth0 被查询，ppp0/ethDown 在枚举期被过滤 */
+    EXPECT_EQ(g_driverCallCount, 8); /* 单次构建 2 NPU × 4 HCA（其中 4 次查询失败被跳过） */
+    AssertRoceIpOk(1, "10.0.0.1");
 }
 
 /* XML 含 NIC 但 NPU 的 BDF 全不匹配（亲和矩阵为空）→ 回退驱动接口，且 XML 残留状态被清理 */
@@ -1959,18 +1988,18 @@ TEST_F(NpuNicAffinityTest, Fallback_XmlEmptyAffinity)
     g_pi[0].bdf_busid = 3;
     g_pi[0].bdf_deviceid = 0;
     g_pi[0].bdf_funcid = 0;
-    Affine(0, "eth0"); /* 驱动侧亲和 eth0 */
+    Affine(0, "hrn5_0"); /* 驱动侧亲和枚举出的 hrn5_0 */
 
     /* XML 的 NPU busid(0000:ff:00.0) 与实际 BDF(0000:03:00.0) 不匹配 → 矩阵为空；
-       其 NIC 名 hrn5_0 不在系统网口列表中，用于校验 XML 残留已被清理 */
+       XML 中的 NIC 名 xscale_9 不在 /tmp/ut_hca 中，用于校验 XML 残留已被清理 */
     W("<system version=\"1.0\">\n<cpu numaid=\"0\">\n"
       "<pci busid=\"0000:01:00.0\">\n"
-      "<nic>\n<net name=\"hrn5_0\"/>\n</nic>\n"
+      "<nic>\n<net name=\"xscale_9\"/>\n</nic>\n"
       "<pci busid=\"0000:ff:00.0\"/>\n"
       "</pci>\n</cpu>\n</system>\n");
 
     AssertRoceIpOk(0, "10.0.0.1");
-    EXPECT_EQ(g_driverCallCount, 1); /* 仅枚举出的 eth0 被查询：若 hrn5_0 残留，查询数会变成 2 */
+    EXPECT_EQ(g_driverCallCount, 1); /* 仅枚举出的 hrn5_0 被查询：若 xscale_9 残留，查询数会变成 2 */
 }
 
 /* 全部 NPU 不可见（零查询）→ 回退构建失败，而非空亲和矩阵静默成功 */
@@ -1978,7 +2007,7 @@ TEST_F(NpuNicAffinityTest, Fallback_AllNpusInvisible)
 {
     S(2, 0);
     SetVisibleDevices({});
-    Affine(0, "eth0");
+    Affine(0, "hrn5_0");
     AssertRoceIpFail(0, TOPO_ERR_INTERNAL);
     EXPECT_EQ(g_driverCallCount, 0); /* 没有任何查询发出，整体报错 */
 }

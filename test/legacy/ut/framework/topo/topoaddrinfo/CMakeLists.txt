@@ -26,6 +26,7 @@ target_sources(hccl_v2_utest PRIVATE
 target_compile_definitions(hccl_v2_utest PRIVATE
     XML_PATH="/tmp/ut_virtualTopology.xml"
     HCA_NET_PATH_TEMPLATE="/tmp/ut_hca/%s/device/net"
+    HCA_LIST_PATH="/tmp/ut_hca"
 )
 
 # 拦截 getifaddrs/freeifaddrs，返回假网络接口数据

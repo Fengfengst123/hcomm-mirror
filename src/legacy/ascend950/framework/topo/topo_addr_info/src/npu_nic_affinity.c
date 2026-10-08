@@ -15,7 +15,6 @@
 #include <dirent.h>
 #include <errno.h>
 #include <ifaddrs.h>
-#include <net/if.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
@@ -32,6 +31,9 @@
 #endif
 #ifndef HCA_NET_PATH_TEMPLATE
 #define HCA_NET_PATH_TEMPLATE "/sys/class/infiniband/%s/device/net"
+#endif
+#ifndef HCA_LIST_PATH
+#define HCA_LIST_PATH "/sys/class/infiniband"
 #endif
 #define MAX_PATH_LEN 512
 #define MAX_GROUP_CNT 16
@@ -385,55 +387,50 @@ static TopoAddrResult ParseXml(AffinityInfo* info)
     return BuildAffinityGroups(tags, tagCount, info);
 }
 
-/* 枚举系统网卡名（内核网口名），结果写入 info->nicNames/nicCount */
+/* 枚举系统HCA名，结果写入 info->nicNames/nicCount */
 static TopoAddrResult EnumerateNicNames(AffinityInfo* info)
 {
     if (info == NULL) {
         TOPO_ERR("EnumerateNicNames: invalid argument (info=%p)", info);
         return TOPO_ERR_PARA;
     }
-    struct ifaddrs* ifaddr = NULL;
-    if (getifaddrs(&ifaddr) == -1) {
-        TOPO_ERR("EnumerateNicNames: getifaddrs failed");
+    DIR* dir = opendir(HCA_LIST_PATH);
+    if (dir == NULL) {
+        TOPO_WARN("EnumerateNicNames: opendir(%s) failed, errno=%d(%s)", HCA_LIST_PATH, errno, strerror(errno));
         return TOPO_ERR_SYSCALL;
     }
 
-    for (struct ifaddrs* ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
-        if (ifa->ifa_name == NULL || strcmp(ifa->ifa_name, "lo") == 0) {
+    for (struct dirent* entry = readdir(dir); entry != NULL; entry = readdir(dir)) {
+        if (entry->d_name[0] == '.') {
             continue;
         }
-        if (strlen(ifa->ifa_name) >= MAX_NAME_LEN) {
+        if (strlen(entry->d_name) >= MAX_NAME_LEN) {
             continue;
         }
-        /* 只保留 UP 的业务网口：跳过回环、点对点网口（tunnel/PPP 等）与未 UP 的网口；
-           docker0/veth 等驱动不认识的虚拟网口即使残留，也会在后续查询失败时被跳过 */
-        if ((ifa->ifa_flags & (IFF_LOOPBACK | IFF_POINTOPOINT)) != 0 || (ifa->ifa_flags & IFF_UP) == 0) {
-            continue;
-        }
-        /* 同一网卡对应多条地址记录，DedupNetNic 去重后只保留名字一次，并顺带累计 nicCount */
+        /* 同一HCA对应多条地址记录，DedupNetNic 去重后只保留名字一次，并顺带累计 nicCount */
         unsigned int nicIdx = 0;
-        if (DedupNetNic(info, ifa->ifa_name, &nicIdx) == TOPO_ERR_MEMORY) {
+        if (DedupNetNic(info, entry->d_name, &nicIdx) == TOPO_ERR_MEMORY) {
             break;
         }
     }
-    freeifaddrs(ifaddr);
+    closedir(dir);
 
     if (info->nicCount == 0) {
-        TOPO_ERR("EnumerateNicNames: no NICs enumerated");
+        TOPO_INFO("EnumerateNicNames: no HCA enumerated under %s", HCA_LIST_PATH);
         return TOPO_ERR_NOT_FOUND;
     }
     return TOPO_SUCCESS;
 }
 
-/* 逐个查询 NPU×网卡的拓扑类型，DCMI_TOPO_TYPE_UB 记为亲和，直接填充 affined 矩阵；
-   单个查询失败（驱动不识别该网口）跳过继续，全部查询失败才整体报错 */
+/* 逐个查询 NPU×HCA的拓扑类型，DCMI_TOPO_TYPE_UB 记为亲和，直接填充 affined 矩阵；
+   单个查询失败（驱动不识别该HCA）跳过继续，全部查询失败才整体报错 */
 static TopoAddrResult BuildAffinityFromDriver(AffinityInfo* info)
 {
     TOPO_PERF_BEGIN(BuildAffinityFromDriver);
     (void)memset_s(info, sizeof(*info), 0, sizeof(*info));
     TopoAddrResult ret = EnumerateNicNames(info);
     if (ret != TOPO_SUCCESS) {
-        TOPO_ERR("BuildAffinityFromDriver: failed to enumerate NICs, ret=%d", ret);
+        TOPO_INFO("BuildAffinityFromDriver: failed to enumerate HCAs, ret=%d", ret);
         TOPO_PERF_END(BuildAffinityFromDriver);
         return ret;
     }
@@ -446,7 +443,7 @@ static TopoAddrResult BuildAffinityFromDriver(AffinityInfo* info)
     }
     unsigned int nicCount = info->nicCount;
     if (nicCount > MAX_HCA_COUNT) {
-        TOPO_ERR("BuildAffinityFromDriver: NIC count overflow, nicCount=%u (max=%d)", nicCount, MAX_HCA_COUNT);
+        TOPO_ERR("BuildAffinityFromDriver: HCA count overflow, nicCount=%u (max=%d)", nicCount, MAX_HCA_COUNT);
         TOPO_PERF_END(BuildAffinityFromDriver);
         return TOPO_ERR_INTERNAL;
     }
@@ -472,17 +469,17 @@ static TopoAddrResult BuildAffinityFromDriver(AffinityInfo* info)
 
             totalQuery++;
             if (drvRet != 0) {
-                /* 驱动不识别该网口（如残留的 docker0/veth 等）：跳过并继续，单个查询失败不拖垮整条回退路径 */
+                /* 驱动不识别该HCA（如与本产品无关的IB 设备）：跳过并继续，单个查询失败不拖垮整条回退路径 */
                 failedQuery++;
                 TOPO_INFO(
-                    "BuildAffinityFromDriver: skip NIC unknown to driver, drvRet=%d, phyId=%d, nic=%s", drvRet, phyId,
+                    "BuildAffinityFromDriver: skip HCA unknown to driver, drvRet=%d, phyId=%d, hca=%s", drvRet, phyId,
                     info->nicNames[nicIdx]);
                 continue;
             }
             TOPO_INFO(
-                "BuildAffinityFromDriver: phyId=%d, logicId=%u, drvRet=%d, topoType=%d, nic=%s", phyId, logicId, drvRet,
+                "BuildAffinityFromDriver: phyId=%d, logicId=%u, drvRet=%d, topoType=%d, hca=%s", phyId, logicId, drvRet,
                 topoType, info->nicNames[nicIdx]);
-            /* 成功时拓扑类型在 topoType 出参，DCMI_TOPO_TYPE_UB 表示网卡与 NPU 亲和 */
+            /* 成功时拓扑类型在 topoType 出参，DCMI_TOPO_TYPE_UB 表示HCA与 NPU 亲和 */
             if (topoType == DCMI_TOPO_TYPE_UB) {
                 info->affined[phyId][nicIdx] = true;
             }
@@ -491,7 +488,7 @@ static TopoAddrResult BuildAffinityFromDriver(AffinityInfo* info)
     /* 全部查询均失败（含零查询）说明驱动拓扑接口不可用，才整体报错 */
     if (failedQuery == totalQuery) {
         TOPO_INFO(
-            "BuildAffinityFromDriver: no NIC topo query succeeded, totalQuery=%u, failedQuery=%u", totalQuery,
+            "BuildAffinityFromDriver: no HCA topo query succeeded, totalQuery=%u, failedQuery=%u", totalQuery,
             failedQuery);
         TOPO_PERF_END(BuildAffinityFromDriver);
         return TOPO_ERR_INTERNAL;
