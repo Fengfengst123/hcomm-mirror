@@ -23,7 +23,7 @@ public:
     HcclResult GetAdjInfo(AlgResourceResponse& algRes, AdjInfo& adjInfo) override;
 
 private:
-    bool CalcScratchMemFlag(const u64 totalSize);
+    bool CalcScratchMemFlag(const u64 totalSize, const u8 deterministic);
     void ParseParam(const OpParam& param) override;
     /* *************** 资源计算 *************** */
     HcclResult CalcScratchMemSize(u64& scratchMemSize) override;

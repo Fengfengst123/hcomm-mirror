@@ -27,11 +27,10 @@ void CollAllReduceMeshSmallCountExecutor::ParseParam(const OpParam& param)
     aicpuUnfoldMode_ = param.aicpuUnfoldMode;
 }
 
-bool CollAllReduceMeshSmallCountExecutor::CalcScratchMemFlag(const u64 totalSize)
+bool CollAllReduceMeshSmallCountExecutor::CalcScratchMemFlag(const u64 totalSize, const u8 deterministic)
 {
     bool isDeter910B = workflowMode_ == HcclWorkflowMode::HCCL_WORKFLOW_MODE_OPS_KERNEL_INFO_LIB
-                       && topoAttr_.deviceType == DevType::DEV_TYPE_910B
-                       && topoMatcher_->GetExternalInputHcclDeterministic() != DETERMINISTIC_DISABLE
+                       && topoAttr_.deviceType == DevType::DEV_TYPE_910B && deterministic != DETERMINISTIC_DISABLE
                        && topoAttr_.deviceNumPerAggregation > DEVICE_TWO
                        && topoAttr_.deviceNumPerAggregation < DEVICE_EIGHT && totalSize <= HCCL_SMALL_COUNT_GRAPH_64_KB;
     return workflowMode_ == HcclWorkflowMode::HCCL_WORKFLOW_MODE_OPS_KERNEL_INFO_LIB
@@ -41,7 +40,7 @@ bool CollAllReduceMeshSmallCountExecutor::CalcScratchMemFlag(const u64 totalSize
 HcclResult CollAllReduceMeshSmallCountExecutor::CalcScratchMemSize(u64& scratchMemSize)
 {
     const u32 base = 2;
-    if (CalcScratchMemFlag(totalSize_) == true) {
+    if (CalcScratchMemFlag(totalSize_, topoMatcher_->GetExternalInputHcclDeterministic())) {
         if (topoAttr_.deviceType == DevType::DEV_TYPE_910B) {
             scratchMemSize = totalSize_ * (topoAttr_.userRankSize - 1);
         } else {
@@ -87,7 +86,7 @@ CollAllReduceMeshSmallCountExecutor::CalcTransportMemType(TransportMemType& inpu
         outputType = TransportMemType::CCL_OUTPUT;
     } else {
         inputType = TransportMemType::PARAM_INPUT;
-        if (CalcScratchMemFlag(totalSize_) == true) {
+        if (CalcScratchMemFlag(totalSize_, topoMatcher_->GetExternalInputHcclDeterministic())) {
             outputType = TransportMemType::SCRATCH;
         } else {
             outputType = TransportMemType::PARAM_OUTPUT;
@@ -160,8 +159,10 @@ HcclResult CollAllReduceMeshSmallCountExecutor::GetAdjInfo(AlgResourceResponse& 
 HcclResult CollAllReduceMeshSmallCountExecutor::KernelRun(const OpParam& param, ExecMem& execMem)
 {
     HCCL_CONFIG_INFO(HCCL_ALG, "[%s] userRank[%u] starts.", __func__, topoAttr_.userRank);
+    // 算法执行期间确定性配置只读取一次，后续统一复用
+    const u8 deterministic = topoMatcher_->GetExternalInputHcclDeterministic();
     std::vector<Slice> dataSegsSlice; // 数据分成ranksize份，每份的起始偏移和大小
-    if (!CalcScratchMemFlag(totalSize_)) {
+    if (!CalcScratchMemFlag(totalSize_, deterministic)) {
         execMem.scratchMem = execMem.outputMem;
     }
 
@@ -173,7 +174,6 @@ HcclResult CollAllReduceMeshSmallCountExecutor::KernelRun(const OpParam& param, 
               ReduceType::INLINE_REDUCE :
               ReduceType::TBE_REDUCE;
     auto originalAlgTypeLevel1 = static_cast<u32>(algType_.algoLevel1);
-    u8 deterministic = topoMatcher_->GetExternalInputHcclDeterministic();
     auto opMeta = HcclOpMetaInfo::GetOneForAllReduce(
         originalAlgTypeLevel1, param.DataDes.dataType, reduceType, true, 1, false, CopyPattern::BCOPY, 1, false, true,
         false, deterministic);
@@ -197,7 +197,7 @@ HcclResult CollAllReduceMeshSmallCountExecutor::KernelRun(const OpParam& param, 
         CHK_RET(level0TempAlg->Prepare(
             reduceAttr, algResResp_->slaveStreams, algResResp_->notifiesMain, algResResp_->notifiesAux,
             level0CommInfo.localRank, &opInfo, aicpu));
-    } else if (topoMatcher_->GetExternalInputHcclDeterministic() == DETERMINISTIC_DISABLE) {
+    } else if (deterministic == DETERMINISTIC_DISABLE) {
         isUsedRegister = true;
         level0TempAlg = AlgTemplateRegistry::Instance().GetAlgTemplate(
             TemplateType::TEMPLATE_ALL_REDUCE_REDUCE_BCAST, dispatcher_);
