@@ -71,6 +71,7 @@ TEST_M(RS, TcRsSetTsqpDepthAbnormal);
 
 TEST_M(RS, TcRsSocketListenStart2);
 TEST_M(RS, TcRsQpCreate2);
+TEST_M(RS, TcRsQpCreateWithCQAbnormal);
 
 TEST_M(RS, TcRsAbnormal2);
 

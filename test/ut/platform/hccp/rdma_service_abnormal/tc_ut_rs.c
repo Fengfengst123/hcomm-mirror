@@ -225,6 +225,19 @@ extern void RsEpollEventTcpListenInHandle(
 extern void RsSslRecvTagInHandle(struct RsAcceptInfo* acceptInfo, struct RsConnInfo* connTmp);
 extern void RsServerValidAsync(unsigned int chipId, struct RsConnCb* connCb, struct RsConnInfo* conn);
 extern int RsNetApiInit(void);
+extern int RsInitMemPool(struct RsQpCb* qpCb);
+extern int RsQpcbInitWithAttrs(struct RsRdevCb* rdevCb, struct RsQpCb* qpCb, struct RsQpNormWithAttrs* qpNorm);
+extern int RsQpcbDeinit(struct RsRdevCb* rdevCb, struct RsQpCb* qpCb);
+
+static int gRsQpcbDeinitCallCnt = 0;
+
+static int StubRsQpcbDeinitCnt(struct RsRdevCb* rdevCb, struct RsQpCb* qpCb)
+{
+    (void)rdevCb;
+    (void)qpCb;
+    gRsQpcbDeinitCallCnt++;
+    return 0;
+}
 
 long unsigned int StubCalloc(long unsigned int num, long unsigned int size)
 {
@@ -2941,4 +2954,72 @@ void TcRsNetApiInitFail()
     ret = RsNetApiInit();
     EXPECT_INT_EQ(-1, ret);
     mocker_clean();
+}
+
+void TcRsQpCreateWithCQAbnormal()
+{
+    int ret = 0;
+    uint32_t devId = 0;
+    unsigned int rdevIndex = 0;
+    unsigned int sendCqn = 0;
+    unsigned int recvCqn = 0;
+    struct RsInitConfig cfg = {0};
+    struct RsQpRespWithAttrs qpResp = {0};
+
+    struct rdev rdevInfo = {0};
+    rdevInfo.phyId = 0;
+    rdevInfo.family = AF_INET;
+    rdevInfo.localIp.addr.s_addr = inet_addr("127.0.0.1");
+
+    struct RsQpNormWithAttrs qpNorm = {0};
+    qpNorm.isExp = 1;
+    qpNorm.extAttrs.version = 1; /* QP_CREATE_WITH_ATTR_VERSION */
+    qpNorm.extAttrs.qpMode = 1;  /* RA_RS_GDR_TMPL_QP_MODE */
+
+    /* resource prepare... */
+    cfg.hccpMode = NETWORK_OFFLINE;
+    ret = RsInit(&cfg);
+    EXPECT_INT_EQ(ret, 0);
+
+    ret = RsRdevInit(rdevInfo, NOTIFY, &rdevIndex);
+    EXPECT_INT_EQ(ret, 0);
+
+    ret = RsTypicalCqCreate(devId, rdevIndex, 16, &sendCqn);
+    EXPECT_INT_EQ(ret, 0);
+    recvCqn = sendCqn;
+
+    /* case1: RsInitMemPool fails, RsQpcbDeinit must be called on rs_init_mem_err path */
+    gRsQpcbDeinitCallCnt = 0;
+    mocker((stub_fn_t)RsInitMemPool, 10, -1);
+    mocker_invoke((stub_fn_t)RsQpcbDeinit, (stub_fn_t)StubRsQpcbDeinitCnt, 10);
+    ret = RsQpCreateWithCQWithAttrs(devId, rdevIndex, sendCqn, recvCqn, &qpNorm, &qpResp);
+    EXPECT_INT_NE(ret, 0);
+    EXPECT_INT_EQ(gRsQpcbDeinitCallCnt, 1);
+    mocker_clean();
+
+    /* case2: RsQpcbInitWithAttrs fails, RsQpcbDeinit must NOT be called on rs_qpcb_init_err path */
+    gRsQpcbDeinitCallCnt = 0;
+    mocker((stub_fn_t)RsQpcbInitWithAttrs, 10, -1);
+    mocker_invoke((stub_fn_t)RsQpcbDeinit, (stub_fn_t)StubRsQpcbDeinitCnt, 10);
+    ret = RsQpCreateWithCQWithAttrs(devId, rdevIndex, sendCqn, recvCqn, &qpNorm, &qpResp);
+    EXPECT_INT_NE(ret, 0);
+    EXPECT_INT_EQ(gRsQpcbDeinitCallCnt, 0);
+    mocker_clean();
+
+    /* case3: RsDrvQpCreateWithAttrs fails, create_qp_err falls through rs_init_mem_err, RsQpcbDeinit called */
+    gRsQpcbDeinitCallCnt = 0;
+    mocker((stub_fn_t)RsDrvQpCreateWithAttrs, 10, -1);
+    mocker_invoke((stub_fn_t)RsQpcbDeinit, (stub_fn_t)StubRsQpcbDeinitCnt, 10);
+    ret = RsQpCreateWithCQWithAttrs(devId, rdevIndex, sendCqn, recvCqn, &qpNorm, &qpResp);
+    EXPECT_INT_NE(ret, 0);
+    EXPECT_INT_EQ(gRsQpcbDeinitCallCnt, 1);
+    mocker_clean();
+
+    /* resource free... */
+    ret = RsTypicalCqDestroy(devId, rdevIndex, sendCqn);
+    EXPECT_INT_EQ(ret, 0);
+    ret = RsRdevDeinit(devId, NOTIFY, rdevIndex);
+    EXPECT_INT_EQ(ret, 0);
+    ret = RsDeinit(&cfg);
+    EXPECT_INT_EQ(ret, 0);
 }

@@ -3158,9 +3158,10 @@ ret_noritfy_cq:
 create_qp_err:
     // Do NOT call RsDrvDestroyCq — CQs are not owned by this QP
     RsDeinitMemPool(qpCb);
-    (void)RsQpcbDeinit(rdevCb, qpCb);
 
 rs_init_mem_err:
+    (void)RsQpcbDeinit(rdevCb, qpCb);
+
 rs_qpcb_init_err:
     pthread_mutex_destroy(&qpCb->cqeErrInfo.mutex);
 

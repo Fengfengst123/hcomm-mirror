@@ -31,6 +31,7 @@ void TcRsSetTsqpDepthAbnormal();
 void TcRsSocketListenStart2();
 void TcRsSocketBatchConnect2();
 void TcRsQpCreate2();
+void TcRsQpCreateWithCQAbnormal();
 void TcRsMrOps2();
 
 void TcRsAbnormal2();
