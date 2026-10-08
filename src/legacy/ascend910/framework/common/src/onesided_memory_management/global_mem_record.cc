@@ -31,7 +31,8 @@ GlobalMemRecord::GlobalMemRecord(GlobalMemRecord&& other) noexcept
       addr_(other.addr_),
       size_(other.size_),
       pLock_(std::move(other.pLock_)),
-      boundComm_(std::move(other.boundComm_))
+      boundComm_(std::move(other.boundComm_)),
+      refCount_(other.refCount_)
 {}
 
 bool GlobalMemRecord::HasOverlap(const GlobalMemRecord& other) const

@@ -44,7 +44,7 @@ public:
     HcclResult Destroy();
 
 private:
-    HcclResult CheckOverlapAndInsert(GlobalMemRecord& memRecord, void** memRecordHandle);
+    HcclResult CheckOverlapAndInsert(GlobalMemRecord& memRecord, void** memRecordHandle, bool& isDuplicate);
     HcclResult CheckOneSidedBackupAndSetDevId(
         const HcclIpAddress& ipAddr, u32& backupDevPhyId, u32& backupDevLogicId,
         std::vector<HcclIpAddress>& localIpList, bool& isOneSidedTaskAndBackupInitA3) const;

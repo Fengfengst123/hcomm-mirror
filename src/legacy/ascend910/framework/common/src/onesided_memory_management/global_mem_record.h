@@ -83,6 +83,12 @@ public:
 
     inline std::unordered_map<HcclNetDevCtx, HcclBuf> GetAllRegBufInfo() const { return regBufInfo_; }
 
+    inline u32 GetRefCount() const { return refCount_; }
+
+    inline void AddRef() const { ++refCount_; }
+
+    inline void DecRef() const { --refCount_; }
+
 private:
     const HcclMemType type_;                      // 内存块类型, host或device
     const void* addr_;                            // 内存块地址
@@ -91,6 +97,7 @@ private:
     std::unordered_set<std::string> boundComm_{}; // 绑定了的通信域
     std::mutex regBufInfoMtx_;
     std::unordered_map<HcclNetDevCtx, HcclBuf> regBufInfo_{};
+    mutable u32 refCount_{1}; // 引用计数，重复注册累加，解注册递减
 };
 
 } // namespace hccl

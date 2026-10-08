@@ -58,16 +58,18 @@ HcclResult GlobalMemRegMgr::Destroy()
     return HCCL_SUCCESS;
 }
 
-HcclResult GlobalMemRegMgr::CheckOverlapAndInsert(GlobalMemRecord& memRecord, void** memRecordHandle)
+HcclResult GlobalMemRegMgr::CheckOverlapAndInsert(GlobalMemRecord& memRecord, void** memRecordHandle, bool& isDuplicate)
 {
     // 由于每次插入都会保证不产生重叠，所以只需要检查最接近的两条记录是否有重叠即可
     const auto memInfo = memRecord.PrintInfo();
+    isDuplicate = false;
 
     auto it = memRecordSet_.lower_bound(memRecord);
     if (it != memRecordSet_.cend()) {
         if (memRecord == *it) {
             // 已经存在相同的记录，取出地址作为handle
             *memRecordHandle = const_cast<GlobalMemRecord*>(&(*it));
+            isDuplicate = true;
             HCCL_INFO(
                 "[GlobalMemRegMgr][CheckOverlapAndInsert] The memory[%s] has been registered already.",
                 memInfo.c_str());
@@ -118,8 +120,20 @@ HcclResult GlobalMemRegMgr::Reg(const HcclMem* mem, void** memRecordHandle)
     GlobalMemRecord newRecord(mem);
     const auto memInfo = newRecord.PrintInfo();
     std::unique_lock<std::mutex> lock(lock_);
-    CHK_RET(CheckOverlapAndInsert(newRecord, memRecordHandle));
-    HCCL_INFO("[GlobalMemRegMgr][Reg] Added a new memory record[%s], handle[%p].", memInfo.c_str(), *memRecordHandle);
+    bool isDuplicate = false;
+    CHK_RET(CheckOverlapAndInsert(newRecord, memRecordHandle, isDuplicate));
+
+    auto* memRecordPtr = static_cast<GlobalMemRecord*>(*memRecordHandle);
+    if (isDuplicate) {
+        // 重复注册同一块内存：引用计数加1，复用已有记录，解注册时按引用计数递减
+        memRecordPtr->AddRef();
+        HCCL_INFO(
+            "[GlobalMemRegMgr][Reg] The memory[%s] has been registered already, ref count[%u], handle[%p].",
+            memInfo.c_str(), memRecordPtr->GetRefCount(), *memRecordHandle);
+    } else {
+        HCCL_INFO(
+            "[GlobalMemRegMgr][Reg] Added a new memory record[%s], handle[%p].", memInfo.c_str(), *memRecordHandle);
+    }
 
     // 记录地址，便于其他接口进行入参handle合法性校验
     validHandlePtrSet.emplace(*memRecordHandle);
@@ -139,6 +153,15 @@ HcclResult GlobalMemRegMgr::DeReg(void* memRecordHandle)
         // 找不到记录报错退出
         HCCL_ERROR("[GlobalMemRegMgr][DeReg] Cannot find the corresponding record of memory[%s].", memInfo.c_str());
         return HCCL_E_NOT_FOUND;
+    }
+
+    // 引用计数减1；若仍有其它引用，仅递减计数，不真正释放记录
+    if (memRecordPtr->GetRefCount() > 1) {
+        memRecordPtr->DecRef();
+        HCCL_INFO(
+            "[GlobalMemRegMgr][DeReg] Memory[%s] still has[%u] reference(s), only decrement ref count, handle[%p].",
+            memInfo.c_str(), memRecordPtr->GetRefCount(), memRecordHandle);
+        return HCCL_SUCCESS;
     }
 
     // 检查内存记录是否还与通信域绑定
