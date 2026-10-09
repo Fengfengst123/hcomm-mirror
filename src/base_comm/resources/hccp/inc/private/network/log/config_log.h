@@ -16,17 +16,8 @@
 #include "ra_rs_opcode.h"
 #include "user_log.h"
 
-extern uint64_t gDebugConfig;
-
-static inline uint64_t HccpGetDebugConfig(void)
-{
-    return gDebugConfig;
-}
-
-static inline void HccpSetDebugConfig(uint64_t value)
-{
-    gDebugConfig = value;
-}
+uint64_t HccpGetDebugConfig(void);
+void HccpSetDebugConfig(uint64_t value);
 
 #define hccp_info_log(moduleType, fmt, args...)                                                                        \
     do {                                                                                                               \

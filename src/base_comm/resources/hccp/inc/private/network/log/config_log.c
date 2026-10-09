@@ -10,4 +10,14 @@
 
 #include "config_log.h"
 
-uint64_t gDebugConfig = 0;
+static uint64_t gDebugConfig = 0;
+
+uint64_t HccpGetDebugConfig(void)
+{
+    return gDebugConfig;
+}
+
+void HccpSetDebugConfig(uint64_t value)
+{
+    gDebugConfig = value;
+}
