@@ -600,7 +600,7 @@ STATIC int RsCreateEpoll(struct rs_cb *rsCb)
     if (connCb->eventfd == RS_FD_INVALID) {
         RS_CLOSE_RETRY_FOR_EINTR(retFd, connCb->epollfd);
         connCb->epollfd = RS_FD_INVALID;
-        hccp_err("create eventfd for rs cb failed !");
+        hccp_err("create eventfd for rs cb failed, errno[%d]", errno);
         return -EINVAL;
     }
 

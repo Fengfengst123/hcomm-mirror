@@ -441,7 +441,7 @@ RS_ATTRI_VISI_DEF int RsInit(struct RsInitConfig *cfg)
 
     ret = getifaddrs(&rscb->ifaddrList);
     if (ret != 0) {
-        hccp_err("getifaddrs failed, ret:%d", ret);
+        hccp_err("getifaddrs failed, ret:%d, errno:%d", ret, errno);
         goto getifaddrs_err;
     }
 

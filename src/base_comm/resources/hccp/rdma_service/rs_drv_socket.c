@@ -71,7 +71,7 @@ int RsGetIpv6ScopeId(struct in6_addr localIp)
     int ret, i;
 
     ret = getifaddrs(&ifaddr);
-    CHK_PRT_RETURN(ret == -1, hccp_err("get ifaddrs failed, ret[%d]", ret), -ESYSFUNC);
+    CHK_PRT_RETURN(ret == -1, hccp_err("get ifaddrs failed, ret[%d] errno[%d]", ret, errno), -ESYSFUNC);
     /* Walk through linked list, maintaining head pointer so we can free list later */
     for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
         if (ifa->ifa_addr == NULL || ifa->ifa_addr->sa_family != AF_INET6) {

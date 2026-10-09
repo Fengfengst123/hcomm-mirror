@@ -278,11 +278,13 @@ STATIC int RsSocketSetFdTimeoutUsec(int connfd, unsigned int tvUsec)
 
     tv.tv_usec = tvUsec;
     ret = setsockopt(connfd, SOL_SOCKET, SO_SNDTIMEO, (char *)&tv, sizeof(tv));
-    CHK_PRT_RETURN(ret < 0, hccp_err("setsockopt connfd %d SO_SNDTIMEO tv_usec %u failed %d", connfd, tvUsec, ret),
+    CHK_PRT_RETURN(ret < 0,
+        hccp_err("setsockopt connfd %d SO_SNDTIMEO tv_usec %u failed %d errno %d", connfd, tvUsec, ret, errno),
         -EFILEOPER);
 
     ret = setsockopt(connfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv, sizeof(tv));
-    CHK_PRT_RETURN(ret < 0, hccp_err("setsockopt connfd %d SO_RCVTIMEO tv_usec %u failed %d", connfd, tvUsec, ret),
+    CHK_PRT_RETURN(ret < 0,
+        hccp_err("setsockopt connfd %d SO_RCVTIMEO tv_usec %u failed %d errno %d", connfd, tvUsec, ret, errno),
         -EFILEOPER);
 
     return 0;
@@ -2482,7 +2484,7 @@ STATIC int RsFillIfaddrInfos(struct IfaddrInfo ifaddrInfos[], unsigned int *num,
     type = RsGetDeviceType(phyId);
     CHK_PRT_RETURN(type == RS_HARDWARE_UNKNOWN, hccp_err("rs_get_device_type failed, type[%d]", type), -EINVAL);
     ret = getifaddrs(&ifaddr);
-    CHK_PRT_RETURN(ret == -1, hccp_err("get ifaddrs failed, ret[%d]", ret), -ESYSFUNC);
+    CHK_PRT_RETURN(ret == -1, hccp_err("get ifaddrs failed, ret[%d], errno[%d]", ret, errno), -ESYSFUNC);
     /* Walk through linked list, maintaining head pointer so we can free list later */
     for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
         if (ifa->ifa_addr == NULL || ifa->ifa_netmask == NULL) {
@@ -2532,7 +2534,7 @@ STATIC int RsFillIfaddrInfosV2(struct InterfaceInfo interfaceInfos[], unsigned i
     type = RsGetDeviceType(phyId);
     CHK_PRT_RETURN(type == RS_HARDWARE_UNKNOWN, hccp_err("rs_get_device_type failed, type[%d]", type), -EINVAL);
     ret = getifaddrs(&ifaddr);
-    CHK_PRT_RETURN(ret != 0, hccp_err("get ifaddrs failed, ret[%d]", ret), -ESYSFUNC);
+    CHK_PRT_RETURN(ret != 0, hccp_err("get ifaddrs failed, ret[%d], errno[%d]", ret, errno), -ESYSFUNC);
     /* Walk through linked list, maintaining head pointer so we can free list later */
     for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
         if (ifa->ifa_addr == NULL || ifa->ifa_netmask == NULL) {
@@ -2595,7 +2597,7 @@ STATIC int RsFillIfnum(unsigned int phyId, bool isAll, unsigned int *num, unsign
         CHK_PRT_RETURN(type == RS_HARDWARE_UNKNOWN, hccp_err("rs_get_device_type failed, type[%d]", type), -EINVAL);
     }
     ret = getifaddrs(&ifaddr);
-    CHK_PRT_RETURN(ret == -1, hccp_err("get ifaddrs failed, ret[%d]", ret), -ESYSFUNC);
+    CHK_PRT_RETURN(ret == -1, hccp_err("get ifaddrs failed, ret[%d], errno[%d]", ret, errno), -ESYSFUNC);
     /* Walk through linked list, maintaining head pointer so we can free list later */
     for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
         if (ifa->ifa_addr == NULL || ifa->ifa_netmask == NULL) {
