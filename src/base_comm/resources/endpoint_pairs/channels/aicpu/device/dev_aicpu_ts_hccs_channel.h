@@ -33,10 +33,12 @@ private:
         DispatcherCtxPtr dispatcherCtx{nullptr};
         std::shared_ptr<hccl::Transport> transport;
         std::string tag{""};
+        char commId[128]{};
     };
 
     std::unordered_map<ChannelHandle, HccsSlot> slots_;
     std::mutex mutex_;
+    static u64 commSeq_;
 };
 } // namespace hccl
 

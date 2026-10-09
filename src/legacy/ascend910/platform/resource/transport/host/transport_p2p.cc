@@ -18,6 +18,7 @@
 #include "mem_name_repository_pub.h"
 #include "adapter_rts.h"
 #include "mem_host_pub.h"
+#include "new/hccl_dispatcher_ctx.h"
 
 namespace hccl {
 std::array<DeviceMem, MAX_MODULE_DEVICE_NUM> TransportP2p::notifyValueMem_;
@@ -1695,6 +1696,9 @@ HcclResult
 TransportP2p::WriteAsync(struct Transport::Buffer& remoteBuf, struct Transport::Buffer& localBuf, Stream& stream)
 {
     if (machinePara_.isNewOneSide) {
+        if (machinePara_.dctxPtr != nullptr) {
+            CHK_RET(SetDispatcherCtx(static_cast<DispatcherCtxPtr>(machinePara_.dctxPtr)));
+        }
         return WriteAsyncEx(remoteBuf, localBuf, stream);
     }
 
@@ -1776,6 +1780,9 @@ HcclResult
 TransportP2p::ReadAsync(struct Transport::Buffer& localBuf, struct Transport::Buffer& remoteBuf, Stream& stream)
 {
     if (machinePara_.isNewOneSide) {
+        if (machinePara_.dctxPtr != nullptr) {
+            CHK_RET(SetDispatcherCtx(static_cast<DispatcherCtxPtr>(machinePara_.dctxPtr)));
+        }
         return ReadAsyncEx(localBuf, remoteBuf, stream);
     }
     DeviceMem dstDevMem(const_cast<void*>(localBuf.addr), localBuf.size);
