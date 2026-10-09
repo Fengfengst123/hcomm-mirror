@@ -784,13 +784,6 @@ STATIC int RsGetHostRdevIndex(struct rdev rdevInfo, struct RsRdevCb *rdevCb, uns
     for (; (&rdevCbTmp->list) != &rdevCb->rsCb->rdevList;
          rdevCbTmp = rdevCbTmp2, rdevCbTmp2 = list_entry(rdevCbTmp2->list.next, struct RsRdevCb, list)) {
         tmpRdevIndex = rdevCbTmp->rdevIndex;
-        if (!RsCompareIpAddr(&rdevCbTmp->localIp, &localIp)) {
-            *rdevIndex = tmpRdevIndex;
-            rdevCb->rdevIndex = *rdevIndex;
-            rdevCb->localIp = localIp;
-            RS_PTHREAD_MUTEX_ULOCK(&rdevCb->rsCb->mutex);
-            return 0;
-        }
     }
 
     *rdevIndex = tmpRdevIndex + 1;
