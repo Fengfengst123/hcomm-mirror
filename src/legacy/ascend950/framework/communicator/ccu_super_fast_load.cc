@@ -12,6 +12,7 @@
 
 #include "exception_util.h"
 #include "internal_exception.h"
+#include "invalid_params_exception.h"
 #include "communicator_impl.h"
 #include "ccu_jetty_mgr.h"
 #include "coll_service_device_mode.h"
@@ -56,6 +57,11 @@ CachedCCUParams::CachedCCUParams(
       insType(insType),
       isSlave(isSlave)
 {
+    if (ccuInstruction.size() != profilingInfo.size()) {
+        THROW<InvalidParamsException>(StringFormat(
+            "[CachedCCUParams] ccuInstruction size[%zu] does not match profilingInfo size[%zu].", ccuInstruction.size(),
+            profilingInfo.size()));
+    }
     std::vector<std::vector<rtCcuTaskInfo_t>> ccuTaskInstruction{};
     auto& commImpl = *(static_cast<CommunicatorImpl*>(comm));
     for (auto& vec : ccuInstruction) {
@@ -120,6 +126,9 @@ CachedCCUParams::alloc_and_memcpy_aligned(const std::vector<std::vector<rtCcuTas
 {
     if (alignment < alignof(CcuTaskParam)) {
         THROW<InternalException>(StringFormat("[CachedCCUParams] alignment must be larger than type alignment."));
+    }
+    if (vecs.empty()) {
+        THROW<InvalidParamsException>(StringFormat("[CachedCCUParams] ccu task params is empty."));
     }
     count.resize(vecs.size());
     count[0] = vecs[0].size();

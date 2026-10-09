@@ -3802,6 +3802,61 @@ private:
     void* fakeStreamPtr;
 };
 
+TEST_F(CommunicatorImplTest, Ut_SaveCCUParams_When_CcuParamsEmpty_Expect_InvalidParamsException)
+{
+    std::vector<std::vector<CcuTaskParam>> ccuParams;
+    std::vector<std::vector<CcuProfilingInfo>> ccuProfilingInfo;
+
+    EXPECT_THROW(
+        fakeComm.saveCCUParams(std::move(ccuParams), std::move(ccuProfilingInfo), 0, CcuInstType::CCU_INS_GROUP, true),
+        InvalidParamsException);
+}
+
+TEST_F(CommunicatorImplTest, Ut_SaveCCUParams_When_ProfilingInfoEmpty_Expect_InvalidParamsException)
+{
+    std::vector<std::vector<CcuTaskParam>> ccuParams{{CcuTaskParam{}}};
+    std::vector<std::vector<CcuProfilingInfo>> ccuProfilingInfo;
+
+    try {
+        fakeComm.saveCCUParams(std::move(ccuParams), std::move(ccuProfilingInfo), 0, CcuInstType::CCU_INS_GROUP, true);
+        FAIL() << "Expected InvalidParamsException";
+    } catch (const InvalidParamsException& exception) {
+        const std::string message = exception.what();
+        EXPECT_NE(message.find("ccuInstruction size[1]"), std::string::npos);
+        EXPECT_NE(message.find("profilingInfo size[0]"), std::string::npos);
+    }
+}
+
+TEST_F(CommunicatorImplTest, Ut_SaveCCUParams_When_VectorSizesMismatch_Expect_InvalidParamsException)
+{
+    std::vector<std::vector<CcuTaskParam>> ccuParams{{CcuTaskParam{}}};
+    std::vector<std::vector<CcuProfilingInfo>> ccuProfilingInfo(2);
+
+    try {
+        fakeComm.saveCCUParams(std::move(ccuParams), std::move(ccuProfilingInfo), 0, CcuInstType::CCU_INS_GROUP, true);
+        FAIL() << "Expected InvalidParamsException";
+    } catch (const InvalidParamsException& exception) {
+        const std::string message = exception.what();
+        EXPECT_NE(message.find("ccuInstruction size[1]"), std::string::npos);
+        EXPECT_NE(message.find("profilingInfo size[2]"), std::string::npos);
+    }
+}
+
+TEST_F(CommunicatorImplTest, Ut_SaveCCUParams_When_VectorSizesMatch_Expect_ParamsCached)
+{
+    std::vector<std::vector<CcuTaskParam>> ccuParams{{CcuTaskParam{}}};
+    std::vector<std::vector<CcuProfilingInfo>> ccuProfilingInfo(1);
+
+    EXPECT_NO_THROW(
+        fakeComm.saveCCUParams(std::move(ccuParams), std::move(ccuProfilingInfo), 0, CcuInstType::CCU_INS_GROUP, true));
+    auto& cachedParams
+        = fakeComm.colCcuParamMapping[fakeComm.currentCollOperator->opType][fakeComm.ccuParamsMappingKey];
+    EXPECT_NE(cachedParams.ccuParams, nullptr);
+    EXPECT_EQ(cachedParams.count.size(), 1);
+    EXPECT_EQ(cachedParams.count[0], 1);
+    EXPECT_EQ(cachedParams.taskParams.size(), 1);
+}
+
 TEST_F(TryFastCcuLaunchTest, Ut_TryFastCcuLaunch_When_NoNeedProf_Expect_ReturnTrue)
 {
     // when
