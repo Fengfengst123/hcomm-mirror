@@ -575,6 +575,7 @@ void CommunicatorImpl::ExecuteFastCcuLaunch(
         opbaseStream->RegisterMaster(std::make_unique<Stream>(stream));
         //  launch LocalWaitFrom on stream
         cntNotifyNTo1->WaitValue(value, timeout, mStream);
+        std::size_t offset = params.count[0];
         for (std::size_t i = 0, len = streamNum - 1; i < len; ++i) {
             u32 bitValue = BASE_BIT << i;
             auto slave = opbaseStream->GetSlave(slaveIndex++);
@@ -583,12 +584,13 @@ void CommunicatorImpl::ExecuteFastCcuLaunch(
             cntNotify1ToN->WaitBits(bitValue, timeout, *slave);
             if (taskExceptionEnv || enableProfilingEnv) {
                 params.taskParams[i + 1].beginTime = DlProfFunction::GetInstance().dlMsprofSysCycleTime();
-                SuperFastLoad(ccuParams + params.count[i], slave->GetPtr(), params.count[i + 1]);
+                SuperFastLoad(ccuParams + offset, slave->GetPtr(), params.count[i + 1]);
                 params.taskParams[i + 1].endTime = DlProfFunction::GetInstance().dlMsprofSysCycleTime();
                 FastCcuLaunchSaveDfxTaskInfo(*this, params.taskParams[i + 1], slave->IsMaster());
             } else {
-                SuperFastLoad(ccuParams + params.count[i], slave->GetPtr(), params.count[i + 1]);
+                SuperFastLoad(ccuParams + offset, slave->GetPtr(), params.count[i + 1]);
             }
+            offset += params.count[i + 1];
             // launch localPostTo on extra streams
             cntNotifyNTo1->PostBits(bitValue, *slave);
         }

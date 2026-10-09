@@ -1895,6 +1895,19 @@ TEST_F(CommunicatorImplTest, Ut_CovertToCurrentCollOperator_When_ReduceScatterV)
 }
 
 namespace {
+struct CcuLaunchRecord {
+    rtCcuTaskInfo_t* taskInfo;
+    rtStream_t stream;
+};
+
+std::vector<CcuLaunchRecord> ccuLaunchRecords;
+
+rtError_t CaptureCcuLaunch(rtCcuTaskInfo_t* taskInfo, rtStream_t const stream)
+{
+    ccuLaunchRecords.push_back({taskInfo, stream});
+    return RT_ERROR_NONE;
+}
+
 void getInsQueue(InsQuePtr& insQueue)
 {
     // ====== 配置用例基本信息 ======
@@ -2214,6 +2227,101 @@ TEST_F(CommunicatorImplTest, Ut_CommunicatorImpl_When_EnableSuperFastLoad_Expect
     comm.superFasterLoad = false;
     comm.taskExceptionEnv = true;
     comm.enableProfilingEnv = true;
+}
+
+TEST_F(CommunicatorImplTest, Ut_SaveCCUParams_When_MiddleStreamEmpty_Expect_CountKeepsStreamIndexes)
+{
+    std::vector<std::vector<CcuTaskParam>> ccuParams(3);
+    ccuParams[0].resize(5);
+    ccuParams[2].resize(3);
+    for (std::size_t i = 0; i < ccuParams[0].size(); ++i) {
+        ccuParams[0][i].missionId = 100U + static_cast<u32>(i);
+    }
+    for (std::size_t i = 0; i < ccuParams[2].size(); ++i) {
+        ccuParams[2][i].missionId = 200U + static_cast<u32>(i);
+    }
+    std::vector<std::vector<CcuProfilingInfo>> ccuProfilingInfo(3);
+
+    fakeComm.saveCCUParams(std::move(ccuParams), std::move(ccuProfilingInfo), 0, CcuInstType::CCU_INS_GROUP, true);
+
+    auto opTypeIt = fakeComm.colCcuParamMapping.find(fakeComm.currentCollOperator->opType);
+    ASSERT_NE(opTypeIt, fakeComm.colCcuParamMapping.end());
+    auto paramsIt = opTypeIt->second.find(fakeComm.ccuParamsMappingKey);
+    ASSERT_NE(paramsIt, opTypeIt->second.end());
+    const CachedCCUParams& cachedParams = paramsIt->second;
+    EXPECT_EQ(cachedParams.count, (std::vector<std::size_t>{5, 0, 3}));
+    EXPECT_EQ(cachedParams.totalCounts, 8U);
+    for (std::size_t i = 0; i < 5; ++i) {
+        EXPECT_EQ(cachedParams.ccuParams[i].missionId, 100U + static_cast<u32>(i));
+    }
+    for (std::size_t i = 0; i < 3; ++i) {
+        EXPECT_EQ(cachedParams.ccuParams[5 + i].missionId, 200U + static_cast<u32>(i));
+    }
+}
+
+TEST_F(CommunicatorImplTest, Ut_ExecuteFastCcuLaunch_When_MultipleStreams_Expect_CumulativeTaskOffsets)
+{
+    MOCKER(rtCCULaunch).stubs().will(invoke(CaptureCcuLaunch));
+    MOCKER_CPP(&StreamManager::CaptureSlaveStream)
+        .stubs()
+        .with(mockcpp::any(), mockcpp::any())
+        .will(ignoreReturnValue());
+    for (std::size_t i = 0; i < 14; ++i) {
+        fakeComm.streamManager->opbase->GetOrCreateSlave();
+    }
+    fakeComm.taskExceptionEnv = false;
+    fakeComm.enableProfilingEnv = false;
+
+    auto verifyLoads = [this](
+                           const std::vector<std::size_t>& streamCounts,
+                           const std::vector<std::pair<std::size_t, std::size_t>>& expectedSlaveLoads) {
+        std::vector<std::vector<CcuTaskParam>> ccuParams(streamCounts.size());
+        std::vector<std::vector<CcuProfilingInfo>> profilingInfo(streamCounts.size());
+        u32 taskId = 0;
+        for (std::size_t streamIndex = 0; streamIndex < streamCounts.size(); ++streamIndex) {
+            ccuParams[streamIndex].resize(streamCounts[streamIndex]);
+            for (auto& task : ccuParams[streamIndex]) {
+                task.missionId = taskId++;
+            }
+        }
+        CachedCCUParams cachedParams(
+            std::move(ccuParams), std::move(profilingInfo), 0, CcuInstType::CCU_INS_GROUP, false, &fakeComm);
+        rtCcuTaskInfo_t* const packedParams = cachedParams.ccuParams;
+        aclrtStream const masterStream = reinterpret_cast<aclrtStream>(0x8000);
+        ccuLaunchRecords.clear();
+
+        fakeComm.ExecuteFastCcuLaunch(CollOpParams{}, masterStream, cachedParams);
+
+        std::vector<rtCcuTaskInfo_t*> masterLoads;
+        std::vector<rtCcuTaskInfo_t*> slaveLoads;
+        for (const auto& record : ccuLaunchRecords) {
+            if (record.stream == masterStream) {
+                masterLoads.push_back(record.taskInfo);
+            } else {
+                slaveLoads.push_back(record.taskInfo);
+            }
+        }
+        ASSERT_EQ(masterLoads.size(), streamCounts[0]);
+        for (std::size_t i = 0; i < streamCounts[0]; ++i) {
+            EXPECT_EQ(masterLoads[i], packedParams + i);
+        }
+
+        std::size_t loadIndex = 0;
+        for (const auto& expectedLoad : expectedSlaveLoads) {
+            ASSERT_LT(loadIndex, slaveLoads.size());
+            EXPECT_EQ(slaveLoads[loadIndex], packedParams + expectedLoad.first);
+            for (std::size_t i = 0; i < expectedLoad.second; ++i) {
+                ASSERT_LT(loadIndex + i, slaveLoads.size());
+                EXPECT_EQ(slaveLoads[loadIndex + i], packedParams + expectedLoad.first + i);
+            }
+            loadIndex += expectedLoad.second;
+        }
+        EXPECT_EQ(loadIndex, slaveLoads.size());
+    };
+
+    verifyLoads({5, 0, 3}, {{5, 3}});
+    verifyLoads({5, 3, 4}, {{5, 3}, {8, 4}});
+    verifyLoads({5, 3}, {{5, 3}});
 }
 
 TEST_F(CommunicatorImplTest, Ut_LoadOpbasedCollOp_When_Alg_Is_Not_Support_Then_Throw_Exception)

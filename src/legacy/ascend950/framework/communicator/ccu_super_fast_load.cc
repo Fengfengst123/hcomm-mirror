@@ -122,8 +122,7 @@ CachedCCUParams::alloc_and_memcpy_aligned(const std::vector<std::vector<rtCcuTas
         THROW<InternalException>(StringFormat("[CachedCCUParams] alignment must be larger than type alignment."));
     }
     count.resize(vecs.size());
-    std::size_t countIndex = 0;
-    count[countIndex++] = vecs[0].size();
+    count[0] = vecs[0].size();
     for (const auto& vec : vecs) {
         totalCounts += vec.size();
         HCCL_INFO("CachedCCUParams: vec.size[%llu]", static_cast<std::uint64_t>(vec.size()));
@@ -148,9 +147,10 @@ CachedCCUParams::alloc_and_memcpy_aligned(const std::vector<std::vector<rtCcuTas
         }
         cur += count[0];
     }
-    u32 reqStreamNum = vecs.size() - 1;
+    std::size_t reqStreamNum = vecs.size() - 1;
     for (std::size_t i = 1; i <= reqStreamNum; i++) {
         auto& vec = vecs[i];
+        count[i] = vec.size();
         if (!vec.empty()) {
             auto ret
                 = memcpy_s(cur, vec.size() * sizeof(rtCcuTaskInfo_t), vec.data(), vec.size() * sizeof(rtCcuTaskInfo_t));
@@ -158,7 +158,6 @@ CachedCCUParams::alloc_and_memcpy_aligned(const std::vector<std::vector<rtCcuTas
                 aligned_free(dst);
                 THROW<InternalException>(StringFormat("[CachedCCUParams] failed to memcpy, ret %d.", ret));
             }
-            count[countIndex++] = vec.size();
             cur += vec.size();
         }
     }
