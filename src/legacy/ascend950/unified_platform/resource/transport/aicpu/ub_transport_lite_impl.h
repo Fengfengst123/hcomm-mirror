@@ -522,7 +522,7 @@ private:
                     wqeCount, ubConnLitePtr->GetUbJettyLiteId().GetDieId(),
                     ubConnLitePtr->GetUbJettyLiteId().GetFuncId(), ubConnLitePtr->GetUbJettyLiteId().GetJettyId());
                 for (size_t wqeIdx = 0; wqeIdx < wqeCount; wqeIdx++) {
-                    PLF_CONFIG_INFO(
+                    PLF_CONFIG_DEBUG(
                         PLF_TASK,
                         "[UbTransportLiteImpl][PostLaunchWqe] %uth generated WQE "
                         "in jetty[%u, %u, %u]",

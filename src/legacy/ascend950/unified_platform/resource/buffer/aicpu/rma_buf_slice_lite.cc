@@ -18,7 +18,7 @@ RmaBufSliceLite::RmaBufSliceLite(u64 addr, u64 size, u32 lkey, u32 tokenId)
       lkey_(lkey),
       tokenId_(tokenId)
 {
-    HCCL_INFO("RmaBufSliceLite::RmaBufSliceLite:%s", Describe().c_str());
+    HCCL_DEBUG("RmaBufSliceLite::RmaBufSliceLite:%s", Describe().c_str());
 }
 
 std::string RmaBufSliceLite::Describe() const

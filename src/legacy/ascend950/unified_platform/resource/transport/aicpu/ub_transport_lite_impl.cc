@@ -313,7 +313,7 @@ RmtRmaBufSliceLite UbTransportLiteImpl::GetRmtRmaBufSliceLite(const RmaBufferLit
 HcclResult
 UbTransportLiteImpl::BuildLocRmaBufferLite(const uintptr_t addr, const size_t size, RmaBufferLite& rmaBufferLite)
 {
-    HCCL_INFO(
+    HCCL_DEBUG(
         "[UbTransportLiteImpl::%s] start to find addr[0x%llx], size[0x%llx] in locBufferMap, whose size is %zu. ",
         __func__, addr, size, locBufferMap.size());
     if (locBufferMap.empty()) {

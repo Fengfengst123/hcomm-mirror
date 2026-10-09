@@ -20,7 +20,7 @@ RmtRmaBufSliceLite::RmtRmaBufSliceLite(u64 addr, u64 size, u32 rkey, u32 tokenId
       tokenValue_(tokenValue),
       notifyId_(notifyId)
 {
-    HCCL_INFO("RmtRmaBufSliceLite::RmtRmaBufSliceLite:%s", Describe().c_str());
+    HCCL_DEBUG("RmtRmaBufSliceLite::RmtRmaBufSliceLite:%s", Describe().c_str());
 }
 
 std::string RmtRmaBufSliceLite::Describe() const

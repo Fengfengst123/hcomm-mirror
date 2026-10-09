@@ -29,7 +29,7 @@ RmaBufferLite::RmaBufferLite(u64 addr, u64 size, u32 tokenId, u32 tokenValue)
       tokenId_(tokenId),
       tokenValue_(tokenValue)
 {
-    HCCL_INFO("RmaBufferLite::RmaBufferLite:%s", Describe().c_str());
+    HCCL_DEBUG("RmaBufferLite::RmaBufferLite:%s", Describe().c_str());
 }
 
 RmaBufSliceLite RmaBufferLite::GetRmaBufSliceLite(u64 offset, u32 sliceSize) const
