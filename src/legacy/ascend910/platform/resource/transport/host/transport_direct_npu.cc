@@ -922,7 +922,7 @@ HcclResult TransportDirectNpu::TxData(
     HCCL_INFO(
         "[TransportDirectNpu][TxData]localRank %u remoteRank %u lkey %u rkey %u remoteAddr %p localAddr %p dataSize "
         "%llu "
-        "timeout %llu localFlagAddr %p remoteFlagAddr %p lfkey %u rfkey %u qpinfo %llu",
+        "timeout %llu s localFlagAddr %p remoteFlagAddr %p lfkey %u rfkey %u qpinfo %llu",
         machinePara_.localUserrank, machinePara_.remoteUserrank, apiParam.lKey, apiParam.rKey, apiParam.remoteAddr,
         apiParam.localAddr, apiParam.dataSize, apiParam.timeout, apiParam.localFlagAddr, apiParam.remoteFlagAddr,
         apiParam.lfKey, apiParam.rfKey, apiParam.qpInfo.qpPtr);
@@ -1001,7 +1001,7 @@ TransportDirectNpu::RxData(UserMemType srcMemType, u64 srcOffset, void* dst, u64
     HCCL_INFO(
         "[TransportDirectNpu][RxData]localRank %u remoteRank %u lkey %u rkey %u remoteAddr %p localAddr %p dataSize "
         "%llu "
-        "timeout %llu localFlagAddr %p remoteFlagAddr %p lfkey %u rfkey %u qpinfo %llu",
+        "timeout %llu s localFlagAddr %p remoteFlagAddr %p lfkey %u rfkey %u qpinfo %llu",
         machinePara_.localUserrank, machinePara_.remoteUserrank, apiParam.lKey, apiParam.rKey, apiParam.remoteAddr,
         apiParam.localAddr, apiParam.dataSize, apiParam.timeout, apiParam.localFlagAddr, apiParam.remoteFlagAddr,
         apiParam.lfKey, apiParam.rfKey, apiParam.qpInfo.qpPtr);
