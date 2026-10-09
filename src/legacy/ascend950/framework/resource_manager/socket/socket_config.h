@@ -148,7 +148,7 @@ public:
 
 private:
     SocketRole role{};
-    string hccpTag;
+    string hccpTag{};
 
     // 带 rankId 和 ipIndex 的 hccpTag: tag_localRank_remoteRank_localIpIdx_remoteIpIdx (SERVER) /
     // tag_remoteRank_localRank_remoteIpIdx_localIpIdx (CLIENT)

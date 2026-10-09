@@ -160,7 +160,7 @@ private:
     // 查 local/remote addr 的 ipIndex 并注入 EndpointPair，供 SocketConfig 拼 hccpTag 使用
     void FillEndpointPairIpIndex(
         hcomm::EndpointPair* endpointPair, uint32_t remoteRank, const EndpointDesc& localEp,
-        const EndpointDesc& remoteEp);
+        const EndpointDesc& remoteEp) const;
     HcclResult BatchServerInitForChannels(
         const HcclChannelDesc* channelDescs, uint32_t channelNum, const std::string& socketTag,
         ReuseSocketIdxMap& reuseSocketIdxMap);

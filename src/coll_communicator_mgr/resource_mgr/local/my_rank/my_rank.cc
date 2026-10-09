@@ -542,7 +542,8 @@ HcclResult MyRank::GetEndpointPairFromChannel(
 }
 
 void MyRank::FillEndpointPairIpIndex(
-    hcomm::EndpointPair* endpointPair, uint32_t remoteRank, const EndpointDesc& localEp, const EndpointDesc& remoteEp)
+    hcomm::EndpointPair* endpointPair, uint32_t remoteRank, const EndpointDesc& localEp,
+    const EndpointDesc& remoteEp) const
 {
     if (rankGraph_ == nullptr || endpointPair == nullptr) {
         return;
