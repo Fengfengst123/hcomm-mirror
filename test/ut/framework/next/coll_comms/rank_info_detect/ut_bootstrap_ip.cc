@@ -38,7 +38,9 @@ using namespace Hccl;
 
 namespace Hccl {
 std::vector<IpAddress> GetHostSocketWhitelist();
-}
+bool FindHostIpByIfName(
+    const std::vector<std::pair<std::string, IpAddress>>& hostIfInfos, s32 family, IpAddress& ipAddress);
+} // namespace Hccl
 
 namespace {
 EnvHostNicConfig MakeHostNicConfig(bool whitelistDisable, bool setIfFields = true)
@@ -56,6 +58,32 @@ EnvHostNicConfig MakeHostNicConfig(bool whitelistDisable, bool setIfFields = tru
 }
 
 std::vector<IpAddress> ReturnLocalHostWhitelist() { return {IpAddress("127.0.0.1")}; }
+
+class DfsConfigEnvGuard {
+public:
+    DfsConfigEnvGuard()
+    {
+        const char* value = std::getenv("HCCL_DFS_CONFIG");
+        if (value != nullptr) {
+            savedValue_ = value;
+            hadValue_ = true;
+        }
+        (void)setenv("HCCL_DFS_CONFIG", "task_exception:on", 1);
+    }
+
+    ~DfsConfigEnvGuard()
+    {
+        if (hadValue_) {
+            (void)setenv("HCCL_DFS_CONFIG", savedValue_.c_str(), 1);
+        } else {
+            (void)unsetenv("HCCL_DFS_CONFIG");
+        }
+    }
+
+private:
+    std::string savedValue_;
+    bool hadValue_{false};
+};
 } // namespace
 
 class GetBootstrapIpTest : public testing::Test {
@@ -199,4 +227,23 @@ TEST_F(GetBootstrapIpTest, Ut_FindLocalHostIp_When_Config_HCCL_SOCKET_IFNAME_Exp
 
     // check
     EXPECT_THROW(GetBootstrapIp(9), InternalException);
+}
+
+TEST_F(GetBootstrapIpTest, Ut_FindHostIpByIfName_When_ExactConfigHasHostNamePrefix_Expect_ExactHostIp)
+{
+    // when
+    DfsConfigEnvGuard envGuard;
+    std::vector<std::pair<std::string, IpAddress>> hostIfInfos;
+    hostIfInfos.push_back(std::make_pair("eth0", IpAddress("127.0.0.1")));
+    hostIfInfos.push_back(std::make_pair("eth0:1", IpAddress("127.0.0.2")));
+    auto fakeEnvConfig = MakeHostNicConfig(true);
+    fakeEnvConfig.hcclSocketIfName = CfgField<SocketIfName>{
+        "HCCL_SOCKET_IFNAME", SocketIfName(std::vector<std::string>{"eth0:1"}, false, true), CastSocketIfName};
+    fakeEnvConfig.hcclSocketIfName.isParsed = true;
+    MOCKER_CPP(&EnvConfig::GetHostNicConfig).stubs().will(returnValue(fakeEnvConfig));
+    IpAddress ipAddress;
+
+    // check
+    EXPECT_TRUE(FindHostIpByIfName(hostIfInfos, AF_INET, ipAddress));
+    EXPECT_EQ(ipAddress, IpAddress("127.0.0.2"));
 }

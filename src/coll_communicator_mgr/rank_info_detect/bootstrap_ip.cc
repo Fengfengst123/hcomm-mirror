@@ -96,11 +96,14 @@ bool FindHostIpByIfName(
         if (hostIfInfo.second.GetFamily() != family) {
             continue;
         }
-        u32 matchLen = hostIfInfo.first.size();
         bool configIfNamesFlag = false;
         for (u32 i = 0; i < socketIfName.configIfNames.size(); i++) {
-            matchLen = socketIfName.searchExact ? hostIfInfo.first.size() : socketIfName.configIfNames[i].size();
-            if (hostIfInfo.first.compare(0, matchLen, socketIfName.configIfNames[i], 0, matchLen) == 0) {
+            bool isMatched
+                = socketIfName.searchExact ?
+                      hostIfInfo.first == socketIfName.configIfNames[i] :
+                      hostIfInfo.first.compare(0, socketIfName.configIfNames[i].size(), socketIfName.configIfNames[i])
+                          == 0;
+            if (isMatched) {
                 configIfNamesFlag = true;
             }
         }
