@@ -382,7 +382,7 @@ STATIC int RsTcpRecvTagInHandle(struct RsListenInfo *listenInfo, int connfd, str
         return 0;
     }
 
-    hccp_run_info("recv tag success, server:{%s:%u} client:%s timeCost:%fms tagSyncTimes:%u tagEintrTimes:%u",
+    hccp_info_socket("recv tag success, server:{%s:%u} client:%s timeCost:%fms tagSyncTimes:%u tagEintrTimes:%u",
         listenInfo->serverIpAddr.readAddr, listenInfo->sockPort, remoteIp->readAddr, timeCost, connTmp->tagSyncTimes,
         connTmp->tagEintrTimes);
     return 0;
@@ -1345,7 +1345,7 @@ STATIC int RsConnectBindClient(int fd, struct RsConnInfo *conn)
     uint16_t clientPort = (conn->clientIp.family == AF_INET) ? ntohs(clientAddr.sAddr.sin_port)
                                                              : ntohs(clientAddr.sAddr6.sin6_port);
     if ((clientPort < 60000) || (clientPort > 60015)) { // HCCL默认监听60000-60015端口,如client使用该端口，记录EVENT日志
-        hccp_run_info("client bind success. client family %d addr %s:%u, fd:%d", conn->clientIp.family,
+        hccp_info_socket("client bind success. client family %d addr %s:%u, fd:%d", conn->clientIp.family,
             conn->clientIp.readAddr, clientPort, fd);
     } else {
         hccp_run_info("client bind success. client family %d addr %s:%u, fd:%d", conn->clientIp.family,

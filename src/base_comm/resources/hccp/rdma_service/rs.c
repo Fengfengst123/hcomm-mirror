@@ -2219,7 +2219,7 @@ RS_ATTRI_VISI_DEF enum ProductType RsGetProductType(int devId)
     int ret;
 
     if (type != PRODUCT_TYPE_NO_VALUE) { // Cache result after first query
-        hccp_run_info("[Get][ChipInfo]chip name is %s, type:%d", chipInfo.name, type);
+        hccp_info_others("[Get][ChipInfo]chip name is %s, type:%d", chipInfo.name, type);
         return type;
     }
 

@@ -339,8 +339,8 @@ out:
     clientPort = (clientIp->family == AF_INET) ? ntohs(clientAddr.sAddr.sin_port) : ntohs(clientAddr.sAddr6.sin6_port);
 
     if ((clientPort < 60000) || (clientPort > 60015)) { // HCCL默认监听60000-60015端口,如client使用该端口，记录EVENT日志
-        hccp_run_info("client connect success. client family %d addr %s:%u, server addr %s:%u, fd:%d", clientIp->family,
-            clientIp->readAddr, clientPort, serverIp->readAddr, port, fd);
+        hccp_info_socket("client connect success. client family %d addr %s:%u, server addr %s:%u, fd:%d",
+            clientIp->family, clientIp->readAddr, clientPort, serverIp->readAddr, port, fd);
     } else {
         hccp_run_info("client connect success. client family %d addr %s:%u, server addr %s:%u, fd:%d", clientIp->family,
             clientIp->readAddr, clientPort, serverIp->readAddr, port, fd);
