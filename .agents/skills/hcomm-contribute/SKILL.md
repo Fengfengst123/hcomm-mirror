@@ -76,7 +76,7 @@ source <CANN安装路径>/cann/set_env.sh && echo $ASCEND_HOME_PATH
 - **UT 的 aicpu 用例依赖 device kernel 配置**：须先 `build.sh --pkg --full` 生成完整包并安装到 CANN 树（`chmod -R u+w $CANN` 后 `bash build_out/cann-hcomm_*.run --full --install-path=$CANN`），否则 CollServiceAiCpu 等套件报 `ccl_kernel.json is not a valid real path`。
 - **执行测试时须在已 source CANN 环境变量的同一 shell 里跑** ctest/build.sh，否则测试进程按默认路径找 CANN 报同上错误。
 
-pre-commit（clang-format + OAT 许可检查）本地跑法：`pip3 install pre-commit && pre-commit run --files <改动文件>`；OAT 检查也可 `bash scripts/oat_check.sh <文件>`（exit=0 才通过）。新增源文件须带 CANN-2.0 许可头（对照仓内已有文件逐字节一致）。
+pre-commit（clang-format + OAT 许可检查）本地跑法：`pip3 install pre-commit && pre-commit run --files <改动文件>`；OAT 检查由 `.pre-commit-config.yaml` 中的远程 hook `oat-check` 承载（首次运行需联网拉取），单独执行可用 `pre-commit run oat-check --files <文件>`。新增源文件须带 CANN-2.0 许可头（对照仓内已有文件逐字节一致）。
 
 ## Step 4 Issue 查重与创建（可独立运行，需 token）
 
