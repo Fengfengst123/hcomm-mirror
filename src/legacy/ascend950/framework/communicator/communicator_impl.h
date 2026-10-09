@@ -228,6 +228,11 @@ public:
     HcclResult AllocAndRegKFCWorkSpace(uint64_t size, const std::string& memTag);
     HcclResult GetKFCWorkSpaceVA(const std::string& memTag, const uint64_t* size, void** addr, bool* newCreated);
     HcclResult DestroyKFCWorkSpaceVA();
+    void* GetKFCWorkSpaceAddr()
+    {
+        auto& shmem = tagDpuShmemArgsMap_["DPUTAG"];
+        return shmem.connectType_ == HOST_DEVICE_CONNECT_TYPE_UB ? shmem.va_ : shmem.accessVA_;
+    }
 
     bool IsWorldGroup() const;
 

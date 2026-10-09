@@ -53,6 +53,11 @@ static HcclResult WaitFlagReady(uint8_t* srcFlagPtr)
         if (flagReadValue == 1) {
             break;
         }
+        if (flagReadValue == 2) { /* 2: DPU2NPU_FLAG_ABORT */
+            HCCL_ERROR(
+                "[%s] Polling flag got ABORT value[%u], peer exited abnormally, exit waiting", __func__, flagReadValue);
+            return HCCL_E_INTERNAL;
+        }
         const auto elapsed
             = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - timeStart);
         if (timeoutVal != 0 && elapsed > timeoutSec) {

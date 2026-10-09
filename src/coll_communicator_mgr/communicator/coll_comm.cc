@@ -27,6 +27,7 @@
 #include "hccl_log_keywords.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
 #include <exception>
 #include <set>
@@ -38,6 +39,13 @@ namespace hccl {
 namespace {
     std::unordered_map<HcclCommSymWindow, HcclComm> g_hcommWindowCommMap{};
     std::mutex g_hcommWindowCommMapMutex{};
+    // DPUTAG共享内存协议约定，与DPU侧实现（legacy/ascend950/framework/communicator）保持一致：
+    // 工作区大小100MB，前半区为NPU->DPU，后半区为DPU->NPU，flag位于各半区首字节
+    constexpr u64 DPU_SHARE_HBM_MEMORY_SIZE = 100 * 1024 * 1024;
+    constexpr u64 DPU_SHARE_HBM_MEMORY_HALF = DPU_SHARE_HBM_MEMORY_SIZE / 2;
+    // dpu2npu半区flag语义：0=空闲，1=响应就绪，2=对端异常退出（读侧见base_comm/primitives/api_c_adpt下
+    // aicpu_ts_sync_data_c_adpt.cc中的WaitFlagReady
+    constexpr uint8_t DPU2NPU_FLAG_ABORT = 2;
 } // namespace
 
 HcclResult RecordHcommWindowOwner(HcclCommSymWindow winHandle, HcclComm comm)
@@ -1073,6 +1081,31 @@ HcclResult CollComm::Suspend()
 
         commStatus_ = HcclCommStatus::HCCL_COMM_STATUS_SUSPENDING;
     }
+
+    // 通信域异常退出时，AICPU侧可能正阻塞在HcommWaitResponse中轮询DPU响应（见WaitFlagReady），
+    // 此处向DPU->NPU半区首字节写入异常退出标志，令其立即结束等待，不再等到自身超时。
+    if (comm_ == nullptr) {
+        HCCL_RUN_INFO("[CollComm][Suspend] comm is null, skip write terminate flag, commId[%s]", commId_.c_str());
+        return myRank_->StopLaunch();
+    }
+    HCCL_RUN_INFO("[CollComm][Suspend] start to terminate WaitResponse");
+    Hccl::HcclCommunicator* commV2 = static_cast<Hccl::HcclCommunicator*>(comm_);
+    void* addr{nullptr};
+    addr = commV2->GetKFCWorkSpaceVA();
+    // DPUTAG工作区在通信域初始化阶段由DPU线程创建，newCreated为true说明本通信域未拉起DPU
+    if (addr == nullptr) {
+        // 通知失败不阻断挂起流程，AICPU侧仍会按自身超时退出等待
+        HCCL_RUN_INFO(
+            "[CollComm][Suspend] get dpu share mem failed, skip write terminate flag, commId[%s], addr[%p]",
+            commId_.c_str(), addr);
+        return myRank_->StopLaunch();
+    }
+    void* dpu2npuFlag = static_cast<uint8_t*>(addr) + DPU_SHARE_HBM_MEMORY_HALF;
+    // 与DPU线程写同一flag的方式保持一致（hostdpu/task_service.cc SynchronizeControlInfo为release语义），
+    // 避免对同一字节的原子/非原子混合访问
+    static_cast<std::atomic<uint8_t>*>(dpu2npuFlag)->store(DPU2NPU_FLAG_ABORT, std::memory_order_release);
+    HCCL_RUN_INFO(
+        "[CollComm][Suspend] write terminate flag success, commId[%s], flagAddr[%p]", commId_.c_str(), dpu2npuFlag);
 
     return myRank_->StopLaunch();
 }

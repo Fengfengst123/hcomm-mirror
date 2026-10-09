@@ -287,6 +287,7 @@ global:
         "Hccl::HcclCommunicator::GetRankGraphV2(void*&)";  # _ZN4Hccl16HcclCommunicator14GetRankGraphV2ERPv
         "Hccl::HcclCommunicator::GetRankInParentComm()";  # _ZN4Hccl16HcclCommunicator19GetRankInParentCommEv
         "Hccl::HcclCommunicator::GetRankIpPortMap(std::shared_ptr<std::unordered_map<unsigned int, std::unordered_map<Hccl::IpAddress, unsigned int, std::hash<Hccl::IpAddress>, std::equal_to<Hccl::IpAddress>, std::allocator<std::pair<Hccl::IpAddress const, unsigned int> > >, std::hash<unsigned int>, std::equal_to<unsigned int>, std::allocator<std::pair<unsigned int const, std::unordered_map<Hccl::IpAddress, unsigned int, std::hash<Hccl::IpAddress>, std::equal_to<Hccl::IpAddress>, std::allocator<std::pair<Hccl::IpAddress const, unsigned int> > > > > > >&)";  # _ZN4Hccl16HcclCommunicator16GetRankIpPortMapERSt10shared_ptrISt13unordered_mapIjS2_INS_9IpAddressEjSt4hashIS3_ESt8equal_toIS3_ESaISt4pairIKS3_jEEES4_IjES6_IjESaIS8_IKjSC_EEEE
+        "Hccl::HcclCommunicator::GetKFCWorkSpaceVA()";  # _ZN4Hccl16HcclCommunicator17GetKFCWorkSpaceVAEv
         "Hccl::HcclCommunicator::SetAccelerator(int, bool)";  # _ZN4Hccl16HcclCommunicator14SetAcceleratorEib
         "Hccl::HccpHdcManager::DeInit(unsigned int)";  # _ZN4Hccl14HccpHdcManager6DeInitEj
         "Hccl::HccpHdcManager::GetInstance()";  # _ZN4Hccl14HccpHdcManager11GetInstanceEv
