@@ -349,6 +349,8 @@ global:
         "hccl::NotifyPool::~NotifyPool()";  # _ZN4hccl10NotifyPoolD1Ev
         "hccl::OpUnfoldCache::ClearEntry(hccl::OpUnfoldKey const&)";  # _ZN4hccl13OpUnfoldCache10ClearEntryERKNS_11OpUnfoldKeyE
         "hccl::OpUnfoldCache::ClearEntryForAlltoallv()";  # _ZN4hccl13OpUnfoldCache22ClearEntryForAlltoallvEv
+        "hccl::OpUnfoldCache::ClearEntryForCapture(unsigned long)";  # _ZN4hccl13OpUnfoldCache20ClearEntryForCaptureEm
+        "hccl::OpUnfoldCache::SetCurCaptureModelId(unsigned long)";  # _ZN4hccl13OpUnfoldCache20SetCurCaptureModelIdEm
         "hccl::OpUnfoldCache::FindEntry(hccl::OpUnfoldKey const&, hccl::OpUnfoldCacheEntry**) const";  # _ZNK4hccl13OpUnfoldCache9FindEntryERKNS_11OpUnfoldKeyEPPNS_18OpUnfoldCacheEntryE
         "hccl::OpUnfoldCache::IsCacheFull() const";  # _ZNK4hccl13OpUnfoldCache11IsCacheFullEv
         "hccl::OpUnfoldCache::OpUnfoldCache()";  # _ZN4hccl13OpUnfoldCacheC1Ev
