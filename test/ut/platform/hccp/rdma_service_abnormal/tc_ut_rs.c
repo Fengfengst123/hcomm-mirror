@@ -222,7 +222,7 @@ extern int RsTcpRecvTagInHandle(
     struct RsListenInfo* listenInfo, int fd, struct RsConnInfo* connTmp, struct RsIpAddrInfo* remoteIp);
 extern void RsEpollEventTcpListenInHandle(
     struct rs_cb* rsCb, struct RsListenInfo* listenInfo, int fd, struct RsIpAddrInfo* remoteIp);
-extern void RsSslRecvTagInHandle(struct RsAcceptInfo* acceptInfo, struct RsConnInfo* connTmp);
+extern int RsSslRecvTagInHandle(struct RsAcceptInfo* acceptInfo, struct RsConnInfo* connTmp);
 extern void RsServerValidAsync(unsigned int chipId, struct RsConnCb* connCb, struct RsConnInfo* conn);
 extern int RsNetApiInit(void);
 extern int RsInitMemPool(struct RsQpCb* qpCb);
@@ -2872,7 +2872,8 @@ void TcRsTcpRecvTagInHandle()
     struct RsListenInfo listenInfo = {0};
     struct RsConnInfo connTmp = {0};
     struct RsIpAddrInfo remoteIp = {0};
-    struct rs_cb* rsCb = NULL;
+    struct rs_cb rsCbStruct = {0};
+    struct rs_cb* rsCb = &rsCbStruct;
     struct RsAcceptInfo acceptInfo = {0};
     int ret = 0;
 

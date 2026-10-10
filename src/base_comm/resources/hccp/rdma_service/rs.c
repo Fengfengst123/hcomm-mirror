@@ -1437,8 +1437,8 @@ STATIC void RsFreeConnOneNode(struct rs_cb *rscb, struct RsConnInfo *conn)
 
     RS_CLOSE_RETRY_FOR_EINTR(ret, conn->connfd);
 
-    hccp_info_socket("free for conn IP:%s, port:%d, connfd:%d, state:%u", conn->clientIp.readAddr, conn->port,
-        conn->connfd, conn->state);
+    hccp_info_socket("free for conn IP:%s, port:%d, connfd:%d, state:%u, tag:%s", conn->clientIp.readAddr, conn->port,
+        conn->connfd, conn->state, conn->tag);
 
     conn->connfd = RS_FD_INVALID;
     conn->state = RS_CONN_STATE_RESET;

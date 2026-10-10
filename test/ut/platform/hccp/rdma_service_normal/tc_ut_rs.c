@@ -54,7 +54,7 @@
 extern void RsGetCurTime(struct timeval* time);
 extern int memset_s(void* dest, size_t destMax, int c, size_t count);
 extern int RsPthreadMutexInit(struct rs_cb* rscb, struct RsInitConfig* cfg);
-extern void RsSslRecvTagInHandle(struct RsAcceptInfo* acceptInfo, struct RsConnInfo* connTmp);
+extern int RsSslRecvTagInHandle(struct RsAcceptInfo* acceptInfo, struct RsConnInfo* connTmp);
 extern void RsEpollEventSslRecvTagInHandle(struct rs_cb* rsCb, struct RsAcceptInfo* acceptInfo);
 extern int RsRdev2rdevCb(unsigned int chipId, unsigned int rdevIndex, struct RsRdevCb** rdevCb);
 extern int RsCompareIpGid(struct rdev rdevInfo, union ibv_gid* gid);
@@ -3713,10 +3713,14 @@ void TcRsSslFree()
 
 void TcRsDrvConnect()
 {
+    struct RsConnInfo conn = {0};
     gRsCb = malloc(sizeof(struct rs_cb));
     gRsCb->hccpMode = 1;
+    conn.connfd = 1;
+    conn.port = 1;
+    conn.clientIp.family = AF_INET;
     mocker(connect, 20, 1);
-    RsDrvConnect(1, NULL, NULL, 1);
+    RsDrvConnect(&conn);
     mocker_clean();
     free(gRsCb);
     gRsCb = NULL;

@@ -72,7 +72,7 @@ int RsCheckDstInterface(unsigned int phyId, const char *ifaName, enum RsHardware
 int RsPeerFillIfnum(unsigned int phyId, unsigned int *num, struct ifaddrs *ifaddrList);
 int RsPeerFillIfaddrInfos(struct InterfaceInfo interfaceInfos[], unsigned int *num, unsigned int phyId,
     struct ifaddrs *ifaddrList);
-int RsDrvConnect(int fd, struct RsIpAddrInfo *serverIp, struct RsIpAddrInfo *clientIp, uint16_t port);
+int RsDrvConnect(struct RsConnInfo *conn);
 int RsDrvSocketSend(int fd, const void *data, uint64_t size, int flags);
 int RsDrvSocketRecv(int fd, void *data, uint64_t size, int flags);
 int RsDrvSslBindFd(struct RsConnInfo *conn, int fd);

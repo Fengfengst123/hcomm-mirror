@@ -101,21 +101,21 @@ int RsWlistCheckConnAdd(struct rs_cb *rsCb, struct RsConnInfo *connTmp)
     /* add conn node to server list */
     ret = RsAllocConnNode(&conn, connTmp->port);
     if (ret) {
-        hccp_err("server IP:0x%s add conn info to list failed, fd:%d, ret:%d", connTmp->serverIp.readAddr,
-            connTmp->connfd, ret);
+        hccp_err("server IP:0x%s add conn info to list failed, fd:%d, ret:%d, tag:%s", connTmp->serverIp.readAddr,
+            connTmp->connfd, ret, connTmp->tag);
         goto alloc_err;
     }
 
     ret = RsSocketCopyConnInfo(connTmp, conn);
     if (ret) {
-        hccp_err("rs_socket_copy_conn_info failed, ret[%d]", ret);
+        hccp_err("rs_socket_copy_conn_info failed, ret:%d, tag:%s", ret, connTmp->tag);
         goto out;
     }
 
     if (rsCb->sslEnable == RS_SSL_ENABLE) {
         ret = RsEpollCtl(rsCb->connCb.epollfd, EPOLL_CTL_DEL, connTmp->connfd, EPOLLIN);
         if (ret) {
-            hccp_err("rs epoll ctl failed, ret %d", ret);
+            hccp_err("rs epoll ctl failed, ret:%d, tag:%s", ret, connTmp->tag);
             goto out;
         }
     }
@@ -167,9 +167,10 @@ STATIC int RsSslRecvTagInHandle(struct RsAcceptInfo *acceptInfo, struct RsConnIn
         RsGetCurTime(&now);
         HccpTimeInterval(&now, &startTime, &timeCost);
         if (timeCost >= RS_RECV_MAX_TIME) {
-            hccp_run_info("recv tag time out, server:{%s:%u} client:%s tagSyncTime:%u tagEintrTime:%u",
-                acceptInfo->serverIpAddr.readAddr, acceptInfo->sockPort, acceptInfo->clientIpAddr.readAddr,
-                connTmp->tagSyncTimes, connTmp->tagEintrTimes);
+            hccp_run_info(
+                "recv tag time out, connfd:%d, server:{%s:%u} tagChkDis:%d client:%s tagSyncTime:%u tagEintrTime:%u",
+                acceptInfo->connFd, acceptInfo->serverIpAddr.readAddr, acceptInfo->sockPort, acceptInfo->tagChkDis,
+                acceptInfo->clientIpAddr.readAddr, connTmp->tagSyncTimes, connTmp->tagEintrTimes);
             return -ETIME;
         }
 
@@ -186,9 +187,11 @@ STATIC int RsSslRecvTagInHandle(struct RsAcceptInfo *acceptInfo, struct RsConnIn
     connTmp->ssl = acceptInfo->ssl;
     connTmp->tagChkDis = acceptInfo->tagChkDis;
 
-    hccp_info_socket("recv tag success, server:{%s:%u} client:%s timeCost:%fms tagSyncTime:%u tagEintrTime:%u",
-        acceptInfo->serverIpAddr.readAddr, acceptInfo->sockPort, acceptInfo->clientIpAddr.readAddr, timeCost,
-        connTmp->tagSyncTimes, connTmp->tagEintrTimes);
+    hccp_info_socket("recv tag success, connfd:%d, server:{%s:%u}, client:%s, timeCost:%fms, tagSyncTime:%u, "
+                     "tagEintrTime:%u, tagChkDis:%d, tag:%s",
+        acceptInfo->connFd, acceptInfo->serverIpAddr.readAddr, acceptInfo->sockPort, acceptInfo->clientIpAddr.readAddr,
+        timeCost, connTmp->tagSyncTimes, connTmp->tagEintrTimes, connTmp->tagChkDis, connTmp->tag);
+
     return 0;
 }
 
@@ -207,7 +210,8 @@ STATIC void RsEpollEventSslRecvTagInHandle(struct rs_cb *rsCb, struct RsAcceptIn
     ret = RsWlistCheckConnAdd(rsCb, &connTmp);
 out:
     if (ret != 0) {
-        hccp_warn_socket("recv tag or add conn unsuccessful ret:%d", ret);
+        hccp_warn_socket("recv tag or add conn unsuccessful, server:%s port:%u fd:%d ret:%d tag:%s",
+            acceptInfo->serverIpAddr.readAddr, acceptInfo->sockPort, acceptInfo->connFd, ret, connTmp.tag);
         ssl_adp_shutdown(acceptInfo->ssl);
         ssl_adp_free(acceptInfo->ssl);
         acceptInfo->ssl = NULL;
@@ -232,17 +236,20 @@ STATIC void RsDoSslHandshake(struct RsAcceptInfo *acceptInfo, struct rs_cb *rscb
     if (ret == 1) {
         ret = rs_tls_peer_cert_verify(acceptInfo->ssl, rscb);
         if (ret) {
-            hccp_err("tls verify peer cert failed");
+            hccp_err("tls verify peer cert failed, server:%s port:%u fd:%d", acceptInfo->serverIpAddr.readAddr,
+                acceptInfo->sockPort, acceptInfo->connFd);
             return;
         }
         acceptInfo->state = RS_CONN_STATE_SSL_CONNECTED;
     } else {
         err = ssl_adp_get_error(acceptInfo->ssl, ret);
         if (err == SSL_ERROR_WANT_WRITE) {
-            hccp_info_socket("return want write");
+            hccp_info_socket("ssl handshake want write, server:%s port:%u fd:%d", acceptInfo->serverIpAddr.readAddr,
+                acceptInfo->sockPort, acceptInfo->connFd);
             return;
         } else if (err == SSL_ERROR_WANT_READ) {
-            hccp_info_socket("return want read");
+            hccp_info_socket("ssl handshake want read, server:%s port:%u fd:%d", acceptInfo->serverIpAddr.readAddr,
+                acceptInfo->sockPort, acceptInfo->connFd);
             return;
         } else {
             rs_ssl_err_string(acceptInfo->connFd, err);
@@ -268,11 +275,11 @@ STATIC int RsEpollEventSslAcceptInHandle(struct rs_cb *rsCb, int fd)
         if (fd == acceptInfo->connFd) {
             if (acceptInfo->ssl == NULL) {
                 acceptInfo->ssl = ssl_adp_new(rsCb->serverSslCtx);
-                CHK_PRT_RETURN(acceptInfo->ssl == NULL, hccp_err("server ssl ctx alloc failed"), -ENOMEM);
+                CHK_PRT_RETURN(acceptInfo->ssl == NULL, hccp_err("server ssl ctx alloc failed, fd:%d", fd), -ENOMEM);
 
                 ret = ssl_adp_set_fd(acceptInfo->ssl, acceptInfo->connFd);
                 if (ret != 1) {
-                    hccp_err("bind connfd and ssl failed, ret %d", ret);
+                    hccp_err("bind connfd and ssl failed, fd:%d, ret:%d", fd, ret);
                     ssl_adp_shutdown(acceptInfo->ssl);
                     ssl_adp_free(acceptInfo->ssl);
                     acceptInfo->ssl = NULL;
@@ -696,9 +703,11 @@ STATIC void *RsConnectHandle(void *arg)
             ret = RsSocketConnectAsync(connTmp, rsCb);
             if (ret != 0 && connTmp->state == RS_CONN_STATE_RESET) {
                 connTmp->state = RS_CONN_STATE_ERR;
-                hccp_err("[client]rs_socket_connect_async failed at RS_CONN_STATE_RESET state, ret:%d, clientIp:%s "
-                         "serverIp:%s server_port:%u tag:%s",
-                    ret, connTmp->clientIp.readAddr, connTmp->serverIp.readAddr, connTmp->port, connTmp->tag);
+                hccp_err(
+                    "[client]rs_socket_connect_async failed at RS_CONN_STATE_RESET state, fd:%d, ret:%d, clientIp:%s "
+                    "serverIp:%s server_port:%u tag:%s",
+                    connTmp->connfd, ret, connTmp->clientIp.readAddr, connTmp->serverIp.readAddr, connTmp->port,
+                    connTmp->tag);
                 continue;
             }
             if ((promoteConnect == false) && (RsGetSocketConnectState(connTmp) == 0)) {
