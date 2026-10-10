@@ -144,9 +144,10 @@ HcclResult HcclCommConn::Listen([[maybe_unused]] int backLog)
     struct SocketListenInfoT serverInfo;
     serverInfo.socketHandle = socketHandle_;
     serverInfo.port = localAddr_.info.tcp.port;
+    serverInfo.tagChkDis = true;
     HCCL_RUN_INFO(
-        "HcclCommConn Listen localIpv4Addr[%s], port[%u]", HcclIpAddress(localAddr_.info.tcp.ipv4Addr).GetReadableIP(),
-        localAddr_.info.tcp.port);
+        "HcclCommConn Listen localIpv4Addr[%s], port[%u], tagChkDis[%d]",
+        HcclIpAddress(localAddr_.info.tcp.ipv4Addr).GetReadableIP(), localAddr_.info.tcp.port, serverInfo.tagChkDis);
     HcclResult ret = hrtRaSocketNonBlockListenStart(&serverInfo, 1);
     std::string errormessage = "The IP address "
                                + std::string(HcclIpAddress(localAddr_.info.tcp.ipv4Addr).GetReadableIP()) + " and port "
@@ -341,6 +342,7 @@ HcclResult HcclCommConn::PrepareConnectSocketInfoForClient(HcclAddr& bindAddr)
     connectInfo_.remoteIp.addr = remoteIp.GetBinaryAddress().addr;
     connectInfo_.remoteIp.addr6 = remoteIp.GetBinaryAddress().addr6;
     connectInfo_.port = remoteAddr_.info.tcp.port;
+    connectInfo_.tagChkDis = true;
     CHK_SAFETY_FUNC_RET(strncpy_s(connectInfo_.tag, SOCK_CONN_TAG_SIZE, linkTag.c_str(), linkTag.length() + 1));
 
     socketInfo_.socketHandle = socketHandle_;

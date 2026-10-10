@@ -52,12 +52,12 @@ public:
     HcclResult DeInit(NICDeployment nicDeploy, bool resetDeviceFlag = false, bool hasBackup = false);
     HcclResult HeterogInit(u32 devId, const HcclIpAddress& ipAddr, u32 port);
     HcclResult HeterogDeinit(u32 devId, const HcclIpAddress& ipAddr, u32 port);
-    HcclResult StartVnic(HcclIpAddress localIp, u32& port, bool tagChkDis = true);
+    HcclResult StartVnic(HcclIpAddress localIp, u32& port, bool tagChkDis = false);
     HcclResult StopVnic(const HcclIpAddress& localIp, u32 port);
     // port值为无效值0xFFFFFFFF时, 只初始化nic网卡，不启动监听
     HcclResult StartNic(
         const HcclIpAddress& ipAddr, u32& port, bool rdmaFlag, HcclIpAddress ipAddrBackup = HcclIpAddress(0),
-        bool tagChkDis = true);
+        bool tagChkDis = false);
     void SetDisableLiteThread(bool disable);
     HcclResult StopNic(const HcclIpAddress& ipAddr, u32 port);
     HcclResult StartHostNetAndListen(
