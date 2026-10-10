@@ -14,8 +14,12 @@
 #include "dl_ibv_extend_function.h"
 #include "dl_ibverbs_function.h"
 
+static pthread_mutex_t gIbverbsApiLock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t gRoceUserApiLock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t gHrnApiLock = PTHREAD_MUTEX_INITIALIZER;
+static int gIbverbsApiRefcnt = 0;
 static int gRoceUserApiRefcnt = 0;
+static int gHrnApiRefcnt = 0;
 void *gIbverbsApiHandle = NULL;
 void *gRoceUserApiHandle = NULL;
 void *gHrnApiHandle = NULL;
@@ -215,31 +219,48 @@ STATIC int RsDeviceOpsApiInit(void)
 
 STATIC int RsOpenIbverbsSo(void)
 {
+    pthread_mutex_lock(&gIbverbsApiLock);
 #ifndef CA_CONFIG_LLT
     if (gIbverbsApiHandle == NULL) {
         gIbverbsApiHandle = HccpDlopen("libibverbs.so", RTLD_NOW);
         if (gIbverbsApiHandle != NULL) {
-            return 0;
+            goto out;
         }
 
         gIbverbsApiHandle = HccpDlopen("libibverbs.so.1", RTLD_NOW);
-        if (gIbverbsApiHandle != 0) {
-            return 0;
+        if (gIbverbsApiHandle != NULL) {
+            goto out;
         }
+
+        pthread_mutex_unlock(&gIbverbsApiLock);
         return -EINVAL;
     } else {
-        hccp_run_info("ibverbs_api dlopen again!");
+        hccp_run_info("ibverbs_api dlopen again, gIbverbsApiRefcnt:%d", gIbverbsApiRefcnt + 1);
     }
+
+out:
 #endif
+    gIbverbsApiRefcnt++;
+    pthread_mutex_unlock(&gIbverbsApiLock);
     return 0;
 }
 
 STATIC void RsCloseIbverbsSo(void)
 {
+    pthread_mutex_lock(&gIbverbsApiLock);
     if (gIbverbsApiHandle != NULL) {
+        gIbverbsApiRefcnt--;
+        if (gIbverbsApiRefcnt > 0) {
+            goto out;
+        }
+
+        hccp_run_info("dlclose IbverbsApi, gIbverbsApiRefcnt:%d", gIbverbsApiRefcnt);
         (void)HccpDlclose(gIbverbsApiHandle);
         gIbverbsApiHandle = NULL;
+        gIbverbsApiRefcnt = 0;
     }
+out:
+    pthread_mutex_unlock(&gIbverbsApiLock);
     return;
 }
 
@@ -482,32 +503,49 @@ STATIC int RsHrnIbvApiInit(void)
 
 STATIC int RsOpenHrnSo(void)
 {
+    pthread_mutex_lock(&gHrnApiLock);
 #ifndef CA_CONFIG_LLT
     if (gHrnApiHandle == NULL) {
         gHrnApiHandle = HccpDlopen("libhrn5-rdmav34.so", RTLD_NOW);
         if (gHrnApiHandle != NULL) {
-            return 0;
+            goto out;
         }
         gHrnApiHandle = HccpDlopen("libhrn5.so.1", RTLD_NOW);
         if (gHrnApiHandle != NULL) {
-            return 0;
+            goto out;
         }
+
+        pthread_mutex_unlock(&gHrnApiLock);
         return -EINVAL;
     } else {
-        hccp_run_info("HrnApi dlopen again!");
+        hccp_run_info("HrnApi dlopen again, gHrnApiRefcnt:%d", gHrnApiRefcnt + 1);
     }
+
+out:
 #endif
+    gHrnApiRefcnt++;
+    pthread_mutex_unlock(&gHrnApiLock);
     return 0;
 }
 
 STATIC void RsCloseHrnSo(void)
 {
+    pthread_mutex_lock(&gHrnApiLock);
 #ifndef CA_CONFIG_LLT
     if (gHrnApiHandle != NULL) {
+        gHrnApiRefcnt--;
+        if (gHrnApiRefcnt > 0) {
+            goto out;
+        }
+
+        hccp_run_info("dlclose hrn api, gHrnApiRefcnt:%d", gHrnApiRefcnt);
         (void)HccpDlclose(gHrnApiHandle);
         gHrnApiHandle = NULL;
+        gHrnApiRefcnt = 0;
     }
+out:
 #endif
+    pthread_mutex_unlock(&gHrnApiLock);
     return;
 }
 

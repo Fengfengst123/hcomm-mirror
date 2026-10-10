@@ -13,6 +13,8 @@
 #include "hccp_dl.h"
 #include "dl_ibv_extend_function.h"
 
+static pthread_mutex_t gRoceIbvExtendApiLock = PTHREAD_MUTEX_INITIALIZER;
+static int gRoceIbvExtendApiRefcnt = 0;
 void *gRoceIbvExtendApiHandle = NULL;
 #ifndef CA_CONFIG_LLT
 STATIC struct RsIbvExtendOps gIbvExtendOps = {0};
@@ -82,28 +84,45 @@ STATIC int RsIbvExtendIbvApiInit(void)
 
 STATIC int RsOpenIbvExtendSo(void)
 {
+    pthread_mutex_lock(&gRoceIbvExtendApiLock);
 #ifndef CA_CONFIG_LLT
     if (gRoceIbvExtendApiHandle == NULL) {
         gRoceIbvExtendApiHandle = HccpDlopen("libibv_extend.so", RTLD_NOW | RTLD_GLOBAL);
         if (gRoceIbvExtendApiHandle != NULL) {
-            return 0;
+            goto out;
         }
+
+        pthread_mutex_unlock(&gRoceIbvExtendApiLock);
         return -EINVAL;
     } else {
-        hccp_run_info("IbvExtendApi dlopen again!");
+        hccp_run_info("IbvExtendApi dlopen again, gRoceIbvExtendApiRefcnt:%d", gRoceIbvExtendApiRefcnt + 1);
     }
+
+out:
 #endif
+    gRoceIbvExtendApiRefcnt++;
+    pthread_mutex_unlock(&gRoceIbvExtendApiLock);
     return 0;
 }
 
 STATIC void RsCloseIbvExtendSo(void)
 {
+    pthread_mutex_lock(&gRoceIbvExtendApiLock);
 #ifndef CA_CONFIG_LLT
     if (gRoceIbvExtendApiHandle != NULL) {
+        gRoceIbvExtendApiRefcnt--;
+        if (gRoceIbvExtendApiRefcnt > 0) {
+            goto out;
+        }
+
+        hccp_run_info("dlclose IbvExtendApi, gRoceIbvExtendApiRefcnt:%d", gRoceIbvExtendApiRefcnt);
         (void)HccpDlclose(gRoceIbvExtendApiHandle);
         gRoceIbvExtendApiHandle = NULL;
+        gRoceIbvExtendApiRefcnt = 0;
     }
+out:
 #endif
+    pthread_mutex_unlock(&gRoceIbvExtendApiLock);
     return;
 }
 
