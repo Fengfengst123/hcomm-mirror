@@ -582,7 +582,7 @@ classDiagram
         +GetAllRegisteredSymMemHandles(memHandles&) HcclResult
         +GetRemoteMissingSymMemHandles(remoteMemTags, memHandles&) HcclResult
         +UpdateSymmetricRemoteMem(remoteRank, remoteMems, memTags) HcclResult
-        +GetHcclBinHandle(binHcclHandle&) HcclResult
+        +GetHcclBinHandle(binHcclHandle&, soName) HcclResult
         +shared_ptr~GroupScheduleMgr~ groupScheduleMgr
         -InitFullMode(...) HcclResult
         -InitSimpleMode(...) HcclResult
@@ -821,7 +821,7 @@ classDiagram
 | `GetAllRegisteredSymMemHandles(std::vector<HcclMemHandle>&)` | Public | [out] memHandles | `HcclResult` | Gets all locally registered symmetric memory handles (shared lock) |
 | `GetRemoteMissingSymMemHandles(remoteMemTags, memHandles&)` | Public | [in] remoteMemTags, [out] memHandles | `HcclResult` | Returns the local handles not yet owned by the remote side of the target channel (set difference) |
 | `UpdateSymmetricRemoteMem(remoteRank, remoteMems, memTags)` | Public | [in] remoteRank, [in] remoteMems, [in] memTags | `HcclResult` | Backfills remote memory: symmetricMemory_->UpdateRemoteMem + UpdateHcommWindowRemoteMem (layer slot computation and HcommWindow backfill) |
-| `GetHcclBinHandle(aclrtBinHandle&)` | Public | [out] binHcclHandle | `HcclResult` | Lazily loads the `libscatter_aicpu_kernel.json` binary (CPU_KERNEL_MODE), protected by binHcclmutex_ |
+| `GetHcclBinHandle(aclrtBinHandle&, const std::string& soName)` | Public | [out] binHcclHandle, [in] soName | `HcclResult` | Derives the json file name from soName (strips the `.so` suffix and appends `.json`) and lazily loads the binary (CPU_KERNEL_MODE), protected by binHcclmutex_; an empty soName returns HCCL_E_PARA |
 | `groupScheduleMgr` | Public member | None | `shared_ptr<GroupScheduleMgr>` | Group P2P scheduling manager (for group) |
 
 #### CollComm Private Methods (Key)

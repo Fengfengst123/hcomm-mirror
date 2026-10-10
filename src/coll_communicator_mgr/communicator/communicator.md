@@ -582,7 +582,7 @@ classDiagram
         +GetAllRegisteredSymMemHandles(memHandles&) HcclResult
         +GetRemoteMissingSymMemHandles(remoteMemTags, memHandles&) HcclResult
         +UpdateSymmetricRemoteMem(remoteRank, remoteMems, memTags) HcclResult
-        +GetHcclBinHandle(binHcclHandle&) HcclResult
+        +GetHcclBinHandle(binHcclHandle&, soName) HcclResult
         +shared_ptr~GroupScheduleMgr~ groupScheduleMgr
         -InitFullMode(...) HcclResult
         -InitSimpleMode(...) HcclResult
@@ -821,7 +821,7 @@ classDiagram
 | `GetAllRegisteredSymMemHandles(std::vector<HcclMemHandle>&)` | 公有 | [out] memHandles | `HcclResult` | 获取本地全部已完成注册的对称内存句柄（共享锁） |
 | `GetRemoteMissingSymMemHandles(remoteMemTags, memHandles&)` | 公有 | [in] remoteMemTags, [out] memHandles | `HcclResult` | 返回目标通道远端尚未拥有的本地句柄（差集） |
 | `UpdateSymmetricRemoteMem(remoteRank, remoteMems, memTags)` | 公有 | [in] remoteRank, [in] remoteMems, [in] memTags | `HcclResult` | 回填远端内存：symmetricMemory_->UpdateRemoteMem + UpdateHcommWindowRemoteMem（层槽位计算与 HcommWindow 回填） |
-| `GetHcclBinHandle(aclrtBinHandle&)` | 公有 | [out] binHcclHandle | `HcclResult` | 懒加载 `libscatter_aicpu_kernel.json` 二进制（CPU_KERNEL_MODE），binHcclmutex_ 保护 |
+| `GetHcclBinHandle(aclrtBinHandle&, const std::string& soName)` | 公有 | [out] binHcclHandle, [in] soName | `HcclResult` | 按 soName 推导 json 文件名（去 `.so` 后缀加 `.json` 后缀）懒加载二进制（CPU_KERNEL_MODE），binHcclmutex_ 保护；soName 为空返回 HCCL_E_PARA |
 | `groupScheduleMgr` | 公有成员 | 无 | `shared_ptr<GroupScheduleMgr>` | Group P2P 调度管理器（for group） |
 
 #### CollComm 私有方法（关键）
