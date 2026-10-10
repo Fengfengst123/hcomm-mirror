@@ -148,4 +148,3 @@ if (ret != HCCL_SUCCESS) {
     // 错误处理
 }
 ```
-

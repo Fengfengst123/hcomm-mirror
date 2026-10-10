@@ -48,23 +48,23 @@ HcclResult HcclThreadAcquire(HcclComm comm, CommEngine engine, uint32_t threadNu
 
 2. 当前各产品形态支持的CommEngine范围：
 
-  <!-- npu="950" id6 -->
-  - Ascend 950PR&950DT系列产品：
-    - COMM_ENGINE_CPU_TS
-    - COMM_ENGINE_AICPU_TS
-  <!-- end id6 -->
+   <!-- npu="950" id6 -->
+   - Ascend 950PR&950DT系列产品：
+     - COMM_ENGINE_CPU_TS
+     - COMM_ENGINE_AICPU_TS
+   <!-- end id6 -->
 
-  <!-- npu="A3" id7 -->
-  - Atlas A3系列产品：
-    - COMM_ENGINE_CPU_TS
-    - COMM_ENGINE_AICPU_TS
-  <!-- end id7 -->
+   <!-- npu="A3" id7 -->
+   - Atlas A3系列产品：
+     - COMM_ENGINE_CPU_TS
+     - COMM_ENGINE_AICPU_TS
+   <!-- end id7 -->
 
-  <!-- npu="910b" id8 -->
-  - Atlas A2系列产品：
-    - COMM_ENGINE_CPU_TS
-    - COMM_ENGINE_AICPU_TS
-  <!-- end id8 -->
+   <!-- npu="910b" id8 -->
+   - Atlas A2系列产品：
+     - COMM_ENGINE_CPU_TS
+     - COMM_ENGINE_AICPU_TS
+   <!-- end id8 -->
 
 3. 该接口不支持COMM_ENGINE_AIV和COMM_ENGINE_CCU两种通信引擎。
 4. comm必须为有效的通信域句柄（由通信域创建接口获得，调用期间保持有效）。禁止传入空指针、野指针或已销毁的句柄。

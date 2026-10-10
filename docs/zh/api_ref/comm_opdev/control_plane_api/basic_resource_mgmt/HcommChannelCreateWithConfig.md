@@ -25,6 +25,7 @@
 当config为nullptr或未设置IS_SHARED_QUEUE时，行为与[HcommChannelCreate](HcommChannelCreate.md)完全等价。
 
 当config中IS_SHARED_QUEUE=true时，启用共享Jetty模式：
+
 - 使用相同endpointHandle多次调用本接口创建的Channel，若源目的endpointPair相同，则共享同一个底层Jetty资源，实现通信资源的复用。
 - 适用于需要频繁创建/销毁通信通道的场景，可显著降低建链开销。
 
