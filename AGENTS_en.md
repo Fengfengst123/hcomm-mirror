@@ -75,7 +75,7 @@ Output: `build_out/cann-hcomm_<version>_linux-<arch>.run`. For a complete list o
 ## 5. Coding Standards
 
 - Naming: Classes and functions use PascalCase; member variables use `camelCase_` (lower camelCase with a trailing underscore); constants and macros use `UPPER_SNAKE_CASE`.
-- Style: Follow the `.clang-format` in the root directory (120 columns, 4 spaces, pointer right-aligned, K&R braces). Use C++14.
+- Style: Follow the `.clang-format` in the root directory (120 columns, 4 spaces, pointer left-aligned, K&R braces). Use C++17.
 - Static warnings: Code must pass CANN static check requirements (verified during the CI codecheck stage) and compile without warnings.
 - pre-commit: clang-format v18.1.8 + OAT compliance check. New source files must include the CANN-2.0 license header.
 
