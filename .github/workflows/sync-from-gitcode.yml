@@ -1,0 +1,29 @@
+name: sync-from-gitcode
+on:
+  schedule:
+    - cron: "30 2 * * *"
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Sync from GitCode
+        run: |
+          set -euo pipefail
+          export GIT_LFS_SKIP_SMUDGE=1
+          export GIT_LFS_SKIP_PUSH=1
+          git config user.name "mirror-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://gitcode.com/cann/hcomm.git
+          git fetch upstream master
+          git checkout -B work upstream/master
+          git checkout main -- .devin/wiki.json .github/workflows/sync-from-gitcode.yml
+          find .github/workflows -type f ! -name 'sync-from-gitcode.yml' -delete || true
+          git add -A
+          git diff --cached --quiet || git commit -m "chore: keep mirror config (.devin/wiki.json + sync workflow), drop upstream CI workflows"
+          git push origin work:main --force
