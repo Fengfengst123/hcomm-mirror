@@ -48,7 +48,8 @@ constexpr int MPI_SUCCESS_RET = 0;
  * @return true 解析成功且 rankSize > 0; false 未设置 RANK_TABLE_FILE、文件读
  *         取失败、JSON 解析失败或 rank 数量为 0。
  */
-static bool TryGetRankSizeFromRankTable(uint32_t& rankSize)
+// 非 static：导出给 level2 桩（hccp_ra_socket_stub.cc）跨 so 复用，读取 ranktable 成员数
+bool TryGetRankSizeFromRankTable(uint32_t& rankSize)
 {
     const char* path = std::getenv("RANK_TABLE_FILE");
     if (path == nullptr || path[0] == '\0') {

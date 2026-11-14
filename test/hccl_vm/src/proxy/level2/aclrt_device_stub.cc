@@ -142,11 +142,11 @@ aclError aclrtSetDevice(int32_t deviceId)
 
         auto deviceKey = device.id;
 
-        // AICPU模式qemu进程拉取放在device身份确定后
-        if (!sim::GetAicpuProcMgr().IsAlive()) {
+        // AICPU模式qemu进程拉取放在device身份确定后（按 deviceKey 共享，同 rank 的工作线程复用）
+        if (!sim::GetAicpuProcMgr(deviceKey).IsAlive()) {
             HCCL_VM_INFO("aclrtSetDevice on AICPU mode.");
             auto config = sim::CreateAicpuDeviceConfig(rankId, deviceKey);
-            if (sim::GetAicpuProcMgr().CreateProcess(config) != 0) {
+            if (sim::GetAicpuProcMgr(deviceKey).CreateProcess(config) != 0) {
                 HCCL_VM_ERROR("failed to create device process.");
                 exit(EXIT_FAILURE);
             }
@@ -158,8 +158,8 @@ aclError aclrtSetDevice(int32_t deviceId)
         uint8_t rspCmd;
         uint64_t rspPayload = 0xFF;
         uint32_t rspLen = 0;
-        if (sim::GetAicpuProcMgr().IsAlive()) {
-            if (sim::GetAicpuProcMgr().Request(
+        if (sim::GetAicpuProcMgr(deviceKey).IsAlive()) {
+            if (sim::GetAicpuProcMgr(deviceKey).Request(
                     PIPE_CMD_SET_DEV_ID, &payload, sizeof(payload), rspCmd, &rspPayload, sizeof(rspPayload), rspLen)
                 != 0) {
                 HCCL_VM_ERROR("Request PIPE_CMD_SET_DEV_ID failed.");
@@ -885,7 +885,8 @@ aclError aclFinalize()
     // OS 统一回收；显式关闭只属于主控/device-arm/测试/换库等真实 owner。
     DumpResStatToCsv();
     HCCL_VM_INFO("-----[acl finalize]----------");
-    sim::GetAicpuProcMgr().DestroyProcess();
+    // 进程级收尾：单进程多线程场景下需收掉全部 deviceKey 的 device 子进程。
+    sim::DestroyAllAicpuProcMgrs();
     sim::DpuKernelLibManager::GetInstance().Cleanup();
     FlushLog();
     return ACL_SUCCESS;

@@ -39,7 +39,7 @@ target_include_directories(runtime_state PRIVATE
 )
 
 # db_sim_runner_common.cc 调 sim::IsEstimateMode()(在 store),store 又反向依赖本库 Db 接口,静态库互链
-target_link_libraries(runtime_state PRIVATE log storage store)
+target_link_libraries(runtime_state PRIVATE log storage store device_spec)
 
 hcclvm_apply_common_flags(runtime_state)
 

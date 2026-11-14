@@ -43,7 +43,7 @@ if(NOT BUILD_LEVEL1_ONLY)
     )
 endif()
 
-target_link_libraries(store PRIVATE log loader runtime_state)
+target_link_libraries(store PRIVATE log loader runtime_state device_spec)
 
 # 日志染色: 模块 tag
 target_compile_definitions(store PRIVATE HCCL_VM_MODULE="STORE")

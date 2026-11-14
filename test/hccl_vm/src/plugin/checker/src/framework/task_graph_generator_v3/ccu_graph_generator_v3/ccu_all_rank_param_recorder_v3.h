@@ -65,14 +65,23 @@ namespace TaskGraphGeneratorV3 {
         HcclResult GetGSA(DeviceId deviceId, uint32_t dieId, uint16_t gsaId, uint64_t& gsaValue);
         HcclResult GetCKE(DeviceId deviceId, uint32_t dieId, uint16_t ckeId, uint16_t& ckeValue);
         HcclResult GetHBM(DeviceId deviceId, uint32_t dieId, uint64_t hbmAddr, std::vector<uint64_t>& data);
+        // 地址↔id 反查：addr 属于 (deviceId, dieId) 的 CCU 资源空间；基址/区域偏移/MS 几何
+        // 全部来自 device 规格（CcuAddressSpace），不再有本地常量表（设计文档 §4.5.5）。
+        // ★ 解码"对端地址"时必须传对端 (rmtDeviceId, rmtDieId)——真实基址 per-device per-die
+        //   唯一，用本端基址解对端地址会错（修 P3）。
         // 通过MS的地址找到MS的Id
-        HcclResult GetMSIdByAddr(uint32_t dieId, uint64_t msAddr, uint16_t& msId);
+        HcclResult GetMSIdByAddr(DeviceId deviceId, uint32_t dieId, uint64_t msAddr, uint16_t& msId);
         // 通过XnId所在的地址值来找到XnId以及寄存器的类型
-        HcclResult GetXnAndTypeIdByAddr(uint32_t dieId, uint64_t xnAddr, CcuComponerntType& type, uint16_t& xnId);
+        HcclResult GetXnAndTypeIdByAddr(
+            DeviceId deviceId, uint32_t dieId, uint64_t xnAddr, CcuComponerntType& type, uint16_t& xnId);
         // 通过XnId所在的地址值来找到XnId
-        HcclResult GetXnIdByAddr(uint32_t dieId, CcuComponerntType type, uint64_t xnAddr, uint16_t& xnId);
+        HcclResult
+        GetXnIdByAddr(DeviceId deviceId, uint32_t dieId, CcuComponerntType type, uint64_t xnAddr, uint16_t& xnId);
         // 通过XnId所在的地址值来找到XnId
-        HcclResult GetAddrByXnId(uint32_t dieId, CcuComponerntType type, uint16_t xnId, uint64_t& xnAddr);
+        HcclResult
+        GetAddrByXnId(DeviceId deviceId, uint32_t dieId, CcuComponerntType type, uint16_t xnId, uint64_t& xnAddr);
+        // (deviceId, dieId) 的 CCU 资源基址；未初始化/越界返回 0 并打错误日志。
+        uint64_t GetCcuBaseAddr(DeviceId deviceId, uint32_t dieId) const;
         std::map<uint16_t, uint64_t> GetXnSnapshot(DeviceId deviceId, uint32_t dieId) const;
         std::map<uint16_t, uint64_t> GetGSASnapshot(DeviceId deviceId, uint32_t dieId) const;
         std::map<uint16_t, uint16_t> GetCKESnapshot(DeviceId deviceId, uint32_t dieId) const;
@@ -100,8 +109,12 @@ namespace TaskGraphGeneratorV3 {
         std::map<uint32_t, std::map<uint32_t, std::map<uint32_t, std::pair<uint64_t, uint64_t>>>> loopGroupRegSnapshot;
 
     public:
-        DevType devType_{DevType::DEV_TYPE_COUNT}; // 初始化无效值
-        std::vector<uint64_t> ccu_resource_base_addr_{};
+        DevType devType_{DevType::DEV_TYPE_COUNT};
+        // ★ per-(deviceId, dieId) 基址表（取代原"只有 die 维度"的 vector——真实基址
+        //   per-device 唯一，旧结构是 P3 的直接体现，设计文档 §4.5.5）。
+        //   由 StorageManager::InitCcuInfo 从 DB/device 规格填充；内层 vector 按 dieId 索引，
+        //   长度 = 该 device 规格的 die_num。
+        std::map<DeviceId, std::vector<uint64_t>> ccu_resource_base_addr_{};
     };
 
 } // namespace TaskGraphGeneratorV3

@@ -73,7 +73,7 @@ namespace {
     {
         auto& mgr = sim::DeviceMemoryManager::GetInstance();
         if (virtualAddress) {
-            mgr.UnmapDevPtrHostPtr(virtualAddress);
+            mgr.UnmapDevPtrHostPtr(deviceId, virtualAddress);
         }
         if (virtualMemId != 0) {
             (void)sim::runtime::Db::Delete<sim::runtime::VirtualMemBlock>(
@@ -151,7 +151,7 @@ namespace {
             return false;
         }
 
-        sim::DeviceMemoryManager::GetInstance().MapDevPtrHostPtr(virtualAddress, hostAddress);
+        sim::DeviceMemoryManager::GetInstance().MapDevPtrHostPtr(deviceId, virtualAddress, hostAddress);
         if (!executor.AddUbBuffer({virtualRecord.start_ptr, virtualRecord.size})) {
             HCCL_VM_ERROR("failed to retain AIV UB address, blockId={}, virtualMemId={}", blockId, virtualMemId);
             CleanupAivUb(shmName, deviceId, physicalMemId, virtualAddress, virtualMemId);

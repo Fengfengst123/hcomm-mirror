@@ -59,9 +59,11 @@ void SyncXnWtExecutor::Run()
         xsValue = ccuResMgr.GetXnValue(rankId_, dieId_, xsId);
     }
     // 将Xs内容写到Xd中
+    // ★ xdValue 是对端 (rmtRankId, rmtDieId) 资源空间内的地址，必须用对端基址解码
+    //   （真实基址 per-rank per-die 唯一，设计文档 §4.5.4 P3）。
     uint16_t xdIdRmt{0};
     CcuComponerntType ccuType{CcuComponerntType::UNKNOWN};
-    if (!ccuResMgr.GetXnAndTypeIdByAddr(dieId_, xdValue, ccuType, xdIdRmt)) {
+    if (!ccuResMgr.GetXnAndTypeIdByAddr(rmtRankId, static_cast<uint32_t>(rmtDieId), xdValue, ccuType, xdIdRmt)) {
         HCCL_VM_ERROR("GetXnAndTypeIdByAddr failed. xdId:[{}]", xdId);
         ccuSimulator_->SetExecState(CcuExecState::EXEC_FAIL);
         return;
@@ -81,7 +83,8 @@ void SyncXnWtExecutor::Run()
         uint16_t xnId = GetXnId(xnId_);
         uint64_t xnAddr = ccuResMgr.GetXnValue(rankId_, dieId_, xnId);
         uint16_t cekIdRmtId = 0;
-        if (!ccuResMgr.GetXnIdByAddr(dieId_, CcuComponerntType::CKE_A6, xnAddr, cekIdRmtId)) {
+        if (!ccuResMgr.GetXnIdByAddr(
+                rmtRankId, static_cast<uint32_t>(rmtDieId), CcuComponerntType::CKE_A6, xnAddr, cekIdRmtId)) {
             ccuSimulator_->SetExecState(CcuExecState::EXEC_FAIL);
             return;
         }

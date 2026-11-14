@@ -552,7 +552,7 @@ void CheckExpansionModeDegradeToAICPU()
 
 void TryLaunchAicpuDevProcForRank(int32_t rankId, uint32_t deviceKey)
 {
-    auto& procMgr = sim::GetAicpuProcMgr();
+    auto& procMgr = sim::GetAicpuProcMgr(deviceKey);
     if (procMgr.IsAlive()) {
         return;
     }
@@ -596,7 +596,7 @@ static int LaunchAICPUKernelWithRawArgs(
         segCnt = 2;
     }
     // 只有当前仍处于 HCCL 算子调用期间，才把当前 opDetail 绑定到 device。
-    payload.opDetailId = sim::runtime::g_cur_comm_key == 0 ? 0 : sim::operation::g_currOpDetailId;
+    payload.opDetailId = sim::runtime::g_cur_comm_key == 0 ? 0 : sim::operation::CurrOpDetailId();
 
     uint8_t rspCmd;
     RspExecKernelPayload rspPayload{};
@@ -637,7 +637,7 @@ extern "C" void LaunchAicpuKernelRaw(
     HCCL_VM_INFO("replay deviceId:{}, devKey:{}, kernelName:{}.", deviceId, devKey, kernelName);
 
     // 检查退化逻辑并在退化场景启动device进程
-    sim::operation::g_currOpDetailId = opDetailId;
+    sim::operation::CurrOpDetailId() = opDetailId;
     sim::operation::UpdateOpExpansionMode(
         static_cast<uint8_t>(sim::runtime::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_AICPU));
     TryLaunchAicpuDevProcForRank(deviceId, devKey);
@@ -706,7 +706,7 @@ aclError aclrtLaunchKernelWithConfig(
         sim::FuncArgs* args = (sim::FuncArgs*)argsHandle;
         uint32_t argsSize = (uint32_t)args->useOffset;
         uint64_t commId = sim::runtime::g_cur_comm_key;
-        uint32_t opDetailId = sim::runtime::g_cur_comm_key == 0 ? 0 : sim::operation::g_currOpDetailId;
+        uint32_t opDetailId = sim::runtime::g_cur_comm_key == 0 ? 0 : sim::operation::CurrOpDetailId();
         if (!RecordAicpuKernelAction(
                 streamId, func->kernelName.c_str(), func->soName.c_str(), args->argsBuff, argsSize, commId,
                 opDetailId)) {
@@ -770,7 +770,13 @@ void LaunchAicpuDpuKernel(aclrtFuncHandle funcHandle, aclrtStream stream, void* 
 extern "C" bool GetPhyMemBlockByVirPtr(void* virPtr, uint64_t& offset, sim::runtime::PhyMemBlock& phyMem);
 
 namespace {
-std::atomic<uint32_t> g_aivLaunchIndex{0};
+// AIV launchIndex 的编号语义必须与多进程部署（每 rank 独立进程、各进程从 0 自增）保持一致：
+// 单进程多 rank 线程（如 allreduce 例程 8 线程）时若用进程级全局计数，各 rank 分到的
+// launchIndex 全局唯一（0..7 各不相同），而 checker 的跨 rank flag cell 匹配键
+// {flagOwnerDevice, launchIdx, commInfoOffset}（见 aiv_task_transform_v3.cc）含本 rank
+// 节点的 launchIdx，发送/接收两侧编号错开后 SendFlag/RecvFlag 永远无法匹配
+// （ErrorCode 102 matching is stuck）。故按线程私有计数，每 rank 线程独立从 0 自增。
+thread_local std::atomic<uint32_t> g_aivLaunchIndex{0};
 } // namespace
 
 namespace ops_hccl {
@@ -984,8 +990,9 @@ static ResolvedHostPtrHandle ResolveHostPtr(const void* devPtr)
 
     handle.phyMem = phyMem;
     auto* devStartPtr = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(devPtr) - offset);
-    auto* hostBasePtr
-        = static_cast<const uint8_t*>(sim::DeviceMemoryManager::GetInstance().GetHostPtrByDevPtr(devStartPtr));
+    // 按 (deviceKey, devPtr) 复合键反查；未命中时走 AcquirePhyMem 按名兜底（原有语义）。
+    auto* hostBasePtr = static_cast<const uint8_t*>(
+        sim::DeviceMemoryManager::GetInstance().GetHostPtrByDevPtr(phyMem.device_id, devStartPtr));
     if (hostBasePtr == nullptr) {
         hostBasePtr = static_cast<const uint8_t*>(
             sim::DeviceMemoryManager::GetInstance().AcquirePhyMem(phyMem.name, phyMem.device_id, phyMem.size));
@@ -1783,7 +1790,8 @@ static VirtualAivLibrary LoadVirtualAivLibrary(const std::string& soName, const 
     lib.envInit = reinterpret_cast<AivEnvInitFunc>(dlsym(lib.handle, AIV_STUB_ENV_INIT_SYMBOL));
     const char* envInitErr = dlerror();
     if (lib.envInit == nullptr || envInitErr != nullptr) {
-        HCCL_VM_ERROR(
+        // 仿真 ABI 符号缺失按"该 so 无 x86 仿真"处理（调用方降级为只落任务），WARN 避免干扰。
+        HCCL_VM_WARN(
             "dlsym {} from {} failed, err = {}", AIV_STUB_ENV_INIT_SYMBOL, lib.soPath,
             envInitErr == nullptr ? "unknown" : envInitErr);
         lib.envInit = nullptr;
@@ -1793,7 +1801,8 @@ static VirtualAivLibrary LoadVirtualAivLibrary(const std::string& soName, const 
     lib.setBlockIdx = reinterpret_cast<AivSetBlockIdxFunc>(dlsym(lib.handle, AIV_STUB_SET_BLOCK_IDX_SYMBOL));
     const char* setBlockIdxErr = dlerror();
     if (lib.setBlockIdx == nullptr || setBlockIdxErr != nullptr) {
-        HCCL_VM_ERROR(
+        // 同上：仿真 ABI 符号缺失走降级路径，WARN 避免干扰。
+        HCCL_VM_WARN(
             "dlsym {} from {} failed, err = {}", AIV_STUB_SET_BLOCK_IDX_SYMBOL, lib.soPath,
             setBlockIdxErr == nullptr ? "unknown" : setBlockIdxErr);
         lib.setBlockIdx = nullptr;
@@ -1803,7 +1812,8 @@ static VirtualAivLibrary LoadVirtualAivLibrary(const std::string& soName, const 
     lib.dumpTasks = reinterpret_cast<AivDumpTasksFunc>(dlsym(lib.handle, AIV_STUB_DUMP_TASKS_SYMBOL));
     const char* dumpTasksErr = dlerror();
     if (lib.dumpTasks == nullptr || dumpTasksErr != nullptr) {
-        HCCL_VM_ERROR(
+        // dumpTasks 只影响 checker 快照产物，so 未导出时按缺省跳过处理，WARN 避免干扰。
+        HCCL_VM_WARN(
             "dlsym {} from {} failed, err = {}", AIV_STUB_DUMP_TASKS_SYMBOL, lib.soPath,
             dumpTasksErr == nullptr ? "unknown" : dumpTasksErr);
         lib.dumpTasks = nullptr;
@@ -1872,7 +1882,9 @@ static aclError VirtualExecuteAivKernel(
     void* kernelSymbol = dlsym(lib->handle, kernelName.c_str());
     const char* kernelErr = dlerror();
     if (kernelSymbol == nullptr || kernelErr != nullptr) {
-        HCCL_VM_ERROR(
+        // kernel 符号缺失是"该 kernel 无 x86 仿真"的常规信号（典型如自定义算子），
+        // 调用方 aclrtLaunchKernelWithHostArgs 会降级为只落任务不执行，故用 WARN 避免干扰。
+        HCCL_VM_WARN(
             "dlsym {} from {} failed, err = {}", kernelName, lib->soPath, kernelErr == nullptr ? "unknown" : kernelErr);
         return ACL_ERROR_RT_FEATURE_NOT_SUPPORT;
     }
@@ -2102,6 +2114,30 @@ static HostArgsLaunchKind ClassifyHostArgsLaunch(const sim::FuncHandle* funcView
     return HostArgsLaunchKind::AIV;
 }
 
+// 自定义算子（如 hccl 自定义 AIV 算子 example）绕过 level0 集合算子入口、直接
+// aclrtLaunchKernelWithHostArgs 下发 kernel，全程没有 op 上下文（g_cur_comm_key==0）。
+// 本函数按当前 deviceKey 反查本进程 Communicator 表补齐 commId/rankId，
+// 使 AIV_GRAPH 任务仍能挂到通信域下落库；集合算子路径（上下文非 0）不经过这里。
+// 参数 deviceKey：当前 rank 的 device 主键（sim::runtime::GetCurrDeviceKey()）；
+// 参数 deviceId：当前 device Id（sim::runtime::GetCurrDeviceId()），用于正查 rankId；
+// 出参 commId/rankId：反查 + 正查成功后填充，供任务元数据使用；
+// 返回：true=上下文补齐成功；false=查不到匹配通信域，调用方维持原报错路径。
+static bool TryFallbackCommContextByDevice(uint32_t deviceKey, uint32_t deviceId, uint64_t& commId, uint32_t& rankId)
+{
+    const auto comm = sim::runtime::Db::GetOneByPred<sim::runtime::Communicator>(
+        HcclSim::Storage::Eq(&sim::runtime::Communicator::device_id, deviceKey));
+    if (!comm.ok()) {
+        HCCL_VM_WARN("fallback comm lookup failed: no Communicator row for deviceKey={}", deviceKey);
+        return false;
+    }
+    if (!sim::runtime::GetCommRankByDeviceId(comm.value->id, deviceId, rankId)) {
+        HCCL_VM_WARN("fallback comm lookup failed: commId={} has no member on deviceId={}", comm.value->id, deviceId);
+        return false;
+    }
+    commId = comm.value->id;
+    return true;
+}
+
 extern "C" aclError aclrtLaunchKernelWithHostArgs(
     aclrtFuncHandle funcHandle, uint32_t numBlocks, aclrtStream stream, aclrtLaunchKernelCfg* cfg, void* hostArgs,
     size_t argsSize, aclrtPlaceHolderInfo* placeHolderArray, size_t placeHolderNum)
@@ -2144,7 +2180,7 @@ extern "C" aclError aclrtLaunchKernelWithHostArgs(
         if (kind == HostArgsLaunchKind::AICPU) {
             // 录制 AicpuKernelAction 而不执行，重放期由 LaunchAicpuKernelRaw 重发
             const uint64_t commId = sim::runtime::g_cur_comm_key;
-            const uint32_t opDetailId = (commId == 0) ? 0 : sim::operation::g_currOpDetailId;
+            const uint32_t opDetailId = (commId == 0) ? 0 : sim::operation::CurrOpDetailId();
             if (!RecordAicpuKernelAction(
                     captureStreamId, capturedKernelName.c_str(), funcView->soName.c_str(),
                     static_cast<const uint8_t*>(hostArgs), static_cast<uint32_t>(argsSize), commId, opDetailId)) {
@@ -2200,7 +2236,7 @@ extern "C" aclError aclrtLaunchKernelWithHostArgs(
     const uint64_t streamId = reinterpret_cast<uint64_t>(stream);
     if (IsCapturingStream(streamId)) {
         const uint64_t commId = sim::runtime::g_cur_comm_key;
-        const uint32_t opDetailId = (commId == 0) ? 0 : sim::operation::g_currOpDetailId;
+        const uint32_t opDetailId = (commId == 0) ? 0 : sim::operation::CurrOpDetailId();
         const uint32_t deviceId = static_cast<uint32_t>(sim::runtime::GetCurrDeviceId());
         uint32_t rankId = UINT32_MAX;
         if (commId != 0) {
@@ -2221,6 +2257,17 @@ extern "C" aclError aclrtLaunchKernelWithHostArgs(
         ProfTaskParamType::TASK_AIV, ProfLinkType::UNKNOWN, ProfTransportType::UNKNOWN); // AIV kernel 无链路维度
     taskMetaData.deviceId = static_cast<uint32_t>(sim::runtime::GetCurrDeviceId());
     taskMetaData.commId = sim::runtime::g_cur_comm_key;
+    if (taskMetaData.commId == 0) {
+        // 自定义算子直 launch 场景无 op 上下文，按 device 反查通信域兜底补 commId/rankId；
+        // 仍查不到则由下方统一报错，不静默放行。
+        const uint32_t devKey = static_cast<uint32_t>(sim::runtime::GetCurrDeviceKey());
+        uint64_t fallbackComm = 0;
+        uint32_t fallbackRank = 0;
+        if (TryFallbackCommContextByDevice(devKey, taskMetaData.deviceId, fallbackComm, fallbackRank)) {
+            taskMetaData.commId = fallbackComm;
+            taskMetaData.rankId = fallbackRank;
+        }
+    }
     if (taskMetaData.commId == 0
         || !sim::runtime::GetCommRankByDeviceId(
             taskMetaData.commId, static_cast<uint32_t>(taskMetaData.deviceId), taskMetaData.rankId)) {
@@ -2233,9 +2280,16 @@ extern "C" aclError aclrtLaunchKernelWithHostArgs(
 
     bool isNoop = false; // 处理算子入口数据量为0的场景
     aclError ret = ops_hccl::VirtualExecuteAivKernel(
-        kernelName, soName, numBlocks, parsedHostArgs, launchIndex, sim::runtime::g_cur_comm_key,
+        kernelName, soName, numBlocks, parsedHostArgs, launchIndex, taskMetaData.commId,
         static_cast<uint32_t>(sim::runtime::g_cur_device_key), 0, isNoop);
-    if (ret != ACL_SUCCESS) {
+    if (ret == ACL_ERROR_RT_FEATURE_NOT_SUPPORT) {
+        // 该 kernel 无 x86 仿真（stub so 缺仿真 ABI 符号或 kernel 符号未导出，典型如自定义算子）：
+        // 降级为只落 AIV_GRAPH 任务、跳过虚拟执行，level1 任务落库不受影响。
+        // 内置 kernel 的 stub so 齐全不会进入此分支。
+        HCCL_VM_WARN(
+            "AIV kernel {} has no x86 simulation (stub missing), record task only, deviceId={}, launchIndex={}",
+            kernelName, taskMetaData.deviceId, launchIndex);
+    } else if (ret != ACL_SUCCESS) {
         HCCL_VM_INFO("VirtualExecuteAivKernel failed, ret = {}", static_cast<int>(ret));
         return ACL_ERROR_INTERNAL_ERROR;
     }
@@ -2300,7 +2354,7 @@ extern "C" void LaunchAivKernelRaw(
         return;
     }
 
-    // 重插 AIV_GRAPH task（opDetail 由调用方 ReplayModelActions 写入 g_currOpDetailId 后关联）。
+    // 重插 AIV_GRAPH task（opDetail 由调用方 ReplayModelActions 写入 CurrOpDetailId() 后关联）。
     HcclTaskMetaData taskMetaData{};
     taskMetaData.taskType = HccLTaskMetaType::AIV_GRAPH;
     taskMetaData.deviceId = static_cast<uint32_t>(sim::runtime::GetCurrDeviceId());

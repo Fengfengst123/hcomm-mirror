@@ -39,8 +39,6 @@ int PipeCreate(PipePair& pair);
 
 void PipeClose(int& fd);
 
-int PipeChildSetup(PipePair& h2d, PipePair& d2h, int targetReadFd, int targetWriteFd);
-
 } // namespace sim
 
 #endif // SIM_PIPE_IO_H

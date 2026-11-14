@@ -52,6 +52,7 @@ target_link_libraries(runner PRIVATE
     loader
     runtime_state
     operation_data
+    device_spec
 
     ccu_executor
     log

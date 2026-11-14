@@ -16,6 +16,7 @@
 #include <map>
 #include <mutex>
 #include <string>
+#include <tuple>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -621,9 +622,11 @@ typedef enum {
     HCCL_CONFIG_TYPE_HCCL_ALGO = 1,
     HCCL_CONFIG_TYPE_UB_MULTI_CHANNEL_NUM = 2,
     /* 新增项：与 CANN 9.3 的 hccl_comm.h 保持一致（新 libhccl 的 GetDeterministicLevel
-     * 在 hcomm 版本高于 9.2.0.1 时会查 DETERMINISTIC；UDI 为通信域自定义标识）。 */
+     * 在 hcomm 版本高于 9.2.0.1 时会查 DETERMINISTIC；UDI 为通信域自定义标识；
+     * EXEC_TIMEOUT 为通信域级执行超时时间查询项）。 */
     HCCL_CONFIG_TYPE_DETERMINISTIC = 3,
-    HCCL_CONFIG_TYPE_UDI = 4
+    HCCL_CONFIG_TYPE_UDI = 4,
+    HCCL_CONFIG_TYPE_EXEC_TIMEOUT = 5
 } HcclConfigType;
 #endif /* HCCL_COMM_H_ */
 
@@ -685,8 +688,15 @@ inline uint64_t HashCtxTag(const char* tag)
 /**
  * @brief 通信引擎上下文全局注册表（单例）。
  *
- * 以 Device 内存地址（addr）为 key、sim::runtime::HcclEngineCtx 为 value 维护全局 map，
- * 替代原有的 DB 表存储。负责 aclrtMalloc/aclrtFree 以及 map 的增删查。
+ * 以逻辑身份 (commId, ctxTagHash, engine) 为 key、sim::runtime::HcclEngineCtx 为 value
+ * 维护全局 map，替代原有的 DB 表存储。负责 aclrtMalloc/aclrtFree 以及 map 的增删查。
+ *
+ * 为什么不用设备地址做 key：单进程多 rank 场景下，各 device 子进程的地址布局相同，
+ * 相同大小/顺序的 aclrtMalloc 会返回数值相同的设备地址；若以其为进程级 map 的 key，
+ * 不同 rank 的上下文会互相覆盖（本仓 EngineCtxRegistry 与外部 HcclTeamMgr 同类问题）。
+ * 而 (commId, ctxTagHash, engine) 已是全部查询入口使用的逻辑身份，且 commId 为
+ * Communicator 主键（HcclComm 句柄即其数值），进程内唯一，无需再叠加 device 维度。
+ *
  * 线程安全，所有方法内部加锁。
  */
 class EngineCtxRegistry {
@@ -702,8 +712,18 @@ public:
     void ResetAll();
 
 private:
+    /// 逻辑身份：(commId, ctxTagHash, engine)，三者组合进程内唯一。
+    using EngineCtxKey = std::tuple<uint64_t, uint64_t, uint64_t>;
+
+    /**
+     * @brief 释放一条上下文占用的内存。
+     * @param addr 上下文地址（对 AICPU/AIV 为 aclrtMalloc 结果）。
+     * @param engineVal CommEngine 枚举数值，决定用 aclrtFree 还是 free。
+     */
+    static void ReleaseCtxAddr(uint64_t addr, uint64_t engineVal);
+
     std::mutex m_mutex;
-    std::unordered_map<uint64_t, sim::runtime::HcclEngineCtx> m_map;
+    std::map<EngineCtxKey, sim::runtime::HcclEngineCtx> m_map;
 };
 
 void EngineCtxDestroyByCommId(uint64_t commId);

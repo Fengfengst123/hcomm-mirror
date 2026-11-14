@@ -24,28 +24,31 @@
 #include "runtime_state/db_sim_runner_common.h"
 #include "runtime_state/db_sim_runner_ops.h"
 #include "storage/table_access.h"
+#include "device_spec/device_spec_types.h"
 
 namespace HcclSim {
 namespace CcuSim {
 
     namespace {
-        /* V1(A5/950) 容量（与 level2 SetCcuV1ResourceBasicInfo 一致） */
-        constexpr CcuCapacity CCU_V1_CAPACITY = {3072, 3072, 1024, 1536, 200, 16, 32 * 1024};
-        /* V2(A6/960) 容量 */
-        constexpr CcuCapacity CCU_V2_CAPACITY = {16384, 0, 1024, 1536, 512, 16, 32 * 1024};
-        /* die 基址（与 level2 resourceAddr 一致） */
-        constexpr uint64_t DIE_BASE_ADDR[2] = {0x123123123ULL, 0x456456456ULL};
-        /* 资源单元步长（B，XN/CKE/GSA 均为 8） */
-        constexpr uint32_t RES_STRIDE = 8;
-        /* 版本化区偏移（权威来源：hcomm ccu_res_specs.{h,cc}）
-         *   V1 = CCUM(0x800000) + INS(0x100000) → GSA(0x8000) → XN(0x8000) → CKE
-         *   V2 = CCUM(0x0)      + INS(0x100000) → XN(0x40000) → CKE
-         * V2 偏移与 checker findTypeByAddr / runner ccu_resource_manager 完全一致。 */
-        constexpr uint64_t V1_GSA_OFFSET = 0x900000ULL;
-        constexpr uint64_t V1_XN_OFFSET = 0x908000ULL;
-        constexpr uint64_t V1_CKE_OFFSET = 0x910000ULL;
-        constexpr uint64_t V2_XN_OFFSET = 0x100000ULL;
-        constexpr uint64_t V2_CKE_OFFSET = 0x140000ULL;
+        /**
+         * @brief 解析当前设备的 device 规格（进程内所有容量/偏移/基址的唯一来源）。
+         *
+         * ★ 取代此前本文件内的字面量常量表（设计文档 §4.5.6）：
+         *   CCU_V1_CAPACITY/CCU_V2_CAPACITY（容量）、DIE_BASE_ADDR（0x123123123/0x456456456
+         *   假基址）、V1_GSA/XN/CKE_OFFSET、V2_XN/CKE_OFFSET（区域偏移）、RES_STRIDE（步长）
+         *   —— 全部改读 config/device/*.yaml（sim::runtime::GetDeviceSpec，DB 优先/yaml 回退）。
+         *
+         * @return 未命中返回 nullptr 并打 ERROR；调用方须显式失败，不得回退到硬编码常量。
+         */
+        const sim::devspec::DeviceSpec* CurrDeviceSpec(const char* who)
+        {
+            const uint64_t deviceId = sim::runtime::GetCurrDeviceId();
+            const auto* spec = sim::runtime::GetDeviceSpec(deviceId);
+            if (spec == nullptr) {
+                HCCL_VM_ERROR("{}: device spec unavailable, deviceId={}", who, deviceId);
+            }
+            return spec;
+        }
 
         /** @brief 进程是否仍存活（用于交换表 run 内清理：只删"写方进程已消失"的上一轮遗留行）。 */
         bool IsProcessAlive(uint64_t pid)
@@ -386,6 +389,7 @@ namespace CcuSim {
     uint64_t CcuResMgr::VariableAlloc(uint64_t insHandle, uint32_t dieId, uint32_t num)
     {
         std::lock_guard<std::mutex> lock(mutex_);
+        SeedWaterlineLocked();
         // 已持 mutex_，禁止调用 IsValidIns（其内部对同一把非递归 mutex_ 二次加锁会自死锁），锁内直查。
         const auto insIter = insPool_.find(insHandle);
         if (insIter == insPool_.end() || insIter->second.destroyed) {
@@ -409,7 +413,8 @@ namespace CcuSim {
         acq.dieId = dieId;
         acq.num = num;
         acq.isEvent = false;
-        acq.baseVa = GetXnBaseAddr(dieId) + static_cast<uint64_t>(xnAllocated_[dieId]) * RES_STRIDE;
+        const CcuResLayout layout = GetLayout();
+        acq.baseVa = GetXnBaseAddr(dieId) + static_cast<uint64_t>(xnAllocated_[dieId]) * layout.xnStride;
         acqVarPool_[handle] = acq;
         xnAllocated_[dieId] += num;
         HCCL_VM_INFO(
@@ -425,6 +430,7 @@ namespace CcuSim {
     uint64_t CcuResMgr::EventAlloc(uint64_t insHandle, uint32_t dieId, uint32_t num)
     {
         std::lock_guard<std::mutex> lock(mutex_);
+        SeedWaterlineLocked();
         // 同 VariableAlloc：锁内直查，避免 IsValidIns 二次加锁自死锁。
         const auto insIter = insPool_.find(insHandle);
         if (insIter == insPool_.end() || insIter->second.destroyed) {
@@ -448,7 +454,8 @@ namespace CcuSim {
         acq.dieId = dieId;
         acq.num = num;
         acq.isEvent = true;
-        acq.baseVa = GetCkeBaseAddr(dieId) + static_cast<uint64_t>(ckeAllocated_[dieId]) * RES_STRIDE;
+        const CcuResLayout layout = GetLayout();
+        acq.baseVa = GetCkeBaseAddr(dieId) + static_cast<uint64_t>(ckeAllocated_[dieId]) * layout.ckeStride;
         acqVarPool_[handle] = acq;
         ckeAllocated_[dieId] += num;
         HCCL_VM_INFO(
@@ -477,7 +484,7 @@ namespace CcuSim {
         if (it == acqVarPool_.end() || it->second.num == 0 || !it->second.isEvent || index >= it->second.num) {
             return false;
         }
-        va = it->second.baseVa + index * RES_STRIDE;
+        va = it->second.baseVa + index * GetLayout().ckeStride;
         return true;
     }
 
@@ -485,50 +492,60 @@ namespace CcuSim {
 
     SimCcuVersion CcuResMgr::GetCcuVersion() const
     {
-        const uint64_t deviceId = sim::runtime::GetCurrDeviceId();
-        const auto optDevice = sim::runtime::Db::GetById<sim::runtime::Device>(deviceId);
-        if (!optDevice.ok()) {
-            HCCL_VM_WARN("ccu version: device id={} not found, fallback to V1", deviceId);
+        // ★ 版本改由 device 规格的 ccu_version 决定，取代原先对 soc_version 的字面量
+        //   strcmp（"Ascend950"/"Ascend960"，设计文档 §4.5.6：5 处 strncmp 单点化）。
+        const auto* spec = CurrDeviceSpec("GetCcuVersion");
+        if (spec == nullptr) {
+            HCCL_VM_WARN("ccu version: device spec unavailable, fallback to V1");
             return SimCcuVersion::V1;
         }
-        if (strcmp(optDevice->soc_version, "Ascend960") == 0) {
-            return SimCcuVersion::V2;
+        switch (spec->ccuVersion) {
+            case sim::devspec::CcuVersion::CCU_V2:
+                return SimCcuVersion::V2;
+            case sim::devspec::CcuVersion::CCU_V1:
+                return SimCcuVersion::V1;
+            default:
+                HCCL_VM_WARN(
+                    "ccu version: unsupported ccu_version={}, fallback to V1",
+                    sim::devspec::CcuVersionToString(spec->ccuVersion));
+                return SimCcuVersion::V1;
         }
-        if (strcmp(optDevice->soc_version, "Ascend950") != 0) {
-            HCCL_VM_WARN("ccu version: unknown soc_version='{}', fallback to V1", optDevice->soc_version);
-        }
-        return SimCcuVersion::V1;
     }
 
-    /** @brief 按 CCU 版本返回资源地址布局（V1 含 GSA 区，V2 无 GSA）。 */
+    /** @brief 资源地址布局：区偏移/步长全部取自 device 规格 regions（无 GSA 区域时 gsaOffset=0）。 */
     CcuResLayout CcuResMgr::GetLayout() const
     {
         CcuResLayout layout;
         layout.version = GetCcuVersion();
-        layout.xnStride = RES_STRIDE;
-        layout.gsaStride = RES_STRIDE;
-        layout.ckeStride = RES_STRIDE;
-        if (layout.version == SimCcuVersion::V2) {
-            layout.xnOffset = V2_XN_OFFSET;
-            layout.ckeOffset = V2_CKE_OFFSET;
-            layout.gsaOffset = 0; // V2 无 GSA
-        } else {
-            layout.gsaOffset = V1_GSA_OFFSET;
-            layout.xnOffset = V1_XN_OFFSET;
-            layout.ckeOffset = V1_CKE_OFFSET;
+        const auto* spec = CurrDeviceSpec("GetLayout");
+        if (spec == nullptr) {
+            return layout; // 偏移/步长保持 0，调用方按越界/失败处理，不回退硬编码
         }
+        auto fillRegion = [spec](sim::devspec::CcuResType type, uint64_t& offset, uint32_t& stride) {
+            const auto* region = spec->FindRegion(type);
+            if (region == nullptr) {
+                offset = 0;
+                stride = 0;
+                return;
+            }
+            offset = region->offset;
+            stride = region->entrySize;
+        };
+        fillRegion(sim::devspec::CcuResType::XN, layout.xnOffset, layout.xnStride);
+        fillRegion(sim::devspec::CcuResType::GSA, layout.gsaOffset, layout.gsaStride); // A6 无 GSA → 0
+        fillRegion(sim::devspec::CcuResType::CKE, layout.ckeOffset, layout.ckeStride);
         return layout;
     }
 
     /** @brief XN 区基址 = dieBase + xnOffset。 */
     uint64_t CcuResMgr::GetXnBaseAddr(uint32_t dieId) const { return GetDieBaseAddr(dieId) + GetLayout().xnOffset; }
 
-    /** @brief GSA 区基址 = dieBase + gsaOffset（V2 无 GSA 返回 0）。 */
+    /** @brief GSA 区基址 = dieBase + gsaOffset（无 GSA 区域返回 0）。 */
     uint64_t CcuResMgr::GetGsaBaseAddr(uint32_t dieId) const
     {
         const CcuResLayout layout = GetLayout();
         if (layout.gsaOffset == 0) {
-            return 0; // V2 无 GSA
+            return 0; // 无 GSA 区域（A6）
         }
         return GetDieBaseAddr(dieId) + layout.gsaOffset;
     }
@@ -536,22 +553,69 @@ namespace CcuSim {
     /** @brief CKE 区基址 = dieBase + ckeOffset。 */
     uint64_t CcuResMgr::GetCkeBaseAddr(uint32_t dieId) const { return GetDieBaseAddr(dieId) + GetLayout().ckeOffset; }
 
-    /** @brief 当前设备的 CCU 容量（按 soc_version 分 V1/V2 档）。 */
+    /** @brief 当前设备的 CCU 容量：全部取自 device 规格 regions/ms（GetCaps 派生）。 */
     CcuCapacity CcuResMgr::GetCapacity() const
     {
-        if (GetCcuVersion() == SimCcuVersion::V2) {
-            return CCU_V2_CAPACITY;
+        CcuCapacity cap{};
+        const auto* spec = CurrDeviceSpec("GetCapacity");
+        if (spec == nullptr) {
+            return cap; // 容量全 0：后续分配将因 exhausted 显式失败，不回退硬编码常量
         }
-        return CCU_V1_CAPACITY;
+        const sim::devspec::CcuCaps caps = spec->GetCaps();
+        cap.xnNum = caps.xnNum;
+        cap.gsaNum = caps.gsaNum;
+        cap.ckeNum = caps.ckeNum;
+        cap.msNum = caps.msNum;
+        cap.loopEngineNum = caps.loopEngineNum;
+        cap.missionNum = caps.missionNum;
+        cap.instructionNum = caps.instructionNum;
+        return cap;
     }
 
-    /** @brief per-die 固定基址（die0=0x123123123, die1=0x456456456）；dieId 越界回退 die0。 */
+    /**
+     * @brief 指定 die 的 CCU 资源基址（per-rank per-die 唯一真实地址）。
+     *
+     * ★ 取代原 per-die 固定假基址（die0=0x123123123, die1=0x456456456，设计文档 §2.2）：
+     *   走全项目唯一入口 sim::runtime::GetCcuResourceBaseAddr（DB Ccu.resource_addr 优先、
+     *   yaml 规格回退），与 level2 resourceAddr 同源。解析失败返回 0 并打 ERROR。
+     */
     uint64_t CcuResMgr::GetDieBaseAddr(uint32_t dieId) const
     {
         if (dieId >= 2) {
-            return DIE_BASE_ADDR[0];
+            HCCL_VM_ERROR("GetDieBaseAddr: dieId {} out of range", dieId);
+            return 0;
         }
-        return DIE_BASE_ADDR[dieId];
+        const uint64_t deviceId = sim::runtime::GetCurrDeviceId();
+        uint64_t base = 0;
+        if (!sim::runtime::GetCcuResourceBaseAddr(deviceId, dieId, base) || base == 0) {
+            HCCL_VM_ERROR("GetDieBaseAddr: resolve failed, deviceId={}, dieId={}", deviceId, dieId);
+            return 0;
+        }
+        return base;
+    }
+
+    uint32_t CcuResMgr::SyncSlotNum() const
+    {
+        const auto* spec = CurrDeviceSpec("SyncSlotNum");
+        if (spec == nullptr) {
+            HCCL_VM_ERROR("SyncSlotNum: device spec unavailable, sync slots fall back to 0（不预留同步区）");
+            return 0;
+        }
+        return spec->reservedSyncSlots;
+    }
+
+    void CcuResMgr::SeedWaterlineLocked() const
+    {
+        if (waterlineSeeded_) {
+            return;
+        }
+        const uint32_t slots = SyncSlotNum();
+        for (uint32_t d = 0; d < 2; ++d) {
+            xnAllocated_[d] = slots;
+            gsaAllocated_[d] = slots;
+            ckeAllocated_[d] = slots;
+        }
+        waterlineSeeded_ = true;
     }
 
     /** @brief 指定 die 的剩余 XN 数 = capacity - 分配水位（dieId 越界返回 0）。 */
@@ -560,17 +624,19 @@ namespace CcuSim {
         if (dieId >= 2) {
             return 0;
         }
+        SeedWaterlineLocked();
         const uint32_t cap = GetCapacity().xnNum;
         return (xnAllocated_[dieId] < cap) ? (cap - xnAllocated_[dieId]) : 0;
     }
 
-    /** @brief 指定 die 的剩余 GSA 数（V2 容量为 0）。 */
+    /** @brief 指定 die 的剩余 GSA 数（无 GSA 区域容量为 0）。 */
     uint32_t CcuResMgr::RemainingGsa(uint32_t dieId) const
     {
         if (dieId >= 2) {
             return 0;
         }
-        const uint32_t cap = GetCapacity().gsaNum; // V2 = 0
+        SeedWaterlineLocked();
+        const uint32_t cap = GetCapacity().gsaNum; // A6 无 GSA = 0
         return (gsaAllocated_[dieId] < cap) ? (cap - gsaAllocated_[dieId]) : 0;
     }
 
@@ -580,6 +646,7 @@ namespace CcuSim {
         if (dieId >= 2) {
             return 0;
         }
+        SeedWaterlineLocked();
         const uint32_t cap = GetCapacity().ckeNum;
         return (ckeAllocated_[dieId] < cap) ? (cap - ckeAllocated_[dieId]) : 0;
     }

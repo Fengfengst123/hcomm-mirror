@@ -88,19 +88,20 @@ namespace CcuSim {
     /*==================== 4. 资源管理器（进程级单例） ====================*/
 
     /**
-     * @brief CCU 每 die 的资源容量（V1/V2 分档，值与 level2 SetCcuV1/V2ResourceBasicInfo 一致）。
+     * @brief CCU 每 die 的资源容量（数值全部来自 device 规格 yaml 的 regions/ms，
+     *        经 sim::runtime::GetDeviceSpec → DeviceSpec::GetCaps() 派生，不再有本地常量表）。
      *
-     * 数据来源：sim::runtime::Device.soc_version 决定版本；容量值为固定常量
+     * 数据来源：sim::runtime::Device.soc_version 前缀匹配 device 规格；容量值为固定常量
      * （真实硬件每 die 相同，仿真中不区分 die 的容量差异）。
      */
     struct CcuCapacity {
-        uint32_t xnNum{0};          /**< XN 寄存器数（V1=3072, V2=16384）。 */
-        uint32_t gsaNum{0};         /**< GSA 寄存器数（V1=3072, V2=0）。 */
-        uint32_t ckeNum{0};         /**< CKE 事件数（V1/V2=1024）。 */
-        uint32_t msNum{0};          /**< MS 缓冲数（V1/V2=1536）。 */
-        uint32_t loopEngineNum{0};  /**< Loop 引擎数（V1=200, V2=512）。 */
-        uint32_t missionNum{0};     /**< Mission 数（V1/V2=16）。 */
-        uint32_t instructionNum{0}; /**< 指令空间条数（V1/V2=32K）。 */
+        uint32_t xnNum{0};          /**< XN 寄存器数（A5=3072, A6=16384，由 spec 派生）。 */
+        uint32_t gsaNum{0};         /**< GSA 寄存器数（A5=3072, A6 无 GSA 区域 → 0）。 */
+        uint32_t ckeNum{0};         /**< CKE 事件数。 */
+        uint32_t msNum{0};          /**< MS 缓冲数。 */
+        uint32_t loopEngineNum{0};  /**< Loop 引擎数。 */
+        uint32_t missionNum{0};     /**< Mission 数。 */
+        uint32_t instructionNum{0}; /**< 指令空间条数。 */
     };
 
     /*==================== 5. 版本化资源地址布局 ====================*/
@@ -118,20 +119,18 @@ namespace CcuSim {
     /**
      * @brief 版本化资源地址布局（地址 = dieBase + offset + id*stride）。
      *
-     * 权威来源：hcomm src/base_comm/resources/ccu/ccu_device/ccu_res_specs.{h,cc}
-     *   V1  = CCUM(0x800000) + INS(0x100000) → GSA(0x8000) → XN(0x8000) → CKE
-     *   V2  = CCUM(0x0)      + INS(0x100000) → XN(0x40000) → CKE
-     * XN/CKE/GSA 单元步长均 8B。V2 偏移与 checker `findTypeByAddr`、runner
-     * `ccu_resource_manager.cc` 完全一致。
+     * ★ offset/stride 全部取自 device 规格 yaml 的 ccu.regions（XN/GSA/CKE 三行），
+     *   不再本地硬编码（设计文档 §4.5.6：删除 V1_GSA/XN/CKE_OFFSET、V2_XN/CKE_OFFSET 字面量）。
+     *   区域缺失时对应 offset/stride 为 0（如 A6 无 GSA），调用方须判 0。
      */
     struct CcuResLayout {
         SimCcuVersion version{SimCcuVersion::V1};
         uint64_t xnOffset{0};  /**< XN 区相对 dieBase 偏移。 */
-        uint64_t gsaOffset{0}; /**< GSA 区偏移（V2 无 GSA，返回 0）。 */
+        uint64_t gsaOffset{0}; /**< GSA 区偏移（无 GSA 区域时为 0）。 */
         uint64_t ckeOffset{0}; /**< CKE 区偏移。 */
-        uint32_t xnStride{8};  /**< XN 单元步长（B）。 */
-        uint32_t gsaStride{8}; /**< GSA 单元步长（B）。 */
-        uint32_t ckeStride{8}; /**< CKE 单元步长（B）。 */
+        uint32_t xnStride{0};  /**< XN 单元步长（B，= region.entry_size）。 */
+        uint32_t gsaStride{0}; /**< GSA 单元步长（B）。 */
+        uint32_t ckeStride{0}; /**< CKE 单元步长（B）。 */
     };
 
     /**
@@ -143,13 +142,13 @@ namespace CcuSim {
      * 3. 描述符池     resDescPool_  （descHandle → SimCcuInsResDesc）
      * 4. 预约池       acqVarPool_   （acqHandle → SimCcuAcquiredVar）
      *
-     * 资源容量与地址模型：
-     * - 容量来源：sim::runtime::Device.soc_version → V1/V2 容量表（与 level2 硬编码一致）；
-     * - 基址来源：per-die 固定基址（die0=0x123123123, die1=0x456456456，与 level2 一致）；
-     * - 分配跟踪：per-die 分配水位（xn/gsa/ckeAllocated），起始 = SYNC_SLOT_NUM（同步区预留）；
-     * - VA 编码：按版本分档（CcuResLayout）——`baseVa = dieBase(dieId) + 区偏移 + id*8`，
-     *   V1 含 GSA 区（0x900000）、XN(0x908000)、CKE(0x910000)；
-     *   V2 XN(0x100000)、CKE(0x140000)（与 checker/runner 反查布局一致）。
+     * 资源容量与地址模型（全部来自 device 规格，无本地常量表）：
+     * - 容量来源：sim::runtime::GetDeviceSpec(当前设备) → DeviceSpec::GetCaps()；
+     * - 基址来源：sim::runtime::GetCcuResourceBaseAddr(当前设备, dieId)——与 level2
+     *   SetCcuV1/V2ResourceBasicInfo 的 resourceAddr 同源（per-rank per-die 唯一真实地址）；
+     * - 分配跟踪：per-die 分配水位（xn/gsa/ckeAllocated），起始 = SyncSlotNum()（同步区预留）；
+     * - VA 编码：`baseVa = dieBase(dieId) + 区偏移 + id*步长`，区偏移/步长由 CcuResLayout
+     *   从 spec.regions 读取（与 checker/runner 的 CcuAddressSpace 反查布局同源）。
      */
     class CcuResMgr {
     public:
@@ -234,8 +233,10 @@ namespace CcuSim {
         /**
          * @brief 获取指定 die 的 CCU 资源基址。
          *
-         * 与 level2 SetCcuV1/V2ResourceBasicInfo 中的 resourceAddr 一致：
-         * die0 → 0x123123123, die1 → 0x456456456。
+         * 与 level2 SetCcuV1/V2ResourceBasicInfo 中的 resourceAddr 同源：
+         * sim::runtime::GetCcuResourceBaseAddr(当前设备, dieId)（DB Ccu.resource_addr 优先、
+         * yaml 规格回退），per-rank per-die 唯一真实地址。解析失败返回 0 并打 ERROR，
+         * 不回退到任何硬编码常量。
          */
         uint64_t GetDieBaseAddr(uint32_t dieId) const;
 
@@ -244,10 +245,11 @@ namespace CcuSim {
         /**
          * @brief 同步区槽位数（hcomm `CcuTransport::INIT_XN_NUM` / `INIT_CKE_NUM`）。
          *
-         * XN/CKE id ∈ [0, SYNC_SLOT_NUM) 为跨 rank 交换区（per-channel 预留，值入库共享）；
-         * 普通（本进程）资源从 SYNC_SLOT_NUM 起分配。
+         * XN/CKE id ∈ [0, SyncSlotNum()) 为跨 rank 交换区（per-channel 预留，值入库共享）；
+         * 普通（本进程）资源从 SyncSlotNum() 起分配。
+         * ★ 数值读自 device 规格 yaml `ccu.reserved_sync_slots`（取代原硬编码常量 4）。
          */
-        static constexpr uint32_t SYNC_SLOT_NUM = 4;
+        uint32_t SyncSlotNum() const;
 
         /**
          * @brief 当前 CCU 资源版本。
@@ -276,6 +278,13 @@ namespace CcuSim {
         CcuResMgr& operator=(const CcuResMgr&) = delete;
 
         uint64_t NextHandle();
+        /**
+         * @brief 惰性播种 per-die 分配水位到 SyncSlotNum()（同步区预留）。
+         *
+         * 水位初值原为编译期常量 SYNC_SLOT_NUM，现改为从 device 规格运行时读取，
+         * 故首次进入任一持锁的分配/余量查询路径时播种一次。**调用方必须已持有 mutex_**。
+         */
+        void SeedWaterlineLocked() const;
         /** @brief 查询指定 die 的剩余 XN / GSA / CKE 数（capacity - allocated）。 */
         uint32_t RemainingXn(uint32_t dieId) const;
         uint32_t RemainingGsa(uint32_t dieId) const;
@@ -289,10 +298,13 @@ namespace CcuSim {
         std::map<uint64_t, SimCcuInsResDesc> resDescPool_;
         std::map<uint64_t, SimCcuAcquiredVar> acqVarPool_;
 
-        /* per-die 分配水位（容量范围内的连续分配指针；同步区 [0,SYNC_SLOT_NUM) 预留） */
-        uint32_t xnAllocated_[2]{SYNC_SLOT_NUM, SYNC_SLOT_NUM};  /**< per die 已分配 XN 数（水位推进）。 */
-        uint32_t gsaAllocated_[2]{SYNC_SLOT_NUM, SYNC_SLOT_NUM}; /**< per die 已分配 GSA 数（V1 用）。 */
-        uint32_t ckeAllocated_[2]{SYNC_SLOT_NUM, SYNC_SLOT_NUM}; /**< per die 已分配 CKE 数。 */
+        /* per-die 分配水位（容量范围内的连续分配指针；同步区 [0,SyncSlotNum()) 预留）。
+         * 初值 0，首次持锁访问时由 SeedWaterlineLocked 播种为 SyncSlotNum()；mutable 以便
+         * const 的 Remaining* 查询路径也能触发一次性播种。 */
+        mutable bool waterlineSeeded_{false};
+        mutable uint32_t xnAllocated_[2]{0, 0};  /**< per die 已分配 XN 数（水位推进）。 */
+        mutable uint32_t gsaAllocated_[2]{0, 0}; /**< per die 已分配 GSA 数（V1 用）。 */
+        mutable uint32_t ckeAllocated_[2]{0, 0}; /**< per die 已分配 CKE 数。 */
 
         /** @brief 本进程是否已清空交换表（`CcuSyncResTab`）——首次 CreateIns 时清一次，防跨 run 旧行。 */
         bool exchangeTableCleared_{false};

@@ -772,6 +772,30 @@ static HcclResult GetUbMultiChannelNumConfig(uint32_t infoLen, void* info)
 }
 
 /**
+ * @brief 读取 HCCL_CONFIG_TYPE_EXEC_TIMEOUT：输出通信域级执行超时时间（int32_t，单位 s）。
+ *
+ * 本模拟器不维护通信域级配置，按"未配置"语义返回 -1，与真实实现
+ * "域未显式配置时返回 -1、由调用侧回退环境变量 HCCL_EXEC_TIMEOUT" 的契约一致。
+ *
+ * @param infoLen 输入：info 缓冲区长度（字节），必须等于 sizeof(int32_t)。
+ * @param info 输出：存放 int32_t 执行超时时间的缓冲区。
+ * @return HcclResult 成功返回 HCCL_SUCCESS；长度不符返回 HCCL_E_PARA。
+ */
+static HcclResult GetExecTimeoutConfig(uint32_t infoLen, void* info)
+{
+    if (infoLen != sizeof(int32_t)) {
+        HCCL_VM_ERROR(
+            "{}: infoLen not expected: {:d}, need {:d}", __func__, infoLen, static_cast<uint32_t>(sizeof(int32_t)));
+        return HCCL_E_PARA;
+    }
+
+    // 本模拟器无通信域级超时配置，按"未配置"返回 -1，0（永不超时）由调用侧解释
+    *(static_cast<int32_t*>(info)) = -1;
+    HCCL_VM_INFO("{} success, execTimeOut is not configured, return -1", __func__);
+    return HCCL_SUCCESS;
+}
+
+/**
  * @brief 获取通信域配置信息。
  *
  * 支持的 cfgType：
@@ -785,6 +809,8 @@ static HcclResult GetUbMultiChannelNumConfig(uint32_t infoLen, void* info)
  *  - HCCL_CONFIG_TYPE_DETERMINISTIC：输出确定性等级（0=非确定 / 1=确定 / 2=严格保序），
  *    取自环境变量 HCCL_DETERMINISTIC（未设置或非法则为 0）；
  *  - HCCL_CONFIG_TYPE_UDI：输出通信域自定义标识，本模拟器无该配置，返回空串（'\0'）。
+ *  - HCCL_CONFIG_TYPE_EXEC_TIMEOUT：输出通信域级执行超时时间（int32_t，单位 s），
+ *    本模拟器无域级配置，按未配置语义返回 -1（调用侧据此回退环境变量 HCCL_EXEC_TIMEOUT）。
  *
  * @param comm 输入：通信域句柄（当前实现未使用）。
  * @param cfgType 输入：配置类型，详见HcclConfigType。
@@ -816,6 +842,8 @@ HcclResult HcclConfigGetInfo(HcclComm comm, HcclConfigType cfgType, uint32_t inf
             return GetDeterministicConfig(infoLen, info);
         case HCCL_CONFIG_TYPE_UDI:
             return GetUdiConfig(infoLen, info);
+        case HCCL_CONFIG_TYPE_EXEC_TIMEOUT:
+            return GetExecTimeoutConfig(infoLen, info);
         default:
             HCCL_VM_ERROR("{}: unsupported cfgType {:d}", __func__, static_cast<int>(cfgType));
             return HCCL_E_PARA;

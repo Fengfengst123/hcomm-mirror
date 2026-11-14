@@ -130,9 +130,92 @@ aclError aclrtSynchronizeStreamWithTimeout(aclrtStream stream, int32_t timeout)
     return ACL_SUCCESS;
 }
 
-aclError aclrtSynchronizeStream(aclrtStream stream)
+/**
+ * @brief 查询 HCCLVM_ENABLE_DUMP_DATA 开关是否使能（RunnerListen/bin dump 与
+ *        all_rank_input_output.txt dump 共用该开关）。
+ *
+ * @return bool 已设置且非 "0" 返回 true；未设置/为空/"0" 返回 false。
+ */
+static bool IsDumpDataEnabled()
 {
-    uint64_t streamId = (uint64_t)(uintptr_t)stream;
+    const char* enableDumpData = std::getenv("HCCLVM_ENABLE_DUMP_DATA");
+    return enableDumpData != nullptr && !std::string(enableDumpData).empty() && std::string(enableDumpData) != "0";
+}
+
+/**
+ * @brief 等待 stream 上的 runner 任务全部执行完成（doneTasks==totalTasks 轮询）。
+ *
+ * @param streamId 输入：待等待完成的 stream id。
+ * @return aclError 全部完成返回 ACL_SUCCESS；完成度查询失败返回 ACL_ERROR_INTERNAL_ERROR。
+ */
+static aclError WaitStreamTasksDone(uint64_t streamId)
+{
+    while (true) {
+        uint64_t totalTasks = 0;
+        uint64_t doneTasks = 0;
+        if (sim::operation::QueryOpTaskCompletionByStreamId(streamId, totalTasks, doneTasks) != 0) {
+            HCCL_VM_ERROR("QueryOpTasksByStreamId fail");
+            return ACL_ERROR_INTERNAL_ERROR;
+        }
+
+        HCCL_VM_INFO("Waiting for stream[{:d}]... {:d}/{:d}", streamId, doneTasks, totalTasks);
+
+        if (doneTasks == totalTasks) {
+            return ACL_SUCCESS;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+}
+
+/**
+ * @brief 置位本 stream 所属设备的 DeviceStatus.synchronize_strategy=1。
+ *
+ * 该信号的消费者（RunnerListen 的 bin dump、runner 侧 all_rank_input_output.txt dump）
+ * 据此判定"全部设备同步就绪"再读设备 buffer：须在 stream 任务全部完成后置位，若在
+ * synchronize 入口就置位，dump 会与仍在执行的任务竞争（实测读到计算中的 rank
+ * output 全 0）。查到 DeviceStatus 记录就 Update，查不到就 Add。
+ *
+ * @param streamRecord 输入：stream 记录（提供 ctx_id 归属链）。
+ * @return aclError 成功返回 ACL_SUCCESS；context/device 记录缺失返回 ACL_ERROR_INVALID_PARAM。
+ */
+static aclError MarkSyncStrategyReady(const sim::runtime::Stream& streamRecord)
+{
+    auto context = sim::runtime::Db::GetById<sim::runtime::Context>(streamRecord.ctx_id);
+    if (!context.ok()) {
+        HCCL_VM_ERROR("context not found:{:d}", streamRecord.ctx_id);
+        return ACL_ERROR_INVALID_PARAM;
+    }
+
+    auto device = sim::runtime::Db::GetById<sim::runtime::Device>(context->device_id);
+    if (!device.ok()) {
+        HCCL_VM_ERROR("device not found:{:d}", context->device_id);
+        return ACL_ERROR_INVALID_PARAM;
+    }
+
+    auto deviceStatus = sim::runtime::Db::GetOneByPred<sim::runtime::DeviceStatus>(
+        HcclSim::Storage::Eq(&sim::runtime::DeviceStatus::device_id, device->id));
+    if (deviceStatus.ok()) {
+        (void)sim::runtime::Db::Update<sim::runtime::DeviceStatus>(
+            HcclSim::Storage::Eq(&sim::runtime::DeviceStatus::id, deviceStatus->id),
+            HcclSim::Storage::Set(&sim::runtime::DeviceStatus::synchronize_strategy, (uint32_t)1));
+    } else {
+        sim::runtime::DeviceStatus newStatus{};
+        newStatus.device_id = device->id;
+        newStatus.synchronize_strategy = 1;
+        (void)sim::runtime::Db::Add<sim::runtime::DeviceStatus>(newStatus);
+    }
+    return ACL_SUCCESS;
+}
+
+/**
+ * @brief 登记 SYNC_STREAM 任务到任务集合（供 runner/checker 建图识别同步点）。
+ *
+ * @param streamId 输入：待同步的 stream id。
+ * @return aclError 登记成功返回 ACL_SUCCESS；syncIdx 获取或任务插入失败返回
+ *         ACL_ERROR_INTERNAL_ERROR。
+ */
+static aclError RegisterSyncStreamTask(uint64_t streamId)
+{
     uint64_t syncIdx{UINT64_MAX};
     if (!sim::operation::NextStreamSyncIdx(streamId, syncIdx)) {
         HCCL_VM_ERROR("Get stream syncIdx failed, streamId={:d}", streamId);
@@ -156,26 +239,36 @@ aclError aclrtSynchronizeStream(aclrtStream stream)
         return ACL_ERROR_INTERNAL_ERROR;
     }
     HCCL_VM_DEBUG("Add SYNC_STREAM task, streamId={:d}, syncIdx={:d}", streamId, syncIdx);
+    return ACL_SUCCESS;
+}
 
-    //  把 aclrtSynchronizeStream 入参流作为当前 opdetail 记录的真实主流，幂等更新
-    // （图模式下 opdetail.streamId 采集期记的是 master_stream，此处修正为重放触发流 resources_str.stream）
-    // 主流发现走摘要接口：只取最新 detail 的 id/streamId（不读 opDetail/opExtInfo BLOB）。
-    uint32_t latestOpDetailId{0};
-    uint64_t latestStreamId{0};
-    if (sim::operation::QueryLatestOpDetailStreamByDeviceId(taskMetaData.deviceId, latestOpDetailId, latestStreamId)
-        == 0) {
-        if (latestStreamId != streamId) {
-            if (sim::operation::UpdateOpDetailMainStream(latestOpDetailId, streamId) != 0) {
-                HCCL_VM_ERROR(
-                    "UpdateOpDetailMainStream fail, opDetailId={}, streamId={}->{}", latestOpDetailId, latestStreamId,
-                    streamId);
-                return ACL_ERROR_INTERNAL_ERROR;
-            }
-            HCCL_VM_INFO(
-                "update real main stream, opDetailId={}, streamId={} -> {}", latestOpDetailId, latestStreamId,
-                streamId);
-        }
+/**
+ * @brief 同步 stream：登记 SYNC_STREAM 任务、修正 opdetail 主流、任务完成后置位同步就绪信号。
+ *
+ * 行为要点：1) 插 SYNC_STREAM 任务并修正最新 opdetail 的主流记录；2) runner 插件在
+ * 运行时等待 stream 任务被 runner 执行完毕（无 runner 时无任务可等，直接继续）；
+ * 3) dump 开关使能时置位 DeviceStatus.synchronize_strategy=1（RunnerListen 的 bin
+ * dump 与 runner 的 all_rank_input_output dump 的就绪信号，不装 runner 也须置位，
+ * 否则性能仿真落盘不触发）。
+ *
+ * @param stream 输入：待同步的 stream 句柄。
+ * @return aclError 成功返回 ACL_SUCCESS；syncIdx 获取/任务插入/主流修正/等待失败返回
+ *         对应错误码；stream/context/device 记录缺失返回 ACL_ERROR_INVALID_PARAM。
+ */
+aclError aclrtSynchronizeStream(aclrtStream stream)
+{
+    uint64_t streamId = (uint64_t)(uintptr_t)stream;
+    const aclError registerRet = RegisterSyncStreamTask(streamId);
+    if (registerRet != ACL_SUCCESS) {
+        return registerRet;
     }
+
+    // 主流修正不再挂在本接口上：
+    // - eager 模式：OpDetail.streamId 在算子入口 RecordOpDbInfo 已记录 API 入参流（即真实主流），
+    //   而算子执行期可能同步任意内部流（如嵌套 warmup 后外层同步 warmup 流、warmup 同步用户流），
+    //   以“同步流”覆写“当前算子主流”会造成主流串写（嵌套场景两算子主流互换）；
+    // - 图模式重放：真实主流 = rtModelExecute 入参流，已在该桩内直接回写克隆 OpDetail
+    //   （见 aclrt_model_stub.cc 的 UpdateOpDetailMainStream），无需经本接口猜测。
 
     // 记录 synchronize_strategy：aclrtSynchronizeStream 是 DeviceStatus 的写入源，
     // 查到对应 device 的记录就 Update，查不到就 Add。
@@ -186,65 +279,23 @@ aclError aclrtSynchronizeStream(aclrtStream stream)
     }
     // dump 未开启时不维护 DeviceStatus（其唯一消费者是 RunnerListen 的 dump 触发），
     // 同时跳过 DeviceStatus 所需的 stream/context/device 查询链路.
-    const char* enableDumpData = std::getenv("HCCLVM_ENABLE_DUMP_DATA");
-    const bool dumpEnabled
-        = (enableDumpData != nullptr && !std::string(enableDumpData).empty() && std::string(enableDumpData) != "0");
-    if (dumpEnabled) {
-        // 记录 synchronize_strategy：aclrtSynchronizeStream 是 DeviceStatus 的写入源，
-        // 查到对应 device 的记录就 Update，查不到就 Add。
-        auto streamRecord = sim::runtime::Db::GetById<sim::runtime::Stream>(streamId);
-        if (!streamRecord.ok()) {
-            HCCL_VM_ERROR("stream not found:{:d}", streamId);
-            return ACL_ERROR_INVALID_PARAM;
-        }
-
-        auto context = sim::runtime::Db::GetById<sim::runtime::Context>(streamRecord->ctx_id);
-        if (!context.ok()) {
-            HCCL_VM_ERROR("context not found:{:d}", streamRecord->ctx_id);
-            return ACL_ERROR_INVALID_PARAM;
-        }
-
-        auto device = sim::runtime::Db::GetById<sim::runtime::Device>(context->device_id);
-        if (!device.ok()) {
-            HCCL_VM_ERROR("device not found:{:d}", context->device_id);
-            return ACL_ERROR_INVALID_PARAM;
-        }
-
-        auto deviceStatus = sim::runtime::Db::GetOneByPred<sim::runtime::DeviceStatus>(
-            HcclSim::Storage::Eq(&sim::runtime::DeviceStatus::device_id, device->id));
-        if (deviceStatus.ok()) {
-            (void)sim::runtime::Db::Update<sim::runtime::DeviceStatus>(
-                HcclSim::Storage::Eq(&sim::runtime::DeviceStatus::id, deviceStatus->id),
-                HcclSim::Storage::Set(&sim::runtime::DeviceStatus::synchronize_strategy, (uint32_t)1));
-        } else {
-            sim::runtime::DeviceStatus newStatus{};
-            newStatus.device_id = device->id;
-            newStatus.synchronize_strategy = 1;
-            (void)sim::runtime::Db::Add<sim::runtime::DeviceStatus>(newStatus);
-        }
-    }
+    const bool dumpEnabled = IsDumpDataEnabled();
 
     auto pluginRows
         = sim::runtime::Db::GetByPred<sim::runtime::Plugin>(HcclSim::Storage::Eq(&sim::runtime::Plugin::tag, "runner"));
-    if (!pluginRows.ok() || !pluginRows.value.has_value() || pluginRows.value->empty()) { // Runner 未启动
-        return ACL_SUCCESS;
+    const bool runnerStarted = pluginRows.ok() && pluginRows.value.has_value() && !pluginRows.value->empty();
+    if (runnerStarted) {
+        // Runner 已启动，等待stream上所有task运行结束后再置位就绪信号
+        const aclError waitRet = WaitStreamTasksDone(streamId);
+        if (waitRet != ACL_SUCCESS) {
+            return waitRet;
+        }
     }
 
-    // Runner 已启动，等待stream上所有task运行结束
-    while (true) {
-        uint64_t totalTasks = 0;
-        uint64_t doneTasks = 0;
-        if (sim::operation::QueryOpTaskCompletionByStreamId(streamId, totalTasks, doneTasks) != 0) {
-            HCCL_VM_ERROR("QueryOpTasksByStreamId fail");
-            return ACL_ERROR_INTERNAL_ERROR;
-        }
-
-        HCCL_VM_INFO("Waiting for stream[{:d}]... {:d}/{:d}", streamId, doneTasks, totalTasks);
-
-        if (doneTasks == totalTasks) {
-            break;
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    // 就绪信号置位：须在 stream 任务全部完成后（无 runner 时无任务可等直接置位），
+    // 详见 MarkSyncStrategyReady 注释。
+    if (dumpEnabled) {
+        return MarkSyncStrategyReady(*streamRecord);
     }
 
     return ACL_SUCCESS;

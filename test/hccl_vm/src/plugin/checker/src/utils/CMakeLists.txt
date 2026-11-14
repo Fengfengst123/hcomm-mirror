@@ -14,6 +14,7 @@ target_sources(checker PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/setting_manager.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/type_conversion.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/storage_manager.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/ccu_base_resolver.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/binary_data_operator.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/dump/dump_json_utils.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/dump/dump_manager.cc

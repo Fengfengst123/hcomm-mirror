@@ -37,21 +37,34 @@ extern "C" {
 
 HcclResult hrtGetDeviceType(DevType& devType)
 {
-    auto devKey = sim::runtime::GetCurrDeviceKey();
-    auto device = sim::runtime::Db::GetById<sim::runtime::Device>(devKey);
+    // 设备类型按 SoC 版本判定（与真机 hrtGetSocVer -> aclrtGetSocName 对齐），不依赖 aclrtSetDevice
+    // 建立的当前 context；首次查询时取数据库中第一条 Device 记录（主键 id 升序）并缓存到静态变量，
+    // 后续查询直接返回缓存值（设备类型在进程生命周期内不会变化）。
+    // 仅缓存查询成功的结果，Device 表尚为空时下次调用仍会重试。
+    static DevType cachedDevType = DevType::DEV_TYPE_COUNT;
+    if (cachedDevType != DevType::DEV_TYPE_COUNT) {
+        devType = cachedDevType;
+        return HCCL_SUCCESS;
+    }
+
+    auto device = sim::runtime::Db::GetOneByPred<sim::runtime::Device>(HcclSim::Storage::All<sim::runtime::Device>());
     if (!device.ok()) {
-        // not find
-        HCCL_VM_ERROR("current device type not found: {:d}", devKey);
+        HCCL_VM_ERROR("no Device record found in db");
         return HCCL_E_NOT_FOUND;
     }
+
+    DevType queriedDevType = DevType::DEV_TYPE_COUNT;
     if (strncmp(device.value->soc_version, "Ascend950", strlen("Ascend950")) == 0) {
-        devType = DevType::DEV_TYPE_950;
+        queriedDevType = DevType::DEV_TYPE_950;
     } else if (strncmp(device.value->soc_version, "Ascend960", strlen("Ascend960")) == 0) {
-        devType = DevType::DEV_TYPE_960;
+        queriedDevType = DevType::DEV_TYPE_960;
     } else {
         HCCL_VM_ERROR("not support device soc version: {:s}", device.value->soc_version);
         return HCCL_E_NOT_SUPPORT;
     }
+
+    cachedDevType = queriedDevType;
+    devType = queriedDevType;
     HCCL_VM_TRACE("Get current device type: {}", static_cast<int>(devType));
     return HCCL_SUCCESS;
 }

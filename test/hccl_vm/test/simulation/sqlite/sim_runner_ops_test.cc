@@ -20,6 +20,8 @@
 #include "storage/internal/process_storage_context.h"
 #include "runtime_state/db_sim_runner_ops.h"
 #include "runtime_state/db_sim_runner_common.h"
+#include "device_spec/device_spec_registry.h"
+#include "device_spec/device_spec_types.h"
 #include "storage/storage_session.h"
 #include "sqlite/simulation_storage_test_helper.h"
 
@@ -253,6 +255,173 @@ TEST_F(SimRunnerOpsGetCurrDeviceIdTest, GetCurrDeviceKey_InvalidCtx_ReturnsZero)
     sim::runtime::SetCurrCtxTls(99999);
     uint64_t deviceKey = sim::runtime::GetCurrDeviceKey();
     EXPECT_EQ(deviceKey, 0);
+}
+
+// ==================== 热点路径解析缓存（device 规格 / CCU 基址 / 当前设备）====================
+// Db:: 薄层按合同不缓存（每次调用一条 SQL），而 Device.soc_version、Ccu.resource_addr、
+// Context.device_id 都是建好后不再改写的静态数据，且规格解析处在 CCU 热点路径上
+// （proxy L1 每次资源分配/取址、A5 每条通道、checker 每卡启动解析、runner 每 rank 初始化）。
+// 以下用例锁定两条契约：① 解析结果常驻，重复调用不再读库；② 失效入口有效
+// （ResetDeviceSpecCache / SetCurrCtxTls / InvalidateCurrDeviceTls）。
+
+namespace {
+constexpr uint64_t kCcuDie0Addr = 0x8e00000000ULL;
+constexpr uint64_t kCcuDie1Addr = 0x8e40000000ULL;
+constexpr uint64_t kCcuDie0AddrRewritten = 0x9e00000000ULL;
+
+uint64_t InsertCcuRow(uint64_t deviceKey, uint8_t dieId, uint64_t resourceAddr)
+{
+    sim::runtime::Ccu ccu{};
+    ccu.device_id = deviceKey;
+    ccu.die_id = dieId;
+    ccu.resource_addr = resourceAddr;
+    ccu.status = 1;
+    return runnerdb_test::InsertRecord<sim::runtime::Ccu>(ccu);
+}
+
+bool RewriteCcuResourceAddr(uint64_t deviceKey, uint8_t dieId, uint64_t resourceAddr)
+{
+    return sim::runtime::Db::Update<sim::runtime::Ccu>(
+               HcclSim::Storage::And(
+                   HcclSim::Storage::Eq(&sim::runtime::Ccu::device_id, deviceKey),
+                   HcclSim::Storage::Eq(&sim::runtime::Ccu::die_id, dieId)),
+               HcclSim::Storage::Set(&sim::runtime::Ccu::resource_addr, resourceAddr))
+        .ok();
+}
+} // namespace
+
+class SimRunnerOpsSpecCacheTest : public testing::Test {
+protected:
+    void SetUp() override
+    {
+        SetupTestData();
+        sim::runtime::Runner runner;
+        sim::runtime::GetCurrRunnerTls(1, runner);
+        // 每个用例都重建库，而解析缓存/记忆是进程级与线程级的：先清空保证用例间隔离
+        sim::runtime::ResetDeviceSpecCache();
+        sim::runtime::InvalidateCurrDeviceTls();
+        ASSERT_NE(InsertCcuRow(1, 0, kCcuDie0Addr), 0U);
+        ASSERT_NE(InsertCcuRow(1, 1, kCcuDie1Addr), 0U);
+    }
+
+    void TearDown() override
+    {
+        sim::runtime::ResetDeviceSpecCache();
+        sim::runtime::InvalidateCurrDeviceTls();
+        CleanUpDb();
+    }
+};
+
+// CCU 基址：首次解析走 DB，之后常驻；DB 行被改写也不影响已缓存结果，直到显式失效。
+TEST_F(SimRunnerOpsSpecCacheTest, GetCcuResourceBaseAddr_CachesUntilReset)
+{
+    uint64_t base = 0;
+    ASSERT_TRUE(sim::runtime::GetCcuResourceBaseAddr(1, 0, base));
+    EXPECT_EQ(base, kCcuDie0Addr);
+    // 另一 die 独立缓存
+    uint64_t base1 = 0;
+    ASSERT_TRUE(sim::runtime::GetCcuResourceBaseAddr(1, 1, base1));
+    EXPECT_EQ(base1, kCcuDie1Addr);
+
+    // 改写 DB 行：缓存命中 → 仍返回旧值（证明未再读库）
+    ASSERT_TRUE(RewriteCcuResourceAddr(1, 0, kCcuDie0AddrRewritten));
+    base = 0;
+    ASSERT_TRUE(sim::runtime::GetCcuResourceBaseAddr(1, 0, base));
+    EXPECT_EQ(base, kCcuDie0Addr);
+
+    // 显式失效后重新读库 → 拿到新值
+    sim::runtime::ResetDeviceSpecCache();
+    base = 0;
+    ASSERT_TRUE(sim::runtime::GetCcuResourceBaseAddr(1, 0, base));
+    EXPECT_EQ(base, kCcuDie0AddrRewritten);
+}
+
+// 失败结果不缓存：Ccu 行缺失且规格不可用时每次仍按原语义返回 false。
+TEST_F(SimRunnerOpsSpecCacheTest, GetCcuResourceBaseAddr_FailureIsNotCached)
+{
+    uint64_t base = 0;
+    EXPECT_FALSE(sim::runtime::GetCcuResourceBaseAddr(12345, 0, base));
+    EXPECT_EQ(base, 0U);
+    // 补上该 (device, die) 的行后立即生效（未被失败结果挡住）
+    ASSERT_NE(InsertCcuRow(12345, 0, kCcuDie1Addr), 0U);
+    EXPECT_TRUE(sim::runtime::GetCcuResourceBaseAddr(12345, 0, base));
+    EXPECT_EQ(base, kCcuDie1Addr);
+}
+
+// device 规格：soc_version 改写后需 ResetDeviceSpecCache 才生效（缓存契约）。
+TEST_F(SimRunnerOpsSpecCacheTest, GetDeviceSpec_CachesSocVersionUntilReset)
+{
+    auto& reg = sim::devspec::DeviceSpecRegistry::GetInstance();
+    if (reg.Size() == 0 && !reg.LoadAll()) {
+        GTEST_SKIP() << "config/device/*.yaml 不可用（需从可执行文件目录运行）: " << reg.LastError();
+    }
+    ASSERT_TRUE(sim::runtime::Db::Update<sim::runtime::Device>(
+                    HcclSim::Storage::Eq(&sim::runtime::Device::id, 1ULL),
+                    HcclSim::Storage::Set(&sim::runtime::Device::soc_version, "Ascend950"))
+                    .ok());
+
+    const auto* spec = sim::runtime::GetDeviceSpec(1);
+    ASSERT_NE(spec, nullptr);
+    EXPECT_EQ(spec->name, "ascend950");
+
+    // 改写 soc_version：缓存命中 → 仍是 ascend950
+    ASSERT_TRUE(sim::runtime::Db::Update<sim::runtime::Device>(
+                    HcclSim::Storage::Eq(&sim::runtime::Device::id, 1ULL),
+                    HcclSim::Storage::Set(&sim::runtime::Device::soc_version, "Ascend960"))
+                    .ok());
+    spec = sim::runtime::GetDeviceSpec(1);
+    ASSERT_NE(spec, nullptr);
+    EXPECT_EQ(spec->name, "ascend950");
+
+    // 失效后重新解析 → ascend960
+    sim::runtime::ResetDeviceSpecCache();
+    spec = sim::runtime::GetDeviceSpec(1);
+    ASSERT_NE(spec, nullptr);
+    EXPECT_EQ(spec->name, "ascend960");
+}
+
+// 当前设备记忆：切换 ctx 后立即反映新设备（SetCurrCtxTls 内部失效）。
+TEST_F(SimRunnerOpsSpecCacheTest, GetCurrDeviceId_MemoInvalidatedOnCtxSwitch)
+{
+    sim::runtime::Device device2{};
+    device2.server_id = 1;
+    device2.logic_id = 1;
+    device2.physical_id = 1;
+    const uint64_t deviceKey2 = runnerdb_test::InsertRecord<sim::runtime::Device>(device2);
+    ASSERT_NE(deviceKey2, 0U);
+    sim::runtime::Context ctx2{};
+    ctx2.device_id = deviceKey2;
+    ctx2.is_default = 1;
+    ctx2.run_id = 1;
+    const uint64_t ctxId2 = runnerdb_test::InsertRecord<sim::runtime::Context>(ctx2);
+    ASSERT_NE(ctxId2, 0U);
+
+    sim::runtime::SetCurrCtxTls(1);
+    EXPECT_EQ(sim::runtime::GetCurrDeviceId(), 1U);
+    EXPECT_EQ(sim::runtime::GetCurrDeviceId(), 1U); // 记忆命中，结果不变
+
+    sim::runtime::SetCurrCtxTls(ctxId2);
+    EXPECT_EQ(sim::runtime::GetCurrDeviceId(), deviceKey2);
+
+    sim::runtime::SetCurrCtxTls(1);
+    EXPECT_EQ(sim::runtime::GetCurrDeviceId(), 1U);
+}
+
+// Context 行被绕过 SetCurrCtxTls 直接删除时，显式失效后恢复"查库失败返回 0"的原语义
+// （aclrtDestroyContext 走的就是这条路径，故它必须调 InvalidateCurrDeviceTls）。
+TEST_F(SimRunnerOpsSpecCacheTest, GetCurrDeviceId_ExplicitInvalidateAfterCtxRowDeleted)
+{
+    sim::runtime::SetCurrCtxTls(1);
+    ASSERT_EQ(sim::runtime::GetCurrDeviceId(), 1U);
+
+    ASSERT_TRUE(
+        sim::runtime::Db::Delete<sim::runtime::Context>(HcclSim::Storage::Eq(&sim::runtime::Context::id, 1ULL)).ok());
+    // 记忆仍命中（Context 行已删也返回旧值）→ 证明本次未读库；这正是销毁 ctx 的调用方
+    // 必须显式失效的原因，否则"ctx 已销毁 → 返回 0"的原语义会丢失。
+    EXPECT_EQ(sim::runtime::GetCurrDeviceId(), 1U);
+
+    sim::runtime::InvalidateCurrDeviceTls();
+    EXPECT_EQ(sim::runtime::GetCurrDeviceId(), 0U);
 }
 
 // ==================== Db 薄兼容接口（一对一转发合同） ====================

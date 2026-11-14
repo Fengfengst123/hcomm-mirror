@@ -10,7 +10,10 @@
 
 #include "ccu_all_rank_param_recorder_v3.h"
 #include <sys/types.h>
+#include <cstdint>
 #include "dfx/ccu_resource_stats_dfx.h"
+#include "device_spec/ccu_address_space.h"
+#include "utils/ccu_base_resolver.h"
 #include "sim_log.h"
 #include "utils/error_codes.h"
 
@@ -261,191 +264,159 @@ namespace TaskGraphGeneratorV3 {
         return HCCL_E_PARA;
     }
 
-    const uint64_t XN_OFFSET_ADDR_A6 = 0x100000;
-    const uint64_t XN_CKB_ADDR_A6 = 0x140000;
-    const uint64_t XN_PFE_ADDR_A6 = 0x148000;
-    const uint64_t XN_CHANNEL_ADDR_A6 = 0x150000;
-    const uint64_t XN_JETTY_ADDR_A6 = 0x170000;
-    const uint64_t XN_MISSION_ADDR_A6 = 0x178000;
-    const uint64_t XN_LOOP_ADDR_A6 = 0x180000;
-    const uint64_t XN_CCUA0_MS_ADDR_A6 = 0x4000000; // MS的起始地址CCU0为64M
-    const uint64_t XN_CCUA1_MS_ADDR_A6 = 0x4200000; // MS的起始地址CCU1为66M
-    const uint64_t XN_CCUA2_MS_ADDR_A6 = 0x4400000; // MS的起始地址CCU2为68M
-    const uint64_t XN_CCUA3_MS_ADDR_A6 = 0x4600000; // MS的起始地址CCU3为70M
-    const uint64_t XN_MS_SIZE_A6 = 4096;        // 每个MS占 4KB（与 GenSliceFromMs 的 msId*4096 口径一致）
-    const uint64_t MS_INTERLEAVE_NUM = 8;       // 每组8个MS
-    const uint64_t CCUA_MS_ADDR_GAP = 0x200000; // CCUA寄存器的MS地址间隔
-    const uint64_t CCUA_NUM_A6 = 4;
-    const uint64_t GROUP_TOTAL_MS = MS_INTERLEAVE_NUM * CCUA_NUM_A6; // 一组总共32个MS
-
-    const uint64_t CCU_MS_START_ADDR[4]
-        = {XN_CCUA0_MS_ADDR_A6, XN_CCUA1_MS_ADDR_A6, XN_CCUA2_MS_ADDR_A6, XN_CCUA3_MS_ADDR_A6};
-
-    HcclResult AllRankParamRecorder::GetMSIdByAddr(uint32_t dieId, uint64_t addr, uint16_t& msId)
-    {
-        if (dieId >= ccu_resource_base_addr_.size()) {
-            const std::string maxDieId = ccu_resource_base_addr_.empty() ?
-                                             "null" :
-                                             std::to_string(static_cast<uint32_t>(ccu_resource_base_addr_.size() - 1));
-            HCCL_VM_ERROR(
-                "{} dieId is out of range when converting address to MS id, dieId={}, "
-                "maxDieId={}",
-                MakeErrorCodeText(ErrorCode::GRAPH_OUT_OF_RANGE).c_str(), dieId, maxDieId);
-            return HCCL_E_PARA;
-        }
-        uint64_t msAddr = addr - ccu_resource_base_addr_[dieId];
-        uint64_t ccuIndex{UINT64_MAX};
-        for (uint64_t i = 0; i < CCUA_NUM_A6; ++i) {
-            uint64_t ccuEnd = CCU_MS_START_ADDR[i] + CCUA_MS_ADDR_GAP;
-            if (msAddr >= CCU_MS_START_ADDR[i] && msAddr < ccuEnd) {
-                ccuIndex = i;
-                break;
+    namespace {
+        /**
+         * CcuComponerntType（checker 对外枚举）⟷ devspec::CcuResType（device 规格区域类型）。
+         *
+         * ★ 地址↔id 的区偏移/步长/容量/MS 几何全部由 CcuAddressSpace 按 device 规格提供，
+         *   此处仅做类型标签映射——取代原 XN_*_ADDR_A6 / CCU_MS_START_ADDR / MS_INTERLEAVE_NUM
+         *   等字面量常量块与 findBaseAddr/findTypeByAddr/findBaseSize 手写转换
+         *   （设计文档 §2.3/§2.4/§2.5、§4.5.5：删除常量块与 4 个转换函数，改持 CcuAddressSpace）。
+         */
+        sim::devspec::CcuResType ToResType(CcuComponerntType type)
+        {
+            switch (type) {
+                case CcuComponerntType::XN_A6:
+                    return sim::devspec::CcuResType::XN;
+                case CcuComponerntType::CKE_A6:
+                    return sim::devspec::CcuResType::CKE;
+                case CcuComponerntType::PFE_A6:
+                    return sim::devspec::CcuResType::PFE;
+                case CcuComponerntType::CHANNEL_A6:
+                    return sim::devspec::CcuResType::CHANNEL;
+                case CcuComponerntType::JETTY_A6:
+                    return sim::devspec::CcuResType::JETTY;
+                case CcuComponerntType::MISSION_A6:
+                    return sim::devspec::CcuResType::MISSION;
+                case CcuComponerntType::LOOP_A6:
+                    return sim::devspec::CcuResType::LOOP;
+                default:
+                    return sim::devspec::CcuResType::UNKNOWN;
             }
         }
-        if (ccuIndex == UINT64_MAX) {
+
+        CcuComponerntType ToComponentType(sim::devspec::CcuResType type)
+        {
+            switch (type) {
+                case sim::devspec::CcuResType::XN:
+                    return CcuComponerntType::XN_A6;
+                case sim::devspec::CcuResType::CKE:
+                    return CcuComponerntType::CKE_A6;
+                case sim::devspec::CcuResType::PFE:
+                    return CcuComponerntType::PFE_A6;
+                case sim::devspec::CcuResType::CHANNEL:
+                    return CcuComponerntType::CHANNEL_A6;
+                case sim::devspec::CcuResType::JETTY:
+                    return CcuComponerntType::JETTY_A6;
+                case sim::devspec::CcuResType::MISSION:
+                    return CcuComponerntType::MISSION_A6;
+                case sim::devspec::CcuResType::LOOP:
+                    return CcuComponerntType::LOOP_A6;
+                default:
+                    return CcuComponerntType::UNKNOWN;
+            }
+        }
+    } // namespace
+
+    uint64_t AllRankParamRecorder::GetCcuBaseAddr(DeviceId deviceId, uint32_t dieId) const
+    {
+        const auto devIter = ccu_resource_base_addr_.find(deviceId);
+        if (devIter == ccu_resource_base_addr_.end() || dieId >= devIter->second.size()) {
             HCCL_VM_ERROR(
-                "{} Address does not fall into any known MS address range, localMsAddr={}, "
-                "rawAddr={}",
-                MakeErrorCodeText(ErrorCode::GRAPH_ADDRESS_INVALID).c_str(), msAddr, addr);
-            return HCCL_E_PARA;
-        }
-        uint64_t localOffset = msAddr - CCU_MS_START_ADDR[ccuIndex];
-        uint64_t localMsIndex = localOffset / XN_MS_SIZE_A6;
-        uint64_t groupIndex = localMsIndex / MS_INTERLEAVE_NUM;
-        uint64_t posInGroup = localMsIndex % MS_INTERLEAVE_NUM;
-        msId = groupIndex * GROUP_TOTAL_MS + ccuIndex * MS_INTERLEAVE_NUM + posInGroup;
-        return HCCL_SUCCESS;
-    }
-
-    // 根据type的类型找基础地址
-    uint64_t findBaseAddr(CcuComponerntType type)
-    {
-        if (type == CcuComponerntType::XN_A6) {
-            return XN_OFFSET_ADDR_A6;
-        } else if (type == CcuComponerntType::CKE_A6) {
-            return XN_CKB_ADDR_A6;
-        } else if (type == CcuComponerntType::PFE_A6) {
-            return XN_PFE_ADDR_A6;
-        } else if (type == CcuComponerntType::CHANNEL_A6) {
-            return XN_CHANNEL_ADDR_A6;
-        } else if (type == CcuComponerntType::JETTY_A6) {
-            return XN_JETTY_ADDR_A6;
-        } else if (type == CcuComponerntType::MISSION_A6) {
-            return XN_MISSION_ADDR_A6;
-        } else if (type == CcuComponerntType::LOOP_A6) {
-            return XN_LOOP_ADDR_A6;
-        } else {
-            return 0x000000000;
-        }
-    }
-
-    // 根据地址值来找到类型
-    CcuComponerntType findTypeByAddr(uint64_t addr)
-    {
-        if (addr >= XN_OFFSET_ADDR_A6 && addr < XN_CKB_ADDR_A6) {
-            return CcuComponerntType::XN_A6;
-        } else if (addr >= XN_CKB_ADDR_A6 && addr < XN_PFE_ADDR_A6) {
-            return CcuComponerntType::CKE_A6;
-        } else if (addr >= XN_PFE_ADDR_A6 && addr < XN_CHANNEL_ADDR_A6) {
-            return CcuComponerntType::PFE_A6;
-        } else if (addr >= XN_CHANNEL_ADDR_A6 && addr < XN_JETTY_ADDR_A6) {
-            return CcuComponerntType::CHANNEL_A6;
-        } else if (addr >= XN_JETTY_ADDR_A6 && addr < XN_MISSION_ADDR_A6) {
-            return CcuComponerntType::JETTY_A6;
-        } else if (addr >= XN_MISSION_ADDR_A6 && addr < XN_LOOP_ADDR_A6) {
-            return CcuComponerntType::MISSION_A6;
-        } else if (addr >= XN_LOOP_ADDR_A6 && addr < XN_LOOP_ADDR_A6 + 0x8000) {
-            return CcuComponerntType::LOOP_A6;
-        } else {
-            return CcuComponerntType::UNKNOWN;
-        }
-    }
-
-    // 根据type的类型返回寄存器每块的数量
-    uint16_t findBaseSize(CcuComponerntType type)
-    {
-        if (type == CcuComponerntType::XN_A6 || type == CcuComponerntType::CKE_A6
-            || type == CcuComponerntType::PFE_A6) {
-            return 8;
-        } else if (
-            type == CcuComponerntType::CHANNEL_A6 || type == CcuComponerntType::JETTY_A6
-            || type == CcuComponerntType::LOOP_A6) {
-            return 32;
-        } else if (type == CcuComponerntType::MISSION_A6) {
-            return 64;
-        } else {
+                "{} ccu base addr not initialized, deviceId={}, dieId={}",
+                MakeErrorCodeText(ErrorCode::GRAPH_OUT_OF_RANGE).c_str(), deviceId, dieId);
             return 0;
         }
+        return devIter->second[dieId];
     }
 
-    // 通过XnId所在的地址值来找到XnId
-    HcclResult
-    AllRankParamRecorder::GetXnAndTypeIdByAddr(uint32_t dieId, uint64_t xnAddr, CcuComponerntType& type, uint16_t& xnId)
+    HcclResult AllRankParamRecorder::GetMSIdByAddr(DeviceId deviceId, uint32_t dieId, uint64_t addr, uint16_t& msId)
     {
-        if (dieId >= ccu_resource_base_addr_.size()) {
-            const std::string maxDieId = ccu_resource_base_addr_.empty() ?
-                                             "null" :
-                                             std::to_string(static_cast<uint32_t>(ccu_resource_base_addr_.size() - 1));
-            HCCL_VM_ERROR(
-                "{} dieId is out of range when converting address to register id, dieId={}, "
-                "maxDieId={}",
-                MakeErrorCodeText(ErrorCode::GRAPH_OUT_OF_RANGE).c_str(), dieId, maxDieId);
+        const uint64_t base = GetCcuBaseAddr(deviceId, dieId);
+        const auto* space = GetCcuAddrSpaceByDeviceId(deviceId);
+        if (base == 0 || space == nullptr) {
             return HCCL_E_PARA;
         }
-        type = findTypeByAddr(xnAddr - ccu_resource_base_addr_[dieId]);
-        if (type == CcuComponerntType::UNKNOWN) {
+        uint32_t id = 0;
+        if (!space->MsAddrToId(base, addr, id) || id > UINT16_MAX) {
             HCCL_VM_ERROR(
-                "{} Address does not belong to any known CCU component range, addr={}, "
-                "dieId={}, dieBaseAddr={}",
-                MakeErrorCodeText(ErrorCode::GRAPH_ADDRESS_INVALID).c_str(), xnAddr, dieId,
-                ccu_resource_base_addr_[dieId]);
+                "{} Address does not fall into any known MS address range, deviceId={}, dieId={}, rawAddr={}",
+                MakeErrorCodeText(ErrorCode::GRAPH_ADDRESS_INVALID).c_str(), deviceId, dieId, addr);
             return HCCL_E_PARA;
         }
-        uint64_t baseAddr = findBaseAddr(type) + ccu_resource_base_addr_[dieId];
-        uint16_t sizeofXn = findBaseSize(type);
-        xnId = static_cast<uint16_t>((xnAddr - baseAddr) / static_cast<uint64_t>(sizeofXn));
+        msId = static_cast<uint16_t>(id);
+        return HCCL_SUCCESS;
+    }
+
+    // 通过XnId所在的地址值来找到XnId以及寄存器的类型
+    HcclResult AllRankParamRecorder::GetXnAndTypeIdByAddr(
+        DeviceId deviceId, uint32_t dieId, uint64_t xnAddr, CcuComponerntType& type, uint16_t& xnId)
+    {
+        type = CcuComponerntType::UNKNOWN;
+        const uint64_t base = GetCcuBaseAddr(deviceId, dieId);
+        const auto* space = GetCcuAddrSpaceByDeviceId(deviceId);
+        if (base == 0 || space == nullptr) {
+            return HCCL_E_PARA;
+        }
+        sim::devspec::CcuResType resType = sim::devspec::CcuResType::UNKNOWN;
+        uint64_t id = 0;
+        if (!space->AddrToResId(base, xnAddr, resType, id)) {
+            HCCL_VM_ERROR(
+                "{} Address does not belong to any known CCU component range, addr={}, deviceId={}, dieId={}, "
+                "dieBaseAddr={}",
+                MakeErrorCodeText(ErrorCode::GRAPH_ADDRESS_INVALID).c_str(), xnAddr, deviceId, dieId, base);
+            return HCCL_E_PARA;
+        }
+        if (id > UINT16_MAX) {
+            HCCL_VM_ERROR(
+                "{} register id out of range, addr={}, id={}", MakeErrorCodeText(ErrorCode::GRAPH_OUT_OF_RANGE).c_str(),
+                xnAddr, id);
+            return HCCL_E_PARA;
+        }
+        type = ToComponentType(resType);
+        xnId = static_cast<uint16_t>(id);
         return HCCL_SUCCESS;
     }
 
     // 通过XnId所在的地址值来找到XnId
-    HcclResult
-    AllRankParamRecorder::GetXnIdByAddr(uint32_t dieId, CcuComponerntType type, uint64_t xnAddr, uint16_t& xnId)
+    HcclResult AllRankParamRecorder::GetXnIdByAddr(
+        DeviceId deviceId, uint32_t dieId, CcuComponerntType type, uint64_t xnAddr, uint16_t& xnId)
     {
-        if (dieId >= ccu_resource_base_addr_.size()) {
-            const std::string maxDieId = ccu_resource_base_addr_.empty() ?
-                                             "null" :
-                                             std::to_string(static_cast<uint32_t>(ccu_resource_base_addr_.size() - 1));
-            HCCL_VM_ERROR(
-                "{} dieId is out of range when converting address to register id, dieId={}, "
-                "maxDieId={}",
-                MakeErrorCodeText(ErrorCode::GRAPH_OUT_OF_RANGE).c_str(), dieId, maxDieId);
+        const uint64_t base = GetCcuBaseAddr(deviceId, dieId);
+        const auto* space = GetCcuAddrSpaceByDeviceId(deviceId);
+        if (base == 0 || space == nullptr) {
             return HCCL_E_PARA;
         }
-        // 需要判断界限  todo
-        uint64_t baseAddr = findBaseAddr(type) + ccu_resource_base_addr_[dieId];
-        uint16_t sizeofXn = findBaseSize(type);
-        xnId = static_cast<uint16_t>((xnAddr - baseAddr) / static_cast<uint64_t>(sizeofXn));
+        uint64_t id = 0;
+        // ★ 带完整边界校验（AddrToIdOfType 内置 id < count），修掉原 "需要判断界限 todo"。
+        if (!space->AddrToIdOfType(base, ToResType(type), xnAddr, id) || id > UINT16_MAX) {
+            HCCL_VM_ERROR(
+                "{} Address does not belong to the requested CCU component range, addr={}, deviceId={}, dieId={}, "
+                "type={}",
+                MakeErrorCodeText(ErrorCode::GRAPH_ADDRESS_INVALID).c_str(), xnAddr, deviceId, dieId,
+                static_cast<uint32_t>(type));
+            return HCCL_E_PARA;
+        }
+        xnId = static_cast<uint16_t>(id);
         return HCCL_SUCCESS;
     }
 
-    // 通过XnId所在的地址值来找到XnId
-    HcclResult
-    AllRankParamRecorder::GetAddrByXnId(uint32_t dieId, CcuComponerntType type, uint16_t xnId, uint64_t& xnAddr)
+    // 通过资源id反查地址
+    HcclResult AllRankParamRecorder::GetAddrByXnId(
+        DeviceId deviceId, uint32_t dieId, CcuComponerntType type, uint16_t xnId, uint64_t& xnAddr)
     {
-        // 需要判断界限  todo
-        if (dieId >= ccu_resource_base_addr_.size()) {
-            const std::string maxDieId = ccu_resource_base_addr_.empty() ?
-                                             "null" :
-                                             std::to_string(static_cast<uint32_t>(ccu_resource_base_addr_.size() - 1));
-            HCCL_VM_ERROR(
-                "{} dieId is out of range when converting register id to address, dieId={}, "
-                "maxDieId={}",
-                MakeErrorCodeText(ErrorCode::GRAPH_OUT_OF_RANGE).c_str(), dieId, maxDieId);
+        const uint64_t base = GetCcuBaseAddr(deviceId, dieId);
+        const auto* space = GetCcuAddrSpaceByDeviceId(deviceId);
+        if (base == 0 || space == nullptr) {
             return HCCL_E_PARA;
         }
-        uint64_t baseAddr = findBaseAddr(type) + ccu_resource_base_addr_[dieId];
-        uint16_t sizeofXn = findBaseSize(type);
-        xnAddr = baseAddr + static_cast<uint64_t>(xnId) * sizeofXn;
+        if (!space->ResIdToAddr(base, ToResType(type), xnId, xnAddr)) {
+            HCCL_VM_ERROR(
+                "{} register id out of range when converting to address, deviceId={}, dieId={}, type={}, id={}",
+                MakeErrorCodeText(ErrorCode::GRAPH_OUT_OF_RANGE).c_str(), deviceId, dieId, static_cast<uint32_t>(type),
+                xnId);
+            return HCCL_E_PARA;
+        }
         return HCCL_SUCCESS;
     }
 

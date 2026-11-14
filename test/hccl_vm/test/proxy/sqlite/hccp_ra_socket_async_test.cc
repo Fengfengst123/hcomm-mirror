@@ -43,6 +43,16 @@
 #include "storage_composition/storage_composition.h"
 #include "store_sim_resource_root.h"
 
+// hccp_ra_socket_stub.cc 经 extern "C" 跨 so 引用 level0 mpi_stub 的
+// TryGetRankSizeFromRankTable（从 RANK_TABLE_FILE 读取通信域成员数）。
+// 本 UT 只链接 level2 源码（无 level0），提供桩实现满足链接；
+// UT 用例不驱动 LSA estimate 路径，返回 false 即走环最小成员数回落。
+extern "C" bool TryGetRankSizeFromRankTable(uint32_t& rankSize)
+{
+    rankSize = 0;
+    return false;
+}
+
 // hccp 异步族由 hccp_async.h 声明；同步族（Init/Deinit/BatchConnect/RaGetSockets）
 // 声明在 hcomm 侧另一头文件、未随 hccp 头导出，被测实现编译在本目标内，此处按
 // 实现签名直接声明（与 hccp_ra_socket_stub.cc 定义一致）。

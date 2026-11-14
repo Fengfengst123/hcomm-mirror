@@ -127,7 +127,9 @@ void TransMemExecutor::Run()
         uint16_t xnId = GetXnId(xnId_);
         uint64_t xnAddr = ccuResMgr.GetXnValue(rankId_, dieId_, xnId);
         uint16_t xnIdRmt = 0;
-        if (!ccuResMgr.GetXnIdByAddr(dieId_, CcuComponerntType::XN_A6, xnAddr, xnIdRmt)) {
+        // ★ xnAddr 是对端 (rmtRankId, rmtDieId) 资源空间内的地址，用对端基址解码（P3）。
+        if (!ccuResMgr.GetXnIdByAddr(
+                rmtRankId, static_cast<uint32_t>(rmtDieId), CcuComponerntType::XN_A6, xnAddr, xnIdRmt)) {
             ccuSimulator_->SetExecState(CcuExecState::EXEC_FAIL);
             return;
         }

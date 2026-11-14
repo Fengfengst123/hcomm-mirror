@@ -1,0 +1,450 @@
+# -----------------------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
+# Please refer to the License for details. You may not use this file except in compliance with the License.
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
+# -----------------------------------------------------------------------------------------------------------
+
+# device spec yaml 参考实现（demo，A5 / Ascend950 / CCU_V1）
+#   用途        : CCU 建模与重构的 device 规格配置参考实现，与 ascend960(A6) 同 schema
+#   实际交付位置 : asset/cluster_model/config/device/ascend950.yaml
+#   设计文档    : docs/ccu_memory_model_refactor_design.md
+#   姊妹文件    : device_spec_yaml_demo_ascend960.yaml（A6 / Ascend960 / CCU_V2，同目录）
+#   ★ 本文件与 A6 demo 的关键差异：A5 的 regions / ms 两项原为设计文档 §4.2.4
+#     的 T5/T7 TODO。现依据 **hcomm 权威源码** 核定，不再是推测值
+#     （下列路径相对 hcomm 仓的 src/base_comm/resources/ccu/）：
+#           ccu_device/ccu_res_specs.h               （常量定义，:24-59）
+#           ccu_device/ccu_res_specs.cc:372,499      （GetXnBaseAddr / GetCkeBaseAddr 偏移推导）
+#           ccu_device/ccu_res_specs.cc:765          （GetResourceSpaceSize → 72 MiB）
+#           ccu_device/ccu_block_res_strategy.cc:23  （CCU_V1_V2_CCUA_NUM = 4）
+#           ccu_microcode/ccu_microcode_v1.h:28-29   （CCU_MS_SIZE=4096, CCU_MS_INTERLEAVE=8）
+#     每条 region 均在注释中标注其 hcomm 依据行号，便于 S0 复核。
+#   ★★ 核定结论见文末【核定结论】，其中修正 1/3/4 已回写设计文档。
+#   解析注意: yaml-cpp 的 convert<T>::decode 内部 unsetf(ios::dec)，走 base-0 语义，
+#             可正确解析 0x 前缀；PyYAML(YAML 1.1) 同样解析为 int。两侧一致。
+#             但所有地址/尺寸字段**必须以 uint64_t 读取**——rank_stride(0x10000000000)、
+#             reserved.size(0xF180000000) 等 ≥ 2^32，用 uint32_t 取会抛 TypedBadConversion。
+
+type: "device_spec"
+spec_version: 1                       # schema 版本，供消费方做兼容判定（A5/A6 两份 demo 均须携带）
+name: "ascend950"
+description: "Ascend950(A5) 设备规格：地址空间划分与 CCU 资源布局（CCU_V1）"
+
+# ---------------------------------------------------------------------------
+# SoC 标识（TODO 清单 T1）
+#
+#   ★ 阶段 0 匹配规则（设计文档 §4.2.1 / §4.7.3）:
+#     由本文件的 name（= 文件名 "ascend950"）做**大小写不敏感最长前缀**匹配，
+#     匹配对象是 cluster/*.yaml 的 server_list[].soc_version（当前唯一活跃来源）:
+#         lower(soc_version).startswith(lower(name))
+#         "ascend950dt_95a1".startswith("ascend950")  ✓
+#     多份 spec 命中 → 取 name 最长者；最长仍并列 → fail-fast；零命中 → fail-fast。
+#     该规则同时覆盖 A5 的 SKU 级值与 family 级值，且避开 ParseDevType
+#     （topo_cluster_ir.cc:137-152）只认 "ascend950"/"ASCEND950"/"950" 的缺陷。
+#
+#   ★ 目标态（阶段 1-3，本期不做）: server_or_pod/*.yaml 增加 `device: "ascend950"`
+#     显式引用本文件，cluster/*.yaml 删除 soc_version，届时本文件的 soc_version
+#     成为全项目**唯一**权威。见设计文档 §4.7。
+#
+#   现网实际出现的 A5 soc_version 值:
+#     "Ascend950DT_95A1"  ← 全部 10 个 A5 cluster 配置（SKU 级）
+#     "Ascend950"         ← 全部 10 个 server_or_pod 顶层（family 级，实质死配置，
+#                            仅喂 generate_server_topo.sh:300 一行日志）
+#     两者粒度不一致，归一裁决见开放问题 O8（主方案完成后处理）。
+# ---------------------------------------------------------------------------
+soc:
+  # ⚠⚠ 阶段 0（决策 (i)）：本字段加载器【完全忽略】—— 不解析、不参与匹配、
+  #   不参与校验、不落库，仅供人工阅读。它是已知的"存在但无效"字段，
+  #   与设计文档 §4.7.1 的 #2（server_or_pod 的死 soc_version）同类，
+  #   由 O8 在阶段 1 消除。
+  #   阶段 0 的 soc_version 权威仍是 cluster/*.yaml 的 server_list[].soc_version，
+  #   spec 选择靠 name 做大小写不敏感最长前缀匹配（ascend950 ↔ Ascend950DT_95A1）。
+  #   目标态（阶段 1-3）：server_or_pod.yaml 用 `device: "ascend950"` 显式引用本文件，
+  #   届时本字段成为全项目唯一 soc_version 权威。见设计文档 §4.7。
+  soc_version: "Ascend950DT_95A1"
+  ccu_version: "CCU_V1"               # CCU_V1 | CCU_V2 | CCU_V3（V3 预留，见文末修正 4）
+  die_num: 2                          # = hcomm CCU_MAX_IODIE_NUM；本期仅支持 1/2（开放问题 O4）
+
+# ---------------------------------------------------------------------------
+# 全局地址空间划分（T2~T4）—— 与 A6 **完全相同**（芯片无关，两份 demo 应逐字段一致）
+#
+#   地址计算公式（设计文档 §4.4.1，device_spec 库实现，不在 yaml 冗余）:
+#     rankBase(r)       = rank_base + r × rank_stride
+#     ccuDieBase(r, d)  = rankBase(r) + partitions[name=="ccu"].offset + ccu.die_offsets[d]
+#     resAddr(r,d,t,id) = ccuDieBase(r,d) + regions[t].offset + id × regions[t].entry_size
+#     userMemVa(r, seg, off) = rankBase(r) + partitions[user_mem][seg].offset + off
+#
+#   rank 窗口内布局（1 TiB）:
+#     0x000000000    user_mem 段0   56 GiB   ← rtMalloc 可分配
+#     0xE00000000    CCU die0        1 GiB   ← 保留，rtMalloc 永不返回
+#     0xE40000000    CCU die1        1 GiB   ← 保留，rtMalloc 永不返回
+#     0xE80000000    user_mem 段1  966 GiB   ← rtMalloc 可分配
+#     0x10000000000  窗口结束
+#     user_mem 合计 = 0xE00000000 + 0xF180000000 = 0xFF80000000（1022 GiB）
+#
+#   ★ partitions 约束（加载器校验 5）:
+#     按 offset 升序、互不重叠、且**完整铺满** [0, rank_window_size)
+#     （首段 offset == 0，末段 offset+size == rank_window_size，相邻段首尾相接）；
+#     **同名可多段** —— user_mem 被 ccu 窗口切成两段；恰好一个 name=="ccu" 段。
+#
+#   ★ rtMalloc 分配算法（设计文档 §4.5.7，per-segment first-fit）:
+#     DeviceMemoryManager 为每个 device 维护 **per-segment 游标**，逐段尝试：
+#       若 段内余量 ≥ alignedSize → va = rankBase + seg.offset + cursor; cursor += alignedSize
+#       否则跳到下一段（浪费该段尾部余量，浪费量严格 < 单次请求大小）
+#     所有段都放不下 → 打 ERROR 并返回 nullptr（即"VA 超出 device 1 TiB 上限"报错）。
+#     ⚠ **禁止**改用"单一全局线性水位 + 一次映射"：那样分配块会**跨越 ccu 空洞**。
+#       反例：段0 余量 0x100 而请求 0x400 时，线性总量检查（≤1022 GiB）会通过，
+#       但块尾 [rankBase+0xE00000000, rankBase+0xE000000300) 侵入 CCU die0 0x300 字节。
+#     rank0 实值（S4 UT 断言用，设计文档 §8.1 A5）:
+#       段0 最后一个可分配 8B 对齐 VA = 0x8000000000 + 0xE00000000 - 8 = 0x8DFFFFFFF8
+#       跳段后首个 VA                 = 0x8000000000 + 0xE80000000     = 0x8E80000000
+#       被完整跳过的区间              = [0x8E00000000, 0x8E80000000)   = CCU die0 + die1
+#       段1 末端 + 1                  = 0x8000000000 + 0x10000000000   = 0x18000000000 = rank1 起点
+#       ⇒ 段0/段1 与 CCU 窗口、与下一 rank 窗口均无缝衔接且零交集。
+#     ⚠ 不设 alloc_guard / user_mem_limit：可用额度就是 Σ user_mem 段 = 1022 GiB，
+#       由 partitions 派生。旧值 0xE00000000（56 GiB）是**线性 bump 分配器无法跳过
+#       ccu 空洞时的补偿上界**，per-segment first-fit 落地后失效，**勿恢复**。
+#     ⚠ 不回收已释放 VA（FreeVirMem 为空实现）：依赖 aclrt_memory_stub.cc:474-482
+#       记载的不变量「标记行与活跃行永不同址共存」（FR1 128p / R3K4 256p 修复），
+#       该不变量由地址永不复用保证。详见设计文档 §4.5.7 / O13。
+#
+#   ★ CCU 窗口位置被锁定在 56 GiB（Q2）：第三方组件对 CCU 基址有硬性要求，
+#     不可挪至窗口末尾换取 user_mem 单段。若未来基址变更，需重新适配本段与
+#     rank0 die0 = 0x8e00000000 / die1 = 0x8e40000000 的对外承诺。
+#
+#   与现有代码同源: rank_base / rank_stride 与 store_sim_device_memory_manager.cc:54-55
+#   AllocVirMem 的 deviceBase / deviceAddrStep 完全一致，保证已分配 HBM 地址零变更（D5）。
+#   实测单 rank 峰值水位 0.405 GiB（log.txt，112 次分配），远小于段0 的 56 GiB，
+#   故现有全部落在段0，VA 与旧公式 rankBase + used 逐位相同 → 零回归。
+# ---------------------------------------------------------------------------
+address_space:
+  rank_base:        0x8000000000      # rank0 窗口起点（= 512 GiB）
+  rank_stride:      0x10000000000     # 每 rank 1 TiB
+  rank_window_size: 0x10000000000     # 须 ≤ rank_stride（校验 5）
+  partitions:
+    - {name: "user_mem",  offset: 0x0,          size: 0xE00000000}   # 段0:   0 ~   56 GiB
+    - {name: "ccu",       offset: 0xE00000000,  size: 0x80000000}    #       56 ~   58 GiB（2 die × 1 GiB）
+    - {name: "user_mem",  offset: 0xE80000000,  size: 0xF180000000}  # 段1:  58 ~ 1024 GiB
+  ccu:
+    # 各 die 相对 CCU 窗口起点（= rank_base + partitions[name=="ccu"].offset）的偏移。
+    # 显式列出、不按步进推导（D10）；长度必须等于 soc.die_num（加载器校验 4）。
+    die_offsets: [0x0, 0x40000000]
+    die_size:    0x40000000           # 每 die CCU 地址空间 1 GiB（实际使用 72 MiB，见 ccu 段）
+
+# ---------------------------------------------------------------------------
+# CCU 区域布局（T5 —— 已按 hcomm ccu_res_specs 核定，非推测）
+#
+#   ★ A5 与 A6 的根本差异：**CCUM 与 CCUA 的先后顺序相反**
+#       hcomm ccu_res_specs.h:26-27:
+#         CCU_V1_CCUM_OFFSET = 0x800000   // V1 CCUM 偏移，位于 CCUA 之后
+#         CCU_V2_CCUM_OFFSET = 0x0        // V2 CCUM 偏移，位于 CCUA 之前
+#       CCUM = CCU Microcode = 指令空间；CCUA = MS（memory slice）的 4 个 bank。
+#       ⇒ V1: MS 在低地址 [0, 0x800000)，指令空间在其后
+#       ⇒ V2: 指令空间在 0x0，MS 在高地址 0x4000000
+#
+#   字段说明:
+#     offset     : 区域起点相对 ccuDieBase 的偏移
+#     size       : 区域地址空间大小（与 entry_size/count 分离）
+#     entry_size : 单个资源的字节步进；0 表示该区域不按 id 编址（不透明块）
+#     count      : 硬件容量（= 上报 hcomm 的 caps 口径，由 GetCaps() 推导）
+#
+#   本表替代的硬编码（统一后全部删除，见设计文档 §4.5.6）:
+#     - proxy L1 ccu_level1_res.cc:44-46  V1_GSA_OFFSET / V1_XN_OFFSET / V1_CKE_OFFSET
+#     - proxy L2 hccp_stub.cc:2083-2204   GetCcuMemInfo 的 9 区域累加表（与 L1 冲突）
+# ---------------------------------------------------------------------------
+ccu:
+  # 权威资源空间总大小（= backingSize，见文末【核定结论】修正 1）
+  #   hcomm ccu_res_specs.h:24:  CCU_V1_V2_RESOURCE_SIZE = 72 * 1024 * 1024
+  #   hcomm ccu_res_specs.cc:765: GetResourceSpaceSize() 返回该值（V3 为 128MB）
+  #   ⇒ A5 与 A6 的 CCU 资源空间**同为 72 MiB**，backingSize 应直接取此值，
+  #     而不是按 max(region ∪ ms 末端) 推导 —— 后者 A5 只算到 0x940000（9.25 MiB），
+  #     会漏掉 62.75 MiB。这段空间虽未被本文件的 regions 建模，但 hcomm 可能访问
+  #     （如 SQ buffer 区），模拟器必须一并 backing，否则 hcomm 访问会落到 mmap 之外。
+  #   ⚠ 因此：regions 表描述的是**模拟器建模范围**，resource_space_size 才是
+  #     **资源空间完整大小**；两者之差是有意留白，**禁止**因留白大就调小本字段。
+  resource_space_size: 0x4800000       # 72 MiB
+
+  regions:
+    # ---- 指令空间（CCUM）：hcomm ccu_res_specs.h:26 + :50 ------------------
+    #   CCU_V1_CCUM_OFFSET = 0x800000；CCU_RESOURCE_INS_RESERVE_SIZE = 0x100000
+    #   entry_size 依据 CCU_RESOURCE_INSTR_PER_SIZE = 32（ccu_res_specs.h:57）
+    - {name: "instruction", type: "INSTR",   offset: 0x800000,  size: 0x100000, entry_size: 32, count: 32768}
+    #   校验: 32 × 32768 = 0x100000 = size ✓（与 hccp_ccu_stub.cc:79 instructionNum=0x8000 一致）
+
+    # ---- GSA：A5 独有（A6 已删除）-----------------------------------------
+    #   偏移 = CCUM + INS = 0x800000 + 0x100000 = 0x900000
+    #   与 proxy L1 V1_GSA_OFFSET = 0x900000 一致（ccu_level1_res.cc:44）
+    #   size 依据 CCU_V1_RESOURCE_GSA_RESERVE_SIZE = 0x8000（ccu_res_specs.h:52）
+    - {name: "gsa",         type: "GSA",     offset: 0x900000,  size: 0x8000,   entry_size: 8,  count: 3072}
+    #   校验: 8 × 3072 = 0x6000 ≤ 0x8000 ✓
+
+    # ---- XN ----------------------------------------------------------------
+    #   hcomm ccu_res_specs.cc:372-373 GetXnBaseAddr:
+    #     V1: ccuXnOffset = CCU_V1_CCUM_OFFSET + INS_RESERVE + GSA_RESERVE
+    #                       = 0x800000 + 0x100000 + 0x8000 = 0x908000
+    #   与 proxy L1 V1_XN_OFFSET = 0x908000 一致（ccu_level1_res.cc:45）
+    #   size 依据 CCU_RESOURCE_XN_V1_RESERVE_SIZE = 32*1024 = 0x8000（ccu_res_specs.h:55）
+    #   ⚠ 注意与 A6 的差异：A6 用 CCU_RESOURCE_XN_V2_RESERVE_SIZE = 256K = 0x40000
+    - {name: "xn",          type: "XN",      offset: 0x908000,  size: 0x8000,   entry_size: 8,  count: 3072}
+    #   校验: 8 × 3072 = 0x6000 ≤ 0x8000 ✓
+    #   ⚠ entry_size 依据 CCU_RESOURCE_XN_PER_SIZE = 8（ccu_res_specs.h:54）
+
+    # ---- CKE ---------------------------------------------------------------
+    #   hcomm ccu_res_specs.cc:499-500 GetCkeBaseAddr:
+    #     V1: ccuCkeOffset = CCUM + INS + GSA + XN_V1_RESERVE
+    #                      = 0x800000 + 0x100000 + 0x8000 + 0x8000 = 0x910000
+    #   与 proxy L1 V1_CKE_OFFSET = 0x910000 一致（ccu_level1_res.cc:46）
+    #   size: hcomm 未给 CKE 预留常量，按 32K 预留惯例取 0x8000（与 L2 GetCcuMemInfo
+    #         的 0x8000 步进一致）；实际占用 1024 × 8 = 0x2000
+    - {name: "cke",         type: "CKE",     offset: 0x910000,  size: 0x8000,   entry_size: 8,  count: 1024}
+    #   校验: 8 × 1024 = 0x2000 ≤ 0x8000 ✓
+    #   ⚠ entry_size 依据 CCU_RESOURCE_CKE_PER_SIZE = 8（ccu_res_specs.h:55 附近）
+
+    # ---- 以下 5 个区域 hcomm ccu_res_specs **未定义偏移** -------------------
+    #   ⚠️ T5 残留 TODO：PFE/CHANNEL/JETTY/MISSION/LOOP 的 A5 偏移在 hcomm
+    #   ccu_res_specs.{h,cc} 中查无定义（已全仓 grep 0x148000/0x150000/0x170000/
+    #   0x178000/0x180000 等，均无命中）。现网仅两处涉及:
+    #     ① proxy L2 hccp_stub.cc:2083-2204 GetCcuMemInfo —— 但它是 CheckerL2 自造的
+    #        版本无关表（INS@0x0 + 0x8000 累加），与 hcomm 权威 V1 布局冲突，D10/R5
+    #        已判定删除，不能作为 A5 依据；
+    #     ② runner/checker 的 A6 解码表 —— 仅 A6 语义。
+    #   下方取值为**延续 hcomm V1 链条的 0x8000 预留惯例**的提案值，待 S0 向
+    #   CCU 驱动/硬件规格核定。
+    #   影响面评估：A5 指令用 **id 编址**而非地址编址（设计文档 S7 / 原始需求 1.2），
+    #   runner/checker 对 A5 不做 AddrToResId 反查，故这 5 项当前只影响
+    #   GetCcuMemInfo 上报值，**不影响 backingSize**（已由 resource_space_size 定死）。
+    - {name: "pfe",         type: "PFE",     offset: 0x918000,  size: 0x8000,   entry_size: 8,  count: 16}
+    #   count 依据 CCU_V1_PER_DIE_PFE_RESERVED_NUM = 16（ccu_res_specs.h:44）；A6 为 20
+    - {name: "channel",     type: "CHANNEL", offset: 0x920000,  size: 0x8000,   entry_size: 32, count: 128}
+    #   count 依据 hccp_ccu_stub.cc:90 "Channel map 128 for v1"；A6 为 1024
+    - {name: "jetty",       type: "JETTY",   offset: 0x928000,  size: 0x8000,   entry_size: 32, count: 128}
+    #   count 依据 CCU_PER_DIE_JETTY_RESERVED_NUM = 128（ccu_res_specs.h:46，V1/V2 同）
+    - {name: "mission",     type: "MISSION", offset: 0x930000,  size: 0x8000,   entry_size: 64, count: 16}
+    #   count 依据 hccp_ccu_stub.cc:80 missionNum = 16（V1/V2 同）
+    - {name: "loop",        type: "LOOP",    offset: 0x938000,  size: 0x8000,   entry_size: 32, count: 200}
+    #   count 依据 hccp_ccu_stub.cc:81 loopEngineNum = 200（A6 为 512）
+    #   校验: 32 × 200 = 0x1900 ≤ 0x8000 ✓；regions 末端 = 0x940000（9.25 MiB）
+
+  # 注：GSA 容量由上方 regions[type=="GSA"].count 表达（T6 已解决，不再设独立 gsa: 键，
+  #     避免与 regions 冗余）。GetCaps().gsa_num 的派生规则为
+  #     「regions[GSA].count，条目缺失即 0」—— A5 有该条目（3072），A6 无（派生为 0）。
+  #     A5 的 GSA 是**真寄存器堆**；A6 无 GSA 寄存器堆但 V2 微码仍保留 gsaOffset 位域
+  #     用作地址步长，详见 A6 demo 的对应说明。
+
+  # ---------------------------------------------------------------------------
+  # MS（memory slice）布局（T7 —— 已按 hcomm 核定，非推测）
+  #
+  #   ★ 结论：A5 与 A6 的 MS **几何完全相同**，仅基址不同。
+  #     CCUA 数量  : 4  —— ccu_block_res_strategy.cc:23 CCU_V1_V2_CCUA_NUM = 4
+  #                          （ccu_res_specs.h:28 注："V3 CCUA数量，V1/V2为4个"）
+  #     ms_size    : 4096 —— ccu_microcode_v1.h:28 CCU_MS_SIZE = 4096（V1 头文件）
+  #     interleave : 8    —— ccu_microcode_v1.h:29 CCU_MS_INTERLEAVE = 8（V1 头文件）
+  #     基址       : 0x0  —— 由 CCU_V1_CCUM_OFFSET = 0x800000 "位于CCUA之后" 反推：
+  #                          CCUA 占 [0, 0x800000) = 8 MiB，4 个 bank ⇒ 每 bank 2 MiB
+  #
+  #   ⇒ 现网 3 套 A5 MS 口径的裁决（设计文档 §4.2.4 T7 / 本 demo 原附录）:
+  #     ① proxy L1 ccu_kernel_sim.cc:65 CCU_MS_BASE = 0x08000000（128 MiB）→ **错误，删除**
+  #        它既超出 V1 CCUA 区间 [0,0x800000)，也超出整个 72 MiB 资源空间；
+  #        形似 CCU_V1_CCUM_OFFSET = 0x800000 多写一个 0。
+  #     ② checker GenSliceFromMs 的 msId × 4096 平坦编址 → **是近似**，忽略了 4-bank
+  #        交织；A6 同样如此。runner 的 GetMSIdByAddr 才做了去交织。此不一致由本
+  #        配置暴露，需在 S2 统一（见【重要修正 3】）。
+  #     ③ runner 平坦 vector（1536 × 4096 = 6 MiB）→ 存储实现细节，与地址编址无关，
+  #        S3 实体化后由 CcuDieView 按本表定位。
+  #
+  #   交织公式（设计文档 §4.4.3；ccua_num=4, interleave=8 与 A6 同）:
+  #     addr→id: off = addr - ccuDieBase → 命中 ccua_windows[i]
+  #              localIdx = (off - off_i) / ms_size
+  #              msId = (localIdx/interleave)×(interleave×ccua_num) + i×interleave + localIdx%interleave
+  #     id→addr: groupIdx = msId/(interleave×ccua_num); ccuaIndex = (msId%(interleave×ccua_num))/interleave
+  #              localIdx = groupIdx×interleave + msId%interleave
+  #              addr = ccuDieBase + ccua_windows[ccuaIndex].offset + localIdx×ms_size
+  #
+  #   覆盖校验（per-window，非求和）:
+  #     每窗口槽数 = 0x200000/4096 = 512
+  #     localIdx_max = ((1536-1)/(4×8))×8 + 7 = 47×8 + 7 = 383 ≤ 511 ✓
+  # ---------------------------------------------------------------------------
+  ms:
+    ms_size:    4096
+    ms_num:     1536                 # GetCaps().ms_num 由此推导；= hccp_ccu_stub.cc:88
+    ccua_num:   4                    # CCU_V1_V2_CCUA_NUM
+    interleave: 8                    # CCU_MS_INTERLEAVE
+    ccua_windows:                    # 偏移相对 ccuDieBase；★ 基址 0x0（A6 为 0x4000000）
+      - {index: 0, offset: 0x0,       size: 0x200000}
+      - {index: 1, offset: 0x200000,  size: 0x200000}
+      - {index: 2, offset: 0x400000,  size: 0x200000}
+      - {index: 3, offset: 0x600000,  size: 0x200000}
+    # ⚠ 分配侧注意（不影响地址布局）: hcomm serveMode_ 默认 ARMX86，注释为
+    #   "默认按a+x模式，规避使用部分ccua"（ccu_res_specs.h:238）；
+    #   ccu_block_res_strategy.cc:253 有 avoidCcu0Flag（k % ccuaNum_ == 0 时不分配），
+    #   即某些模式下 CCUA0 会被规避。地址空间布局不变，但**可用 msId 集合会缩小**。
+    #   模拟器是否需要复刻该规避策略 → 列为 S0 追加确认项（本 demo 不复刻）。
+
+  # 跨 rank 同步预留槽数（T8）：L1 现硬编码 SYNC_SLOT_NUM = 4（ccu_level1_res.h:250）
+  #   ⚠ L1 实际是 per-type 三个独立水位（ccu_level1_res.h:293-295
+  #     xnAllocated_[2]{4,4} / gsaAllocated_[2]{4,4} / ckeAllocated_[2]{4,4}），
+  #     A5 三者都有；A6 无 GSA 故只有 xn/cke 生效。
+  reserved_sync_slots: 4
+
+  # 0.5RTT 计数寄存器（A6 专有，A5 无）——此处显式置 0 以消除歧义
+  #   A6 依据 CCU_V2_RESOURCE_TOTAL_CNT_XNS_NUM = 4（ccu_res_specs.h:59，
+  #   "0.5RTT配置寄存器共4组"），对应 CheckerL2 的 HalfRTTTab / g_allDeviceHalfRTTInfo
+  count_xn_num: 0
+
+  # 注意：不设 caps 段（T9 已改为推导，见 A6 demo 同名说明）
+  #   GetCaps() 对本文件的推导结果，与 hccp_ccu_stub.cc:69-96
+  #   SetCcuV1ResourceBasicInfo 的现值逐项一致，可作为 T5/T6/T7 的交叉验证:
+  #     instruction_num ← regions[INSTR].count   = 32768 = 0x8000  ✓
+  #     mission_num     ← regions[MISSION].count = 16              ✓
+  #     loop_engine_num ← regions[LOOP].count    = 200             ✓
+  #     gsa_num         ← regions[GSA].count     = 3072            ✓（条目缺失则为 0，A6 即如此）
+  #     xn_num          ← regions[XN].count      = 3072            ✓
+  #     cke_num         ← regions[CKE].count     = 1024            ✓
+  #     ms_num          ← ms.ms_num              = 1536            ✓
+  #     channel_num     ← regions[CHANNEL].count = 128             ✓
+  #     jetty_num       ← regions[JETTY].count   = 128             ✓
+  #     pfe_num         ← regions[PFE].count     = 16              ✓
+  #   10/10 命中 ⇒ regions/ms 填写正确。
+
+# ---------------------------------------------------------------------------
+# 其它 device 规格（T10/T11，本期仅占位、不消费；开放问题 O7）
+# ---------------------------------------------------------------------------
+compute:
+  ai_core_num:     0
+  vector_core_num: 0
+  ai_cpu_num:      0
+bandwidth:
+  hbm_gbps:          0.0    # 占位；A5 实际值待第二期从 light_performance/sim_config.json 收敛
+  hbm_utilization:   0.0
+  default_port_gbps: 0.0
+
+# =====================================================================================
+# 派生量（由 device_spec 库计算，yaml 中不冗余存储）
+# =====================================================================================
+#   backingSize = ccu.resource_space_size = 0x4800000（72 MiB）
+#     ★ 直接取 hcomm 权威值 CCU_V1_V2_RESOURCE_SIZE，**不用** max(region ∪ ms 末端) 推导:
+#       max(regions ∪ ms) = max(0x940000, 0x800000) = 0x940000（9.25 MiB），
+#       小于权威值 72 MiB —— 差出的 62.75 MiB 未被本文件 regions 建模，但 hcomm 可能
+#       访问（如 SQ buffer 区），模拟器必须一并 backing，否则 hcomm 访问会落到 mmap
+#       之外（详见文末【核定结论】修正 1）。
+#     加载器校验 8: max(regions ∪ ms 末端) ≤ resource_space_size ≤ die_size
+#                   0x940000 ≤ 0x4800000 ≤ 0x40000000 ✓
+#
+#   典型 ccuDieBase = rankBase + 0xE00000000 + die_offsets[d]:
+#     rank0 die0 = 0x8e00000000      rank0 die1 = 0x8e40000000
+#     rank1 die0 = 0x18e00000000     rank1 die1 = 0x18e40000000
+#
+#   A5 区域布局总览（相对 ccuDieBase）:
+#     0x0000000 ┌──────────────────────────────┐
+#               │ CCUA0..3 = MS 4 bank  8 MiB  │  ← A6 在 0x4000000，A5 在 0x0
+#     0x0800000 ├──────────────────────────────┤
+#               │ CCUM = instruction    1 MiB  │
+#     0x0900000 ├──────────────────────────────┤
+#               │ GSA   32K │ XN 32K │ CKE 32K │
+#     0x0918000 ├──────────────────────────────┤
+#               │ PFE/CHANNEL/JETTY/           │  ← 偏移为提案值（T5 残留 TODO）
+#     0x0940000 │ MISSION/LOOP  各 32K         │
+#               ├──────────────────────────────┤
+#               │ 未按 region 建模的空间        │  ← 62.75 MiB；仍被 72 MiB backing
+#               │ （hcomm 可能使用，模拟器不解读）│     完整覆盖，稀疏语义下不占实存
+#     0x4800000 └──────────────────────────────┘  = 72 MiB = resource_space_size
+#
+#   VA 位宽（风险 R4）: rank ≥ 128 时窗口起点超出 47-bit 规范用户 VA；
+#   模拟设备 VA 非 host 可解引用。A5/A6 同。
+# =====================================================================================
+
+# =====================================================================================
+# 加载器校验（A5 实算结果）
+# =====================================================================================
+#   1. 区间互不重叠（regions ∪ ms.ccua_windows，两者必须合并检查）:
+#        ms      [0x0,        0x800000)
+#        INSTR   [0x800000,   0x900000)   紧邻 ms，无重叠 ✓
+#        GSA     [0x900000,   0x908000)   ✓
+#        XN      [0x908000,   0x910000)   ✓
+#        CKE     [0x910000,   0x918000)   ✓
+#        PFE     [0x918000,   0x920000)   ✓
+#        CHANNEL [0x920000,   0x928000)   ✓
+#        JETTY   [0x928000,   0x930000)   ✓
+#        MISSION [0x930000,   0x938000)   ✓
+#        LOOP    [0x938000,   0x940000)   ✓  ← regions 末端
+#      全部 ⊂ [0, die_size = 0x40000000) ✓
+#   2. entry_size × count ≤ size: 逐项见上方各 region 注释，全部 ✓
+#      （INSTR 取等: 32 × 32768 = 0x100000 = size）
+#   3. MS per-window: localIdx_max = ((1536-1)/(4×8))×8 + 7 = 383 ≤ 511 ✓
+#      （**不用**求和式 ms_num ≤ Σ窗口槽数：异构窗口下求和式会漏判，见设计文档 S4）
+#      另需校验 ccua_num == len(ccua_windows) == 4 ✓、index 连续 0..3 ✓
+#   4. len(die_offsets)=2 == soc.die_num=2 ✓；
+#      die 窗口互不重叠: 0x0 + 0x40000000 ≤ 0x40000000 ✓
+#   5. partitions 铺满性与 user_mem 派生:
+#      升序且相邻首尾相接: 0x0+0xE00000000=0xE00000000 ✓，0xE00000000+0x80000000=0xE80000000 ✓
+#      首段 offset == 0 ✓；末段 offset+size = 0xE80000000+0xF180000000 = 0x10000000000
+#        == rank_window_size ✓（完整铺满，无空洞无重叠）
+#      恰好一个 name=="ccu" 段 ✓；ccu 段容量校验:
+#        partitions[ccu].offset + max(die_offsets) + die_size
+#        = 0xE00000000 + 0x40000000 + 0x40000000 = 0xE80000000
+#        ≤ partitions[ccu].offset + partitions[ccu].size = 0xE80000000 ✓（取等）
+#      userMemTotal = 0xE00000000 + 0xF180000000 = 0xFF80000000（1022 GiB）> 0 ✓，段数 = 2 ✓
+#      rank_window_size(0x10000000000) ≤ rank_stride(0x10000000000) ✓
+#   6. （已取消）caps 由 GetCaps() 推导，见上
+#   7. rank_base + max_ranks × rank_stride 位宽: max_ranks 取 GetMaxRanks()
+#      （sim_capacity_limits.h:30-45，可被 HCCL_VM_MAX_RANKS 覆盖）；
+#      1024 rank 时顶端 = 0x4008000000000（51 bit）→ 告警，见 R4
+#   8. max(regions ∪ ms 末端) ≤ resource_space_size ≤ die_size:
+#      0x940000 ≤ 0x4800000 ≤ 0x40000000 ✓（留白 62.75 MiB 为有意，见派生量节）
+#   9. 所有 cluster/*.yaml + server_or_pod/*.yaml 出现的 soc_version 必须唯一命中
+#      一份 device spec（大小写不敏感最长前缀）。本文件 name="ascend950" 命中
+#      "Ascend950DT_95A1"（cluster）与 "Ascend950"（server_or_pod）；
+#      A6 name="ascend960" 命中 "Ascend960" 与 "Ascend960DT_961BY"。
+#      注：本文件 soc.soc_version 字段**不参与**此校验（决策 (i)，加载器完全忽略）。
+# =====================================================================================
+
+# =====================================================================================
+# 【核定结论】核定 A5 过程中得出的结论（修正 1/3/4 已回写设计文档，此处留摘要）
+# =====================================================================================
+#
+# 修正 1：backingSize 必须取 hcomm 权威的 resource_space_size（72 MiB），
+#         而非 max(region ∪ ms 末端)
+#   依据: ccu_res_specs.h:24  CCU_V1_V2_RESOURCE_SIZE = 72 * 1024 * 1024
+#         ccu_res_specs.cc:765 GetResourceSpaceSize() 返回该值
+#   A6 巧合: max(region ∪ ms) = 0x4800000 = 72 MiB，与权威值相同 ⇒ A6 数字没错，
+#            但**推导方式是错的**（巧合成立）。
+#   A5 暴露: max(region ∪ ms) = 0x940000 = 9.25 MiB ≠ 72 MiB，相差 **62.75 MiB**。
+#            若按 max 推导，backing 只有 9.25 MiB，而 hcomm 会访问 0x940000 以上的
+#            空间（如 SQ buffer 区）→ 落到 mmap 之外 → GetRealPtrByAddr /
+#            AcquireDevPtrInNoHostProcess 范围查询失败返回 nullptr，
+#            或 CcuDieView typed accessor 野指针 SIGSEGV。
+#   ★ 这是"regions 表 = 模拟器建模范围"与"resource_space_size = 资源空间完整大小"
+#     必须分离的决定性论据：**禁止**因留白大就调小 resource_space_size。
+#   ⇒ 已回写设计文档 §4.5.2（backingSize 定义）+ §4.3.1 校验 8 + §5 D10 语义补充。
+#   ⇒ 连带修正 R1：A5/A6 同为 128 rank × 2 die × 72 MiB = 18 GiB
+#     （原"A5 48 GiB，A6 的 2.7 倍"的估算基于 level1 错误的 CCU_MS_BASE=0x08000000，
+#      已删除）；R1b 相应降级，但"CCU shm 禁止走 AllocPhyMem"的硬约束 1 保留。
+#   ⇒ 连带修正 S0：T7 已由 hcomm 源码核定，不再是出口硬条件；
+#     剩余待核定项只有 T5 中 PFE/CHANNEL/JETTY/MISSION/LOOP 五项偏移。
+#
+# 修正 3：A5 与 A6 的 MS 几何相同 ⇒ checker 的平坦编址是**两代共同的近似**
+#   checker GenSliceFromMs 用 msId × 4096（ccu_task_common_v3.cc:1073），
+#   runner GetMsAddr 同样用 msId × 4096（ccu_resource_manager.cc:353），
+#   但 runner GetMSIdByAddr 做了 4-bank × 8 路去交织（ccu_resource_manager.cc:398-423）。
+#   ⇒ 同一 msId 在"地址反查"与"直接编址"两条路径下语义不一致，A5/A6 皆然。
+#     设计文档 §4.4.3 已提示 GetMsAddr / MsIdToAddr 需统一，此处补充:
+#     统一后 checker 的 MS slice offset 与 semantic check 的 MsKey
+#     （task_graph_semantic_check_v3.cc:47-48 按 address/4096 分桶）都要跟着改。
+#     与 docs/ccu_resource_statistics_design.md §3.4 的遗留确认项是同一个问题，
+#     应合并到 S0 一次裁决（见设计文档 A9）。
+#
+# 修正 4：发现 CCU_V3，schema 需为其留扩展位
+#   依据 ccu_res_specs.h:25,28-31:
+#     CCU_V3_RESOURCE_SIZE = 128 MiB（CCUA 由 4 扩为 8）
+#     CCU_V3_XN_TOTAL_NUM_LIMIT = 16K、CCU_V3_CKE_TOTAL_NUM_LIMIT = 2048
+#     V3 引入私有/共享资源分块: blockXnSize/blockCkeSize/blockLoopEngineSize、
+#     xnBaseId/ckeBaseId/loopEngineBaseId、sharedXnNum/sharedXnBaseId/... 
+#     （CcuResSpecInfo 结构体，ccu_res_specs.h:95-135）
+#   ⇒ 本 schema 的 regions 列表 + ccua_num 已能表达 CCUA 4→8 与容量变化；
+#     但 V3 的"私有/共享双区 + per-block 起始 id"需要新增字段。
+#     建议 S1 阶段在 schema 中预留 ccu.blocks / ccu.shared 段（本期不填、不消费），
+#     避免 V3 落地时再改 schema 版本。同时 ccu_version 枚举应含 CCU_V3。
+# =====================================================================================

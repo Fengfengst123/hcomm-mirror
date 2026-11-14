@@ -31,6 +31,8 @@
 #include "runtime_state/sim_models.h"
 #include "store/store_sim_run_mode.h"
 #include "sim_common_api.h"
+#include "device_spec/device_spec_registry.h"
+#include "device_spec/rank_address_space.h"
 #include <json.hpp>
 
 uint64_t g_cur_server_key = 0;
@@ -802,6 +804,283 @@ aclError GetCcuFromDeviceByDieId(uint64_t deviceKey, uint8_t dieId, sim::runtime
 
     ccu = *ret;
     return ACL_SUCCESS;
+}
+
+/*==================== device 规格查询（设计文档 §4.8.3）====================*/
+
+namespace {
+    /**
+     * @brief device 规格解析缓存（进程级）。
+     *
+     * 缓存前提：`Device.soc_version` 与 `Ccu.resource_addr` 都是 Scope::Static 列，
+     * 由 InitClusterStaticTopoData 在 start 阶段一次性写入，运行期不变；而 `Db::` 薄层
+     * 按合同不缓存（每次调用一条 SQL：SQLite 一次 prepare+step，MariaDB 一次往返），
+     * 且全部进程共享同一个 data/hccl_sim.db（WAL + busy_timeout），逐卡逐次解析会随
+     * 卡数线性放大数据库压力。
+     *
+     * 只缓存"已成功解析"的结果：失败路径保持原样每次读库并重打 ERROR，
+     * 以免把一次瞬时失败固化成永久错误。
+     * 失效入口：ResetDeviceSpecCache()。
+     */
+    struct DeviceSpecCache {
+        std::mutex mutex;
+        /// deviceKey → Device.soc_version（仅缓存非空值，见 LoadSocVersion）
+        std::map<uint64_t, std::string> socVersion;
+        /// (deviceKey, dieId) → CCU 资源基址（仅缓存非 0）
+        std::map<std::pair<uint64_t, uint32_t>, uint64_t> ccuBase;
+    };
+
+    DeviceSpecCache& SpecCache()
+    {
+        static DeviceSpecCache cache;
+        return cache;
+    }
+
+    /// 取缓存的 soc_version；未命中返回 false（不读库）。
+    bool LookupCachedSocVersion(uint64_t deviceKey, std::string& socVer)
+    {
+        auto& cache = SpecCache();
+        std::lock_guard<std::mutex> lock(cache.mutex);
+        const auto it = cache.socVersion.find(deviceKey);
+        if (it == cache.socVersion.end()) {
+            return false;
+        }
+        socVer = it->second;
+        return true;
+    }
+
+    /// 读 Device 行取 soc_version 并写缓存；行不存在返回 false。
+    /// ★ 只缓存非空 soc_version：空值意味着该行还没被拓扑初始化填好（或配置缺失），
+    ///   缓存下来会让后续填好的值永远读不到，故空值保持每次读库（与改造前一致）。
+    bool LoadSocVersion(uint64_t deviceKey, std::string& socVer, const char* who)
+    {
+        if (LookupCachedSocVersion(deviceKey, socVer)) {
+            return true;
+        }
+        auto dev = Db::GetById<Device>(deviceKey);
+        if (!dev.ok()) {
+            HCCL_VM_ERROR("{}: cannot find device {:d}", who, deviceKey);
+            return false;
+        }
+        socVer.assign(dev->soc_version);
+        if (socVer.empty()) {
+            return true;
+        }
+        auto& cache = SpecCache();
+        std::lock_guard<std::mutex> lock(cache.mutex);
+        cache.socVersion[deviceKey] = socVer;
+        return true;
+    }
+
+    bool LookupCachedCcuBase(uint64_t deviceKey, uint32_t dieId, uint64_t& baseAddr)
+    {
+        auto& cache = SpecCache();
+        std::lock_guard<std::mutex> lock(cache.mutex);
+        const auto it = cache.ccuBase.find({deviceKey, dieId});
+        if (it == cache.ccuBase.end()) {
+            return false;
+        }
+        baseAddr = it->second;
+        return true;
+    }
+
+    void CacheCcuBase(uint64_t deviceKey, uint32_t dieId, uint64_t baseAddr)
+    {
+        if (baseAddr == 0) {
+            return;
+        }
+        auto& cache = SpecCache();
+        std::lock_guard<std::mutex> lock(cache.mutex);
+        cache.ccuBase[{deviceKey, dieId}] = baseAddr;
+    }
+
+    /// 由 soc_version 走 DeviceSpecRegistry（纯内存）取规格；必要时先加载 yaml。
+    const devspec::DeviceSpec* FindSpecBySocVersion(const std::string& socVer)
+    {
+        auto& reg = devspec::DeviceSpecRegistry::GetInstance();
+        if (reg.Size() == 0) {
+            (void)reg.LoadAll(); // 只读 config/device/*.yaml，不依赖 DB
+        }
+        return socVer.empty() ? nullptr : reg.FindBySocVersion(socVer);
+    }
+} // namespace
+
+void ResetDeviceSpecCache()
+{
+    auto& cache = SpecCache();
+    std::lock_guard<std::mutex> lock(cache.mutex);
+    cache.socVersion.clear();
+    cache.ccuBase.clear();
+}
+
+aclError GetDeviceSpecByName(const std::string& name, sim::runtime::DeviceSpec& out)
+{
+    auto ret = Db::GetOneByPred<DeviceSpec>(HcclSim::Storage::Eq(&DeviceSpec::name, name));
+    if (!ret.ok()) {
+        HCCL_VM_ERROR("cannot find device spec by name {:s}", name);
+        return ACL_ERROR_INVALID_PARAM;
+    }
+    out = *ret;
+    return ACL_SUCCESS;
+}
+
+aclError GetDeviceSpecByDeviceKey(uint64_t deviceKey, sim::runtime::DeviceSpec& out)
+{
+    // 经 DeviceSpecBinding 关联（§4.8.4 / D13）：不给 Device 加 FK 列，
+    // 以规避 Table(Version(n)) 变更语义不明（O10）。
+    auto binding = Db::GetOneByPred<DeviceSpecBinding>(HcclSim::Storage::Eq(&DeviceSpecBinding::device_id, deviceKey));
+    if (!binding.ok()) {
+        HCCL_VM_ERROR("cannot find device spec binding for device {:d}", deviceKey);
+        return ACL_ERROR_INVALID_PARAM;
+    }
+    auto spec = Db::GetById<DeviceSpec>(binding->spec_id);
+    if (!spec.ok()) {
+        HCCL_VM_ERROR("cannot find device spec id {:d} bound to device {:d}", binding->spec_id, deviceKey);
+        return ACL_ERROR_INVALID_PARAM;
+    }
+    out = *spec;
+    return ACL_SUCCESS;
+}
+
+bool GetDeviceSpecRegions(uint64_t specId, std::vector<sim::runtime::DeviceSpecRegion>& out)
+{
+    out.clear();
+    auto ret = Db::GetByPred<DeviceSpecRegion>(HcclSim::Storage::Eq(&DeviceSpecRegion::spec_id, specId));
+    if (!ret.ok() || !ret.value.has_value()) {
+        HCCL_VM_ERROR("cannot read device spec regions for spec {:d}", specId);
+        return false;
+    }
+    out = *ret.value;
+    std::sort(out.begin(), out.end(), [](const DeviceSpecRegion& a, const DeviceSpecRegion& b) {
+        return a.offset < b.offset;
+    });
+    return true;
+}
+
+bool GetDeviceSpecMsWindows(uint64_t specId, std::vector<sim::runtime::DeviceSpecMsWindow>& out)
+{
+    out.clear();
+    auto ret = Db::GetByPred<DeviceSpecMsWindow>(HcclSim::Storage::Eq(&DeviceSpecMsWindow::spec_id, specId));
+    if (!ret.ok() || !ret.value.has_value()) {
+        HCCL_VM_ERROR("cannot read device spec ms windows for spec {:d}", specId);
+        return false;
+    }
+    out = *ret.value;
+    std::sort(out.begin(), out.end(), [](const DeviceSpecMsWindow& a, const DeviceSpecMsWindow& b) {
+        return a.ccua_index < b.ccua_index;
+    });
+    return true;
+}
+
+bool GetDeviceSpecDies(uint64_t specId, std::vector<sim::runtime::DeviceSpecDie>& out)
+{
+    out.clear();
+    auto ret = Db::GetByPred<DeviceSpecDie>(HcclSim::Storage::Eq(&DeviceSpecDie::spec_id, specId));
+    if (!ret.ok() || !ret.value.has_value()) {
+        HCCL_VM_ERROR("cannot read device spec dies for spec {:d}", specId);
+        return false;
+    }
+    out = *ret.value;
+    std::sort(out.begin(), out.end(), [](const DeviceSpecDie& a, const DeviceSpecDie& b) {
+        return a.die_id < b.die_id;
+    });
+    return true;
+}
+
+bool GetDeviceSpecPartitions(uint64_t specId, std::vector<sim::runtime::DeviceSpecPartition>& out)
+{
+    out.clear();
+    auto ret = Db::GetByPred<DeviceSpecPartition>(HcclSim::Storage::Eq(&DeviceSpecPartition::spec_id, specId));
+    if (!ret.ok() || !ret.value.has_value()) {
+        HCCL_VM_ERROR("cannot read device spec partitions for spec {:d}", specId);
+        return false;
+    }
+    out = *ret.value;
+    std::sort(out.begin(), out.end(), [](const DeviceSpecPartition& a, const DeviceSpecPartition& b) {
+        return a.offset < b.offset;
+    });
+    return true;
+}
+
+bool GetAllDeviceSpecs(std::vector<sim::runtime::DeviceSpec>& out)
+{
+    out.clear();
+    auto ret = Db::GetByPred<DeviceSpec>(HcclSim::Storage::All<DeviceSpec>());
+    if (!ret.ok() || !ret.value.has_value()) {
+        HCCL_VM_ERROR("cannot read device spec table");
+        return false;
+    }
+    out = *ret.value;
+    std::sort(out.begin(), out.end(), [](const DeviceSpec& a, const DeviceSpec& b) {
+        return std::string(a.name) < std::string(b.name);
+    });
+    return true;
+}
+
+bool GetCcuResourceBaseAddr(uint64_t deviceKey, uint32_t dieId, uint64_t& baseAddr)
+{
+    baseAddr = 0;
+
+    // ⓪ 缓存命中：基址是静态数据，同一 (device, die) 只解析一次
+    if (LookupCachedCcuBase(deviceKey, dieId, baseAddr)) {
+        return true;
+    }
+
+    // ① DB 优先：Ccu.resource_addr 由 InitClusterStaticTopoData → FillCcu 写入
+    Ccu ccu{};
+    if (GetCcuFromDeviceByDieId(deviceKey, static_cast<uint8_t>(dieId), ccu) == ACL_SUCCESS && ccu.resource_addr != 0) {
+        baseAddr = ccu.resource_addr;
+        CacheCcuBase(deviceKey, dieId, baseAddr);
+        return true;
+    }
+
+    // ② 回退：按 device 的 soc_version 读 yaml 规格推导（mock-comm 等不落库路径，§4.8.7 / O9）
+    std::string socVer;
+    if (!LoadSocVersion(deviceKey, socVer, "GetCcuResourceBaseAddr")) {
+        return false;
+    }
+    const devspec::DeviceSpec* spec = FindSpecBySocVersion(socVer);
+    if (spec == nullptr) {
+        HCCL_VM_ERROR(
+            "GetCcuResourceBaseAddr: device {:d} soc_version \"{}\" 未命中任何 device spec，"
+            "且 DB 中 Ccu.resource_addr 为空 —— 拒绝回退到硬编码常量（设计文档 §2.2）",
+            deviceKey, socVer);
+        return false;
+    }
+    uint32_t rankIdx = 0;
+    if (!devspec::RankAddressSpace::RankIdxOfDeviceKey(deviceKey, rankIdx)) {
+        HCCL_VM_ERROR("GetCcuResourceBaseAddr: invalid deviceKey {:d}（见 O14 id 空间不一致）", deviceKey);
+        return false;
+    }
+    const devspec::RankAddressSpace ras(spec->addr);
+    baseAddr = ras.CcuDieBase(rankIdx, dieId);
+    if (baseAddr == 0) {
+        HCCL_VM_ERROR(
+            "GetCcuResourceBaseAddr: dieId {} 越界（spec {} 的 die_num={}）", dieId, spec->name, spec->dieNum);
+        return false;
+    }
+    CacheCcuBase(deviceKey, dieId, baseAddr);
+    HCCL_VM_INFO(
+        "GetCcuResourceBaseAddr: dev={:d} die={} → {:#x}（yaml 回退路径，spec={}）", deviceKey, dieId, baseAddr,
+        spec->name);
+    return true;
+}
+
+const devspec::DeviceSpec* GetDeviceSpec(uint64_t deviceKey)
+{
+    std::string socVer;
+    if (!LoadSocVersion(deviceKey, socVer, "GetDeviceSpec")) {
+        return nullptr;
+    }
+    const devspec::DeviceSpec* spec = FindSpecBySocVersion(socVer);
+    if (spec == nullptr) {
+        HCCL_VM_ERROR(
+            "GetDeviceSpec: device {:d} soc_version \"{}\" 未命中任何 device spec（{}）——"
+            "拒绝回退到硬编码常量（设计文档 §2.2）",
+            deviceKey, socVer, devspec::DeviceSpecRegistry::GetInstance().LastError());
+        return nullptr;
+    }
+    return spec;
 }
 
 aclError GetContextByDevId(uint32_t deviceId, sim::runtime::Context& context)

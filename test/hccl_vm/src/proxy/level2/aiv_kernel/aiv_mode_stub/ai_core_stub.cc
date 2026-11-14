@@ -18,9 +18,20 @@
 namespace AivSim {
 AivKernelExecutor::AivKernelExecutor() {}
 
+/**
+ * @brief 获取当前线程私有的 AIV kernel 执行器实例。
+ *
+ * allreduce 等用例在一个进程内为每个 rank 各起一个线程并发下发 AIV kernel，
+ * 执行器若用进程级单例会被各 rank 线程并发 Init/读写（aiv_env_init -> Init ->
+ * kernelFunc 全链共享 rankId_/buffer/任务状态），导致 rank 校验错乱与任务数据竞争；
+ * 下发、虚拟执行与 dump（aiv_dump_tasks）均在同一线程内完成，thread_local 不影响
+ * 单线程内的跨 launch 状态复用（comm 身份、UB buffer 等按线程持久保留）。
+ *
+ * @return AivKernelExecutor& 当前线程的执行器单例引用。
+ */
 AivKernelExecutor& AivKernelExecutor::GetInstance()
 {
-    static AivKernelExecutor instance;
+    static thread_local AivKernelExecutor instance;
     return instance;
 }
 

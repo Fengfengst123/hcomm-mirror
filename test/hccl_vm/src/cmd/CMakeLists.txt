@@ -50,6 +50,7 @@ target_link_libraries(cmd PRIVATE
         operation_data
         store
         topo
+        device_spec
         CLI11::CLI11
         yaml-cpp::yaml-cpp
         JSON::JSON

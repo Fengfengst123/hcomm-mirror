@@ -43,7 +43,7 @@ protected:
     }
 
     /// 门铃批 UDMA 解析入口：原 ParseDavidUDMASqe 公共包装删除后，UT 自建 OpDetail 身份
-    /// 上下文直连主链（本夹具原本未设 g_currOpDetailId，旧用例实际未进入解析主链）。
+    /// 上下文直连主链（本夹具原本未设 CurrOpDetailId()，旧用例实际未进入解析主链）。
     /// 用后还原为 0，避免影响其他依赖"身份缺失即提前返回"语义的用例。
     void ParseUdmaDoorbellSqe(uint32_t streamId, void* sqeBuf)
     {
@@ -55,13 +55,13 @@ protected:
         detail.streamId = streamId;
         const uint64_t detailId = runnerdb_test::InsertRecord<sim::operation::OpDetailTab>(detail);
         ASSERT_NE(detailId, 0U);
-        sim::operation::g_currOpDetailId = static_cast<uint32_t>(detailId);
+        sim::operation::CurrOpDetailId() = static_cast<uint32_t>(detailId);
 
         TaskIdentity identity{};
         ASSERT_TRUE(ResolveCurrentTaskIdentity(identity));
         ParseDavidUDMASqeWithIdentity(streamId, sqeBuf, identity);
 
-        sim::operation::g_currOpDetailId = 0;
+        sim::operation::CurrOpDetailId() = 0;
     }
 };
 

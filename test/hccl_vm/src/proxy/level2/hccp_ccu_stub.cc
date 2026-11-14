@@ -25,6 +25,7 @@
 #include "ccu_common.h"
 #include "sim_ccu_jetty_ctx.h"
 #include "ccu_microcode_v1.h"
+#include "device_spec/device_spec_registry.h"
 #include "ccu_u_comm.h"
 #include "dtype_common.h"
 #include "store_sim_store_pub.h"
@@ -66,80 +67,141 @@ int GetEnableCcuDie(channel_info_out* output, uint8_t dieId)
     return 0;
 }
 
-void SetCcuV1ResourceBasicInfo(channel_info_out* output, uint8_t dieId, uint32_t devId)
+/**
+ * @brief 解析某 (devId, dieId) 的 CCU 资源空间基址。
+ *
+ * ★ 取代此前 die0=0x123123123 / die1=0x456456456 的硬编码（设计文档 §2.2）。
+ *   旧值对所有 rank 相同、且不对应任何真实内存，第三方拿到后必须二次转换（P2/P3）。
+ *   现统一走 sim::runtime::GetCcuResourceBaseAddr（DB Ccu.resource_addr 优先，
+ *   未落库时按 device 规格推导），得到 per-rank per-die 唯一的真实地址。
+ *
+ * @return 解析失败返回 0；调用方须把 resourceAddr 置空并打错误日志，
+ *         **不得回退到任何硬编码常量**（否则 hcomm 会拿到看似合法实则无效的假地址）。
+ */
+static uint64_t ResolveCcuResourceAddr(uint32_t devId, uint8_t dieId)
 {
-    // todo: 后续根据dieId，设置不同的resourceAddr
-    if (dieId == 0) {
-        output->data.data_info.data_array[0].baseinfo.resourceAddr = (void*)0x123123123;
-    } else {
-        output->data.data_info.data_array[0].baseinfo.resourceAddr = (void*)0x456456456;
+    sim::runtime::Device device{};
+    if (sim::runtime::GetDeviceByPhysicalId(devId, device) != ACL_SUCCESS) {
+        HCCL_VM_ERROR("resolve ccu resourceAddr: get device by logic id {} failed", devId);
+        return 0;
     }
-    output->data.data_info.data_array[0].baseinfo.missionKey = 0;
-    output->data.data_info.data_array[0].baseinfo.ms_id = 3; //
-    uint32_t instructionNum = 0x8000;                        // Instruction 32k
-    uint32_t missionNum = 16;                                // Mission ctx 16
-    uint32_t loopEngineNum = 200;                            // Loop ctx 200
-    output->data.data_info.data_array[0].baseinfo.caps.lqc_ccu_cap0
-        = (instructionNum - 1) | ((missionNum - 1) << MOVE_TOW_BYTES) | ((loopEngineNum - 1) << MOVE_THREE_BYTES);
-    uint32_t gsaNum = 3072; // GSA 3072
-    uint32_t xnNum = 3072;  // Xn 3072
-    output->data.data_info.data_array[0].baseinfo.caps.lqc_ccu_cap1 = ((xnNum - 1) << MOVE_TOW_BYTES) | (gsaNum - 1);
-    uint32_t ckeNum = 1024; // Checlist Entry(CKE) 1024
-    uint32_t msNum = 1536;  // MemorySlice(MS) 1536
-    output->data.data_info.data_array[0].baseinfo.caps.lqc_ccu_cap2 = ((msNum - 1) << MOVE_TOW_BYTES) | (ckeNum - 1);
-    uint32_t channelNum = 128; // Channel map 128 for v1
-    uint32_t jettyNum = 128;   // Jetty context 128
-    output->data.data_info.data_array[0].baseinfo.caps.lqc_ccu_cap3
-        = ((jettyNum - 1) << MOVE_TOW_BYTES) | (channelNum - 1);
-    uint32_t pfeNum = 16; // PFE 16 for v1
-    output->data.data_info.data_array[0].baseinfo.caps.lqc_ccu_cap4 = (pfeNum - 1) & 0x000000FF;
+    uint64_t baseAddr = 0;
+    if (!sim::runtime::GetCcuResourceBaseAddr(device.id, static_cast<uint32_t>(dieId), baseAddr)) {
+        HCCL_VM_ERROR(
+            "resolve ccu resourceAddr: devId={} dieId={} 解析失败（DB 与 device 规格均不可用）", devId,
+            static_cast<uint32_t>(dieId));
+        return 0;
+    }
+    return baseAddr;
 }
 
-void SetCcuV2ResourceBasicInfo(channel_info_out* output, uint8_t dieId, uint32_t devId)
+/**
+ * @brief 解析 devId 对应的 device 规格（含 caps 与 ccu_version）。
+ * @return 失败返回 nullptr 并打错误日志；调用方须失败返回，**不得回退到硬编码容量**。
+ */
+static const sim::devspec::DeviceSpec* ResolveDeviceSpec(uint32_t devId)
 {
-    // todo: 后续根据dieId，设置不同的resourceAddr
-    if (dieId == 0) {
-        output->data.data_info.data_array[0].baseinfo.resourceAddr = (void*)0x123123123;
-    } else {
-        output->data.data_info.data_array[0].baseinfo.resourceAddr = (void*)0x456456456;
+    sim::runtime::Device device{};
+    if (sim::runtime::GetDeviceByPhysicalId(devId, device) != ACL_SUCCESS) {
+        HCCL_VM_ERROR("resolve device spec: get device by logic id {} failed", devId);
+        return nullptr;
     }
+    auto& reg = sim::devspec::DeviceSpecRegistry::GetInstance();
+    if (reg.Size() == 0) {
+        (void)reg.LoadAll(); // 只读 config/device/*.yaml，不依赖 DB
+    }
+    const sim::devspec::DeviceSpec* spec = reg.FindBySocVersion(device.soc_version);
+    if (spec == nullptr) {
+        HCCL_VM_ERROR(
+            "resolve device spec: soc_version \"{}\" 未命中任何 device spec（{}）", device.soc_version,
+            reg.LastError());
+    }
+    return spec;
+}
+
+/**
+ * V1(A5) 能力寄存器打包。
+ * ★ 位布局与 V2 **不同**（cap0 的 loopEngine 在 bit24，V2 在 bit20 且为 12-bit 域），
+ *   故 V1/V2 的打包逻辑不可合并；但所有容量数值均来自 device 规格（GetCaps()），
+ *   不再使用 0x8000/16/200/3072/1024/1536/128 等硬编码。
+ */
+void SetCcuV1ResourceBasicInfo(channel_info_out* output, uint8_t dieId, uint32_t devId)
+{
+    const sim::devspec::DeviceSpec* spec = ResolveDeviceSpec(devId);
+    if (spec == nullptr) {
+        return; // resourceAddr/caps 均无法确定；保持 output 原样，由调用方感知失败
+    }
+    const sim::devspec::CcuCaps caps = spec->GetCaps();
+
+    // resourceAddr 按 (devId, dieId) 解析为真实、per-rank 唯一的地址（原 todo 已落实）
+    const uint64_t resourceAddr = ResolveCcuResourceAddr(devId, dieId);
+    output->data.data_info.data_array[0].baseinfo.resourceAddr = reinterpret_cast<void*>(resourceAddr);
     output->data.data_info.data_array[0].baseinfo.missionKey = 0;
     output->data.data_info.data_array[0].baseinfo.ms_id = 3; //
-    uint32_t instructionNum = 0x8000;                        // Instruction 32k
-    uint32_t missionNum = 16;                                // Mission ctx 16
-    uint32_t loopEngineNum = 512;                            // Loop ctx 512
-    output->data.data_info.data_array[0].baseinfo.caps.lqc_ccu_cap0
-        = ((instructionNum - 1) & 0xFFFF) | (((missionNum - 1) & 0xF) << 16) | (((loopEngineNum - 1) & 0xFFF) << 20);
-    uint32_t gsaNum = 0;    // GSA 0 for v2
-    uint32_t xnNum = 16384; // Xn 16384
-    output->data.data_info.data_array[0].baseinfo.caps.lqc_ccu_cap1 = ((xnNum - 1) << MOVE_TOW_BYTES);
-    uint32_t ckeNum = 1024; // Checlist Entry(CKE) 1024
-    uint32_t msNum = 1536;  // MemorySlice(MS) 1536
-    output->data.data_info.data_array[0].baseinfo.caps.lqc_ccu_cap2 = ((msNum - 1) << MOVE_TOW_BYTES) | (ckeNum - 1);
-    uint32_t channelNum = 1024; // Channel map 1024 for v2
-    uint32_t jettyNum = 128;    // Jetty context 128
+
+    output->data.data_info.data_array[0].baseinfo.caps.lqc_ccu_cap0 = (caps.instructionNum - 1)
+                                                                      | ((caps.missionNum - 1) << MOVE_TOW_BYTES)
+                                                                      | ((caps.loopEngineNum - 1) << MOVE_THREE_BYTES);
+    // V1 有 GSA，故 cap1 低 16 位承载 gsaNum-1
+    output->data.data_info.data_array[0].baseinfo.caps.lqc_ccu_cap1
+        = ((caps.xnNum - 1) << MOVE_TOW_BYTES) | (caps.gsaNum - 1);
+    output->data.data_info.data_array[0].baseinfo.caps.lqc_ccu_cap2
+        = ((caps.msNum - 1) << MOVE_TOW_BYTES) | (caps.ckeNum - 1);
     output->data.data_info.data_array[0].baseinfo.caps.lqc_ccu_cap3
-        = ((jettyNum - 1) << MOVE_TOW_BYTES) | (channelNum - 1);
-    uint32_t pfeNum = 20; // PFE 20 for v2
-    output->data.data_info.data_array[0].baseinfo.caps.lqc_ccu_cap4 = (pfeNum - 1) & 0x000000FF;
+        = ((caps.jettyNum - 1) << MOVE_TOW_BYTES) | (caps.channelNum - 1);
+    output->data.data_info.data_array[0].baseinfo.caps.lqc_ccu_cap4 = (caps.pfeNum - 1) & 0x000000FF;
+}
+
+/**
+ * V2(A6) 能力寄存器打包。位布局见上（与 V1 不同，不可合并）。
+ * ★ cap1 刻意**不含 gsa 项**：A6 无 GSA 寄存器堆，caps.gsaNum == 0，
+ *   若照 V1 写 `| (gsaNum - 1)` 会因 0-1 下溢成 0xFFFFFFFF 而污染整个 cap1。
+ */
+void SetCcuV2ResourceBasicInfo(channel_info_out* output, uint8_t dieId, uint32_t devId)
+{
+    const sim::devspec::DeviceSpec* spec = ResolveDeviceSpec(devId);
+    if (spec == nullptr) {
+        return;
+    }
+    const sim::devspec::CcuCaps caps = spec->GetCaps();
+
+    const uint64_t resourceAddr = ResolveCcuResourceAddr(devId, dieId);
+    output->data.data_info.data_array[0].baseinfo.resourceAddr = reinterpret_cast<void*>(resourceAddr);
+    output->data.data_info.data_array[0].baseinfo.missionKey = 0;
+    output->data.data_info.data_array[0].baseinfo.ms_id = 3; //
+
+    output->data.data_info.data_array[0].baseinfo.caps.lqc_ccu_cap0 = ((caps.instructionNum - 1) & 0xFFFF)
+                                                                      | (((caps.missionNum - 1) & 0xF) << 16)
+                                                                      | (((caps.loopEngineNum - 1) & 0xFFF) << 20);
+    output->data.data_info.data_array[0].baseinfo.caps.lqc_ccu_cap1 = ((caps.xnNum - 1) << MOVE_TOW_BYTES);
+    output->data.data_info.data_array[0].baseinfo.caps.lqc_ccu_cap2
+        = ((caps.msNum - 1) << MOVE_TOW_BYTES) | (caps.ckeNum - 1);
+    output->data.data_info.data_array[0].baseinfo.caps.lqc_ccu_cap3
+        = ((caps.jettyNum - 1) << MOVE_TOW_BYTES) | (caps.channelNum - 1);
+    output->data.data_info.data_array[0].baseinfo.caps.lqc_ccu_cap4 = (caps.pfeNum - 1) & 0x000000FF;
 }
 
 int SetCcuResourceBasicInfo(channel_info_out* output, uint8_t dieId, uint32_t devId)
 {
-    sim::runtime::Device device{};
-    if (sim::runtime::GetDeviceByPhysicalId(devId, device) != ACL_SUCCESS) {
-        HCCL_VM_ERROR("get device by logic id {} failed.", devId);
+    // ★ 版本分派改由 device 规格的 ccu_version 决定，取代原先两处
+    //   strncmp(soc_version, "Ascend950"/"Ascend960", ...) 硬编码字符串匹配。
+    const sim::devspec::DeviceSpec* spec = ResolveDeviceSpec(devId);
+    if (spec == nullptr) {
         return -1;
     }
-    if (strncmp(device.soc_version, "Ascend950", strlen("Ascend950")) == 0) {
-        SetCcuV1ResourceBasicInfo(output, dieId, devId);
-    } else if (strncmp(device.soc_version, "Ascend960", strlen("Ascend960")) == 0) {
-        SetCcuV2ResourceBasicInfo(output, dieId, devId);
-    } else {
-        HCCL_VM_ERROR("unknown device version: {} for devId: {}", device.soc_version, devId);
-        return -1;
+    switch (spec->ccuVersion) {
+        case sim::devspec::CcuVersion::CCU_V1:
+            SetCcuV1ResourceBasicInfo(output, dieId, devId);
+            return 0;
+        case sim::devspec::CcuVersion::CCU_V2:
+            SetCcuV2ResourceBasicInfo(output, dieId, devId);
+            return 0;
+        default:
+            HCCL_VM_ERROR(
+                "unsupported ccu_version {} for devId {} (spec {})", sim::devspec::CcuVersionToString(spec->ccuVersion),
+                devId, spec->name);
+            return -1;
     }
-    return 0;
 }
 extern void* GetRealPtrByAddr(const void* devPtr);
 
@@ -400,13 +462,35 @@ int ConfigChannelInfo(channel_info_in* input, uint32_t deviceId)
     if (devType == DevType::DEV_TYPE_950) {
         srcJettyId = (uint16_t)((chDataTmp.startJettyIdHigh << 4) | chDataTmp.startJettyIdLow);
         srcDieId = chDataTmp.ioDieId;
-        auto dstVa = GetRemoteCcuVa(chDataTmp);
-        if (dstVa == 0x456000000) {
-            dstDieId = 1;
-            dstDieFromVa = true;
-        } else if (dstVa == 0x123000000) {
-            dstDieId = 0;
-            dstDieFromVa = true;
+        // ★ 推导结果只在"同设备跨 die"时被消费（见下方 `locDevice.id == rmtEndPoint.device_id
+        //   && dstDieFromVa` 分支）；而 CCU 基址已是 per-rank per-die 唯一，跨设备通道的
+        //   remoteCcuVa 属于对端 rank，与本 device 两个 die 的基址恒不相等 → 解析结果必被丢弃
+        //   （dstDieId 保持 0，与解析后不命中一致）。故先判同设备再解析基址，
+        //   避免每条通道 2 次无用读库（通道数随集群规模线性增长）。
+        if (locDevice.id == rmtEndPoint.device_id) {
+            auto dstVa = GetRemoteCcuVa(chDataTmp);
+            // ★ 取代此前 dstVa == 0x456000000/0x123000000 的魔数判别（把假基址移位后当协议
+            //   字段用，设计文档 §2.3 缺陷 4）：hcomm 写入的 remoteCcuVa 是对端 die 的 CCU
+            //   资源基址（resourceAddr），经 REMOTE_CCU_VA_RIGHT_SHIFT_NUM 位精度截断存储。
+            //   现按本 device 各 die 的真实基址做同精度截断后比较，基址变更无需再改此处。
+            //   基址为静态数据，GetCcuResourceBaseAddr 首次解析后进程级常驻，不再逐通道读库。
+            const auto truncateVa = [](uint64_t va) {
+                return (va >> REMOTE_CCU_VA_RIGHT_SHIFT_NUM) << REMOTE_CCU_VA_RIGHT_SHIFT_NUM;
+            };
+            uint64_t die0Base = 0;
+            uint64_t die1Base = 0;
+            const bool hasDie0 = sim::runtime::GetCcuResourceBaseAddr(locDevice.id, 0, die0Base) && die0Base != 0;
+            const bool hasDie1 = sim::runtime::GetCcuResourceBaseAddr(locDevice.id, 1, die1Base) && die1Base != 0;
+            if (!hasDie0 && !hasDie1) {
+                HCCL_VM_ERROR(
+                    "resolve ccu die base failed, devKey={}, cannot derive dstDieId from dstVa", locDevice.id);
+            } else if (hasDie1 && dstVa == truncateVa(die1Base)) {
+                dstDieId = 1;
+                dstDieFromVa = true;
+            } else if (hasDie0 && dstVa == truncateVa(die0Base)) {
+                dstDieId = 0;
+                dstDieFromVa = true;
+            }
         }
     } else if (devType == DevType::DEV_TYPE_960) {
         srcJettyId = chId / 8 + 1024;
@@ -788,9 +872,9 @@ int rtCCULaunch(rtCcuTaskInfo_t* taskInfo, rtStream_t const stream)
     // 图模式采集分支：录制 CCU_LAUNCH action，不立即入库，保证重放时落在 START_SUB/END_SUB 之间。
     // taskMeta 已在上面完成 devAddr -> virAddr 转换，重放沿用采集期翻译结果即可。
     if (IsCapturingStream(streamId)) {
-        // g_currOpDetailId 是进程级全局,由算子入口 RecordOpDbInfo 设置; CCU 的 rtCCULaunch 在 HCCL 内部
-        // 若 g_cur_comm_key 为 0, 但 g_currOpDetailId 仍可读，直接取它即可;
-        uint32_t opDetailId = sim::operation::g_currOpDetailId;
+        // CurrOpDetailId() 按 deviceKey 分槽、同 rank 跨线程共享，由算子入口 RecordOpDbInfo 设置;
+        // CCU 的 rtCCULaunch 在 HCCL 内部线程触发，若 g_cur_comm_key 为 0 但槽位仍可读，直接取它即可;
+        uint32_t opDetailId = sim::operation::CurrOpDetailId();
         RecordCcuLaunchAction(streamId, taskMetaData, opDetailId);
         HCCL_VM_INFO(
             "ccu captured to model(stream:{}), not executed, missionId[{}]", streamId,

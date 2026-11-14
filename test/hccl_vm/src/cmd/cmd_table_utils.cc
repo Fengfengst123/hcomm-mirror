@@ -20,6 +20,7 @@
 #include "sim_common_defs.h"
 #include "sim_log.h"
 #include "storage/table_access.h"
+#include "runtime_state/db_sim_runner_common.h"
 #include "runtime_state/db_sim_runner_ops.h"
 
 namespace HcclSim {
@@ -603,6 +604,8 @@ bool CmdTableUpdate(const std::string& table, const uint64_t id, const std::stri
         auto updated = sim::runtime::Db::Update<sim::runtime::Device>(
             HcclSim::Storage::Eq(&sim::runtime::Device::id, id),
             HcclSim::Storage::Set(&sim::runtime::Device::soc_version, value));
+        // soc_version 是 device 规格解析的输入且被进程级缓存,改动后必须失效缓存
+        sim::runtime::ResetDeviceSpecCache();
         return updated.ok() && updated.value.has_value() && *updated.value > 0;
     } else {
         HCCL_VM_ERROR("undefine update {} [id={}].{} = \"{}\"", table, id, column, value);

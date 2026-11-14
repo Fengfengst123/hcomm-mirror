@@ -92,7 +92,7 @@ constexpr uint32_t DPU_DEV_TASK_ENTRY_READY = 1; /**< 槽位就绪（生产者�
 /** 环记录布局镜像（与 host 侧 DpuDevTaskRingEntry 逐字节一致）。 */
 struct DpuDevTaskRingEntry {
     uint32_t state;        /**< FREE/READY */
-    uint32_t opDetailId;   /**< 推送时刻的 sim::operation::g_currOpDetailId */
+    uint32_t opDetailId;   /**< 推送时刻的 sim::operation::CurrOpDetailId() */
     HcclTaskMetaData meta; /**< 任务元数据镜像 */
     uint8_t reserved[2];   /**< 填充至 200B */
 };
@@ -164,7 +164,7 @@ bool PushDevTaskToRing(uint8_t* ring, const HcclTaskMetaData* task)
         std::this_thread::yield();
     }
 
-    entry->opDetailId = sim::operation::g_currOpDetailId;
+    entry->opDetailId = sim::operation::CurrOpDetailId();
     std::memcpy(&entry->meta, task, sizeof(HcclTaskMetaData));
 #if defined(__aarch64__) || defined(__arm__)
     asm volatile("dmb sy" ::: "memory");

@@ -52,6 +52,10 @@ struct OpDetailTab {
     // UB 多 channel(jetty)数, proxy 侧取环境变量 HCCL_UB_MULTI_CHANNEL_NUM
     // (未设置/非法回落 1 = 不使能多 jetty); 轻量性能仿真插件按该值折算端口带宽利用率
     uint32_t ubMultiChannelNum{HcclSim::HCCL_VM_UB_MULTI_CHANNEL_NUM_DEFAULT};
+    // 算子完成(出栈)序号: 算子桩退栈时按进程内单调递增计数器打标(从 1 起, 0=未打标)。
+    // 嵌套调用(如算子内部 LaunchWarmupVOperator 再入 alltoallv)时 opIter 是入栈/开始序,
+    // 与真实执行完成序相反; checker 按 endSeq 聚簇排序保证"先出栈的任务图在前"。
+    uint32_t endSeq{0};
 };
 
 struct OpMemInfoTab {
@@ -160,6 +164,7 @@ struct OpExecutionIndexEntry {
     uint64_t commId{0};
     uint32_t opIter{0};
     uint32_t rankSize{0};
+    uint32_t endSeq{0}; // 算子完成(出栈)序号; 0=未打标, checker 聚簇排序用
 };
 
 struct DeviceOpExecutionRecord {

@@ -7,7 +7,7 @@
 为 CCU Executor 模块构建一个调试回放工具，通过采集指令执行过程中的 trace 数据，在前端 UI 上实现单步回放，展示每条指令执行时的：
 - 指令本身的信息（类型、参数、所属 CCU）
 - 指令执行过程中的 debug 信息（关键变量值、执行路径）
-- CCU 资源的变化（XN/GSA/CKE/MS/Channel 的前后对比）
+- CCU 资源的变化（Variable/Address/Event/CcuBuffer/Channel 的前后对比）
 
 ### 1.2 代码现状分析
 
@@ -78,7 +78,7 @@ Rank[0..N]
 ### 2.2 结论：采用 Trace 回放方案
 
 **理由**：
-1. **精确性**：CCU 调试的核心需求是观察资源变化，日志无法保证完整采集 XN/GSA/CKE/MS 的值
+1. **精确性**：CCU 调试的核心需求是观察资源变化，日志无法保证完整采集 Variable/Address/Event/CcuBuffer 的值
 2. **前端友好**：HVRM Insight 已有完善的数据加载管线（Worker + JSON），结构化 trace 数据可直接对接
 3. **增量记录**：仅记录变化的资源字段（delta），而非全量快照，控制存储大小
 4. **单步回放**：trace 数据天然支持按指令序号定位，日志回放则难以实现精确的单步控制
@@ -120,11 +120,11 @@ while (HasTask()) {                          // 外层轮次循环（round）
 ```
 
 当某个 CCU 的 SQE 执行到 waitCKE 指令且条件不满足时，`TaskCcuGraph()` 返回 `HOLD_CMD`，
-该 SQE 任务**不出队**，外层循环继续处理下一个 CCU。等另一 CCU 执行 SetCke 设置了对应的 CKE 后，
-下一轮外层循环重试该 SQE 时 CKE 条件满足，继续执行。
+该 SQE 任务**不出队**，外层循环继续处理下一个 CCU。等另一 CCU 执行 SetCke 设置了对应的 Event 后，
+下一轮外层循环重试该 SQE 时 Event 条件满足，继续执行。
 
 关键事实：
-- **CCU 资源独立**：每个 CCU (rankId, dieId) 拥有独立的 XN/GSA/CKE/MS/指令空间
+- **CCU 资源独立**：每个 CCU (rankId, dieId) 拥有独立的 Variable/Address/Event/CcuBuffer/指令空间
 - **一个 CCU 一个 Simulator**：同一个 (rankId, dieId) 上的多个 SQE 复用同一个 `CcuSimulator` 实例（通过 `Init()` 重置指令指针）
 - **SQE 描述执行范围**：每个 SQE 任务包含 missionId、起始指令 ID、指令数量、入参列表
 - **全局交错执行**：实际执行顺序是 R0:D0 → R0:D1 → R1:D0 → R1:D1 → R0:D0 → ...（所有 CCU 轮流执行）
@@ -536,9 +536,9 @@ struct CcuInstrTraceDetail {
 |----------|---------|------|------|
 | 指令描述 | `instrSpaces[].instructions[].instrDescribe` | **静态** | 预计算的 Describe() 输出 |
 | 指令类别/名称 | `instrSpaces[].instructions[]` | **静态** | 由指令字节决定 |
-| CKE 等待信息 | `CcuTraceEntry.waitInfo` | **动态** | waitCKEId/mask、自旋次数等 |
-| CKE 资源变化 | `CcuResourceDelta.ckeChanges` | **动态** | CKE before/after 值 |
-| XN/GSA/MS 变化 | `CcuResourceDelta.xnChanges` 等 | **动态** | 资源 before/after 值 |
+| Event 等待信息 | `CcuTraceEntry.waitInfo` | **动态** | waitCKEId/mask、自旋次数等 |
+| Event 资源变化 | `CcuResourceDelta.ckeChanges` | **动态** | Event before/after 值 |
+| Variable/Address/CcuBuffer 变化 | `CcuResourceDelta.xnChanges` 等 | **动态** | 资源 before/after 值 |
 | Loop 偏移上下文 | `CcuExecutionContext` | **动态** | loopRound、offset 等 |
 | 指令专属动态参数 | `CcuInstrTraceDetail.args` | **动态** | 运行时解析后的值（offset 后、SQE 参数等） |
 
@@ -676,11 +676,11 @@ JSON Schema 概要：
 
 ### 4.1 插桩位置
 
-在 `CcuSimulator::ExecuteInstr()` 中，指令执行前后各插入一次采集点。**关键：CKE Wait 自旋合并**。
+在 `CcuSimulator::ExecuteInstr()` 中，指令执行前后各插入一次采集点。**关键：Event Wait 自旋合并**。
 
-由于 `WaitCkeProcess` 中 CKE 条件不满足时，会设置 `waitCKE_=true` 导致 `ExecuteInstr` 返回 false，上层 `Execute()` 重新调用同一条指令。如果不做合并，一条 Wait 指令可能产生数百条重复 trace entry。
+由于 `WaitCkeProcess` 中 Event 条件不满足时，会设置 `waitCKE_=true` 导致 `ExecuteInstr` 返回 false，上层 `Execute()` 重新调用同一条指令。如果不做合并，一条 Wait 指令可能产生数百条重复 trace entry。
 
-**解决方案**：采集器检测连续的同一条指令重复执行（CKE Wait 自旋），将其合并为一条 trace entry，并记录自旋次数。
+**解决方案**：采集器检测连续的同一条指令重复执行（Event Wait 自旋），将其合并为一条 trace entry，并记录自旋次数。
 
 ```cpp
 bool CcuSimulator::ExecuteInstr(uint16_t curInstrId)
@@ -881,9 +881,9 @@ public:
 
 1. **按需启用**：通过环境变量 `HCCLVM_ENABLE_CCU_TRACE=1` 控制是否采集
 2. **增量记录**：仅记录非零变化的资源字段（delta），不存储未变化的资源
-3. **MS 数据分级采集**（通过 `HCCLVM_CCU_TRACE_MS_LEVEL` 控制）：
-   - `none`（默认）：不采集 MS 数据，仅记录 MS ID 和长度
-   - `digest`：采集 MS 数据的哈希摘要（16 字节），用于完整性校验
+3. **CcuBuffer 数据分级采集**（通过 `HCCLVM_CCU_TRACE_MS_LEVEL` 控制）：
+   - `none`（默认）：不采集 CcuBuffer 数据，仅记录 CcuBuffer ID 和长度
+   - `digest`：采集 CcuBuffer 数据的哈希摘要（16 字节），用于完整性校验
    - `range`：仅记录被修改的偏移区间（offset + length + before/after）
    - `full`：记录完整 4KB（仅在需要数据对比时使用）
 4. **延迟写入**：先内存缓存，执行结束后批量写入文件
@@ -924,7 +924,7 @@ full 模式：
 - 该轮指令数与首轮不一致
 - 该轮资源变化模式与首轮显著不同（delta 字段集合不同）
 - 该轮包含 EXEC_FAIL
-- 该轮 CKE Wait 次数异常（超过首轮 2 倍以上）
+- 该轮 Event Wait 次数异常（超过首轮 2 倍以上）
 
 #### 4.6.3 前端渲染优化
 
@@ -1092,7 +1092,7 @@ const pages = [
 | （空白） | 尚未执行 |
 | `✓ #N RN` | 已执行，#N 为全局序号，RN 为 Round 号 |
 | `← 当前 #N` | 当前回放步骤停留在此指令 |
-| `HOLD` | waitCKE 阻塞（CKE 条件不满足，等待中），**橙色高亮** |
+| `HOLD` | waitCKE 阻塞（Event 条件不满足，等待中），**橙色高亮** |
 | `FAIL` | 执行失败，**红色高亮** |
 
 **类型列/SQE 列删除原因**：
@@ -1150,7 +1150,7 @@ trace 回放推进到下一条 entry
 | **行断点** | 到达指定 globalSeqId 时暂停 | 点击指令列表 BP 列的圆圈 |
 | **名称断点** | 所有指定名称的指令处暂停 | 断点管理面板添加 |
 | **类别断点** | 所有指定类别（Load/Trans/Control/Reduce）的指令处暂停 | 断点管理面板添加 |
-| **资源变更断点** | 指定资源被修改的指令处暂停（如 "Xn[5] 被写入时断点"） | 断点管理面板添加 |
+| **资源变更断点** | 指定资源被修改的指令处暂停（如 "Variable[5] 被写入时断点"） | 断点管理面板添加 |
 | **轮次断点** | 外层调度进入指定 Round 时暂停（如 "Round 3 的首条指令"） | 断点管理面板添加 |
 
 ##### 断点状态
@@ -1199,14 +1199,14 @@ trace 回放推进到下一条 entry
 3. **CCU 切换提示** → 自动切换 CCU 时，状态栏短暂显示 "CCU 切换: R0:D0 → R1:D0"，帮助用户理解调度跳转
 4. **自动播放模式** → 按设定速度逐条推进全局序列，模拟实际交错执行过程；CCU 随 trace 自动切换
 5. **Round 分隔** → 当 execRound 变化时，左侧执行轨迹摘要区显示 Round 变化（如 "Round 0 → Round 1"）
-6. **HOLD 状态** → waitCKE 阻塞的指令在执行状态列显示橙色 `HOLD` 标记；指令细节面板展示等待的 CKE ID、mask、自旋次数
+6. **HOLD 状态** → waitCKE 阻塞的指令在执行状态列显示橙色 `HOLD` 标记；指令细节面板展示等待的 Event ID、mask、自旋次数
 7. **点击指令行** → 联动更新：资源变化面板（展示该指令的 delta）、指令细节面板、CCU 资源概览（更新为当前 CCU 状态）
 8. **点击 BP 列圆圈** → 切换该行的断点标记（○ ↔ ●），断点三元组 `(rankId, dieId, instrId)` 自动绑定当前 CCU；断点管理面板同步更新
 9. **自动播放遇到断点** → 暂停并弹出命中提示栏（含 CCU/Round 信息），可选继续/单步/跳到下一断点
 10. **点击 [⇥ 下一断点]** → 快进到下一个断点位置；若断点在其他 CCU，自动切换 CCU 选择器
 11. **执行轨迹摘要** → 左侧栏实时展示当前 CCU 的已执行指令数、当前 Round、当前 SQE 等摘要信息
 12. **SQE 信息联动** → 指令细节面板中展示当前指令所属 SQE 的 missionId、instStartId、instCnt、args 列表
-13. **资源概览** → 展示当前 CCU 的累积资源状态（XN/GSA/CKE/MS），随回放实时更新
+13. **资源概览** → 展示当前 CCU 的累积资源状态（Variable/Address/Event/CcuBuffer），随回放实时更新
 14. **搜索指令** → 在当前 CCU 的指令列表中按指令名、描述、instrId 搜索
 15. **追溯资源来源** → 点击资源变化面板中的某个变更值，自动高亮上一次修改该资源的指令（在同一 CCU 内追溯）
 16. **跨 CCU 跳转** → 点击 crossCcuChanges 中的远端变更，自动切换 CCU 选择器到对应 CCU 并定位到关联指令
@@ -1435,7 +1435,7 @@ function autoPlay() {
 - 按 seqId 断点（最常用：点击指令行设置）
 - 按指令名称断点（如 "所有 ReduceAdd 指令处断点"）
 - 按指令类别断点（如 "所有 Trans 类指令处断点"）
-- 按资源变更断点（如 "Xn[5] 被修改的指令处断点"，需扫描 delta 数据）
+- 按资源变更断点（如 "Variable[5] 被修改的指令处断点"，需扫描 delta 数据）
 
 **前端断点 UI 交互**：
 
@@ -1717,10 +1717,10 @@ src/plugin/solver/virtual_runtime/insight/frontendV3/src/
 | 筛选维度 | 选项 | 说明 |
 |---------|------|------|
 | **指令类别** | Load / Trans / Control / Reduce / 全部 | 按 4 大类过滤 |
-| **执行状态** | 正常 / 失败 / CKE等待 / 全部 | 按执行结果过滤 |
+| **执行状态** | 正常 / 失败 / Event等待 / 全部 | 按执行结果过滤 |
 | **Loop 上下文** | 非 Loop / Loop 首轮 / Loop 中间轮 / Loop 末轮 / 全部 | 按 Loop 位置过滤 |
-| **资源变更类型** | 修改了 XN / 修改了 GSA / 修改了 CKE / 修改了 MS / 跨 CCU / 全部 | 按变更的资源类型过滤 |
-| **CKE Wait** | 有 Wait / 无 Wait / 全部 | 是否包含 CKE 等待 |
+| **资源变更类型** | 修改了 Variable / 修改了 Address / 修改了 Event / 修改了 CcuBuffer / 跨 CCU / 全部 | 按变更的资源类型过滤 |
+| **Event Wait** | 有 Wait / 无 Wait / 全部 | 是否包含 Event 等待 |
 | **SQE 范围** | SQE 0 / SQE 1 / ... / 全部 | 按 SQE session 过滤 |
 
 筛选器状态可保存为"筛选预设"，方便反复使用。
@@ -1784,9 +1784,9 @@ function traceBackward(resourceType, resourceId, currentSeqId) {
   3. 统计：Xn[5]=0x400 被后续 N 条指令读取，直到 seqId=M 被覆写
 ```
 
-#### 9.2.3 CKE 同步关系可视化
+#### 9.2.3 Event 同步关系可视化
 
-CKE 是 CCU 指令间同步的核心机制。提供专门的 CKE 关系视图：
+Event 是 CCU 指令间同步的核心机制。提供专门的 Event 关系视图：
 
 ```
 CKE[3] 同步关系时间线：
@@ -1834,7 +1834,7 @@ seqId=40  TransMM  waitCKE[3:0001] ⚠ 自旋 14 轮后通过
 | 指令序列 | 相同 instrId + instrName | 指令缺失/多出 → 红色 |
 | 资源 Delta | 相同的 xnChanges/gsaChanges/ckeChanges | 值不同 → 黄色 |
 | 执行状态 | 相同 execState | A 成功 B 失败 → 红色 |
-| CKE Wait | 相同 waitRetryCount（容差 ±1） | 等待次数差异大 → 橙色 |
+| Event Wait | 相同 waitRetryCount（容差 ±1） | 等待次数差异大 → 橙色 |
 | 跨 CCU 变更 | 相同的 remoteCkeChanges | 远端操作不一致 → 紫色 |
 
 #### 9.3.3 Diff 数据来源
@@ -1892,15 +1892,15 @@ CCU V1 和 V2 的资源规格不同：
 
 | 资源 | V1 规格 | V2 规格 |
 |------|--------|--------|
-| XN | 3072 | 4096 |
-| GSA | 3072 | 4096 |
-| CKE | 1024 | 1024 |
-| MS | 1536 | 1536 |
+| Variable | 3072 | 4096 |
+| Address | 3072 | 4096 |
+| Event | 1024 | 1024 |
+| CcuBuffer | 1536 | 1536 |
 | 指令类型 | 4大类 ~20种 | 4大类 ~35种 |
 
 **兼容策略**：
 1. `CcuRunMetadata.ccuVersion` 标识本次 trace 的微码版本
-2. 前端根据 ccuVersion 动态调整资源显示范围（V1 显示 3072 个 XN，V2 显示 4096 个）
+2. 前端根据 ccuVersion 动态调整资源显示范围（V1 显示 3072 个 Variable，V2 显示 4096 个）
 3. 前端根据 ccuVersion 显示对应的指令类型名称（V2 有 Add/Sub/Mul 等算术指令，V1 没有）
 4. Trace Diff 支持跨版本对比（V1 trace vs V2 trace），但标记资源规格差异
 

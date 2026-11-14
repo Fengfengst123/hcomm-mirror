@@ -33,6 +33,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "sim_log.h"
@@ -497,6 +498,47 @@ TEST_F(AicpuDeviceConfigTest, PathShadowDoesNotPreemptConfiguredAbsoluteProgram)
     EXPECT_EQ(argvLines[0], stub);
 
     ASSERT_EQ(procMgr.DestroyProcess(), 0);
+}
+
+// ---- GetAicpuProcMgr 按 deviceKey 共享的注册表语义 ----
+// 背景：多进程 hccl_test 中同 rank 的主线程与 hcomm 工作线程必须共享同一 device
+// 子进程；单进程多线程 examples 中不同 rank 用不同 deviceKey，必须彼此隔离。
+
+/// 同一 deviceKey 在不同线程取到同一管理器；不同 deviceKey 得到不同管理器。
+TEST(AicpuProcMgrRegistryTest, SameDeviceKeySharesAcrossThreads)
+{
+    sim::SubProcessManager* fromMain = &sim::GetAicpuProcMgr(9001);
+    sim::SubProcessManager* fromWorker = nullptr;
+    std::thread worker([&fromWorker]() {
+        fromWorker = &sim::GetAicpuProcMgr(9001);
+    });
+    worker.join();
+    EXPECT_EQ(fromMain, fromWorker);
+    EXPECT_NE(fromMain, &sim::GetAicpuProcMgr(9002));
+    // 未显式拉起进程的管理器处于未启用状态（IsAlive=false、pid=-1）
+    EXPECT_FALSE(fromMain->IsAlive());
+    EXPECT_EQ(fromMain->GetPid(), -1);
+    sim::DestroyAllAicpuProcMgrs();
+}
+
+/// 无参调用沿用本线程最近一次显式登记的 deviceKey（同一管理器）。
+TEST(AicpuProcMgrRegistryTest, ThreadRemembersLastDeviceKey)
+{
+    sim::SubProcessManager* explicitMgr = &sim::GetAicpuProcMgr(9011);
+    EXPECT_EQ(explicitMgr, &sim::GetAicpuProcMgr());
+    sim::DestroyAllAicpuProcMgrs();
+}
+
+/// DestroyAllAicpuProcMgrs 幂等，清空后重新取到的是未启用状态的管理器。
+TEST(AicpuProcMgrRegistryTest, DestroyAllIsIdempotentAndResetsRegistry)
+{
+    (void)sim::GetAicpuProcMgr(9021);
+    sim::DestroyAllAicpuProcMgrs();
+    sim::DestroyAllAicpuProcMgrs();
+    sim::SubProcessManager& fresh = sim::GetAicpuProcMgr(9021);
+    EXPECT_FALSE(fresh.IsAlive());
+    EXPECT_EQ(fresh.GetPid(), -1);
+    sim::DestroyAllAicpuProcMgrs();
 }
 
 } // namespace

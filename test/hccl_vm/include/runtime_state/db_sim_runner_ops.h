@@ -180,6 +180,38 @@
         Field(id, AutoIncrement), Field(device_id), Field(resource_addr), Field(die_id), Field(status), \
         PrimaryKey(id), \
             Index(device_id, die_id))) \
+    /* ---- device 规格（来自 config/device/*.yaml，设计文档 §4.8.2）---- \
+     * yaml 为唯一权威，本组表是运行时产物；两后端均由同一元数据 RenderCreateTable， \
+     * 无需分别写 DDL（sqlite_engine.cc:984 / mariadb_engine.cc:1063,1070）。 */ \
+    Table(sim::runtime::DeviceSpec, (Version(1), Scope::Static, \
+        Field(id, AutoIncrement), Field(name, Text), Field(ccu_version), Field(die_num), \
+        Field(spec_version), Field(rank_base), Field(rank_stride), Field(rank_window_size), \
+        Field(ccu_window_offset), Field(ccu_window_size), Field(ccu_die_size), \
+        Field(resource_space_size), Field(reserved_sync_slots), Field(count_xn_num), \
+        PrimaryKey(id), \
+            Unique(name))) \
+    Table(sim::runtime::DeviceSpecRegion, (Version(1), Scope::Static, \
+        Field(id, AutoIncrement), Field(spec_id), Field(name, Text), Field(type), \
+        Field(offset), Field(size), Field(entry_size), Field(count), \
+        PrimaryKey(id), \
+            Index(spec_id, type))) \
+    Table(sim::runtime::DeviceSpecMsWindow, (Version(1), Scope::Static, \
+        Field(id, AutoIncrement), Field(spec_id), Field(ccua_index), Field(offset), Field(size), \
+        PrimaryKey(id), \
+            Index(spec_id, ccua_index))) \
+    Table(sim::runtime::DeviceSpecDie, (Version(1), Scope::Static, \
+        Field(id, AutoIncrement), Field(spec_id), Field(die_id), Field(offset), \
+        PrimaryKey(id), \
+            Index(spec_id, die_id))) \
+    Table(sim::runtime::DeviceSpecPartition, (Version(1), Scope::Static, \
+        Field(id, AutoIncrement), Field(spec_id), Field(name, Text), Field(seg_index), \
+        Field(offset), Field(size), \
+        PrimaryKey(id), \
+            Index(spec_id, name, seg_index))) \
+    Table(sim::runtime::DeviceSpecBinding, (Version(1), Scope::Static, \
+        Field(id, AutoIncrement), Field(device_id), Field(spec_id), \
+        PrimaryKey(id), \
+            Unique(device_id), Index(spec_id))) \
     Table(sim::runtime::DeviceConnection, (Version(2), Scope::Static, \
         Field(id, AutoIncrement), Field(src_dev_id), Field(dst_dev_id), Field(link_type), \
         Field(access_by_remote), \
@@ -551,6 +583,12 @@ bool SetCurrCtxTls(uint64_t ctx);
 uint64_t GetCurrDeviceId();
 uint64_t GetCurrDeviceKey();
 uint64_t GetDeviceIdByCtxId(uint64_t ctxId);
+
+/// 失效 GetCurrDeviceId 的本线程记忆（ctxId → device_id）。
+/// SetCurrCtxTls 内部已自动调用；仅在**绕过 SetCurrCtxTls 直接删除当前 Context 行**时
+/// 需要显式调用（如 aclrtDestroyContext），否则后续 GetCurrDeviceId 会返回已销毁 ctx 的
+/// 旧 device_id 而不是按原语义查库失败返回 0。
+void InvalidateCurrDeviceTls();
 
 void SetTsDevice(int tsId);
 

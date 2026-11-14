@@ -181,6 +181,16 @@ add_executable(device
     # device 侧打桩库（libhccl_device_proxy.so）在子进程加载时经 --export-dynamic
     # 从本可执行文件解析，迁移前对应 runnerdb/tracedb/db_sim_runner_common.cc。
     ${HCCL_VM_SRC}/runtime_state/db_sim_runner_common.cc
+    # device_spec：device 规格解析与地址计算（config/device/*.yaml）。
+    # db_sim_runner_common.cc 的 GetCcuResourceBaseAddr 在 DB 无 Ccu.resource_addr 时
+    # 需回退读 yaml 推导（mock-comm / device 子进程等不落库路径，设计文档 §4.8.7 / O9），
+    # 故 device 侧也必须带上这组源文件。本目标已链接 yaml-cpp-aarch64 且定义
+    # HAVE_YAML_CPP（见下），InstallPath 由 HCCLVM_LOG_SOURCES 的 sim_common_api.cc 提供。
+    ${HCCL_VM_SRC}/device_spec/device_spec_types.cc
+    ${HCCL_VM_SRC}/device_spec/device_spec_yaml_loader.cc
+    ${HCCL_VM_SRC}/device_spec/device_spec_registry.cc
+    ${HCCL_VM_SRC}/device_spec/rank_address_space.cc
+    ${HCCL_VM_SRC}/device_spec/ccu_address_space.cc
     ${HCCL_VM_SRC}/common/sim_pipe_io.cc
 )
 
@@ -207,6 +217,7 @@ target_include_directories(device PRIVATE
     ${HCCL_VM_INCLUDE}/store
 
     ${HCCL_VM_SRC}/utils
+    ${HCCL_VM_SRC}/device_spec
     ${HCCL_VM_SRC}/device_arm
     ${HCCL_VM_SRC}/device_arm/common
     ${HCCL_VM_SRC}/common

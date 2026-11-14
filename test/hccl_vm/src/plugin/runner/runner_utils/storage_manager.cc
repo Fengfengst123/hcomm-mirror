@@ -14,6 +14,7 @@
 #include <cstdlib> // strtoull
 #include <cstring>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <limits>
 #include <nlohmann_json/json.hpp>
@@ -24,6 +25,7 @@
 
 #include "store_binary_data_operator.h"
 #include "ccu_resource_manager.h"
+#include "runtime_state/db_sim_runner_common.h"
 #include "sim_log.h"
 
 namespace HcclSim {
@@ -317,13 +319,24 @@ HcclVmResult StorageManager::InitCcuResource(std::vector<sim::operation::CcuInst
         HCCL_VM_ERROR("Wrong devive type: {:d}", static_cast<int>(devType_));
         return HcclVmResult::HCCL_SIM_E_INTERNAL;
     }
-    std::vector<uint64_t> ccuResourceBaseAddr{};
-    ccuResourceBaseAddr.push_back(0x123123123);
-    ccuResourceBaseAddr.push_back(0x456456456);
-
+    // ★ 取代原先的 ccuResourceBaseAddr = {0x123123123, 0x456456456} 假基址（设计文档 §2.2 #7）：
+    //   per-(rank, die) 走全项目唯一入口 sim::runtime::GetCcuResourceBaseAddr（DB 优先/yaml 回退）。
+    //   注意：本函数属 legacy 路径（RunVirtualRuntime 当前无调用者），rank 槽位沿用
+    //   "rankId 即 CcuResourceManager 索引"的旧约定；活跃路径见 hccl_task_sequential_execute_v2.cc
+    //   （按 deviceId 索引并逐 device 解析基址）。解析失败写 0（显式"未知"），不回退假地址。
     auto rankSize = GetRankSize();
     auto& ccuResMgr = CcuResourceManager::GetInstance();
     for (uint32_t rankId = 0; rankId < rankSize; rankId++) {
+        std::vector<uint64_t> ccuResourceBaseAddr{};
+        for (uint32_t dieId = 0; dieId < HcclSim::DIE_NUM; dieId++) {
+            uint64_t baseAddr = 0;
+            if (!sim::runtime::GetCcuResourceBaseAddr(rankId, dieId, baseAddr) || baseAddr == 0) {
+                HCCL_VM_ERROR(
+                    "resolve ccu resource base addr failed: rankId={} dieId={}（写入 0，不回退假地址）", rankId, dieId);
+                baseAddr = 0;
+            }
+            ccuResourceBaseAddr.push_back(baseAddr);
+        }
         ccuResMgr.Init(rankId, rankSize, ccuVersion, ccuResourceBaseAddr);
         ccuResMgr.InitChannelInfo(rankId, m_allRankChannelInfo[rankId]);
     }
@@ -341,11 +354,138 @@ HcclVmResult StorageManager::InitCcuResource(std::vector<sim::operation::CcuInst
     return HcclVmResult::HCCL_SIM_SUCCESS;
 }
 
+/**
+ * @brief dump 开关查询：HCCLVM_ENABLE_DUMP_DATA 未设置/为空/"0" 均视为未使能。
+ * @return 使能返回 true，否则返回 false。
+ */
+bool StorageManager::IsDumpDataEnabled() const
+{
+    const char* enableDumpData = std::getenv("HCCLVM_ENABLE_DUMP_DATA");
+    return enableDumpData != nullptr && !std::string(enableDumpData).empty() && std::string(enableDumpData) != "0";
+}
+
+/**
+ * @brief 打开 all_rank_input_output.txt：append=false 截断重写（legacy 整轮 dump），append=true 追加（V2 按 op 增量）。
+ * @param ofs 出参，打开成功的输出流
+ * @param append true 追加模式，false 截断模式
+ * @return 打开成功返回 true；找不到根目录/打开失败时打日志并返回 false。
+ */
+bool StorageManager::OpenDumpFile(std::ofstream& ofs, bool append)
+{
+    std::string rootPath = FindRootPath();
+    if (rootPath.empty()) {
+        HCCL_VM_ERROR("Failed to find root path");
+        return false;
+    }
+    std::string fullPath = rootPath + HCCLVM_ALL_RANK_INPUT_OUTPUT_FILE;
+    auto mode = std::ios::out | (append ? std::ios::app : std::ios::trunc);
+    ofs.open(fullPath, mode);
+    if (!ofs.is_open()) {
+        HCCL_VM_ERROR("Open file failed: {}", fullPath);
+        return false;
+    }
+    return true;
+}
+
+/**
+ * @brief 把一个 rank 的 input/output buffer 映射到本进程地址空间并回填 BufferInfo。
+ * @param addr buffer 虚拟地址，为 0 视为无此 buffer（直接成功返回）
+ * @param size buffer 大小
+ * @param type buffer 类型（仅用于日志）
+ * @param out 出参，回填 virtualAddr/phyAddr/size
+ * @param phyMemOut 出参，成功获取的物理内存块追加到该 vector，由调用方在写出后统一释放
+ * @return 映射成功或 addr 为 0 返回 HCCL_SIM_SUCCESS；映射失败返回 HCCL_SIM_E_INTERNAL。
+ */
+HcclVmResult StorageManager::AcquireRankBuffer(
+    uint64_t addr, uint64_t size, BufferType type, BufferInfo& out, std::vector<sim::runtime::PhyMemBlock>& phyMemOut)
+{
+    if (addr == 0 || size == 0) {
+        return HcclVmResult::HCCL_SIM_SUCCESS;
+    }
+    sim::runtime::PhyMemBlock srcPhyMem{};
+    auto startAddr = sim::AcquireDevPtrInNoHostProcess((void*)addr, srcPhyMem);
+    if (startAddr == nullptr) {
+        HCCL_VM_ERROR("fail addr(type={}, addr={:x})!", static_cast<int>(type), addr);
+        return HcclVmResult::HCCL_SIM_E_INTERNAL;
+    }
+    phyMemOut.push_back(srcPhyMem);
+    out.virtualAddr = addr;
+    out.phyAddr = (char*)startAddr;
+    out.size = size;
+    return HcclVmResult::HCCL_SIM_SUCCESS;
+}
+
+/**
+ * @brief 把一个 op（全部 rank）的 input/output 数据写出一个 "=== Op N ===" 段；
+ *        legacy 整轮 dump 与 V2 按 op 增量 dump 共用此实现。
+ * @param ofs 已打开的输出流
+ * @param opIdx 算子序号（写入段头）
+ * @param opType 算子类型（HcclCMDType，决定打印 input 还是 input+output）
+ * @param rankSize 通信域 rank 数（buffer 向量维度；V2 路径取算子明细行，不能依赖 GetRankSize）
+ * @param rankTask 该 op 全部 rank 的复合明细（key = rankId）
+ * @param phyMemOut 出参，本段映射到的物理内存块，由调用方在写出后统一释放
+ * @return 写出成功返回 HCCL_SIM_SUCCESS；buffer 映射失败返回 HCCL_SIM_E_INTERNAL。
+ */
+HcclVmResult StorageManager::DumpOneOpGroup(
+    std::ofstream& ofs, uint32_t opIdx, uint32_t opType, uint32_t rankSize,
+    const std::map<uint32_t, sim::operation::CompositeOpDetail>& rankTask,
+    std::vector<sim::runtime::PhyMemBlock>& phyMemOut)
+{
+    std::vector<BufferInfo> allRankInput(rankSize);
+    std::vector<BufferInfo> allRankOutput(rankSize);
+    for (auto& it : rankTask) {
+        if (it.first >= rankSize) {
+            HCCL_VM_WARN("rankId={} out of range, rankSize={}, opIdx={}", it.first, rankSize, opIdx);
+            continue;
+        }
+        auto& memInfo = it.second.memInfo;
+        auto inRet = AcquireRankBuffer(
+            memInfo.inputAddr, memInfo.inputSize, BufferType::INPUT, allRankInput[it.first], phyMemOut);
+        auto outRet = AcquireRankBuffer(
+            memInfo.outputAddr, memInfo.outputSize, BufferType::OUTPUT, allRankOutput[it.first], phyMemOut);
+        if (inRet != HcclVmResult::HCCL_SIM_SUCCESS || outRet != HcclVmResult::HCCL_SIM_SUCCESS) {
+            return HcclVmResult::HCCL_SIM_E_INTERNAL;
+        }
+        HCCL_VM_INFO(
+            "opIdx={}, rankId={}, inputAddr={:x}, size={}, outputAddr={:x}, size={}", opIdx, it.first,
+            memInfo.inputAddr, memInfo.inputSize, memInfo.outputAddr, memInfo.outputSize);
+    }
+
+    ofs << "\n=== Op " << std::dec << opIdx << " (opType=" << opType << ") ===\n";
+    switch (static_cast<HcclCMDType>(opType)) {
+        case HcclCMDType::HCCL_CMD_BROADCAST:
+            PrintOpData1(ofs, rankSize, allRankInput);
+            break;
+        case HcclCMDType::HCCL_CMD_SEND:
+        case HcclCMDType::HCCL_CMD_RECEIVE:
+            // P2P：发送侧有 input、接收侧有 output，按 input+output 同列打印
+            PrintOpData2(ofs, rankSize, allRankInput, allRankOutput);
+            break;
+        case HcclCMDType::HCCL_CMD_ALLGATHER:
+        case HcclCMDType::HCCL_CMD_ALLREDUCE:
+        case HcclCMDType::HCCL_CMD_SCATTER:
+        case HcclCMDType::HCCL_CMD_REDUCE:
+        case HcclCMDType::HCCL_CMD_REDUCE_SCATTER:
+        case HcclCMDType::HCCL_CMD_ALLTOALL:
+        case HcclCMDType::HCCL_CMD_ALLTOALLV:
+            PrintOpData2(ofs, rankSize, allRankInput, allRankOutput);
+            break;
+        default:
+            break;
+    }
+    return HcclVmResult::HCCL_SIM_SUCCESS;
+}
+
+/**
+ * @brief legacy 整轮 dump 入口：把按 op 分组的全部 rank input/output 数据截断写出
+ *        all_rank_input_output.txt（当前无调用者，保留兼容；活跃路径为 CollectOpRankDump）。
+ * @param compositeDataMap 按 op 索引、按 rankId 索引的复合算子明细
+ * 副作用：使能 HCCLVM_ENABLE_DUMP_DATA 时写文件；映射的物理内存留在 m_allPhyMem，由调用方 ReleasePhyMem。
+ */
 void StorageManager::DumpAllRankInputOutput(
     std::vector<std::map<uint32_t, sim::operation::CompositeOpDetail>>& compositeDataMap)
 {
-    const char* enableDumpData = std::getenv("HCCLVM_ENABLE_DUMP_DATA");
-    if (enableDumpData == nullptr || std::string(enableDumpData).empty() || std::string(enableDumpData) == "0") {
+    if (!IsDumpDataEnabled()) {
         HCCL_VM_DEBUG("HCCLVM_ENABLE_DUMP_DATA is not set");
         return;
     }
@@ -354,63 +494,18 @@ void StorageManager::DumpAllRankInputOutput(
         HCCL_VM_ERROR("compositeDataMap is empty");
         return;
     }
-    std::string rootPath = FindRootPath();
-    if (rootPath.empty()) {
-        HCCL_VM_ERROR("Failed to find root path");
+    std::ofstream ofs;
+    if (!OpenDumpFile(ofs, false)) {
         return;
     }
-    std::string fullPath = rootPath + HCCLVM_ALL_RANK_INPUT_OUTPUT_FILE;
-    std::ofstream ofs(fullPath);
-    if (!ofs.is_open()) {
-        HCCL_VM_ERROR("Open file failed: {}", fullPath);
-        return;
-    }
+    m_dumpFileTruncated = true; // legacy 整轮 dump 本身截断，同步标记避免后续 V2 flush 再截断
 
-    HCCL_VM_INFO("Dump All Rank Input Output Data. rankSize={}, fullPath={}", rankSize, fullPath);
+    HCCL_VM_INFO("Dump All Rank Input Output Data. rankSize={}", rankSize);
     for (size_t opIdx = 0; opIdx < compositeDataMap.size(); opIdx++) {
         auto& rankTask = compositeDataMap[opIdx];
         if (rankTask.empty()) {
             continue;
         }
-        std::vector<BufferInfo> allRankInput(rankSize);
-        std::vector<BufferInfo> allRankOutput(rankSize);
-        for (auto& it : rankTask) {
-            auto& memInfo = it.second.memInfo;
-            if (memInfo.inputAddr != 0 && memInfo.inputSize > 0) {
-                sim::runtime::PhyMemBlock srcPhyMem{};
-                auto startAddr = sim::AcquireDevPtrInNoHostProcess((void*)(memInfo.inputAddr), srcPhyMem);
-                if (startAddr == nullptr) {
-                    HCCL_VM_ERROR(
-                        "fail addr(type={}, addr={:x})!", static_cast<int>(BufferType::INPUT), memInfo.inputAddr);
-                    return;
-                }
-                m_allPhyMem.push_back(srcPhyMem);
-                allRankInput[it.first].virtualAddr = memInfo.inputAddr;
-                allRankInput[it.first].phyAddr = (char*)startAddr;
-                allRankInput[it.first].size = memInfo.inputSize;
-                HCCL_VM_INFO(
-                    "opIdx={}, rankId={}, inputAddr={:x}, size={}", opIdx, it.first, memInfo.inputAddr,
-                    memInfo.inputSize);
-            }
-
-            if (memInfo.outputAddr != 0 && memInfo.outputSize > 0) {
-                sim::runtime::PhyMemBlock srcPhyMem{};
-                auto startAddr = sim::AcquireDevPtrInNoHostProcess((void*)(memInfo.outputAddr), srcPhyMem);
-                if (startAddr == nullptr) {
-                    HCCL_VM_ERROR(
-                        "fail addr(type={}, addr={:x})!", static_cast<int>(BufferType::OUTPUT), memInfo.outputAddr);
-                    return;
-                }
-                m_allPhyMem.push_back(srcPhyMem);
-                allRankOutput[it.first].virtualAddr = memInfo.outputAddr;
-                allRankOutput[it.first].phyAddr = (char*)startAddr;
-                allRankOutput[it.first].size = memInfo.outputSize;
-                HCCL_VM_INFO(
-                    "opIdx={}, rankId={}, outputAddr={:x}, size={}", opIdx, it.first, memInfo.outputAddr,
-                    memInfo.outputSize);
-            }
-        }
-
         const auto& firstComp = rankTask.begin()->second;
         if (firstComp.detail.opDetail.size() < sizeof(::OpDetails)) {
             HCCL_VM_ERROR("opDetail BLOB too small, opIdx={}, size={}", opIdx, firstComp.detail.opDetail.size());
@@ -418,49 +513,143 @@ void StorageManager::DumpAllRankInputOutput(
         }
         ::OpDetails opDetails{};
         std::memcpy(&opDetails, firstComp.detail.opDetail.data(), sizeof(::OpDetails));
-
-        ofs << "\n=== Op " << std::dec << opIdx << " (opType=" << static_cast<int>(opDetails.opType) << ") ===\n";
-
-        switch (static_cast<HcclCMDType>(opDetails.opType)) {
-            case HcclCMDType::HCCL_CMD_BROADCAST:
-                PrintOpData1(ofs, allRankInput);
-                break;
-            case HcclCMDType::HCCL_CMD_ALLGATHER:
-            case HcclCMDType::HCCL_CMD_ALLREDUCE:
-            case HcclCMDType::HCCL_CMD_SCATTER:
-            case HcclCMDType::HCCL_CMD_REDUCE:
-            case HcclCMDType::HCCL_CMD_REDUCE_SCATTER:
-            case HcclCMDType::HCCL_CMD_ALLTOALL:
-            case HcclCMDType::HCCL_CMD_ALLTOALLV:
-                PrintOpData2(ofs, allRankInput, allRankOutput);
-                break;
+        auto ret = DumpOneOpGroup(ofs, opIdx, opDetails.opType, rankSize, rankTask, m_allPhyMem);
+        if (ret != HcclVmResult::HCCL_SIM_SUCCESS) {
+            HCCL_VM_WARN("dump op group failed. opIdx={}, ret={:d}", opIdx, static_cast<int>(ret));
         }
     }
     ofs.close();
     HCCL_VM_INFO("Dump All Rank Input Output Data success.");
 }
 
+/**
+ * @brief V2 执行路径的 input/output dump 登记入口（详见头文件注释）：只记录 buffer 地址/大小，
+ *        不读内容；内容在全部设备同步就绪后由 FlushPendingOpDumps 统一读出写出。
+ * @param commHash 该 op 所属通信域的 hash（跨 rank 共享，聚合键的一部分）
+ * @param detail 该 rank 的算子明细行
+ * @param memInfo 该 rank 的 input/output buffer 地址与大小
+ */
+void StorageManager::CollectOpRankDump(
+    uint64_t commHash, const sim::operation::OpDetailTab& detail, const sim::operation::OpMemInfoTab& memInfo)
+{
+    if (!IsDumpDataEnabled()) {
+        return;
+    }
+    if (detail.opDetail.size() < sizeof(::OpDetails)) {
+        HCCL_VM_ERROR("opDetail BLOB too small, opDetailId={}, size={}", detail.id, detail.opDetail.size());
+        return;
+    }
+    ::OpDetails opDetails{};
+    std::memcpy(&opDetails, detail.opDetail.data(), sizeof(::OpDetails));
+
+    // 聚合键用通信域级 commHash（跨 rank 共享）+ syncIter（区分多次 run）+ opIter（区分同周期多 op）；
+    // detail.commId 是每 rank 各自的 Communicator 行 id，用作聚合键会导致每组只有 1 个 rank、永远收不齐。
+    auto key = std::make_tuple(commHash, detail.syncIter, detail.opIter);
+    auto& pending = m_pendingOpDumps[key];
+    if (pending.dumped) {
+        // 本 op 已落盘；同 opDetailId 的后续 task 完成通知直接忽略。
+        return;
+    }
+    pending.opType = opDetails.opType;
+    pending.rankSize = detail.rankSize;
+    auto& comp = pending.rankMemInfos[detail.rankId];
+    comp.rankId = detail.rankId;
+    comp.deviceId = detail.deviceId;
+    comp.commId = detail.commId;
+    comp.detail = detail;
+    comp.memInfo = memInfo;
+}
+
+/**
+ * @brief 是否存在未落盘的 pending dump 组。
+ * @return 存在返回 true，否则返回 false。
+ */
+bool StorageManager::HasPendingOpDumps() const
+{
+    for (const auto& [_, pending] : m_pendingOpDumps) {
+        if (!pending.dumped) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * @brief 全部设备同步就绪后（由调用方判定）把所有未落盘的 pending 组读出并写出
+ *        all_rank_input_output.txt；每组仅落盘一次。本会话首次落盘截断重写（清掉历史运行
+ *        残留的旧 section），其后追加，保证文件内容只含本次运行产生的段。
+ */
+void StorageManager::FlushPendingOpDumps()
+{
+    if (!IsDumpDataEnabled()) {
+        return;
+    }
+    std::ofstream ofs;
+    bool opened = false;
+    for (auto& [key, pending] : m_pendingOpDumps) {
+        if (pending.dumped) {
+            continue;
+        }
+        if (!opened) {
+            // 首次打开按截断标记决定模式；打开失败不置标记，下一轮重试仍会先截断
+            if (!OpenDumpFile(ofs, m_dumpFileTruncated)) {
+                return; // 打开失败，保留 pending 待下一轮就绪信号重试
+            }
+            m_dumpFileTruncated = true;
+            opened = true;
+        }
+        const auto& [commHash, syncIter, opIter] = key;
+        HCCL_VM_INFO(
+            "Dump op input/output data. commHash={}, syncIter={}, opIter={}, registeredRanks={}", commHash, syncIter,
+            opIter, pending.rankMemInfos.size());
+        auto ret = DumpOneOpGroup(ofs, opIter, pending.opType, pending.rankSize, pending.rankMemInfos, m_allPhyMem);
+        ReleasePhyMem(); // 本组已写出，释放其映射的设备内存，避免长稳运行无限增长
+        if (ret != HcclVmResult::HCCL_SIM_SUCCESS) {
+            HCCL_VM_WARN("dump op group failed. opIter={}, ret={:d}", opIter, static_cast<int>(ret));
+            continue; // 保留未落盘标记，待下一轮就绪信号重试
+        }
+        pending.dumped = true;
+    }
+    if (opened) {
+        ofs.close();
+    }
+}
+
+/**
+ * @brief 按大小灵活打印 buffer 内容：不超过阈值全量打印，超过阈值只打印前缀+后缀并标注跳过字节数。
+ * @param ofs 已打开的输出流
+ * @param buffer 已映射到本进程的 buffer（phyAddr 有效）
+ */
 void StorageManager::FlexiblePrintData(std::ofstream& ofs, const BufferInfo& buffer)
 {
     if (buffer.size <= PRINT_DATA_SIZE_THRESHOLD) {
         for (uint64_t i = 0; i < buffer.size; i++) {
-            ofs << std::hex << static_cast<int>(static_cast<unsigned char>(buffer.phyAddr[i]));
+            // setw 每次插入即失效须逐字节重设；不补零会导致 0x00/0x04 等打印成 "0"/"4" 错位
+            ofs << std::hex << std::setfill('0') << std::setw(2)
+                << static_cast<int>(static_cast<unsigned char>(buffer.phyAddr[i]));
         }
         return;
     }
 
     for (uint32_t i = 0; i < PRINT_DATA_PREFIX; i++) {
-        ofs << std::hex << static_cast<int>(static_cast<unsigned char>(buffer.phyAddr[i]));
+        ofs << std::hex << std::setfill('0') << std::setw(2)
+            << static_cast<int>(static_cast<unsigned char>(buffer.phyAddr[i]));
     }
     ofs << "\n...[skipped " << std::dec << buffer.size - PRINT_DATA_SIZE_THRESHOLD << " bytes]...\n";
     for (uint64_t i = buffer.size - PRINT_DATA_SUFFIX; i < buffer.size; i++) {
-        ofs << std::hex << static_cast<int>(static_cast<unsigned char>(buffer.phyAddr[i]));
+        ofs << std::hex << std::setfill('0') << std::setw(2)
+            << static_cast<int>(static_cast<unsigned char>(buffer.phyAddr[i]));
     }
 }
 
-void StorageManager::PrintOpData1(std::ofstream& ofs, const std::vector<BufferInfo>& allRankInput)
+/**
+ * @brief 打印单 buffer 类算子（如 Broadcast）的全部 rank input 数据。
+ * @param ofs 已打开的输出流
+ * @param rankSize 通信域 rank 数（显式传入，V2 路径 GetRankSize() 无值）
+ * @param allRankInput 按 rankId 索引的 input buffer 向量
+ */
+void StorageManager::PrintOpData1(std::ofstream& ofs, uint32_t rankSize, const std::vector<BufferInfo>& allRankInput)
 {
-    auto rankSize = GetRankSize();
     for (uint32_t idx = 0; idx < rankSize; idx++) {
         ofs << std::dec << "Rank " << idx << " Input: " << (uint64_t)(void*)allRankInput[idx].virtualAddr
             << ", size=" << allRankInput[idx].size << std::endl;
@@ -469,10 +658,17 @@ void StorageManager::PrintOpData1(std::ofstream& ofs, const std::vector<BufferIn
     }
 }
 
+/**
+ * @brief 打印 input+output 类算子的全部 rank input/output 数据。
+ * @param ofs 已打开的输出流
+ * @param rankSize 通信域 rank 数（显式传入，V2 路径 GetRankSize() 无值）
+ * @param allRankInput 按 rankId 索引的 input buffer 向量
+ * @param allRankOutput 按 rankId 索引的 output buffer 向量
+ */
 void StorageManager::PrintOpData2(
-    std::ofstream& ofs, const std::vector<BufferInfo>& allRankInput, const std::vector<BufferInfo>& allRankOutput)
+    std::ofstream& ofs, uint32_t rankSize, const std::vector<BufferInfo>& allRankInput,
+    const std::vector<BufferInfo>& allRankOutput)
 {
-    auto rankSize = GetRankSize();
     for (uint32_t idx = 0; idx < rankSize; idx++) {
         ofs << std::dec << "Rank " << idx << " Input: " << (uint64_t)(void*)allRankInput[idx].virtualAddr
             << ", size=" << allRankInput[idx].size << std::endl;

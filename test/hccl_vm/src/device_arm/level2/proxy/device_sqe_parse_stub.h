@@ -28,7 +28,7 @@ struct TaskIdentity {
     uint32_t deviceId;
 };
 
-// g_currOpDetailId → OpDetailTab 解析任务身份(commId/rankId/deviceId), SQE 解析公共入口与 UT 共用
+// CurrOpDetailId() → OpDetailTab 解析任务身份(commId/rankId/deviceId), SQE 解析公共入口与 UT 共用
 bool ResolveCurrentTaskIdentity(TaskIdentity& identity);
 
 // 非估算模式: 虚拟地址 + 地址反查 deviceId, 不填 rank 字段

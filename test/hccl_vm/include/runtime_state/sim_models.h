@@ -171,12 +171,98 @@ typedef struct {
 } Port;
 
 typedef struct CcuTag {
-    uint64_t id;            // PK
-    uint64_t device_id;     // FK
-    uint64_t resource_addr; // ccu资源地址，区分不同die的资源：die0: 0x123123123; die1: 0x456456456
+    uint64_t id;        // PK
+    uint64_t device_id; // FK
+    // CCU 资源空间基址（per-rank per-die 唯一）。由 device 规格推导：
+    //   ccuDieBase(rankIdx, dieId) = rank_base + rankIdx × rank_stride
+    //                              + ccu_window_offset + ccu_die_offsets[dieId]
+    // 例：rank0 die0 = 0x8e00000000、die1 = 0x8e40000000；rank1 die0 = 0x18e00000000。
+    // ★ 旧值 die0=0x123123123 / die1=0x456456456 是各 rank 相同的假地址，已废弃；
+    //   写入方为 topo_ascend_cluster_parser.cc 的 FillCcu()（此前恒为 0，见设计文档 P7）。
+    uint64_t resource_addr;
     uint8_t die_id;
     uint8_t status;
 } Ccu;
+
+/*==================== device 规格（来自 config/device/*.yaml，设计文档 §4.8.2）====================
+ * yaml 是唯一权威源，本组表是**运行时产物**：由 InitClusterStaticTopoData 在解析集群拓扑时
+ * 落库，供 proxy / runner / checker / Python 插件与第三方直接查询，避免各自解析 yaml。
+ * 两者不一致时以 yaml 为准并 fail-fast（§4.8.6）；DB 未命中时消费方必须回退读 yaml
+ * （mock-comm 路径不经 InitClusterStaticTopoData，见 §4.8.7 / O9）。
+ */
+
+/// 一份 device 规格的头信息（对应一个 config/device/<name>.yaml）。
+typedef struct DeviceSpecTag {
+    uint64_t id;                // PK
+    char name[64];              // spec 标识 = yaml 文件名主干（"ascend950"），UNIQUE
+    uint8_t ccu_version;        // devspec::CcuVersion：1=CCU_V1 2=CCU_V2 3=CCU_V3
+    uint8_t die_num;            // 每 device 的 die 数（本期仅 1/2，见 O4）
+    uint32_t spec_version;      // yaml schema 版本
+    uint64_t rank_base;         // rank0 窗口起点（0x8000000000）
+    uint64_t rank_stride;       // 每 rank 窗口步长（1 TiB）
+    uint64_t rank_window_size;  // 单 rank 窗口大小（1 TiB）
+    uint64_t ccu_window_offset; // CCU 窗口在 rank 窗口内的起点（0xE00000000 = 56 GiB）
+    uint64_t ccu_window_size;   // CCU 窗口大小（die_num × die_size = 2 GiB）
+    uint64_t ccu_die_size;      // 单 die 的 CCU 地址空间（1 GiB）
+    // = backingSize，取 hcomm 权威值 CCU_V1_V2_RESOURCE_SIZE（72 MiB）。
+    // ★ 不是 max(region ∪ ms 末端)：A5 的后者只有 9.25 MiB，会导致 hcomm 访问越界（D10-补）。
+    uint64_t resource_space_size;
+    uint32_t reserved_sync_slots; // 跨 rank 同步预留槽（L1 SYNC_SLOT_NUM 语义）
+    uint32_t count_xn_num;        // 0.5RTT 计数寄存器组数（A6=4，A5=0）
+    // ★ 无 user_mem_limit 列：可用额度由 DeviceSpecPartition 的 user_mem 段求和派生
+    //   （1022 GiB / 2 段），rtMalloc 不踩 CCU 由 per-segment first-fit 结构性保证（§4.5.7）。
+    // ★ 无 soc_version 列：决策 (i) 下加载器不解析 yaml 的 soc.soc_version，
+    //   Device⟷DeviceSpec 的关联走 DeviceSpecBinding（§4.8.4 / D13）。
+    // ★ 无 gsa_count 列：GSA 由 DeviceSpecRegion 的 GSA 行表达（A6 无该行 → 派生 0，D15）。
+} DeviceSpec;
+
+/// device 规格的一个 CCU 资源区域（对应 yaml ccu.regions[] 的一项）。
+typedef struct DeviceSpecRegionTag {
+    uint64_t id;         // PK
+    uint64_t spec_id;    // FK → DeviceSpec.id
+    char name[32];       // 区域名（"xn" / "cke" / ...）
+    uint16_t type;       // devspec::CcuResType
+    uint64_t offset;     // 相对 ccuDieBase
+    uint64_t size;       // 区域地址空间大小
+    uint32_t entry_size; // 单个资源的字节步进；0 = 不按 id 编址的不透明块
+    uint32_t count;      // 硬件容量（= 上报 hcomm 的 caps 口径）
+} DeviceSpecRegion;
+
+/// MS 的一个 CCUA bank 窗口（对应 yaml ccu.ms.ccua_windows[] 的一项）。
+typedef struct DeviceSpecMsWindowTag {
+    uint64_t id;         // PK
+    uint64_t spec_id;    // FK → DeviceSpec.id
+    uint32_t ccua_index; // bank 序号（0..ccua_num-1）
+    uint64_t offset;     // 相对 ccuDieBase（A5=0x0 起，A6=0x4000000 起）
+    uint64_t size;
+} DeviceSpecMsWindow;
+
+/// 各 die 相对 CCU 窗口起点的偏移（对应 yaml address_space.ccu.die_offsets[]）。
+typedef struct DeviceSpecDieTag {
+    uint64_t id;      // PK
+    uint64_t spec_id; // FK → DeviceSpec.id
+    uint32_t die_id;
+    uint64_t offset;
+} DeviceSpecDie;
+
+/// rank 窗口内的一个分区段（对应 yaml address_space.partitions[]）。
+/// user_mem 会出现多段（被 ccu 段切开），分配器按段做 first-fit。
+typedef struct DeviceSpecPartitionTag {
+    uint64_t id;        // PK
+    uint64_t spec_id;   // FK → DeviceSpec.id
+    char name[32];      // "user_mem" | "ccu"
+    uint32_t seg_index; // 同名段内的序号（按 offset 升序），供分配器游标索引
+    uint64_t offset;    // 相对 rankBase
+    uint64_t size;
+} DeviceSpecPartition;
+
+/// Device ⟷ DeviceSpec 关联（设计文档 §4.8.4 / D13）。
+/// 用独立绑定表而非给 Device 加 FK 列，以规避 Table(Version(n)) 变更语义不明（O10）。
+typedef struct DeviceSpecBindingTag {
+    uint64_t id;        // PK
+    uint64_t device_id; // FK → Device.id
+    uint64_t spec_id;   // FK → DeviceSpec.id
+} DeviceSpecBinding;
 
 typedef struct DeviceConnectionTag {
     uint64_t id;         // PK

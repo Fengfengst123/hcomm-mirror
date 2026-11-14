@@ -1,7 +1,7 @@
 # CCU 资源统计特性设计方案
 
 > 特性目标：checker 成图后，以**算子每次调用（op）× device(+die)** 为粒度统计该次调用
-> 使用的全部 CCU 资源（channel、指令空间、Xn/GSA/CKE/MS 寄存器、loop、mission）；
+> 使用的全部 CCU 资源（channel、指令空间、Variable/Address/Event/CcuBuffer 寄存器、loop、mission）；
 > 成图过程中以 dfx 形式采集存储，全部成图完毕后从 dfx 提取生成 CSV 统计报告。
 >
 > 状态：方案设计（D1-D7 已实施，已按评审意见修订 V6）
@@ -17,7 +17,7 @@
 > 大面积出现），与 per-op 统计的立论矛盾；引用口径提为一期主口径，差分降为参考（见 3.1）。
 >
 > V6 修订：**CSV 改为按算子分节显示，节头附带算子信息**（算子类型、算法名、数据类型、
-> 元素数、输入/输出数据量、reduce 类型、rankSize），数据行精简为 14 列（见 4.2）；
+> 元素数、输入/输出数据量、reduce 类型、rankSize），数据行精简为 13 列（见 4.2）；
 > 拓扑映射修正为 `Device.id → server_id → CommConfigServer.serverKey` 主路径
 > （D7 实测 deviceId 与 physical_id 口径错位，见 4.3）。
 
@@ -43,9 +43,9 @@
    - **channel**：从 checker 插件的 channel 表获取，记录去重后的 channel 个数；
    - **指令空间**：CCU 指令空间为 32K 条 × 32B = 1MB，统计已生成的指令数；
    - **寄存器**：
-     - A5：Xn、GSA、CKE、MS；
-     - A6：Xn、CKE、MS（A6 无 GSA）；
-     - **CKE 统计粒度以 ckeId 为准，不带 mask/bit 信息**；
+      - A5：Variable、Address、Event、CcuBuffer；
+      - A6：Variable、Event、CcuBuffer（A6 无 Address）；
+      - **Event 统计粒度以 ckeId 为准，不带 mask/bit 信息**；
      - **A6 引入了寄存器地址寻址，所有资源必须先将地址转换为 id，再统计**；
    - **loop**：CCU 的并发执行单元。只统计**静态展开实例数**（不含运行时迭代次数）。
      从 LoopGroup 指令计算：设 loop 模板个数为 `n`，展开 offset 为 `o`（`o ∈ [0, n-1]`），
@@ -68,7 +68,7 @@
 | mission/指令区间 | `CcuTaskParam{dieId, missionId, instStartId, instCnt}`；`CcuGraphStateV3::InitInstrInfo` 已计算 `missionStartInstrId / missionInstrCount`（`ccu_task_common_v3.cc:307-336`） |
 | loop 展开公式 | A6：`ccu_task_transform_instruct_a6_v3.cc:1703` `expandTimes = (curLoopIdx < expandOffset) ? 1 : (expandCnt + 1)`，总展开 = `o + (n-o)*(m+1)` = `n + (n-o)*m`，**与需求公式一致**；A5 同构（a5_v3.cc:2056）；无嵌套（`CheckLoopGroupNotSupport` 保证） |
 | LoopGroup 字段位宽 | A6：`loopInsCnt(10bit) / expandOffset(9bit) / expandCnt(9bit)`；A5：均为 7bit |
-| MS 使用汇聚点 | `GenSliceFromMs(msId, len, slice)`（`ccu_task_common_v3.cc:1071`）：A5/A6 全部 MS 使用点（普通指令 + loop 展开指令，约 30+ 处调用）都在 `UpdateMSId` 偏移后以最终 msId 调用该函数 |
+| CcuBuffer 使用汇聚点 | `GenSliceFromMs(msId, len, slice)`（`ccu_task_common_v3.cc:1071`）：A5/A6 全部 CcuBuffer 使用点（普通指令 + loop 展开指令，约 30+ 处调用）都在 `UpdateMSId` 偏移后以最终 msId 调用该函数 |
 | dfx 现成范式 | `src/dfx/dag_graphviz_dump`：受 `enableDagGraphvizDump` 开关控制，成图内采集、结束后落盘 |
 
 ---
@@ -118,7 +118,7 @@
    - 大图路径（`ProcessBigGraph`）从不调用 `BeginOp` → 天然零采集，
      双 checker 同开也不会重复计数。
 - **per-op 隔离的正确性依据**：单算子模式每 op 前 `AllRankParamRecorder::Reset()`
-  （main.cc:221），寄存器状态不跨 op 泄漏——op 桶内记录的 Xn/GSA/CKE/MS 全部归属该 op，
+  （main.cc:221），   寄存器状态不跨 op 泄漏——op 桶内记录的 Variable/Address/Event/CcuBuffer 全部归属该 op，
   无"读写归属"歧义；channel 按翻译期实际引用收集（`Has/GetChannelInfo` 封装，见 3.1），
   天然归属当前 op。
 - **报告器**：`RunChecker` 末尾（单算子结果汇总表之后，main.cc:594-654 附近）统一生成。
@@ -235,7 +235,7 @@ struct OpInfo {
 - 实现优化项（非阻塞）：`opInstrIds` 用 `set<uint32_t>` 每桶每 die 最多 32K 元素，
   op 数 × die 数大时可改区间合并（interval merge）存储、报告时求总长度。
 
-### 3.3 寄存器 Xn / GSA / CKE
+### 3.3 寄存器 Variable / Address / Event
 
 **通用原则：**
 1. **按 id 集合去重，不按指令累加（评审明确）**——统计口径是"该算子调用完成后，
@@ -253,11 +253,11 @@ struct OpInfo {
      聚合为计数摘要（如 "ClearX [a,b]: k ids never written"），禁止逐 id 打印；
      ② ClearX 尾部还会 `ProcessSetMask → SetCKE`，其触碰的 ckeId 按"触碰即统计"
      口径正常入 ckeIds。**现阶段只做统计、不做监测**，此项列为二期可选。
-2. **写入时记账，禁止终态快照**——A6 `ClearX`、CKE wait 清位（`ClearWaitMask`）、`ClearCKE`
+2. **写入时记账，禁止终态快照**——A6 `ClearX`、Event wait 清位（`ClearWaitMask`）、`ClearCKE`
    会抹掉终态，快照法漏统计"用过后清除"的资源。写入时记账 + set 去重同时满足
    "不漏"与"不重"。
-3. **A6 一律先地址→id 再统计**——A6 指令操作数为寄存器地址（CKE/PFE/CHANNEL/JETTY/MISSION/
-   LOOP/MS 分段，recorder .cc:259-269）。**段归类在调用方完成**：翻译代码先经
+3. **A6 一律先地址→id 再统计**——A6 指令操作数为寄存器地址（Event/PFE/CHANNEL/JETTY/MISSION/
+   LOOP/CcuBuffer 分段，recorder .cc:259-269）。**段归类在调用方完成**：翻译代码先经
    `GetXnAndTypeIdByAddr / GetXnIdByAddr` 转换并按 `CcuComponerntType` 分流后才调用
    SetXn/SetCKE（已核实：a6_v3.cc:2312-2317 按 type 分支调用），因此 `SetXn` 钩子
    天然只收到 XN 段 id，钩子内无需再做归类。
@@ -271,24 +271,24 @@ struct OpInfo {
 
 | 资源 | 挂点 | 记录内容 |
 |---|---|---|
-| Xn | `SetXn`（recorder .cc:84） | `xnIds.insert(id)`，另记 `xnMaxId` 峰值；A6 段归类已在调用方完成，钩子收到的即 XN 段 id（见通用原则 3） |
-| GSA（仅 A5） | `SetGSA`（.cc:90） | `gsaIds.insert(id)`；A6 报告输出 `NA`（勿输出 0，避免误读为"未使用"） |
-| CKE | `SetCKE`（.cc:96） | `ckeIds.insert(ckeId)`，**以 ckeId 为粒度，不带 mask/bit 信息** |
+| Variable | `SetXn`（recorder .cc:84） | `xnIds.insert(id)`，另记 `xnMaxId` 峰值；A6 段归类已在调用方完成，钩子收到的即 Variable 段 id（见通用原则 3） |
+| Address（仅 A5） | `SetGSA`（.cc:90） | `gsaIds.insert(id)`；A6 报告输出 `NA`（勿输出 0，避免误读为"未使用"） |
+| Event | `SetCKE`（.cc:96） | `ckeIds.insert(ckeId)`，**以 ckeId 为粒度，不带 mask/bit 信息** |
 
-### 3.4 MS（方案供评审）
+### 3.4 CcuBuffer（方案供评审）
 
-现状：recorder 无 MS 登记表，msId 不经 Set* 钩子。经代码核查，
-**`GenSliceFromMs(msId, len, slice)`（`ccu_task_common_v3.cc:1071`）是 A5/A6 全部 MS
+现状：recorder 无 CcuBuffer 登记表，msId 不经 Set* 钩子。经代码核查，
+**`GenSliceFromMs(msId, len, slice)`（`ccu_task_common_v3.cc:1071`）是 A5/A6 全部 CcuBuffer
 使用点的唯一汇聚函数**：普通搬运/归约指令与 loop 展开指令（约 30+ 处调用，
 a5_v3.cc:834-1866、a6 同构）都在 `UpdateMSId` 偏移后以最终 msId 调用它；
-A6 地址形式的 MS 也已先经 `GetMSIdByAddr`（recorder .cc:279）转成 id。
+A6 地址形式的 CcuBuffer 也已先经 `GetMSIdByAddr`（recorder .cc:279）转成 id。
 因此只需解决"该函数缺少 (dev,die) 上下文"一个问题。三个候选方案：
 
 | 方案 | 做法 | 改动量 | 优缺点 |
 |---|---|---|---|
-| **A. 上下文注入（推荐）** | 复用 2 节的"当前算子上下文"门控：`BeginOp` 后，指令翻译入口（`TransformInstrQue`/`ProcessCcuNode`，已知当前 dev/die，`curCcuTask->GetDeviceId()/GetDieId()`）把 `(opKey, dev, die)` 写入 collector 当前上下文（普通成员即可，CCU 展开为单线程串行）；`GenSliceFromMs` 内部读上下文并 `RecordMs(...)` | 2 处入口 + 1 处函数体，**调用点零改动** | 覆盖所有 MS 使用路径（含 loop 合并/展开）；与采集门控共用同一上下文机制；依赖"翻译期串行"假设（已核实：ccu_graph_generator_v3 无线程，多线程仅在内存冲突检查阶段），需在代码注释中固化 |
+| **A. 上下文注入（推荐）** | 复用 2 节的"当前算子上下文"门控：`BeginOp` 后，指令翻译入口（`TransformInstrQue`/`ProcessCcuNode`，已知当前 dev/die，`curCcuTask->GetDeviceId()/GetDieId()`）把 `(opKey, dev, die)` 写入 collector 当前上下文（普通成员即可，CCU 展开为单线程串行）；`GenSliceFromMs` 内部读上下文并 `RecordMs(...)` | 2 处入口 + 1 处函数体，**调用点零改动** | 覆盖所有 CcuBuffer 使用路径（含 loop 合并/展开）；与采集门控共用同一上下文机制；依赖"翻译期串行"假设（已核实：ccu_graph_generator_v3 无线程，多线程仅在内存冲突检查阶段），需在代码注释中固化 |
 | B. 显式传参 | `GenSliceFromMs` 增加 `(deviceId, dieId)` 参数，全部调用点传参 | 1 函数签名 + 30+ 调用点机械修改 | 无隐式状态、最健壮；改动面大，A5/A6 两文件都要动 |
-| C. 图节点后遍历 | 成图后遍历 TransMem/Reduce/Batch 节点的 MS 切片（`BufferType::MS`，`offset = msId*4096` 反推 msId；loop 合并节点另有 `msIds` 集合），按节点 `TaskPosition.deviceId` + die 聚合 | 独立遍历代码 | 不侵入翻译层；但需覆盖所有节点类型，且依赖图形态（合并/并行化改写后），存在漏统风险 |
+| C. 图节点后遍历 | 成图后遍历 TransMem/Reduce/Batch 节点的 CcuBuffer 切片（`BufferType::MS`，`offset = msId*4096` 反推 msId；loop 合并节点另有 `msIds` 集合），按节点 `TaskPosition.deviceId` + die 聚合 | 独立遍历代码 | 不侵入翻译层；但需覆盖所有节点类型，且依赖图形态（合并/并行化改写后），存在漏统风险 |
 
 **建议选 A**（兜底可 A+C 交叉校验）。遗留确认项：A6 `GetMSIdByAddr` 的
 4 CCUA bank × interleave 8 编址（recorder .cc:266-277）转换出的 msId 是 die 内全局编号
@@ -349,7 +349,7 @@ A6 地址形式的 MS 也已先经 `GetMSIdByAddr`（recorder .cc:279）转成 i
 
 - 时机：`RunChecker` 末尾，全部算子成图/检查完毕后一次性生成。
 - 位置：复用 `DumpV3Manager` 输出目录，单文件 `ccu_resource_stats.csv`——
-  **按算子分节**（每算子调用一节：`#` 节头两行 + 14 列数据行），满足"每次算子调用单独统计"
+  **按算子分节**（每算子调用一节：`#` 节头两行 + 13 列数据行），满足"每次算子调用单独统计"
   （hccl_test 批次调用逐次成节、复合用例多算子按节区分）。
 - **不生成 run 级/device 总量聚合报告**（V4 决策：聚合数据对分析算子资源占用无意义）。
 - 同时输出一条 summary 日志（风格对齐 `[CHECKER_RUN_SUMMARY]`）。
@@ -387,26 +387,25 @@ CheckOneOp 内在 CheckerParam 就绪后经 `Collector::SetCurrentOpInfo` 入桶
 | reduceType | reduce 类型；仅 ALLREDUCE/REDUCE/REDUCE_SCATTER/REDUCE_SCATTER_V 输出，其余 `NA` | `HcclReduceOpToString(reduceType)` |
 | rankSize | 通信域 rank 数 | `CheckerParam.rankSize` |
 
-**节内数据列**（14 列）：
+**节内数据列**（13 列）：
 
 | # | 列名 | 说明 | 来源 |
 |---|---|---|---|
 | 1 | superPodId | 超节点 Id | DB 拓扑映射（4.3） |
 | 2 | serverId | Server Id | DB 拓扑映射 |
-| 3 | boardId | Board Id（POD 形态为 board 序号；server 形态恒为 0） | DB 拓扑映射 |
-| 4 | phyDevId | 物理设备 Id（= checker deviceId，全局唯一） | 采集容器 key |
-| 5 | dieId | die Id（定位 CCU） | 采集容器 key |
-| 6 | channelNum | 该算子调用实际引用的 channel 个数（引用口径，去重） | 3.1 |
-| 7 | instructionNum | 该算子调用使用的指令数（SQE 区间并集） | 3.2 |
-| 8 | loopTemplateNum | Σ n（loop 模板个数） | 3.5 |
-| 9 | loopNum | Σ (n + (n-o)*m)（静态展开实例数） | 3.5 |
-| 10 | xnNum | 去重后 Xn 寄存器个数 | 3.3 |
-| 11 | gsaNum | 去重后 GSA 个数；A6 输出 `NA` | 3.3 |
-| 12 | ckeNum | 去重后 ckeId 个数（不含 mask） | 3.3 |
-| 13 | msNum | 去重后 MS 个数 | 3.4 |
-| 14 | missionNum | 去重后 mission 个数 | 3.6 |
+| 3 | phyDevId | 物理设备 Id（= checker deviceId，全局唯一） | 采集容器 key |
+| 4 | dieId | die Id（定位 CCU） | 采集容器 key |
+| 5 | channelNum | 该算子调用实际引用的 channel 个数（引用口径，去重） | 3.1 |
+| 6 | instructionNum | 该算子调用使用的指令数（SQE 区间并集） | 3.2 |
+| 7 | loopTemplateNum | Σ n（loop 模板个数） | 3.5 |
+| 8 | loopNum | Σ (n + (n-o)*m)（静态展开实例数） | 3.5 |
+| 9 | xnNum | 去重后 Variable 寄存器个数 | 3.3 |
+| 10 | gsaNum | 去重后 Address 个数；A6 输出 `NA` | 3.3 |
+| 11 | ckeNum | 去重后 ckeId 个数（不含 mask） | 3.3 |
+| 12 | msNum | 去重后 CcuBuffer 个数 | 3.4 |
+| 13 | missionNum | 去重后 mission 个数 | 3.6 |
 
-- 节排序：按 (opIter, commName, commHash)；节内行按 (superPodId, serverId, boardId, phyDevId, dieId)。
+- 节排序：按 (opIter, commName, commHash)；节内行按 (superPodId, serverId, phyDevId, dieId)。
 - 行覆盖：每节只输出该 op 实际涉及的 (dev,die)。单 rank 无 task 被跳过的 op（main.cc:228）不出节。
 - dfx 中保留但暂不进 CSV 的扩展数据：`xnMaxId`（峰值水位）、`loopGroupNum`、
   `instrResidentNum`、channel 差分口径集合（newChannelIds）——如后续分析需要可加列，无需改采集层。
@@ -446,7 +445,7 @@ CheckOneOp 内在 CheckerParam 就绪后经 `Collector::SetCurrentOpInfo` 入桶
 2. **大图路径不采集**，通过"BeginOp 上下文门控"实现零采集零开销，双 checker 同开
    也无重复计数；大图 window 内多算子共享状态、TaskPosition 归属等难题全部消解。
 3. 寄存器写入有集中入口（SetXn/SetGSA/SetCKE）；A6 地址→id 转换 checker 已统一实现，
-   统计沿用即可；MS 有唯一汇聚点 `GenSliceFromMs`（3.4 方案 A 零调用点改动）。
+    统计沿用即可；CcuBuffer 有唯一汇聚点 `GenSliceFromMs`（3.4 方案 A 零调用点改动）。
 4. loop 公式与代码实现一致（a6_v3.cc:1703），挂点在翻译层，不受合并/并行化改写影响；
    key 幂等记账作为防御机制保证计数与展开次数无关。
 5. 拓扑标签经 DB 直读可达；dfx 采集 + 结束出报告有现成范式（dag_graphviz_dump）。
@@ -461,7 +460,7 @@ CheckOneOp 内在 CheckerParam 就绪后经 `Collector::SetCurrentOpInfo` 入桶
 |---|---|---|---|
 | 1 | 拓扑解析工具库（src/cmd / src/runtime_state）checker 未链接；且 `TopoMetaConfig` 仅存 yaml 文件名/`"ranktable"` 标记，checker 进程运行环境下拓扑文件的绝对路径解析方式未验证 | 中 | 下沉公共库或 checker 内等价实现；实施前验证文件路径可达性；兜底输出 -1 |
 | 2 | `ccu_resource_base_addr_` 当前为 mock 硬编码（storage_manager.cc:757-763，仅 2 个 die 槽位），影响 A6 地址→id 转换；dieId≥2 时 `GetXnAndTypeIdByAddr/GetMSIdByAddr` 直接报错，A6 多 die 统计会失败而非降级 | 中 | 统计复用 checker 既有转换路径（与检查逻辑同口径，不引入新误差）；转换失败时记 UNKNOWN 桶 + WARN 不中断；base addr 正式化属存量问题，随其修复自动生效 |
-| 3 | MS 统计方案待评审拍板（3.4 A/B/C）；A6 msId 的 bank/interleave 编号口径需与硬件规格对齐 | 中 | 推荐方案 A；口径确认后在报告注明 |
+| 3 | CcuBuffer 统计方案待评审拍板（3.4 A/B/C）；A6 msId 的 bank/interleave 编号口径需与硬件规格对齐 | 中 | 推荐方案 A；口径确认后在报告注明 |
 | 4 | 纯大图 run 无统计数据（V4 采集范围决策的代价） | 中 | 统计开关打开但 `enableNewChecker=off` 时打 WARN；文档/报告头注明依赖；如后续需要大图统计，二期按 TaskPosition.operatorId 归属扩展（key 幂等记账已为其兜底防双计） |
 | 5 | instructionNum 主口径为 per-op SQE 区间并集，instrResidentNum（run 级快照）为参考值，两者语义需在使用说明中写清 | 低 | 3.2/4.2 已定义；报告头注释口径 |
 | 6 | 检查失败提前退出时是否输出部分报告 | 低 | 建议仍输出（数据为已采集部分），日志标记 partial；失败 op 桶保留并在 summary 列出 |
@@ -481,7 +480,7 @@ CheckOneOp 内在 CheckerParam 就绪后经 `Collector::SetCurrentOpInfo` 入桶
    `BeginOp` 返回 RAII guard（析构即 EndOp，覆盖 CheckOneOp 全部失败提前返回路径）+
    开关 + 开关冲突 WARN）。
 2. **M2 寄存器采集**：SetXn/SetGSA/SetCKE 钩子（无上下文短路；A6 地址→id 归类后入账）。
-3. **M3 MS 采集**：按评审选定方案（建议 3.4-A 上下文注入，与 M1 门控共用上下文）落 `RecordMs`。
+3. **M3 CcuBuffer 采集**：按评审选定方案（建议 3.4-A 上下文注入，与 M1 门控共用上下文）落 `RecordMs`。
 4. **M4 loop/mission/指令区间采集**：TransformLoopGroupInstr 处 key 幂等记账
    （含同 key 值冲突防御）、InitInstrInfo 收集 mission/per-op 指令区间。
 5. **M5 channel 采集**：新增 `HasChannelInfo/GetChannelInfo` 统一封装（内嵌 `RecordChannel`

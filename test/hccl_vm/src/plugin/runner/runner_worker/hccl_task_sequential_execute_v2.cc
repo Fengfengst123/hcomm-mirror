@@ -26,18 +26,16 @@
 #include "hccl_task_thread.h"
 #include "device_resource_manager.h"
 #include "ccu_resource_manager.h"
+#include "storage_manager.h"
 #include "operation_data/operation_data_ops.h"
 #include "runtime_state/db_sim_runner_ops.h"
+#include "runtime_state/db_sim_runner_common.h"
 #include "runtime_state/sim_models.h"
+#include "storage/table_access.h"
 
 using namespace HcclSim;
 
 namespace VirtualRunTime {
-
-namespace {
-    // CCU资源基址与proxy侧SetCcuResourceBasicInfo保持一致: die0/die1
-    const std::vector<uint64_t> CCU_RESOURCE_BASE_ADDR = {0x123123123, 0x456456456};
-} // namespace
 
 // 按DB变更签名增量刷新CCU资源：
 // 1. ccuInstr表每次微码加载插入一行、ccuChannels表每次通道配置插入一行，行数作为轻量变更签名；
@@ -125,7 +123,28 @@ HcclVmResult SequentialExecutorV2::EnsureCcuResource()
         if (ccuResMgr.HasResource(static_cast<int>(deviceId))) {
             continue;
         }
-        ccuResMgr.Init(static_cast<int>(deviceId), capacity, ccuVersion, CCU_RESOURCE_BASE_ADDR);
+        // CCU 资源基址按 (device, die) 从 device 规格解析：DB Ccu.resource_addr 优先，
+        // 未落库时回退读 config/device/*.yaml（统一入口 sim::runtime::GetCcuResourceBaseAddr）。
+        // ★ 取代原先的 const std::vector<uint64_t> CCU_RESOURCE_BASE_ADDR = {0x123123123, 0x456456456}
+        //   —— 该硬编码对所有 rank 相同、不对应任何真实内存，且靠注释"与 proxy 侧保持一致"
+        //   维持一致性（设计文档 §2.2 / P2 / P3）。
+        std::vector<uint64_t> ccuResourceBaseAddr;
+        ccuResourceBaseAddr.reserve(HcclSim::DIE_NUM);
+        bool addrResolved = true;
+        for (uint32_t dieId = 0; dieId < HcclSim::DIE_NUM; ++dieId) {
+            uint64_t baseAddr = 0;
+            if (!sim::runtime::GetCcuResourceBaseAddr(deviceId, dieId, baseAddr) || baseAddr == 0) {
+                HCCL_VM_ERROR("resolve ccu resource base addr failed: deviceId={} dieId={}", deviceId, dieId);
+                addrResolved = false;
+                break;
+            }
+            ccuResourceBaseAddr.push_back(baseAddr);
+        }
+        if (!addrResolved) {
+            // 不注入错误基址；HasResource 仍为 false，TaskCcuGraph 会返回 HOLD 等待重试
+            continue;
+        }
+        ccuResMgr.Init(static_cast<int>(deviceId), capacity, ccuVersion, ccuResourceBaseAddr);
     }
 
     // 通道映射刷新: channelId → 远端CcuInfo(远端deviceId, dieId)，按源设备分组
@@ -177,6 +196,74 @@ HcclVmResult SequentialExecutorV2::EnsureCcuResource()
         "CCU resources refreshed: version={}, devices={}, channels={}, instrRes={}",
         RunnerCcuVersionToString(ccuVersion), deviceIds.size(), channels.size(), instrRes.size());
     return HcclVmResult::HCCL_SIM_SUCCESS;
+}
+
+/**
+ * @brief dump 开关（HCCLVM_ENABLE_DUMP_DATA）使能时，任一任务成功后按 opDetailId 反查算子明细与
+ *        内存信息，登记（只记 buffer 地址/大小，不读内容）到 StorageManager 按 op 聚合暂存；
+ *        未使能时廉价 no-op。
+ * @param task 刚执行成功的任务行（提供 opDetailId 定位算子）
+ * 副作用：使能时查询 runner 库并向 StorageManager 登记；查询失败仅告警不影响主流程。
+ * 注意：聚合键使用通信域级 commHash（按 detail.commId 反查 Communicator 得到，跨 rank 一致）；
+ *       detail.commId 是每 rank 各自的 Communicator 行 id，不能直接作聚合键。
+ *       buffer 内容不在此处读取：proxy 懒插入任务，"任务数到齐"不可作为完成判定，故改为
+ *       全部设备同步就绪（宿主 aclrtSynchronizeStream 返回，proxy 置 synchronize_strategy=1）
+ *       后由 FlushReadyOpDumps 统一读出，保证终态数据。
+ */
+void SequentialExecutorV2::DumpTaskInputOutput(const sim::operation::OpTaskTab& task)
+{
+    const char* enableDumpData = std::getenv("HCCLVM_ENABLE_DUMP_DATA");
+    if (enableDumpData == nullptr || std::string(enableDumpData).empty() || std::string(enableDumpData) == "0") {
+        return;
+    }
+    sim::operation::OpDetailTab detail{};
+    if (sim::operation::QueryOpDetailById(task.opDetailId, detail) != 0) {
+        HCCL_VM_WARN("QueryOpDetailById failed, opDetailId={}, skip input/output dump", task.opDetailId);
+        return;
+    }
+    sim::operation::OpMemInfoTab memInfo{};
+    if (sim::operation::QueryOpMemInfoByOpDetailId(task.opDetailId, memInfo) != 0) {
+        HCCL_VM_WARN("QueryOpMemInfoByOpDetailId failed, opDetailId={}, skip input/output dump", task.opDetailId);
+        return;
+    }
+    // commId 是每 rank 各自的 Communicator 行 id，需反查通信域级 commHash 作为跨 rank 聚合键。
+    auto comm = sim::runtime::Db::GetById<sim::runtime::Communicator>(detail.commId);
+    if (!comm.ok()) {
+        HCCL_VM_WARN("query Communicator failed, commId={}, skip input/output dump", detail.commId);
+        return;
+    }
+    HcclSim::StorageManager::GetInstance().CollectOpRankDump(comm->comm_hash, detail, memInfo);
+}
+
+/**
+ * @brief 存在未落盘 dump 组时，轮询"全部设备同步就绪"信号；就绪后由 StorageManager 把所有 pending
+ *        组读出写出 all_rank_input_output.txt（详见头文件注释）。
+ */
+void SequentialExecutorV2::FlushReadyOpDumps()
+{
+    auto& storage = HcclSim::StorageManager::GetInstance();
+    if (!storage.HasPendingOpDumps()) {
+        return;
+    }
+    auto readyStatusResult = sim::runtime::Db::Count<sim::runtime::DeviceStatus>(
+        HcclSim::Storage::Eq(&sim::runtime::DeviceStatus::synchronize_strategy, uint64_t{1}));
+    if (!readyStatusResult.ok() || !readyStatusResult.value.has_value()) {
+        HCCL_VM_WARN("query DeviceStatus ready count failed, skip op dump flush");
+        return;
+    }
+    if (*readyStatusResult.value == 0) {
+        return; // 尚无设备就绪，等待下一轮
+    }
+    auto onlineDevicesResult = sim::runtime::Db::Count<sim::runtime::Device>(
+        HcclSim::Storage::Eq(&sim::runtime::Device::status, uint64_t{1}));
+    if (!onlineDevicesResult.ok() || !onlineDevicesResult.value.has_value()) {
+        HCCL_VM_WARN("query online Device count failed, skip op dump flush");
+        return;
+    }
+    if (*onlineDevicesResult.value != *readyStatusResult.value) {
+        return; // 未全部就绪，下一轮 Execute 再判
+    }
+    storage.FlushPendingOpDumps();
 }
 
 HcclVmResult SequentialExecutorV2::Execute()
@@ -231,8 +318,12 @@ HcclVmResult SequentialExecutorV2::Execute()
         }
         if (ret == HcclVmResult::HCCL_SIM_SUCCESS) {
             HCCL_VM_INFO("Task Finished: id={}, pid={}", task.id, task.pid);
+            DumpTaskInputOutput(task);
         }
     }
+
+    // 每轮末尾轮询"全部设备同步就绪"信号，就绪后统一落盘本周期登记的 op dump（读终态 buffer）。
+    FlushReadyOpDumps();
 
     return HcclVmResult::HCCL_SIM_SUCCESS;
 }

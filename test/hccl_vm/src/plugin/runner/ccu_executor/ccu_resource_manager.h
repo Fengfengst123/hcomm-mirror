@@ -17,6 +17,7 @@
 #define HCCL_SIM_CCU_RESOURCE_MANAGER_H
 
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -25,6 +26,7 @@
 
 #include "ccu_resource_v1.h"
 #include "ccu_resource_v2.h"
+#include "device_spec/ccu_address_space.h"
 
 constexpr uint16_t U16_INVALID = UINT16_MAX;
 constexpr uint32_t U32_INVALID = UINT32_MAX;
@@ -87,14 +89,18 @@ public:
     bool TransMSToMem(int rankId, int dieId, uint16_t msId, void* buf, uint16_t length);
     bool TransMemToMS(int rankId, int dieId, uint16_t msId, void* buf, uint16_t length);
 
+    // 地址↔id 反查：addr 属于 (rankId, dieId) 的 CCU 资源空间；基址/区域偏移/MS 几何
+    // 全部来自 device 规格（CcuAddressSpace），不再有本地常量表（设计文档 §4.5.4）。
+    // ★ 解码的是"对端地址"时，rankId/dieId 必须传对端 (rmtRankId, rmtDieId)——真实基址
+    //   per-rank per-die 唯一，用本端基址解对端地址会错（修 P3 last-writer-wins）。
     // 通过MS的地址找到MS的Id
-    bool GetMSIdByAddr(uint32_t dieId, uint64_t addr, uint16_t& msId);
+    bool GetMSIdByAddr(int rankId, uint32_t dieId, uint64_t addr, uint16_t& msId);
     // 通过XnId所在的地址值来找到XnId以及寄存器的类型
-    bool GetXnAndTypeIdByAddr(uint32_t dieId, uint64_t xnAddr, CcuComponerntType& type, uint16_t& xnId);
+    bool GetXnAndTypeIdByAddr(int rankId, uint32_t dieId, uint64_t xnAddr, CcuComponerntType& type, uint16_t& xnId);
     // 通过XnId所在的地址值来找到XnId
-    bool GetXnIdByAddr(uint32_t dieId, CcuComponerntType type, uint64_t xnAddr, uint16_t& xnId);
+    bool GetXnIdByAddr(int rankId, uint32_t dieId, CcuComponerntType type, uint64_t xnAddr, uint16_t& xnId);
     // 通过XnId所在的地址值来找到XnId
-    bool GetAddrByXnId(uint32_t dieId, CcuComponerntType type, uint16_t xnId, uint64_t& xnAddr);
+    bool GetAddrByXnId(int rankId, uint32_t dieId, CcuComponerntType type, uint16_t xnId, uint64_t& xnAddr);
 
     uint64_t GetSqeArgValue(int rankId, int dieId, uint16_t argId) const;
     uint16_t GetInstrCnt(int rankId, int dieId) const;
@@ -117,11 +123,19 @@ private:
     CcuResourceManager() = default;
     ~CcuResourceManager() = default;
 
+    // (rankId, dieId) 的 CCU 资源基址（越界/未初始化返回 0）。基址由 Init 从 device 规格解析写入。
+    uint64_t BaseAddr(int rankId, uint32_t dieId) const;
+    // rankId 对应 device 规格的地址空间计算器（懒加载 + 缓存；未命中返回 nullptr）。
+    const sim::devspec::CcuAddressSpace* AddrSpace(int rankId);
+
 private:
     bool enableDump_{false};
     CcuResData ccuResData_{}; // ccu资源数据
     std::mutex ccuExecutorMutex;
-    std::vector<uint64_t> ccuResourceBaseAddr_{};
+    // ★ per-(rankId, dieId) 基址表（取代原 last-writer-wins 的单一 vector，设计文档 §4.5.4 P3）。
+    std::map<int, std::vector<uint64_t>> ccuResourceBaseAddr_{};
+    // rankId → 该 device 规格的 CCU 地址空间计算器（进程级常驻，只读，可缓存）。
+    std::map<int, std::unique_ptr<sim::devspec::CcuAddressSpace>> addrSpaces_{};
 };
 
 #endif // HCCL_SIM_CCU_RESOURCE_MANAGER_H

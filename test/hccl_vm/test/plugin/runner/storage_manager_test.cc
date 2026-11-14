@@ -14,6 +14,7 @@
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
+#include <sstream>
 
 #include "store_binary_data_operator.h"
 #define private public
@@ -568,4 +569,147 @@ TEST_F(StorageManagerTest, DumpAllRankInputOutput_EnabledEnvZero)
     setenv("HCCLVM_ENABLE_DUMP_DATA", "0", 1);
     std::vector<std::map<uint32_t, sim::operation::CompositeOpDetail>> emptyData;
     EXPECT_NO_THROW(StorageManager::GetInstance().DumpAllRankInputOutput(emptyData));
+}
+
+namespace {
+// 构造带 opType BLOB 的算子明细行；commId 用唯一值隔离单例中残留的 pending 聚合状态。
+sim::operation::OpDetailTab
+MakeOpDetail(uint32_t id, uint64_t commId, uint32_t opIter, uint32_t rankId, uint32_t rankSize, uint32_t opType)
+{
+    ::OpDetails opDetails{};
+    opDetails.opType = static_cast<uint16_t>(opType);
+    sim::operation::OpDetailTab detail{};
+    detail.id = id;
+    detail.commId = commId;
+    detail.opIter = opIter;
+    detail.rankId = rankId;
+    detail.rankSize = rankSize;
+    detail.opDetail.resize(sizeof(::OpDetails));
+    std::memcpy(detail.opDetail.data(), &opDetails, sizeof(::OpDetails));
+    return detail;
+}
+
+// 读取整个文本文件内容；文件不存在或不可读时返回空串（测试断言用）。
+std::string ReadFileContent(const std::string& path)
+{
+    std::ifstream ifs(path);
+    std::stringstream ss;
+    ss << ifs.rdbuf();
+    return ss.str();
+}
+} // namespace
+
+TEST_F(StorageManagerTest, CollectOpRankDump_DisabledEnv_NoFile)
+{
+    unsetenv("HCCLVM_ENABLE_DUMP_DATA");
+    auto tmpDir = CreateTempDir();
+    ASSERT_FALSE(tmpDir.empty());
+    std::filesystem::create_directories(tmpDir + "/plugin");
+    auto origDir = std::filesystem::current_path();
+    std::filesystem::current_path(tmpDir);
+
+    auto& mgr = StorageManager::GetInstance();
+    mgr.CollectOpRankDump(9002, MakeOpDetail(1, 1, 0, 0, 1, HCCL_CMD_ALLREDUCE), sim::operation::OpMemInfoTab{});
+    mgr.FlushPendingOpDumps(); // 未使能时 flush 同样 no-op
+    EXPECT_FALSE(std::filesystem::exists(tmpDir + "/all_rank_input_output.txt"));
+
+    std::filesystem::current_path(origDir);
+    std::filesystem::remove_all(tmpDir);
+}
+
+TEST_F(StorageManagerTest, CollectOpRankDump_RegisterOnly_NoFileUntilFlush)
+{
+    setenv("HCCLVM_ENABLE_DUMP_DATA", "1", 1);
+    auto tmpDir = CreateTempDir();
+    ASSERT_FALSE(tmpDir.empty());
+    std::filesystem::create_directories(tmpDir + "/plugin");
+    auto origDir = std::filesystem::current_path();
+    std::filesystem::current_path(tmpDir);
+
+    // 登记只记录 buffer 地址，任何时刻都不直接写文件（写文件只发生在全部设备就绪后的 flush）
+    auto& mgr = StorageManager::GetInstance();
+    sim::operation::OpMemInfoTab memInfo{};
+    mgr.CollectOpRankDump(9003, MakeOpDetail(1, 1, 0, 0, 2, HCCL_CMD_ALLREDUCE), memInfo);
+    EXPECT_FALSE(std::filesystem::exists(tmpDir + "/all_rank_input_output.txt"));
+
+    // flush 按已登记内容写出（2 rank 组仅登记 rank0，模拟部分 rank 先就绪的场景）
+    mgr.FlushPendingOpDumps();
+    const auto dumpPath = tmpDir + "/all_rank_input_output.txt";
+    ASSERT_TRUE(std::filesystem::exists(dumpPath));
+    EXPECT_NE(ReadFileContent(dumpPath).find("=== Op 0 (opType="), std::string::npos);
+    mgr.FlushPendingOpDumps(); // 清理本用例 pending，避免泄漏到后续用例的 flush
+
+    std::filesystem::current_path(origDir);
+    std::filesystem::remove_all(tmpDir);
+}
+
+TEST_F(StorageManagerTest, FlushPendingOpDumps_WritesFileOnce)
+{
+    setenv("HCCLVM_ENABLE_DUMP_DATA", "1", 1);
+    auto tmpDir = CreateTempDir();
+    ASSERT_FALSE(tmpDir.empty());
+    std::filesystem::create_directories(tmpDir + "/plugin");
+    auto origDir = std::filesystem::current_path();
+    std::filesystem::current_path(tmpDir);
+
+    constexpr uint64_t commHash = 9001;
+    auto& mgr = StorageManager::GetInstance();
+    sim::operation::OpMemInfoTab memInfo{};
+    // 同一 commHash 下不同 rank（detail.commId 各不相同，模拟真实库中每 rank 各自的 Communicator 行 id）
+    mgr.CollectOpRankDump(commHash, MakeOpDetail(1, 1, 0, 0, 2, HCCL_CMD_ALLREDUCE), memInfo);
+    mgr.CollectOpRankDump(commHash, MakeOpDetail(2, 4, 0, 1, 2, HCCL_CMD_ALLREDUCE), memInfo);
+    EXPECT_FALSE(std::filesystem::exists(tmpDir + "/all_rank_input_output.txt"));
+
+    mgr.FlushPendingOpDumps();
+    const auto dumpPath = tmpDir + "/all_rank_input_output.txt";
+    ASSERT_TRUE(std::filesystem::exists(dumpPath));
+    const std::string content = ReadFileContent(dumpPath);
+    EXPECT_NE(content.find("=== Op 0 (opType="), std::string::npos);
+    EXPECT_NE(content.find("Rank 0 Input:"), std::string::npos);
+    EXPECT_NE(content.find("Rank 1 Output:"), std::string::npos);
+
+    // 幂等：重复 flush 与同 op 迟到的登记都不重复落盘
+    mgr.CollectOpRankDump(commHash, MakeOpDetail(2, 4, 0, 1, 2, HCCL_CMD_ALLREDUCE), memInfo);
+    mgr.FlushPendingOpDumps();
+    EXPECT_EQ(ReadFileContent(dumpPath), content);
+
+    std::filesystem::current_path(origDir);
+    std::filesystem::remove_all(tmpDir);
+}
+
+// 验证 dump 文件的会话截断语义：预置历史运行残留段后，首次 flush 必须截断重写清掉残留，
+// 同一会话内第二次 flush 追加新 op 段且不影响已写内容。
+TEST_F(StorageManagerTest, FlushPendingOpDumps_FirstFlushTruncatesStaleFile)
+{
+    setenv("HCCLVM_ENABLE_DUMP_DATA", "1", 1);
+    auto tmpDir = CreateTempDir();
+    ASSERT_FALSE(tmpDir.empty());
+    std::filesystem::create_directories(tmpDir + "/plugin");
+    auto origDir = std::filesystem::current_path();
+    std::filesystem::current_path(tmpDir);
+
+    // 预置历史运行 append 残留的旧 section，首次 flush 必须截断清掉
+    const auto dumpPath = tmpDir + "/all_rank_input_output.txt";
+    {
+        std::ofstream stale(dumpPath);
+        stale << "=== Op 0 (opType=2) ===\nstale-section-from-previous-run\n";
+    }
+
+    auto& mgr = StorageManager::GetInstance();
+    sim::operation::OpMemInfoTab memInfo{};
+    mgr.CollectOpRankDump(9101, MakeOpDetail(1, 1, 0, 0, 1, HCCL_CMD_ALLREDUCE), memInfo);
+    mgr.FlushPendingOpDumps();
+    const std::string first = ReadFileContent(dumpPath);
+    EXPECT_NE(first.find("=== Op 0 (opType="), std::string::npos);
+    EXPECT_EQ(first.find("stale-section-from-previous-run"), std::string::npos);
+
+    // 同一会话内第二次 flush 追加（新 op 段保留，首次段不被截断）
+    mgr.CollectOpRankDump(9102, MakeOpDetail(2, 2, 1, 0, 1, HCCL_CMD_ALLREDUCE), memInfo);
+    mgr.FlushPendingOpDumps();
+    const std::string second = ReadFileContent(dumpPath);
+    EXPECT_NE(second.find("=== Op 0 (opType="), std::string::npos);
+    EXPECT_NE(second.find("=== Op 1 (opType="), std::string::npos);
+
+    std::filesystem::current_path(origDir);
+    std::filesystem::remove_all(tmpDir);
 }

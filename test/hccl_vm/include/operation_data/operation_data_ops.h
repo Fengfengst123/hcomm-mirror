@@ -38,59 +38,61 @@
 #define Derived Ddl::Derived
 #define OnDelete Ddl::OnDelete
 
-#define HCCL_VM_OPDATA_DATABASE(Table)                                                                                            \
-    /* (deviceId,id)：设备维度最新算子定位（deviceId 过滤 + id 倒序取首条），                                \
-       服务 QueryLatestOpDetailStreamByDeviceId；id 命中索引列，streamId 回表 */                                       \
-    /* Version(2)：新增列 ubMultiChannelNum（proxy 侧 HCCL_UB_MULTI_CHANNEL_NUM，每 channel 的 jetty 数），           \
-       轻量性能仿真插件据此折算端口带宽利用率；仅加列不改索引 */                                       \
-    Table(                                                                                                                        \
-        sim::operation::OpDetailTab,                                                                                              \
-        (Version(2), Scope::Static, Field(id, AutoIncrement), Field(pid), Field(deviceId), Field(rankId),                         \
-         Field(commId), Field(opIter), Field(syncIter), Field(streamId), Field(root), Field(opExpansionMode),                     \
-         Field(devType), Field(rankSize), Field(srcRank), Field(dstRank), Field(opDetail), Field(opExtInfo),                      \
-         Field(algorithmName, Text), Field(ubMultiChannelNum), PrimaryKey(id), Index(pid, syncIter),                              \
-         Index(commId, deviceId, id), Index(syncIter), Index(deviceId, id)))                                                      \
-        Table(                                                                                                                    \
-            sim::operation::OpMemInfoTab,                                                                                         \
-            (Version(1), Scope::Static, Field(id, AutoIncrement), Field(opDetailId), Field(inputAddr),                            \
-             Field(inputSize), Field(outputAddr), Field(outputSize), Field(cclAddr), Field(cclSize), PrimaryKey(id),              \
-             Index(opDetailId), ForeignKey(opDetailId, sim::operation::OpDetailTab::id, OnDelete::Cascade)))                      \
-            Table(                                                                                                                \
-                sim::operation::SyncRecordTab,                                                                                    \
-                (Version(1), Scope::Static, Field(id, AutoIncrement), Field(pid), Field(rankId), Field(rankSize),                 \
-                 Field(syncIter), Field(streamId), Field(status), PrimaryKey(id), Index(status)))                                 \
-                Table(                                                                                                            \
-                    sim::operation::CcuChannelTab,                                                                                \
-                    (Version(1), Scope::Static, Field(id, AutoIncrement), Field(channelId), Field(srcDieId),                      \
-                     Field(dstDieId), Field(srcDeviceId), Field(dstDeviceId), Field(srcRankId), Field(dstRankId),                 \
-                     Field(leid, Blob), Field(reid, Blob), Field(protocol), Field(jettyNum), Field(jettyId, Blob),                \
-                     PrimaryKey(id), Index(channelId)))                                                                           \
-                    Table(                                                                                                        \
-                        sim::operation::JettyMapTab,                                                                              \
-                        (Version(1), Scope::Static, Field(id, AutoIncrement), Field(opDetailId), Field(srcDieId),                 \
-                         Field(dstDieId), Field(srcRankId), Field(dstRankId), Field(leid, Blob), Field(reid, Blob),               \
-                         Field(protocol), PrimaryKey(id), Index(opDetailId), Index(srcDieId, dstDieId)))                          \
-                        Table(                                                                                                    \
-                            sim::operation::CcuInstrResTab,                                                                       \
-                            (Version(1), Scope::Static, Field(id, AutoIncrement), Field(deviceId), Field(dieId),                  \
-                             Field(instrCount), Field(instrSpace, Blob), PrimaryKey(id), Index(deviceId, dieId)))                 \
-                            Table(                                                                                                \
-                                sim::operation::CcuInstrTab,                                                                      \
-                                (Version(1), Scope::Static, Field(id, AutoIncrement), Field(ccuInstrResId),                       \
-                                 Field(startId), Field(instrInfoSize), PrimaryKey(id),                                            \
-                                 ForeignKey(                                                                                      \
-                                     ccuInstrResId, sim::operation::CcuInstrResTab::id,                                           \
-                                     OnDelete::Cascade))) /* (streamId,isDone)：任务完成度聚合（streamId 过滤 + isDone \
-                                                             匹配计数）的 覆盖索引；独立 isDone                      \
-                                                             索引仍服务只按完成态过滤的查询 */                     \
-        Table(                                                                                                                    \
-            sim::operation::OpTaskTab,                                                                                            \
-            (Version(1), Scope::DynamicPid, Field(id, AutoIncrement), Field(pid), Field(opDetailId), Field(deviceId),             \
-             Field(streamId), Field(taskType), Field(isDone), Field(optaskMeta), PrimaryKey(id), Index(opDetailId),               \
-             Index(streamId, isDone), Index(isDone)))                                                                             \
-            Table(                                                                                                                \
-                sim::operation::HalfRTTTab, (Version(1), Scope::Static, Field(id, AutoIncrement), Field(deviceId),                \
-                                             Field(dieId), Field(wishCntXnIdBegin), Field(wishCntXnIdEnd),                        \
+#define HCCL_VM_OPDATA_DATABASE(Table)                                                                                                             \
+    /* (deviceId,id)：设备维度最新算子定位（deviceId 过滤 + id 倒序取首条），                                                 \
+       服务 QueryLatestOpDetailStreamByDeviceId；id 命中索引列，streamId 回表 */                                                        \
+    /* Version(2)：新增列 ubMultiChannelNum（proxy 侧 HCCL_UB_MULTI_CHANNEL_NUM，每 channel 的 jetty 数），                            \
+       轻量性能仿真插件据此折算端口带宽利用率；仅加列不改索引 */                                                        \
+    /* Version(3)：新增列 endSeq（算子完成/出栈序号，算子桩退栈时打标；嵌套调用场景 opIter 为入栈序，            \
+       checker 依 endSeq 按完成序成图）；仅加列不改索引。数据库每次 hccl-vm start 随 data 目录重建，无存量迁移 */ \
+    Table(                                                                                                                                         \
+        sim::operation::OpDetailTab,                                                                                                               \
+        (Version(3), Scope::Static, Field(id, AutoIncrement), Field(pid), Field(deviceId), Field(rankId),                                          \
+         Field(commId), Field(opIter), Field(syncIter), Field(streamId), Field(root), Field(opExpansionMode),                                      \
+         Field(devType), Field(rankSize), Field(srcRank), Field(dstRank), Field(opDetail), Field(opExtInfo),                                       \
+         Field(algorithmName, Text), Field(ubMultiChannelNum), Field(endSeq), PrimaryKey(id), Index(pid, syncIter),                                \
+         Index(commId, deviceId, id), Index(syncIter), Index(deviceId, id)))                                                                       \
+        Table(                                                                                                                                     \
+            sim::operation::OpMemInfoTab,                                                                                                          \
+            (Version(1), Scope::Static, Field(id, AutoIncrement), Field(opDetailId), Field(inputAddr),                                             \
+             Field(inputSize), Field(outputAddr), Field(outputSize), Field(cclAddr), Field(cclSize), PrimaryKey(id),                               \
+             Index(opDetailId), ForeignKey(opDetailId, sim::operation::OpDetailTab::id, OnDelete::Cascade)))                                       \
+            Table(                                                                                                                                 \
+                sim::operation::SyncRecordTab,                                                                                                     \
+                (Version(1), Scope::Static, Field(id, AutoIncrement), Field(pid), Field(rankId), Field(rankSize),                                  \
+                 Field(syncIter), Field(streamId), Field(status), PrimaryKey(id), Index(status)))                                                  \
+                Table(                                                                                                                             \
+                    sim::operation::CcuChannelTab,                                                                                                 \
+                    (Version(1), Scope::Static, Field(id, AutoIncrement), Field(channelId), Field(srcDieId),                                       \
+                     Field(dstDieId), Field(srcDeviceId), Field(dstDeviceId), Field(srcRankId), Field(dstRankId),                                  \
+                     Field(leid, Blob), Field(reid, Blob), Field(protocol), Field(jettyNum), Field(jettyId, Blob),                                 \
+                     PrimaryKey(id), Index(channelId)))                                                                                            \
+                    Table(                                                                                                                         \
+                        sim::operation::JettyMapTab,                                                                                               \
+                        (Version(1), Scope::Static, Field(id, AutoIncrement), Field(opDetailId), Field(srcDieId),                                  \
+                         Field(dstDieId), Field(srcRankId), Field(dstRankId), Field(leid, Blob), Field(reid, Blob),                                \
+                         Field(protocol), PrimaryKey(id), Index(opDetailId), Index(srcDieId, dstDieId)))                                           \
+                        Table(                                                                                                                     \
+                            sim::operation::CcuInstrResTab,                                                                                        \
+                            (Version(1), Scope::Static, Field(id, AutoIncrement), Field(deviceId), Field(dieId),                                   \
+                             Field(instrCount), Field(instrSpace, Blob), PrimaryKey(id), Index(deviceId, dieId)))                                  \
+                            Table(                                                                                                                 \
+                                sim::operation::CcuInstrTab,                                                                                       \
+                                (Version(1), Scope::Static, Field(id, AutoIncrement), Field(ccuInstrResId),                                        \
+                                 Field(startId), Field(instrInfoSize), PrimaryKey(id),                                                             \
+                                 ForeignKey(                                                                                                       \
+                                     ccuInstrResId, sim::operation::CcuInstrResTab::id,                                                            \
+                                     OnDelete::Cascade))) /* (streamId,isDone)：任务完成度聚合（streamId 过滤 + isDone                  \
+                                                             匹配计数）的 覆盖索引；独立 isDone                                       \
+                                                             索引仍服务只按完成态过滤的查询 */                                      \
+        Table(                                                                                                                                     \
+            sim::operation::OpTaskTab,                                                                                                             \
+            (Version(1), Scope::DynamicPid, Field(id, AutoIncrement), Field(pid), Field(opDetailId), Field(deviceId),                              \
+             Field(streamId), Field(taskType), Field(isDone), Field(optaskMeta), PrimaryKey(id), Index(opDetailId),                                \
+             Index(streamId, isDone), Index(isDone)))                                                                                              \
+            Table(                                                                                                                                 \
+                sim::operation::HalfRTTTab, (Version(1), Scope::Static, Field(id, AutoIncrement), Field(deviceId),                                 \
+                                             Field(dieId), Field(wishCntXnIdBegin), Field(wishCntXnIdEnd),                                         \
                                              Field(totalCntId), PrimaryKey(id), Index(deviceId, dieId)))
 
 // 发布 OperationData 逻辑库目录：展开全部 9 个表条目并派生只读 manifest
@@ -133,22 +135,66 @@ struct RecordCodecHooks<sim::operation::CcuChannelTab> : DefaultRecordCodecHooks
 // 第二套 Db 薄门面；业务优先使用这些领域接口，简单或特殊场景仍可直接使用
 // HcclSim::Storage 原子接口。后端、会话、lease、SQL 均不可见。
 namespace sim::operation {
-// 进程当前 OpDetail 序号（实现文件定义；device 进程经头文件声明读写，替代
-// device 侧本地的 extern 声明——命名空间随本域收敛为 sim::operation）。
-extern uint32_t g_currOpDetailId;
-// 进程当前 OpMem 序号（实现文件定义；aclrt model 重放路径经头文件声明读写）。
-extern uint32_t g_currOpMemId;
+/**
+ * @brief 取当前 deviceKey 对应的“进程当前 OpDetail 序号”槽位（可读可写引用）。
+ *
+ * 作用域与 AICPU device 子进程管理器一致，是“每 deviceKey（= rank 身份）一份”：
+ * 单进程多线程 examples 中每个 rank 线程独立计数；多进程 hccl_test 中同 rank 的
+ * 主线程与 hcomm 工作线程共享同一槽位（回退到历史“进程级全局”语义，避免工作线程
+ * 读到自己的 0 而丢失算子身份）。未登记 deviceKey 的线程在全进程仅有一个非零槽位
+ * 时复用该槽位。
+ *
+ * @return 槽位引用（注册表生命周期内稳定，可跨线程共享；初始值为 0）。
+ */
+uint32_t& CurrOpDetailId();
 
 /**
- * @brief 当前进程正在处理的算子迭代（= 最近一次 InsertOpDetail 分配的 opIter）。
+ * @brief 当前 rank 正在处理的算子迭代（= 最近一次 InsertOpDetail 分配的 opIter）。
  *
  * 用途：CCU 交换表（CcuSyncResTab）需要跨 rank 一致的 op 身份来隔离不同算子的交换值。
- *       opIter 由 InsertOpDetail 按 (commName, commHash) 自增，两侧进程按同一算子序列
- *       推进时天然对齐，可直接当 op 身份使用。
+ *       opIter 由 InsertOpDetail 按 (commName, commHash, deviceKey) 槽位自增——同一 rank
+ *       内多通信域各有序列、异 rank 互不发号；两侧进程按同一算子序列推进时天然对齐。
+ *       多进程形态（hccl_test）每 rank 独立 deviceKey，等效原进程级语义、行为不变。
  *
- * @return 最新分配的 opIter；尚无算子插入时为 0。
+ * @return 本 rank 最新分配的 opIter；尚无算子插入时为 0。
  */
 uint32_t GetCurOpIter();
+
+/**
+ * @brief “当前算子”上下文快照（用于嵌套算子调用的 save/restore，即栈式进出）。
+ *
+ * 背景：CurrOpDetailId/opIter/opMem 均为“每 deviceKey 单槽、后写覆盖”，隐含
+ * “算子首尾不重叠（顺序执行）”的假设。当算子内部再入另一算子（如 alltoallv
+ * 执行期 LaunchWarmupVOperator 触发嵌套 warmup alltoallv）时，内层会覆盖这些槽位
+ * 且不还原，导致外层算子后续任务被错误归属（opDetailId 落到内层或 0），外层
+ * OpDetail 变成无任务的空壳，checker 按 opIter 加载即失败。
+ *
+ * 解决：算子桩入口 SaveOpContext() 压栈快照、出口 RestoreOpContext() 弹栈还原，
+ * 使嵌套调用满足 LIFO 语义，外层算子上下文在内层返回后被完整恢复。
+ */
+struct OpContextSnapshot {
+    uint32_t opDetailId{0};
+    uint32_t opIter{0};
+    uint32_t opMemId{0};
+};
+
+/// 压栈：捕获当前 deviceKey 的算子上下文（opDetailId/opIter/opMem）。
+OpContextSnapshot SaveOpContext();
+/// 弹栈：把当前 deviceKey 的算子上下文还原为快照值（嵌套返回后恢复外层身份）。
+void RestoreOpContext(const OpContextSnapshot& snapshot);
+
+/**
+ * @brief 为指定 OpDetail 分配“完成(出栈)序号”并落库（endSeq 列）。
+ *
+ * 语义：进程内单调递增（从 1 起），在算子桩退栈（算子真正结束）时打标。opIter 是
+ * 入栈/开始序，嵌套场景下与完成序相反（外层 opIter 更小但更晚完成）；checker 依
+ * endSeq 聚簇排序 data_.operators，保证“先出栈的任务图在前、后出栈的在后”，与真实
+ * 执行顺序一致。opDetailId==0 视为无效，直接返回 0（不打标）。
+ *
+ * @param opDetailId 目标 OpDetail 主键。
+ * @return 0 成功（含 opDetailId==0 的跳过）；非 0 失败（诊断已打出）。
+ */
+int AssignOpEndSeq(uint32_t opDetailId);
 
 // ==== Stream Sync 迭代分区（纯进程内状态，不落库） ====
 // 迁移前语义：以 streamId 为键维护各流独立的 sync 迭代计数。

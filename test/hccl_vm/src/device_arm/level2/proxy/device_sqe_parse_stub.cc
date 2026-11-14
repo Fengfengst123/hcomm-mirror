@@ -39,16 +39,16 @@ constexpr int SHIFT_BIT32 = 32;
 constexpr uint64_t SDMA_LENGTH_WRAP_4GB = 1ULL << 32;
 static uint32_t g_currSqeGroupId = 0;
 
-// 任务身份解析: g_currOpDetailId → OpDetailTab(commId/rankId/deviceId), 公共入口与 UT 共用
+// 任务身份解析: CurrOpDetailId() → OpDetailTab(commId/rankId/deviceId), 公共入口与 UT 共用
 bool ResolveCurrentTaskIdentity(TaskIdentity& identity)
 {
-    if (sim::operation::g_currOpDetailId == 0) {
+    if (sim::operation::CurrOpDetailId() == 0) {
         // 未经过算子入口劫持（如 HcclBarrier）时 opDetailId 为 0：
         // 按当前设备查 Communicator 表取首行作默认身份，供 SQE 任务标注
         auto members = sim::runtime::Db::GetByPred<sim::runtime::Communicator>(
             HcclSim::Storage::Eq(&sim::runtime::Communicator::device_id, GetCurDeviceKey()));
         if (!members.ok() || !members.value.has_value() || members->empty()) {
-            HCCL_VM_ERROR("cannot resolve task identity for opDetailId={}", sim::operation::g_currOpDetailId);
+            HCCL_VM_ERROR("cannot resolve task identity for opDetailId={}", sim::operation::CurrOpDetailId());
             return false;
         }
         identity.commId = members->front().id;
@@ -62,18 +62,18 @@ bool ResolveCurrentTaskIdentity(TaskIdentity& identity)
     // 同一 kernel 的 SQE 解析共用同一 opDetailId, 单条目缓存避免每条 SQE 重复查库
     static thread_local uint32_t s_cachedOpDetailId{0};
     static thread_local TaskIdentity s_cachedIdentity{};
-    if (sim::operation::g_currOpDetailId == s_cachedOpDetailId) {
+    if (sim::operation::CurrOpDetailId() == s_cachedOpDetailId) {
         identity = s_cachedIdentity;
         return true;
     }
     if (sim::operation::QueryOpDetailIdentity(
-            sim::operation::g_currOpDetailId, identity.commId, identity.rankId, identity.deviceId)
+            sim::operation::CurrOpDetailId(), identity.commId, identity.rankId, identity.deviceId)
             != 0
         || identity.commId == 0) {
-        HCCL_VM_ERROR("cannot resolve task identity for opDetailId={}", sim::operation::g_currOpDetailId);
+        HCCL_VM_ERROR("cannot resolve task identity for opDetailId={}", sim::operation::CurrOpDetailId());
         return false;
     }
-    s_cachedOpDetailId = sim::operation::g_currOpDetailId;
+    s_cachedOpDetailId = sim::operation::CurrOpDetailId();
     s_cachedIdentity = identity;
     return true;
 }

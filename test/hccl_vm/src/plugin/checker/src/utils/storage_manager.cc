@@ -27,6 +27,7 @@
 
 #include "binary_data_operator.h"
 #include "runtime_state/db_sim_communicator.h"
+#include "ccu_base_resolver.h"
 #include "error_codes.h"
 #include "sim_log.h"
 
@@ -754,12 +755,15 @@ bool StorageManager::GetMainStreamId(DeviceId deviceId, TaskGraphGeneratorV3::St
     return true;
 }
 
-void StorageManager::InitCcuInfo(DevType& devType, std::vector<uint64_t>& resourceBaseAddr)
+void StorageManager::InitCcuInfo(
+    DevType& devType, std::map<TaskGraphGeneratorV3::DeviceId, std::vector<uint64_t>>& resourceBaseAddr)
 {
     devType = devType_;
-    resourceBaseAddr.clear();
-    resourceBaseAddr.push_back(0x123123123);
-    resourceBaseAddr.push_back(0x456456456);
+    // ★ 取代原先的 0x123123123/0x456456456 假基址（设计文档 §2.2 #8 / §4.5.5）：
+    //   per-(deviceId, dieId) 真实基址由 ResolveAllCcuBaseAddrs 从 DB/device 规格解析。
+    //   该解析放在独立 TU（ccu_base_resolver.cc）以规避 task_meta_defs.h 与
+    //   sim_common_defs.h 的 include-guard 互斥（详见 ccu_base_resolver.h 注释）。
+    resourceBaseAddr = ResolveAllCcuBaseAddrs();
 }
 
 HcclResult StorageManager::LoadHcclVmInstrData(std::vector<sim::operation::CcuInstrResTab>& instrRes)

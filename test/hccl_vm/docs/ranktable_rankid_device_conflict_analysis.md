@@ -62,15 +62,14 @@ ZHF-DEBUG: peer deviceId is 1, devPhyId is 0   ← rank 2: ranktable 说在 devi
 | `physical_id` (phyDevId) | Device 的物理编号，固定不变 | 由集群拓扑文件定义 |
 | `logic_id` (logicDevId) | Device 的逻辑编号，可映射 | 本 simulator 中 `logic_id = physical_id`（数值相等） |
 | `device_id` (DB key) | Device 表主键 | 内部数据库自增分配 |
-| `local_id` | ranktable.json 中记录的 device 逻辑编号 | server 形态：`srcDevPhyId`；POD 形态：`boardIdx * devNumPerBoard + srcDevPhyId` |
+| `local_id` | ranktable.json 中记录的 device 逻辑编号 | Server 形态：设为 `srcDevPhyId`；POD 形态：设为 `boardIdx * devNumPerBoard + srcDevPhyId`（POD 全局 id） |
 | `serverKey` | Server 的唯一标识 | `GetServerKeyById(superPodId, serverId, boardId)` |
 
 > **POD 形态（4 层拓扑：board → pod → 超节点 → cluster）下的口径**：
 > 上表中的 "server" 指**叶子节点（host 节点）**。server 形态下叶子节点即 server；
 > POD 形态下叶子节点为 **board**（DB 中每 board 一行 `Server`，`board_id` 区分），因此：
-> - `physical_id` / ranktable 的 `device_id` 为 **board 内物理 id**（如 `[0,7]`，
->   而不是改造前 POD 内的 `[0,63]`），与真机一致；`local_id` 为 **POD 全局 id**
->   （`= board_id × 每board卡数 + board 内物理 id`，与 POD 级 topo.json 的 local_id 值域一致）；
+> - `physical_id` / ranktable 的 `device_id` 为 **board 内物理 id**（如 `[0,7]`），与真机一致；
+> - ranktable 的 `local_id` 为 **POD 全局 id**（= `board_id × 每board卡数 + board内物理id`，如 1dpod64 值域 `[0,63]`），与 POD 级 topo.json 的 `local_id` 口径一致；
 > - 本文所有公式中的 **D（`serverMeta.size()`）= 该 board 编入通信域的卡数**（如 8），
 >   故应用侧 `aclrtSetDevice(rank % 8)`、`aclrtGetDeviceCount()` 返回 8；
 > - `serverKey` 需按 `(superPodId, serverId, boardId)` 三元组定位。
@@ -555,19 +554,22 @@ ranktable.json 在此路径中**完全决定**该 rankId 对应哪个 device 的
 ### BuildRankEntry 中 device_id 与 local_id 的设置
 
 ```cpp
-// topo_ascend_cluster_parser.cc:413-416
-json AscendClusterTopoParser::BuildRankEntry(const Server &server, int srcDevPhyId, uint32_t boardIdx, ...)
+// Server 形态: topo_ascend_cluster_parser.cc:413-416
+json AscendClusterTopoParser::BuildRankEntry(const Server &server, int srcDevPhyId, ...)
 {
     json rankEntry;
-    const int devNumPerBoard = server.GetDeviceCount();
-    rankEntry["device_id"] = srcDevPhyId;                                          // ← board 内物理 ID
-    rankEntry["local_id"] = static_cast<int>(boardIdx) * devNumPerBoard + srcDevPhyId;  // ← POD 全局 ID
+    rankEntry["device_id"] = srcDevPhyId;    // ← board 内物理 id
+    rankEntry["local_id"] = srcDevPhyId;     // ← Server 形态下与 device_id 相同
     rankEntry["rank_id"] = rankId;
     ...
 }
+
+// POD 形态: topo_ascend_cluster_parser.cc:952-953
+rankEntry["device_id"] = srcDevPhyId;                                        // ← board 内物理 id
+rankEntry["local_id"] = static_cast<int>(boardIdx) * devNumPerBoard + srcDevPhyId; // ← POD 全局 id
 ```
 
-由于本 simulator 中 `logic_id = physical_id`，`device_id` 和 `logic_id` 数值相同。server 形态下 `local_id = device_id`（均为 server 内物理 ID）；POD 形态下 `local_id = board_id × 每 board 卡数 + board 内物理 ID`（POD 全局 ID）。`BuildRankEntry` 本身没有问题。真正的问题在于传入 `BuildRankEntry` 的 `phyDevId` 取自 `serverMeta[logicDevId]`，而 `logicDevId` 的计算方式（450/451 行）决定了哪个物理设备被分配给该 rank。
+Server 形态下 `logic_id = physical_id`，`device_id` 和 `local_id` 数值相同。POD 形态下 `device_id` 仍为 board 内物理 id，但 `local_id` 是 POD 全局 id（`board_id × 每board卡数 + board内物理id`）。`BuildRankEntry` 本身没有问题，真正的问题在于传入的 `phyDevId` 取自 `serverMeta[logicDevId]`，而 `logicDevId` 的计算方式（450/451 行）决定了哪个物理设备被分配给该 rank。
 
 ---
 
@@ -687,15 +689,19 @@ infoList[idx].chipId = info.phyId; // todo: 单server, logic id与rank id相等�
 
 该处确实有潜在隐患（TODO 注释），但 `CheckRankGraphAddrs` **完全不读取 chipId 字段**，EID 比对仅按 IP/EID 原值匹配（`localEidSet.count(interface->GetAddr().GetEid())`）。因此 chipId 的赋值问题与本次报错无关。
 
-### BuildRankEntry 中 device_id 与 local_id 同时设为 phyDevId
+### BuildRankEntry 中 device_id 与 local_id 的设置
 
 ```cpp
-// topo_ascend_cluster_parser.cc:414-415
+// Server 形态: topo_ascend_cluster_parser.cc:414-415
 rankEntry["device_id"] = srcDevPhyId;
 rankEntry["local_id"] = srcDevPhyId;
+
+// POD 形态: topo_ascend_cluster_parser.cc:952-953
+rankEntry["device_id"] = srcDevPhyId;
+rankEntry["local_id"] = static_cast<int>(boardIdx) * devNumPerBoard + srcDevPhyId;
 ```
 
-由于本 simulator 中 `logic_id = physical_id`（数值相等），二者设为相同值没有问题。问题在于传入的 `srcDevPhyId`（即 `phyDevId`）取自 `serverMeta[logicDevId]`，而 `logicDevId` 的计算方式（450/451 行）才是根因。
+Server 形态下 `logic_id = physical_id`（数值相等），`device_id` 和 `local_id` 设为相同值没有问题。POD 形态下 `local_id` 为 POD 全局 id，与 `device_id`（board 内物理 id）不同，但这不影响本次问题的根因。真正的问题在于传入的 `srcDevPhyId`（即 `phyDevId`）取自 `serverMeta[logicDevId]`，而 `logicDevId` 的计算方式（450/451 行）才是根因。
 
 ### hcomm 是否按 server 过滤 peer
 

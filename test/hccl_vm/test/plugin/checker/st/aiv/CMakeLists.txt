@@ -27,6 +27,7 @@ target_sources(test_aiv_st PRIVATE
     ${CHECKER_SRC}/framework/task_graph_generator_v3/aiv_graph_generator_v3/aiv_snapshot_json_loader_v3.cc
     ${CHECKER_SRC}/framework/task_graph_generator_v3/aiv_graph_generator_v3/aiv_task_transform_v3.cc
     ${CHECKER_SRC}/utils/storage_manager.cc
+    ${CHECKER_SRC}/utils/ccu_base_resolver.cc
     ${CHECKER_SRC}/utils/binary_data_operator.cc
     ${CHECKER_SRC}/framework/task_graph_generator_v3/ccu_graph_generator_v3/ccu_all_rank_param_recorder_v3.cc
     ${CHECKER_SRC}/dfx/ccu_resource_stats_dfx.cc

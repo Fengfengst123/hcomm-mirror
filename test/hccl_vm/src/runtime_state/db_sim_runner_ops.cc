@@ -33,6 +33,11 @@ thread_local uint64_t g_last_streamId;
 thread_local uint64_t g_last_taskId;
 thread_local int g_tsId = 0;
 
+// GetCurrDeviceId 的本线程记忆（ctxId → device_id）；0 表示未记忆。
+// 与 g_runner 同生命周期（thread_local），失效点见 InvalidateCurrDeviceTls。
+thread_local uint64_t g_currDeviceCtxId = 0;
+thread_local uint64_t g_currDeviceId = 0;
+
 // ==== 薄兼容接口分区：sim::runtime::Db 全部为头文件内联模板（一对一转发） ====
 
 // ==== Device / Server / Topology 分区 ====
@@ -143,6 +148,8 @@ bool SetCurrCtxTls(uint64_t ctx)
     try {
         auto& currRunnerId = g_runner.id;
         g_runner.current_ctx_id = ctx;
+        // 当前 ctx 变更 → 本线程记忆的 device_id 立即失效（含 ctx 置 0 的 reset 路径）
+        InvalidateCurrDeviceTls();
         auto updated = Db::Update<Runner>(
             HcclSim::Storage::Eq(&Runner::id, currRunnerId), HcclSim::Storage::Set(&Runner::current_ctx_id, ctx));
         return updated.ok();
@@ -154,10 +161,20 @@ bool SetCurrCtxTls(uint64_t ctx)
 
 uint64_t GetCurrDeviceId()
 {
-    auto currCtx = Db::GetById<Context>(g_runner.current_ctx_id);
+    // 记忆化：`Context.device_id` 建行后不再被改写（全仓仅 ref_cnt 自增与整行删除），
+    // 且 `g_runner` 是 thread_local，故同一 ctxId 的解析结果可在本线程常驻，
+    // 省去每次 2 条 SQL（Context + Device）。CCU 热点路径（proxy L1 的容量/布局/基址
+    // 解析每次都先取当前设备）据此从"每次调用读库"降为 0（设计文档 §4.5.6）。
+    // 失效点：SetCurrCtxTls（切换/清零当前 ctx）、InvalidateCurrDeviceTls（Context 行被销毁）。
+    const uint64_t ctxId = g_runner.current_ctx_id;
+    if (ctxId != 0 && ctxId == g_currDeviceCtxId) {
+        return g_currDeviceId;
+    }
+
+    auto currCtx = Db::GetById<Context>(ctxId);
     if (!currCtx.ok()) {
         // not find
-        HCCL_VM_ERROR("can not get CurrContext: {:d}", g_runner.current_ctx_id);
+        HCCL_VM_ERROR("can not get CurrContext: {:d}", ctxId);
         return 0;
     }
 
@@ -168,7 +185,15 @@ uint64_t GetCurrDeviceId()
         return 0;
     }
 
+    g_currDeviceCtxId = ctxId;
+    g_currDeviceId = currCtx.value->device_id;
     return currCtx.value->device_id;
+}
+
+void InvalidateCurrDeviceTls()
+{
+    g_currDeviceCtxId = 0;
+    g_currDeviceId = 0;
 }
 
 uint64_t GetCurrDeviceKey()

@@ -200,7 +200,7 @@ MemSlice = { rankId, type, offset, len }
   | INPUT | 算子输入BUFFER |
   | OUTPUT | 算子输出BUFFER |
   | CCL | CCL_BUFFER |
-  | MS_CCU | CCU MS |
+   | MS_CCU | CCU CcuBuffer |
 - `offset` 和 `len` 共同确定内存访问区间
   - `offset` 表示本次访问在该内存片段上的起始地址
   - `len` 表示本次内存访问的长度

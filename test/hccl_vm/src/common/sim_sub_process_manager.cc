@@ -12,21 +12,27 @@
 #include <sys/wait.h>
 #include <sys/utsname.h>
 #include <fcntl.h>
+#include <poll.h>
+#include <spawn.h>
 #include <unistd.h>
 
 #include <cerrno>
+#include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <limits>
+#include <memory>
 #include <sstream>
 #include <thread>
+#include <unordered_map>
 #include "sim_log.h"
 #include "sim_common_defs.h"
 #include "sim_common_api.h"
 #include "sim_pipe_io.h"
+#include "store_sim_resource_root.h"
 
 namespace sim {
 
@@ -256,9 +262,84 @@ namespace {
     }
 } // namespace
 
-static sim::SubProcessManager g_aiCpuProcMgr;
+// 每 deviceKey 一份 AICPU device 子进程管理器：
+// - 单进程多线程 examples：8 个 rank 线程用 8 个不同 deviceKey → 8 个 device 进程（隔离目标）；
+// - 多进程 hccl_test：同 rank 的主线程与 hcomm 工作线程同 deviceKey → 共享 1 个 device 进程
+//   （与历史“进程级单例”行为一致，避免工作线程重复拉起 QEMU 子进程）。
+namespace {
+    struct ProcMgrRegistry {
+        std::mutex lock;
+        std::map<uint64_t, std::shared_ptr<SubProcessManager>> mgrs;
+    };
 
-SubProcessManager& GetAicpuProcMgr() { return g_aiCpuProcMgr; }
+    /**
+     * @brief 取全局管理器注册表（函数内静态，避免静态初始化顺序问题）。
+     * @return 注册表单例引用。
+     */
+    ProcMgrRegistry& GetProcMgrRegistry()
+    {
+        static ProcMgrRegistry registry;
+        return registry;
+    }
+
+    // 本线程最近一次显式指定（aclrtSetDevice / TryLaunchAicpuDevProcForRank）的 deviceKey。
+    // 仅用于把“无参调用”解析到正确槽位；不参与跨线程共享判断。
+    thread_local uint64_t g_threadDeviceKey = 0;
+} // namespace
+
+/**
+ * @brief 取指定 deviceKey 的 AICPU device 子进程管理器（按 key 共享，线程安全）。
+ * @param deviceKey Device 表主键；0 表示沿用本线程最近一次登记的值。
+ * @return 管理器引用；未登记且无法唯一判定归属时返回 key=0 的空管理槽。
+ */
+SubProcessManager& GetAicpuProcMgr(uint64_t deviceKey)
+{
+    if (deviceKey != 0) {
+        g_threadDeviceKey = deviceKey;
+    }
+    uint64_t key = (deviceKey != 0) ? deviceKey : g_threadDeviceKey;
+
+    ProcMgrRegistry& registry = GetProcMgrRegistry();
+    std::lock_guard<std::mutex> lock(registry.lock);
+
+    if (key == 0) {
+        // 未登记过 deviceKey 的线程（如部分 hcomm 内部线程）回退：全进程只有一个存活
+        // 管理器时直接复用，保持历史“进程级单例”语义；多设备并存时无法判定归属，
+        // 落到 key=0 的空槽（IsAlive()=false，调用方按未启用 AICPU 模式处理）。
+        SubProcessManager* onlyAlive = nullptr;
+        size_t aliveCount = 0;
+        for (auto& item : registry.mgrs) {
+            if (item.second != nullptr && item.second->IsAlive()) {
+                onlyAlive = item.second.get();
+                ++aliveCount;
+            }
+        }
+        if (aliveCount == 1) {
+            return *onlyAlive;
+        }
+    }
+
+    auto iter = registry.mgrs.find(key);
+    if (iter == registry.mgrs.end()) {
+        iter = registry.mgrs.emplace(key, std::make_shared<SubProcessManager>()).first;
+    }
+    return *iter->second;
+}
+
+/**
+ * @brief 销毁注册表中全部 device 子进程并清空注册表（进程级收尾，幂等）。
+ */
+void DestroyAllAicpuProcMgrs()
+{
+    ProcMgrRegistry& registry = GetProcMgrRegistry();
+    std::lock_guard<std::mutex> lock(registry.lock);
+    for (auto& item : registry.mgrs) {
+        if (item.second != nullptr) {
+            item.second->DestroyProcess();
+        }
+    }
+    registry.mgrs.clear();
+}
 
 SubProcessManager::~SubProcessManager()
 {
@@ -267,6 +348,8 @@ SubProcessManager::~SubProcessManager()
     }
 }
 
+// 创建 device 子进程：最多尝试 kMaxSpawnAttempts 次，任一成功即返回。
+// 单进程多 rank 并发 spawn 时 QEMU fork/exec 偶发"子进程未就绪"，重试一次可避免整 rank 早退。
 int SubProcessManager::CreateProcess(const SubProcessConfig& config)
 {
     std::lock_guard<std::mutex> lock(m_forkLock);
@@ -281,7 +364,143 @@ int SubProcessManager::CreateProcess(const SubProcessConfig& config)
         return 0;
     }
 
-    sim::PipePair h2dPipe{}, d2hPipe{};
+    // 单进程多 rank 场景下 QEMU fork/exec 偶发"子进程未就绪"（peer 提前关管）；
+    // 首次失败时自动重试一次，避免整 rank 早退导致 AllReduce 等不齐而 join 死锁。
+    const int kMaxSpawnAttempts = 2;
+    for (int attempt = 1; attempt <= kMaxSpawnAttempts; ++attempt) {
+        if (attempt > 1) {
+            HCCL_VM_WARN("{}: retry subprocess spawn (attempt {}/{})", __func__, attempt, kMaxSpawnAttempts);
+        }
+        int rc = SpawnOnce(config);
+        if (rc == 0) {
+            return 0;
+        }
+    }
+    return -1;
+}
+
+// 拼接 device 进程 exec 参数：config.args 尾部追加 h2d/d2h 管道 fd 参数并以 nullptr 结尾。
+std::vector<char*> SubProcessManager::BuildSpawnArgv(const SubProcessConfig& config)
+{
+    std::vector<char*> argv;
+    for (const auto& arg : config.args) {
+        argv.push_back(const_cast<char*>(arg.c_str()));
+    }
+
+    // fd 是编译期常量，直接用字面量：std::to_string 的局部 string 在函数返回后
+    // 销毁，指针会悬垂（posix_spawnp 异步消费 argv，悬垂即垃圾/崩溃）。
+    static_assert(kH2dReadFd == 200 && kD2hWriteFd == 201, "argv fd literals must match kH2dReadFd/kD2hWriteFd");
+    argv.push_back(const_cast<char*>("200"));
+    argv.push_back(const_cast<char*>("201"));
+    argv.push_back(nullptr);
+    return argv;
+}
+
+// 构造 device 子进程 exec 用环境块（environ 快照 + config.envVars 覆盖）。
+// 在父进程侧（posix_spawnp 之前）构建：父进程内存分配安全，规避多线程进程
+// fork 后在子进程 malloc/setenv 的死锁风险。返回空串表示构建失败。
+// 仅覆盖 config.envVars 里显式声明的键（不设新值时沿用父进程环境，等效原 fork 语义）。
+static std::string BuildSpawnEnv(const SubProcessConfig& config)
+{
+    std::unordered_map<std::string, std::string> env;
+    for (char* const* ep = environ; *ep != nullptr; ++ep) {
+        const std::string entry(*ep);
+        const size_t eq = entry.find('=');
+        if (eq != std::string::npos) {
+            env[entry.substr(0, eq)] = entry.substr(eq + 1);
+        }
+    }
+    for (const auto& kv : config.envVars) {
+        env[kv.first] = kv.second;
+    }
+    std::string out;
+    out.reserve(4096);
+    for (const auto& kv : env) {
+        out += kv.first;
+        out += '=';
+        out += kv.second;
+        out += '\0';
+    }
+    return out;
+}
+
+// 一次性关闭两对管道全部端（SpawnOnce 失败路径用）。
+// @param h2d/d2h 两对管道（fd 会被置 -1）。
+static void CloseAllPipes(sim::PipePair& h2d, sim::PipePair& d2h)
+{
+    sim::PipeClose(h2d.readFd);
+    sim::PipeClose(h2d.writeFd);
+    sim::PipeClose(d2h.readFd);
+    sim::PipeClose(d2h.writeFd);
+}
+
+// 打开 stderr 捕获文件（spawn 前在父进程侧完成；子进程不运行我方代码，靠
+// file_actions 重定向）。文件名先用序号占位，spawn 拿到 pid 后由调用方 rename。
+// @param resRoot 资源根目录；@param seq 本次 spawn 序号（区分重试）。
+// @param errPath 输出路径缓冲；@return 文件 fd，打开失败返回 -1。
+static int OpenStderrCapture(const std::string& resRoot, uint32_t seq, char* errPath, size_t errPathSize)
+{
+    snprintf(
+        errPath, errPathSize, "%s/device_stderr_tmp_%d_%u.log", resRoot.c_str(), static_cast<int>(::getpid()), seq);
+    return open(errPath, O_CREAT | O_WRONLY | O_TRUNC, 0644);
+}
+
+// 把 NUL 分隔的环境块（BuildSpawnEnv 产物）转成 envp 指针数组。
+// @param envBlock 环境块；@param envp 输出指针数组（末尾补 nullptr）。
+static void EnvBlockToEnvp(std::string& envBlock, std::vector<char*>& envp)
+{
+    if (envBlock.empty()) {
+        return;
+    }
+    envp.reserve(envBlock.size() / 8 + 2);
+    for (size_t i = 0; i < envBlock.size();) {
+        envp.push_back(envBlock.data() + i);
+        i += strlen(envBlock.data() + i) + 1;
+    }
+    envp.push_back(nullptr);
+}
+
+// 登记子进程文件动作：就位 h2d 读端/d2h 写端到固定 fd（dup2 清 CLOEXEC）、
+// 关掉子进程不需要的管道端、stderr 重定向到捕获文件。
+// @param actions 已 init 的动作表；@param h2dPipe/d2hPipe 两对管道；
+// @param targetReadFd/targetWriteFd 子进程约定的固定管道 fd；
+// @param errFd stderr 捕获 fd（<0 则跳过重定向）。
+// @return 0 成功；非 0 为首个失败的错误码。
+static int SetupSpawnFileActions(
+    posix_spawn_file_actions_t* actions, const sim::PipePair& h2dPipe, const sim::PipePair& d2hPipe, int targetReadFd,
+    int targetWriteFd, int errFd)
+{
+    auto addDup2 = [actions](int from, int to) {
+        if (from == to) {
+            // dup2 同 fd 无操作且会清 CLOEXEC；file_actions 无对应动作，
+            // 父进程侧先清 CLOEXEC（spawn 后父进程随即关闭该端，无副作用）。
+            fcntl(from, F_SETFD, 0);
+            return 0;
+        }
+        return posix_spawn_file_actions_adddup2(actions, from, to);
+    };
+    int rc = 0;
+    rc |= addDup2(h2dPipe.readFd, targetReadFd);
+    rc |= addDup2(d2hPipe.writeFd, targetWriteFd);
+    rc |= posix_spawn_file_actions_addclose(actions, h2dPipe.writeFd);
+    rc |= posix_spawn_file_actions_addclose(actions, d2hPipe.readFd);
+    if (h2dPipe.readFd != targetReadFd) {
+        rc |= posix_spawn_file_actions_addclose(actions, h2dPipe.readFd);
+    }
+    if (d2hPipe.writeFd != targetWriteFd) {
+        rc |= posix_spawn_file_actions_addclose(actions, d2hPipe.writeFd);
+    }
+    if (errFd >= 0) {
+        rc |= posix_spawn_file_actions_adddup2(actions, errFd, STDERR_FILENO);
+        rc |= posix_spawn_file_actions_addclose(actions, errFd);
+    }
+    return rc;
+}
+
+// 创建 h2d/d2h 两对管道（SpawnOnce 前置步骤）。
+// @param h2dPipe/d2hPipe 输出管道对；@return 0 成功；非 0 失败（已自行部分清理）。
+static int CreatePipePairs(sim::PipePair& h2dPipe, sim::PipePair& d2hPipe)
+{
     if (sim::PipeCreate(h2dPipe) != 0) {
         HCCL_VM_ERROR("Failed to create h2d pipe");
         return -1;
@@ -292,42 +511,79 @@ int SubProcessManager::CreateProcess(const SubProcessConfig& config)
         sim::PipeClose(h2dPipe.writeFd);
         return -1;
     }
+    return 0;
+}
 
-    pid_t pid = fork();
-    if (pid == -1) {
-        HCCL_VM_ERROR("fork() failed: {}", strerror(errno));
-        sim::PipeClose(h2dPipe.readFd);
-        sim::PipeClose(h2dPipe.writeFd);
-        sim::PipeClose(d2hPipe.readFd);
-        sim::PipeClose(d2hPipe.writeFd);
+// spawn 失败清场：关管道、关并删除 stderr 捕获文件。
+static void CleanupFailedSpawn(sim::PipePair& h2dPipe, sim::PipePair& d2hPipe, int errFd, const char* errPath)
+{
+    CloseAllPipes(h2dPipe, d2hPipe);
+    if (errFd >= 0) {
+        close(errFd);
+        unlink(errPath);
+    }
+}
+
+// spawn 成功后收尾：父进程侧关掉 stderr 捕获 fd，并把占位文件名 rename 为
+// device_stderr_<pid>.log（保持按子进程 pid 定位的调试约定）。
+static void FinalizeStderrCapture(const std::string& resRoot, int errFd, const char* errPath, pid_t childPid)
+{
+    if (errFd < 0) {
+        return;
+    }
+    close(errFd); // 父进程不需要写端
+    char finalPath[512] = {0};
+    snprintf(finalPath, sizeof(finalPath), "%s/device_stderr_%d.log", resRoot.c_str(), static_cast<int>(childPid));
+    rename(errPath, finalPath);
+}
+
+// 创建并启动一次 device 子进程：管对 + posix_spawnp + 等 READY。
+// 用 posix_spawnp 替代 fork+exec：glibc 走 clone(CLONE_VM|CLONE_VFORK)，不执行
+// pthread_atfork 子进程钩子、不做地址空间拷贝。多线程（每 rank 一线程）+ CANN
+// 第三方库（libascend_trace 注册 atfork）场景下，fork 子进程会继承"已蒸发线程"
+// 持有的锁并死锁（futex_do_wait，等不到 dup2/exec）；posix_spawnp 从根上规避。
+// 每次调用重建一对新 fd；失败路径内部已 DestroyProcess 清场（m_pid 归 -1），调用方可安全重试。
+int SubProcessManager::SpawnOnce(const SubProcessConfig& config)
+{
+    sim::PipePair h2dPipe{}, d2hPipe{};
+    if (CreatePipePairs(h2dPipe, d2hPipe) != 0) {
         return -1;
     }
 
-    // device进程执行参数拼接
-    std::vector<char*> argv;
-    for (const auto& arg : config.args) {
-        argv.push_back(const_cast<char*>(arg.c_str()));
-    }
+    // stderr 捕获文件与 exec 参数/环境块全部在父进程侧准备（posix_spawnp 无子进程用户代码）。
+    static std::atomic<uint32_t> s_stderrSeq{0};
+    const std::string& resRoot = sim::SimResourceRoot::GetInstance().GetRoot();
+    char errPath[512] = {0};
+    const int errFd
+        = OpenStderrCapture(resRoot, s_stderrSeq.fetch_add(1, std::memory_order_relaxed), errPath, sizeof(errPath));
+    std::vector<char*> argv = BuildSpawnArgv(config);
+    std::string envBlock = BuildSpawnEnv(config);
+    std::vector<char*> envp;
+    EnvBlockToEnvp(envBlock, envp);
 
-    std::string h2dReadFdStr = std::to_string(kH2dReadFd);
-    std::string d2hWriteFdStr = std::to_string(kD2hWriteFd);
-    argv.push_back(const_cast<char*>(h2dReadFdStr.c_str()));
-    argv.push_back(const_cast<char*>(d2hWriteFdStr.c_str()));
-    argv.push_back(nullptr);
-
-    if (pid == 0) {
-        // fork 后只断开继承的日志入口，避免触碰父进程日志锁；exec 前不 flush/析构。
-        hcclvm::g_logWriter = nullptr;
-        g_logger = nullptr;
-        sim::PipeChildSetup(h2dPipe, d2hPipe, kH2dReadFd, kD2hWriteFd);
-
-        for (const auto& env : config.envVars) {
-            setenv(env.first.c_str(), env.second.c_str(), 1);
+    posix_spawn_file_actions_t actions;
+    const int initRc = posix_spawn_file_actions_init(&actions);
+    const int actionRc
+        = initRc == 0 ? SetupSpawnFileActions(&actions, h2dPipe, d2hPipe, kH2dReadFd, kD2hWriteFd, errFd) : initRc;
+    if (actionRc != 0) {
+        HCCL_VM_ERROR("posix_spawn file actions setup failed: {}", strerror(actionRc));
+        if (initRc == 0) {
+            posix_spawn_file_actions_destroy(&actions);
         }
-
-        execvp(config.executable.c_str(), argv.data());
-        _exit(127);
+        CleanupFailedSpawn(h2dPipe, d2hPipe, errFd, errPath);
+        return -1;
     }
+
+    pid_t pid = -1;
+    const int spawnRc = posix_spawnp(
+        &pid, config.executable.c_str(), &actions, nullptr, argv.data(), envp.empty() ? nullptr : envp.data());
+    posix_spawn_file_actions_destroy(&actions);
+    if (spawnRc != 0) {
+        HCCL_VM_ERROR("posix_spawnp({}) failed: {}", config.executable, strerror(spawnRc));
+        CleanupFailedSpawn(h2dPipe, d2hPipe, errFd, errPath);
+        return -1;
+    }
+    FinalizeStderrCapture(resRoot, errFd, errPath, pid);
 
     m_pid = pid;
     sim::PipeClose(h2dPipe.readFd);  // 主进程不读 h2dPipe
@@ -338,7 +594,7 @@ int SubProcessManager::CreateProcess(const SubProcessConfig& config)
     HCCL_VM_INFO("Child process {} created (m_h2dWriteFd={}, m_d2hReadFd={}).", m_pid, m_h2dWriteFd, m_d2hReadFd);
 
     // 等待device进程管道准备就绪进入Ready状态
-    if (WaitForReady() != 0) {
+    if (WaitForReady(kSpawnReadyTimeoutMs) != 0) {
         HCCL_VM_ERROR("Child process {} failed to become READY, aborting.", m_pid);
         DestroyProcess();
         return -1;
@@ -347,11 +603,33 @@ int SubProcessManager::CreateProcess(const SubProcessConfig& config)
     return 0;
 }
 
-int SubProcessManager::WaitForReady()
+// 等待 device 子进程发来 READY 握手（pipe 消息 cmd==PIPE_RSP_READY）。
+// @param timeoutMs >0 时先 poll 等 d2h 可读（防子进程卡死把 host 线程永久挂住）；
+//        <=0 时退化为纯阻塞读（历史行为）。
+// @return 0 成功；非 0 表示超时/读失败/子进程退出/握手命令异常。
+int SubProcessManager::WaitForReady(int timeoutMs)
 {
     if (m_d2hReadFd < 0 || m_pid < 0) {
         HCCL_VM_ERROR("WaitForReady: child not running.");
         return -1;
+    }
+
+    // 先 poll 等待 d2h 可读：子进程卡死（而非退出）时阻塞读会挂住 host 线程；
+    // 超时返回让上层走重试/报错路径。
+    if (timeoutMs > 0) {
+        struct pollfd pfd = {m_d2hReadFd, POLLIN, 0};
+        int pollRc;
+        do {
+            pollRc = poll(&pfd, 1, timeoutMs);
+        } while (pollRc < 0 && errno == EINTR);
+        if (pollRc == 0) {
+            HCCL_VM_ERROR("WaitForReady: child pid={} not READY within {} ms.", m_pid, timeoutMs);
+            return -1;
+        }
+        if (pollRc < 0) {
+            HCCL_VM_ERROR("WaitForReady: poll failed: {}", strerror(errno));
+            return -1;
+        }
     }
 
     uint8_t rspCmd = 0;

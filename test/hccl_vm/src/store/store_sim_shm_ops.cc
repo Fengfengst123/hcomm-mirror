@@ -155,6 +155,8 @@ void* ShmOpen(const char* name, size_t* size)
         return nullptr;
     }
 
+    // device 进程与 host 进程一致，由内核默认选址；跨进程同址数值由 host 侧
+    // (deviceKey, 地址) 复合键/查询消歧，不在映射选址上做文章。
     void* addr = mmap(nullptr, statBuf.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, shmFd, 0);
     int err = errno;
     close(shmFd);

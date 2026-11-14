@@ -151,14 +151,14 @@ int HandlePipeCmdExecKernel(uint8_t* payload, uint32_t payloadLen)
         }
         // InsertOpTask 仍通过该值把 device 任务写入本次 opDetail 的任务表；
         // 它不参与任务 metadata 的身份生成。
-        sim::operation::g_currOpDetailId = kernelReq->opDetailId;
+        sim::operation::CurrOpDetailId() = kernelReq->opDetailId;
     } else {
         // 普通 kernel 不产生带通信域身份的 SQE，执行前必须清掉上一次算子的上下文。
-        sim::operation::g_currOpDetailId = 0;
+        sim::operation::CurrOpDetailId() = 0;
     }
 
     int execRet = ExecuteAicpuKernel(rankId, kernelReq, argsPtr);
-    sim::operation::g_currOpDetailId = 0;
+    sim::operation::CurrOpDetailId() = 0;
     RspExecKernelPayload donePayload{};
     donePayload.status = static_cast<int32_t>(execRet);
     DeviceSendMsg(PIPE_RSP_EXEC_KERNEL, &donePayload, sizeof(donePayload));

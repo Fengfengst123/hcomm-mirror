@@ -42,7 +42,7 @@ extern uint64_t g_cur_server_key;
 
 static void TryLaunchAicpuDevProcForRank(int32_t rankId, uint32_t deviceKey)
 {
-    auto& procMgr = sim::GetAicpuProcMgr();
+    auto& procMgr = sim::GetAicpuProcMgr(deviceKey);
     if (procMgr.IsAlive()) {
         return;
     }
@@ -759,9 +759,17 @@ static HcclResult SupplementDedicatedThreadNotify(ThreadHandle handle, uint32_t 
     return HCCL_SUCCESS;
 }
 
+/**
+ * @brief 查询 HCOMM 是否支持 HcclDedicatedThreadAcquire 专用线程获取能力。
+ *
+ * 仿真环境未实现 dedicated 保序线程（OrderLaunch 依赖该能力），固定返回 false，
+ * 调用方（如 OrderLaunch Phase1/GE 模式）据此跳过保序流程。
+ *
+ * @return bool 恒返回 false。
+ */
 bool HcommIsSupportHcclDedicatedThreadAcquire()
 {
-    HCCL_VM_INFO("{}: stub returns true", __func__);
+    HCCL_VM_INFO("{}: stub returns false", __func__);
     return false;
 }
 

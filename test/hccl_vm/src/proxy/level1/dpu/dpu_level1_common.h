@@ -100,7 +100,7 @@ namespace DpuSim {
     /** 环记录：device 推送时刻的 opDetailId + 任务元数据原样镜像。 */
     struct DpuDevTaskRingEntry {
         uint32_t state;        /**< FREE/READY（生产者写、消费者清，acquire/release 语义） */
-        uint32_t opDetailId;   /**< device 进程推送时刻的 sim::operation::g_currOpDetailId */
+        uint32_t opDetailId;   /**< device 进程推送时刻的 sim::operation::CurrOpDetailId() */
         HcclTaskMetaData meta; /**< 任务元数据镜像（落库 BLOB 与 device 直写逐字节一致） */
         uint8_t reserved[2];   /**< 填充至 200B（4 字节对齐步长，防非对齐原子访问） */
     };

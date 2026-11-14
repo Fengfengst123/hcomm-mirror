@@ -64,7 +64,9 @@ HcclResult HcclRankGraphGetLayers(HcclComm comm, uint32_t** netLayers, uint32_t*
         return result;
     }
     // 步骤3：把单例当作数据黑盒，查询当前rank拥有的网络层。
-    static std::vector<uint32_t> resultLayers;
+    // 线程级缓冲：北向接口以"返回指针、调用方持有至本线程下次调用"为契约，
+    // 单进程多线程下必须为每线程一份，避免并发查询互相覆写。
+    thread_local std::vector<uint32_t> resultLayers;
     sim::RankTableQueryStatus status = sim::RankTable::Instance().GetNetLayers(rankId, resultLayers);
     if (status != sim::RankTableQueryStatus::SUCCESS) {
         HCCL_VM_ERROR(
@@ -95,7 +97,7 @@ HcclResult HcclRankGraphGetRanksByLayer(HcclComm comm, uint32_t netLayer, uint32
         return result;
     }
     // 步骤3：向单例查询指定层中的rank列表。
-    static std::vector<uint32_t> resultRanks;
+    thread_local std::vector<uint32_t> resultRanks;
     sim::RankTableQueryStatus status = sim::RankTable::Instance().GetRanksByLayer(rankId, netLayer, resultRanks);
     if (status == sim::RankTableQueryStatus::LAYER_NOT_FOUND) {
         HCCL_VM_ERROR("{}: network layer {:d} was not found for rank {:d}", __func__, netLayer, rankId);
@@ -170,7 +172,7 @@ HcclRankGraphGetInstSizeListByLayer(HcclComm comm, uint32_t netLayer, uint32_t**
         return result;
     }
     // 步骤3：向单例查询各网络实例的大小。
-    static std::vector<uint32_t> resultSizes;
+    thread_local std::vector<uint32_t> resultSizes;
     sim::RankTableQueryStatus status = sim::RankTable::Instance().GetInstSizeListByLayer(rankId, netLayer, resultSizes);
     if (status == sim::RankTableQueryStatus::LAYER_NOT_FOUND) {
         HCCL_VM_ERROR("{}: network layer {:d} was not found for rank {:d}", __func__, netLayer, rankId);
@@ -249,7 +251,7 @@ HcclRankGraphGetTopoInstsByLayer(HcclComm comm, uint32_t netLayer, uint32_t** to
         return result;
     }
     // 步骤3：向单例查询拓扑实例ID。
-    static std::vector<uint32_t> resultInstances;
+    thread_local std::vector<uint32_t> resultInstances;
     sim::RankTableQueryStatus status
         = sim::RankTable::Instance().GetTopoInstsByLayer(rankId, netLayer, resultInstances);
     if (status == sim::RankTableQueryStatus::LAYER_NOT_FOUND || status == sim::RankTableQueryStatus::UNSUPPORTED_TYPE) {
@@ -334,7 +336,7 @@ HcclResult HcclRankGraphGetLinks(
         return result;
     }
     // 步骤3：向单例查询已经转换好的HComm链路数据。
-    static std::vector<CommLink> resultLinks;
+    thread_local std::vector<CommLink> resultLinks;
     sim::RankTableQueryStatus status
         = sim::RankTable::Instance().GetCommLinks(rankId, netLayer, srcRank, dstRank, resultLinks);
     if (status == sim::RankTableQueryStatus::LAYER_NOT_FOUND) {
@@ -411,7 +413,7 @@ HcclResult HcclRankGraphGetRanksByTopoInst(
         return result;
     }
     // 步骤3：向单例查询拓扑实例包含的rank。
-    static std::vector<uint32_t> resultRanks;
+    thread_local std::vector<uint32_t> resultRanks;
     sim::RankTableQueryStatus status
         = sim::RankTable::Instance().GetRanksByTopoInst(rankId, netLayer, topoInstId, resultRanks);
     if (status == sim::RankTableQueryStatus::LAYER_NOT_FOUND

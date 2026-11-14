@@ -21,6 +21,7 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <tuple>
 #include <string_view>
 #include <unistd.h>
 #include <utility>
@@ -29,6 +30,7 @@
 #include "sim_common_macro.h"
 #include "sim_log.h"
 #include "sim_capacity_limits.h"
+#include "runtime_state/db_sim_runner_common.h"
 #include "runtime_state/db_sim_runner_ops.h"
 #include "runtime_state/db_sim_communicator.h"
 #include "runtime_state/sim_models.h"
@@ -38,16 +40,114 @@
 
 namespace sim::operation {
 uint32_t g_syncIterCounter = 0;
-uint32_t g_currOpDetailId = 0;
-uint32_t g_currOpMemId = 0;
-// 当前进程正在处理的算子迭代（= 最近一次 InsertOpDetail 分配的 opIter；主线语义）。
-// 用途：CCU 交换表（CcuSyncResTab）需要跨 rank 一致的 op 身份来隔离不同算子的
-// 交换值——两侧进程按同一算子序列推进时天然对齐。
-std::atomic<uint32_t> g_curOpIter{0};
-// opIter 按 (commName, commHash) 独立自增（迁移前/主线语义）：进程参与多个通信域时
-// 各序列互不干扰，两侧进程在同一通信域上的算子序列天然对齐。
+namespace {
+    // 每 deviceKey 一份“进程当前 OpDetail 序号”槽位（见头文件 doc）：
+    // - examples 单进程多线程：每 rank 线程独立槽位；
+    // - hccl_test 多进程：同 rank 的主线程与工作线程共享同一槽位。
+    // std::map 节点引用稳定，跨线程插入新槽位不会使已返回的引用失效。
+    struct OpDetailIdSlots {
+        std::mutex lock;
+        std::map<uint64_t, uint32_t> slots;
+    };
+
+    /**
+     * @brief 取 OpDetail 序号槽位表（函数内静态，避免静态初始化顺序问题）。
+     * @return 槽位表单例引用。
+     */
+    OpDetailIdSlots& GetOpDetailIdSlots()
+    {
+        static OpDetailIdSlots store;
+        return store;
+    }
+} // namespace
+
+/**
+ * @brief 取当前 deviceKey 的 OpDetail 序号槽位（每 deviceKey 一份，跨线程共享）。
+ * @return 槽位引用（初始 0，注册表生命周期内稳定）。
+ */
+uint32_t& CurrOpDetailId()
+{
+    const uint64_t deviceKey = sim::runtime::g_cur_device_key;
+    if (deviceKey != 0) {
+        // 已登记 deviceKey 的线程：TLS 缓存槽位指针（std::map 节点引用稳定）
+        static thread_local uint64_t cachedKey = 0;
+        static thread_local uint32_t* cachedSlot = nullptr;
+        if (cachedSlot != nullptr && cachedKey == deviceKey) {
+            return *cachedSlot;
+        }
+        OpDetailIdSlots& store = GetOpDetailIdSlots();
+        std::lock_guard<std::mutex> lock(store.lock);
+        uint32_t& slot = store.slots[deviceKey];
+        cachedKey = deviceKey;
+        cachedSlot = &slot;
+        return slot;
+    }
+
+    // 未登记 deviceKey 的线程（部分 hcomm 内部线程）：每次现算、不做 TLS 缓存，
+    // 避免“首个非零槽位建立前”把回退结果固化成 0。全进程仅一个非零槽位时复用之，
+    // 保持历史“进程级全局”可见性；多 rank 并存时无法判定归属，落到 key=0 空槽。
+    OpDetailIdSlots& store = GetOpDetailIdSlots();
+    std::lock_guard<std::mutex> lock(store.lock);
+    uint64_t onlyNonZeroKey = 0;
+    size_t nonZeroCount = 0;
+    for (const auto& item : store.slots) {
+        if (item.first != 0) {
+            onlyNonZeroKey = item.first;
+            ++nonZeroCount;
+        }
+    }
+    if (nonZeroCount == 1) {
+        return store.slots[onlyNonZeroKey];
+    }
+    return store.slots[0];
+}
+namespace {
+    // 通用"每 deviceKey 一份"原子槽位表：同 rank 多线程共享、异 rank 隔离（与 CurrOpDetailId
+    // 语义一致）。deviceKey=0（未登记线程）落到独立空槽；std::map 节点引用稳定。
+    struct AtomicSlotStore {
+        std::mutex lock;
+        std::map<uint64_t, std::atomic<uint32_t>> slots;
+    };
+
+    /**
+     * @brief 取当前 deviceKey 的原子槽位（每 deviceKey 一份，注册表生命周期内稳定）。
+     * @param store 目标槽位表（每类状态各持一份，互不串扰）。
+     * @return 原子槽位引用（初始 0）。
+     */
+    std::atomic<uint32_t>& AtomicSlotByDeviceKey(AtomicSlotStore& store)
+    {
+        const uint64_t deviceKey = sim::runtime::g_cur_device_key;
+        std::lock_guard<std::mutex> lock(store.lock);
+        return store.slots[deviceKey];
+    }
+} // namespace
+
+// P1 槽位化：三个原本"进程级最后写入获胜"的标量改为每 deviceKey 一份。
+// - examples 单进程多 rank：各 rank 独占槽位 → opIter/identity 对齐（checker 修复点）；
+// - hccl_test 多进程：deviceKey 各自唯一，等效原进程级语义，行为不变。
+namespace {
+    AtomicSlotStore g_currOpMemIdSlots; // 最近 OpMem 序号槽位（本文件读写）
+    AtomicSlotStore g_curOpIterSlots;   // 当前 op 迭代槽位（CCU 交换表身份）
+} // namespace
+
+// opIter 按 (commName, commHash, deviceKey) 三维自增（P1 槽位化）：
+// - examples 单进程多 rank：各 rank 独占序列 → 同一 opIter 聚合满 8 rank（checker 修复点）；
+// - hccl_test 多进程：deviceKey 各自唯一，等效原 (commName,commHash) 每进程一份，语义不变。
+// 维度 (commName,commHash) 保留，保证同一 rank 内多个通信域的算子序列互不干扰。
 std::mutex g_opIterCounterMutex{};
-std::map<std::pair<std::string, uint64_t>, std::atomic<uint32_t>> g_opIterCounters{};
+std::map<std::tuple<std::string, uint64_t, uint64_t>, std::atomic<uint32_t>> g_opIterCounters{};
+
+/**
+ * @brief 当前 rank 的"最近 OpMem 序号"槽位（每 deviceKey 一份）。
+ * @return 原子槽位引用，可读写；外部头文件不再导出裸变量。
+ */
+std::atomic<uint32_t>& CurrOpMemIdRef() { return AtomicSlotByDeviceKey(g_currOpMemIdSlots); }
+
+/**
+ * @brief 当前 rank 的"当前 op 迭代"槽位（每 deviceKey 一份）。
+ * @return 原子槽位引用，可读写。
+ */
+std::atomic<uint32_t>& CurrOpIterRef() { return AtomicSlotByDeviceKey(g_curOpIterSlots); }
 
 namespace {
     using HcclSim::Storage::Compare;
@@ -88,8 +188,11 @@ namespace {
     /// 重试；SQLite 后端无此并发冲突码，迁移前语义不感知。
     constexpr int kTxConflictRetryLimit = 8;
 
-    /// 分配下一个 opIter（按 commName/commHash 独立序列；迁移前/主线语义）并记录
-    /// "当前 op"迭代（CCU 交换表 op 隔离身份）。失败时返回 false 且不改动 opIter。
+    /// 分配下一个 opIter 并记录"当前 op"迭代（CCU 交换表 op 隔离身份）。
+    /// P1 槽位化：计数器按 (commName, commHash, deviceKey) 三维隔离——
+    /// 同一 rank 内多通信域仍各有序列，异 rank 间互不发号（修复 examples 单进程
+    /// 8 线程串号）；hccl_test 多进程每 rank 独立进程，等效原进程级语义不变。
+    /// 失败时返回 false 且不改动 opIter。
     bool AssignOpIter(uint64_t commId, uint32_t& opIter)
     {
         std::string commName;
@@ -98,13 +201,14 @@ namespace {
             HCCL_VM_ERROR("Failed to resolve communicator identity before assigning opIter, commId={}", commId);
             return false;
         }
+        const uint64_t deviceKey = sim::runtime::g_cur_device_key;
         {
             std::lock_guard<std::mutex> lock(g_opIterCounterMutex);
-            auto iter = g_opIterCounters.try_emplace(std::make_pair(commName, commHash), 0u).first;
+            auto iter = g_opIterCounters.try_emplace(std::make_tuple(commName, commHash, deviceKey), 0u).first;
             opIter = iter->second.fetch_add(1, std::memory_order_relaxed);
         }
-        // 记录"当前 op"：本 op 的 CCU launch 随后会在同进程发生，交换表据此打 op 身份。
-        g_curOpIter.store(opIter, std::memory_order_relaxed);
+        // 记录"当前 op"：本 op 的 CCU launch 随后会在同 rank 发生，交换表据此打 op 身份。
+        CurrOpIterRef().store(opIter, std::memory_order_relaxed);
         return true;
     }
 } // namespace
@@ -127,7 +231,47 @@ bool NextStreamSyncIdx(uint64_t streamId, uint64_t& syncIdx)
 
 // ==== Op Detail / Memory 分区 ====
 
-uint32_t GetCurOpIter() { return g_curOpIter.load(std::memory_order_relaxed); }
+// 当前 rank 的"最近 op 迭代"（= 最近一次 InsertOpDetail 分配的 opIter；槽位化后每 rank 独立）。
+uint32_t GetCurOpIter() { return CurrOpIterRef().load(std::memory_order_relaxed); }
+
+// ==== 嵌套算子上下文 save/restore（栈式进出）====
+// CurrOpDetailId/opIter/opMem 都是“每 deviceKey 单槽、后写覆盖”，隐含算子顺序执行假设。
+// 嵌套调用（算子内部再入算子，如 alltoallv 执行期的 warmup alltoallv）会覆盖且不还原，
+// 使外层算子后续任务错误归属。这里提供压栈/弹栈原语，由算子桩 ScopedOpContext 使用。
+
+OpContextSnapshot SaveOpContext()
+{
+    OpContextSnapshot snapshot;
+    snapshot.opDetailId = CurrOpDetailId();
+    snapshot.opIter = CurrOpIterRef().load(std::memory_order_relaxed);
+    snapshot.opMemId = CurrOpMemIdRef().load(std::memory_order_relaxed);
+    return snapshot;
+}
+
+void RestoreOpContext(const OpContextSnapshot& snapshot)
+{
+    CurrOpDetailId() = snapshot.opDetailId;
+    CurrOpIterRef().store(snapshot.opIter, std::memory_order_relaxed);
+    CurrOpMemIdRef().store(snapshot.opMemId, std::memory_order_relaxed);
+}
+
+// 进程内单调递增的“完成(出栈)序号”发号器（0 保留为“未打标”，故从 1 起）。
+// 每 rank 独立进程各自计数；collective 锁步保证同一算子在各 rank 得到相同 endSeq。
+int AssignOpEndSeq(uint32_t opDetailId)
+{
+    if (opDetailId == 0) {
+        return 0;
+    }
+    static std::atomic<uint32_t> endSeqCounter{0};
+    const uint32_t endSeq = endSeqCounter.fetch_add(1, std::memory_order_relaxed) + 1;
+    auto updated = HcclSim::Storage::Update<OpDetailTab>(
+        HcclSim::Storage::Eq(&OpDetailTab::id, opDetailId), HcclSim::Storage::Set(&OpDetailTab::endSeq, endSeq));
+    if (!updated.ok()) {
+        HCCL_VM_ERROR("Failed to update opDetail endSeq, id={}, endSeq={}", opDetailId, endSeq);
+        return -1;
+    }
+    return 0;
+}
 
 int InsertOpDetail(OpDetailTab& rec)
 {
@@ -141,23 +285,29 @@ int InsertOpDetail(OpDetailTab& rec)
     if (!inserted.ok()) {
         return FailWith("insert opDetails", inserted.diagnostic);
     }
-    g_currOpDetailId = rec.id;
+    CurrOpDetailId() = rec.id;
     return 0;
 }
 
+// 写入一次算子的内存信息（绑定到本 rank 当前 OpDetail），成功后更新 OpMem 槽位。
+// @param rec 待写入的 opMemInfo 记录（id 字段由引擎重新分配）。
+// @return 0 成功；非 0 失败（诊断信息已由 FailWith 打出）。
 int InsertOpMem(OpMemInfoTab& rec)
 {
-    rec.opDetailId = g_currOpDetailId;
+    rec.opDetailId = CurrOpDetailId();
 
     rec.id = 0;
     auto inserted = HcclSim::Storage::Insert<OpMemInfoTab>(rec);
     if (!inserted.ok()) {
         return FailWith("insert opMemInfo", inserted.diagnostic);
     }
-    g_currOpMemId = rec.id;
+    CurrOpMemIdRef().store(rec.id, std::memory_order_relaxed);
     return 0;
 }
 
+// 同一事务内原子写入 OpDetail 与 OpMem（多表流程；CONFLICT 时按引擎契约整个事务重建重试）。
+// @param detail 待写入的 opDetail 记录；@param mem 待写入的 opMemInfo 记录。
+// @return 0 成功；非 0 失败（重试耗尽或底层错误）。
 int InsertOpDetailAndMem(OpDetailTab& detail, OpMemInfoTab& mem)
 {
     // 迁移前语义：OpDetail 与 OpMem 在同一事务内原子提交。
@@ -199,8 +349,8 @@ int InsertOpDetailAndMem(OpDetailTab& detail, OpMemInfoTab& mem)
         }
         auto committed = transaction->Commit();
         if (committed.ok()) {
-            g_currOpDetailId = detail.id;
-            g_currOpMemId = mem.id;
+            CurrOpDetailId() = detail.id;
+            CurrOpMemIdRef().store(mem.id, std::memory_order_relaxed);
             return 0;
         }
         if (committed.code != HcclSim::Storage::DbCode::CONFLICT) {
@@ -210,11 +360,14 @@ int InsertOpDetailAndMem(OpDetailTab& detail, OpMemInfoTab& mem)
     return FailWith("insert opDetails with opMemInfo", "transaction conflict retries exhausted");
 }
 
+// 更新本 rank 当前 OpMem出血的 ccl 缓冲区地址与大小（按 OpMem 槽位键）。
+// @param cclAddr 目标 ccl 地址；@param cclSize 目标 ccl 尺寸。
+// @return 0 成功；非 0 失败。
 int UpdateOpMemCclBuffer(uint64_t cclAddr, uint64_t cclSize)
 {
     auto updated = HcclSim::Storage::Update<OpMemInfoTab>(
-        HcclSim::Storage::Eq(&OpMemInfoTab::id, g_currOpMemId), HcclSim::Storage::Set(&OpMemInfoTab::cclAddr, cclAddr),
-        HcclSim::Storage::Set(&OpMemInfoTab::cclSize, cclSize));
+        HcclSim::Storage::Eq(&OpMemInfoTab::id, CurrOpMemIdRef().load(std::memory_order_relaxed)),
+        HcclSim::Storage::Set(&OpMemInfoTab::cclAddr, cclAddr), HcclSim::Storage::Set(&OpMemInfoTab::cclSize, cclSize));
     if (!updated.ok()) {
         return FailWith("update opMemInfo ccl buffer", updated.diagnostic);
     }
@@ -233,14 +386,14 @@ int QueryCurrentOpMemInfoByRank(uint32_t rankId, OpMemInfoTab& out)
     // 纯无效传输）；投影覆盖谓词与排序字段，语义与全行读取一致。
     auto detailTable = HcclSim::Storage::AcquireTable<OpDetailTab>();
     if (!detailTable.ok()) {
-        HCCL_VM_ERROR("query failed, currentOpDetailId={}, rankId={}", g_currOpDetailId, rankId);
+        HCCL_VM_ERROR("query failed, currentOpDetailId={}, rankId={}", CurrOpDetailId(), rankId);
         return -1;
     }
     const auto currentDetail = detailTable->Select(
-        HcclSim::Storage::Eq(&OpDetailTab::id, g_currOpDetailId), HcclSim::Storage::Limit(1),
+        HcclSim::Storage::Eq(&OpDetailTab::id, CurrOpDetailId()), HcclSim::Storage::Limit(1),
         HcclSim::Storage::Fields(&OpDetailTab::id, &OpDetailTab::syncIter));
     if (!currentDetail.ok() || currentDetail.value->empty()) {
-        HCCL_VM_ERROR("query failed, currentOpDetailId={}, rankId={}", g_currOpDetailId, rankId);
+        HCCL_VM_ERROR("query failed, currentOpDetailId={}, rankId={}", CurrOpDetailId(), rankId);
         return -1;
     }
     const auto targetDetail = detailTable->Select(
@@ -250,13 +403,13 @@ int QueryCurrentOpMemInfoByRank(uint32_t rankId, OpMemInfoTab& out)
         HcclSim::Storage::OrderBy(&OpDetailTab::id, HcclSim::Storage::SortDirection::DESC), HcclSim::Storage::Limit(1),
         HcclSim::Storage::Fields(&OpDetailTab::id, &OpDetailTab::syncIter, &OpDetailTab::rankId));
     if (!targetDetail.ok() || targetDetail.value->empty()) {
-        HCCL_VM_ERROR("query failed, currentOpDetailId={}, rankId={}", g_currOpDetailId, rankId);
+        HCCL_VM_ERROR("query failed, currentOpDetailId={}, rankId={}", CurrOpDetailId(), rankId);
         return -1;
     }
     const auto mem = HcclSim::Storage::SelectOne<OpMemInfoTab>(
         HcclSim::Storage::Eq(&OpMemInfoTab::opDetailId, targetDetail.value->front().id));
     if (!mem.ok()) {
-        HCCL_VM_ERROR("query failed, currentOpDetailId={}, rankId={}", g_currOpDetailId, rankId);
+        HCCL_VM_ERROR("query failed, currentOpDetailId={}, rankId={}", CurrOpDetailId(), rankId);
         return -1;
     }
     out = *mem.value;
@@ -316,10 +469,10 @@ int QueryOpMemInfoByOpDetailId(uint32_t opDetailId, OpMemInfoTab& out)
 int UpdateOpExpansionMode(uint8_t mode)
 {
     auto updated = HcclSim::Storage::Update<OpDetailTab>(
-        HcclSim::Storage::Eq(&OpDetailTab::id, g_currOpDetailId),
+        HcclSim::Storage::Eq(&OpDetailTab::id, CurrOpDetailId()),
         HcclSim::Storage::Set(&OpDetailTab::opExpansionMode, mode));
     if (!updated.ok()) {
-        HCCL_VM_ERROR("Failed to update mode={}, id={}", mode, g_currOpDetailId);
+        HCCL_VM_ERROR("Failed to update mode={}, id={}", mode, CurrOpDetailId());
         return -1;
     }
     return 0;
@@ -328,17 +481,17 @@ int UpdateOpExpansionMode(uint8_t mode)
 int UpdateOpDetailAlgName(const std::string& algName)
 {
     // 算法选择结果回填 (日志截取): level0 桩先 InsertOpDetail (置
-    // g_currOpDetailId) 再调真实业务, 选择日志发生在业务调用内、与插入
+    // CurrOpDetailId()) 再调真实业务, 选择日志发生在业务调用内、与插入
     // 同线程, 据此更新"当前算子"行; 同一算子多次匹配 (选择器 ->
     // HcclGetAlgRes -> 降级重选) 时后写覆盖, 与最终生效算法一致
-    if (algName.empty() || g_currOpDetailId == 0) {
+    if (algName.empty() || CurrOpDetailId() == 0) {
         return 0;
     }
     auto updated = HcclSim::Storage::Update<OpDetailTab>(
-        HcclSim::Storage::Eq(&OpDetailTab::id, g_currOpDetailId),
+        HcclSim::Storage::Eq(&OpDetailTab::id, CurrOpDetailId()),
         HcclSim::Storage::Set(&OpDetailTab::algorithmName, algName));
     if (!updated.ok()) {
-        HCCL_VM_ERROR("Failed to update opDetail algorithmName, id={}, algName={}", g_currOpDetailId, algName);
+        HCCL_VM_ERROR("Failed to update opDetail algorithmName, id={}, algName={}", CurrOpDetailId(), algName);
         return -1;
     }
     return 0;
@@ -361,10 +514,10 @@ int QueryLatestOpExpansionMode()
     // 标量查询：只取 opExpansionMode，Fields 投影剥离 opDetail/opExtInfo 大 BLOB；
     // SelectOne 直接物化单对象（不经 vector 中转）。
     auto found = HcclSim::Storage::SelectOne<OpDetailTab>(
-        HcclSim::Storage::Eq(&OpDetailTab::id, g_currOpDetailId),
+        HcclSim::Storage::Eq(&OpDetailTab::id, CurrOpDetailId()),
         HcclSim::Storage::Fields(&OpDetailTab::id, &OpDetailTab::opExpansionMode));
     if (!found.ok() || !found.value.has_value()) {
-        HCCL_VM_WARN("Failed to query, id={}", g_currOpDetailId);
+        HCCL_VM_WARN("Failed to query, id={}", CurrOpDetailId());
         return static_cast<int>(sim::runtime::SimOpExpansionMode::SIM_OP_EXPANSION_MODE_RESERVED);
     }
     return static_cast<int>(found.value->opExpansionMode);
@@ -438,17 +591,17 @@ int QueryOpExecutionIndexEntries(std::vector<OpExecutionIndexEntry>& out)
 {
     // 迁移前语义：SELECT id, deviceId, rankId, commId, opIter, rankSize
     // FROM opDetails ORDER BY id，逐行映射为执行索引条目。
-    // 字段投影：只回传上述 6 个小字段，不拖 opDetail/opExtInfo 大 BLOB——
+    // 字段投影：只回传上述小字段（含 endSeq 完成序），不拖 opDetail/opExtInfo 大 BLOB——
     // 256p 全表 extInfo（每行含 N×N 矩阵 4+8×rankSize² 字节）约 268MB，
     // 并发写冲突时原子快照会撞 128MiB 固定上限；投影后整表 ~50KB。
-    // 调用方（LoadOpExecutionKeys）只消费这 6 个字段，BLOB 由逐算子
+    // 调用方（LoadOpExecutionKeys）只消费这些小字段，BLOB 由逐算子
     // 查询（QueryCompositeOpDetailByOpIter，单行）自行读取。
     auto rows = HcclSim::Storage::Select<OpDetailTab>(
         HcclSim::Storage::All<OpDetailTab>(),
         HcclSim::Storage::OrderBy(&OpDetailTab::id, HcclSim::Storage::SortDirection::ASC),
         HcclSim::Storage::Fields(
             &OpDetailTab::id, &OpDetailTab::deviceId, &OpDetailTab::rankId, &OpDetailTab::commId, &OpDetailTab::opIter,
-            &OpDetailTab::rankSize));
+            &OpDetailTab::rankSize, &OpDetailTab::endSeq));
     if (!rows.ok()) {
         HCCL_VM_ERROR("Failed to query operator execution index");
         return -1;
@@ -464,6 +617,7 @@ int QueryOpExecutionIndexEntries(std::vector<OpExecutionIndexEntry>& out)
         entry.commId = rec.commId;
         entry.opIter = rec.opIter;
         entry.rankSize = rec.rankSize;
+        entry.endSeq = rec.endSeq;
         out.push_back(entry);
     }
     return 0;
@@ -709,7 +863,7 @@ int InsertCcuChannel(CcuChannelTab& rec)
 
 int InsertJettyMap(JettyMapTab& rec)
 {
-    rec.opDetailId = g_currOpDetailId;
+    rec.opDetailId = CurrOpDetailId();
 
     rec.id = 0;
     auto inserted = HcclSim::Storage::Insert<JettyMapTab>(rec);
@@ -925,7 +1079,7 @@ int QueryHalfRTTAll(std::vector<HalfRTTTab>& out)
 
 int InsertOpTask(OpTaskTab& rec, bool isDevice)
 {
-    rec.opDetailId = g_currOpDetailId;
+    rec.opDetailId = CurrOpDetailId();
     // host进程使用pid，AICPU模式的device进程使用ppid(即host进程的pid)
     const uint64_t tabPid = isDevice ? static_cast<uint64_t>(getppid()) : static_cast<uint64_t>(getpid());
     // 迁移前语义：pid 随任务行持久化，runner 完成任务时按 task.pid 解析进程 scope 表刷新 isDone。

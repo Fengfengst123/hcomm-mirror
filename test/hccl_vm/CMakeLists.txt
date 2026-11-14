@@ -190,6 +190,17 @@ function(config_hcclvm_install)
             GROUP_READ GROUP_EXECUTE
             WORLD_READ WORLD_EXECUTE
     )
+    install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/asset/cluster_model/config/device"
+        DESTINATION "config"
+        FILE_PERMISSIONS
+            OWNER_READ OWNER_WRITE
+            GROUP_READ
+            WORLD_READ
+        DIRECTORY_PERMISSIONS
+            OWNER_READ OWNER_WRITE OWNER_EXECUTE
+            GROUP_READ GROUP_EXECUTE
+            WORLD_READ WORLD_EXECUTE
+    )
     install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/asset/cluster_model/topo_meta"
         DESTINATION "config"
         FILE_PERMISSIONS

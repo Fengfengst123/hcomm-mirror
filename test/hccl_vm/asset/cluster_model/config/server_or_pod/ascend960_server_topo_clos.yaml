@@ -16,6 +16,9 @@ soc_version: "Ascend960"
 device_num: 8
 hardware_type: "960D-clos-8P-topo"
 
+# 端口类型：x2或x4, x2端口带宽是x4端口带宽的一半
+port_type: "x2"
+
 device_ports_allocate_map:
  # port分配表: 0: 不使用, 1: device直连, 2: device连交换机, 3: d2h端口
  #                 portId:  0  1  2  3  4  5  6  7  8  9  10 11 12 13 14 15 16 17 18 19

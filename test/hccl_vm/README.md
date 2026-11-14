@@ -16,7 +16,7 @@ HCCL-VM是面向华为昇腾NPU卡的高性能集合通信的虚拟执行环境�
 | -------- | ------------- |
 | 系统架构  | x86_64 Ubuntu22.04及以上 |
 | 规格约束  | Ascend950，其余参照[约束详情](#45-工具规格约束) |
-| QEMU（仅 AICPU 模式运行需要，x86_64 宿主） | 系统自带 qemu-user-static 可直接使用；版本低于 10.2.4 时无法限制翻译代码缓存、QEMU 常驻内存较大，大规模场景可能引发换页、明显影响性能，可按 [2.3 QEMU 部署](#23-qemu-部署仅-aicpu-模式x86_64-宿主需要) 安装 10.2.4 及以上版本优化。原生 ARM 主机不需要 QEMU；编译（`build.sh`/`build_pkg.sh`）不依赖本机已安装 QEMU |
+| QEMU（x86_64 宿主） | 优先使用系统自带或 apt 安装的 qemu-user-static（PATH 中的 `qemu-aarch64-static`）；版本低于 10.2.4 时无法限制翻译代码缓存、QEMU 常驻内存较大，大规模场景可能引发换页、明显影响性能，如需自行编译 10.2.4 及以上版本见 [3.1.1 QEMU 源码编译（可选）](#311-qemu-源码编译可选x86_64-宿主)。原生 ARM 主机不需要 QEMU；编译（`build.sh`/`build_pkg.sh`）不依赖本机已安装 QEMU |
 | Python3（仅估算模式 @estimate 性能仿真插件运行需要） | ≥3.8（含 sqlite3 标准库），另需预装 simpy 离散事件仿真包（`pip3 install simpy`），详见 [4.9.5](#495-估算插件estimate与依赖说明) |
 
 ### 2.1 CANN包安装
@@ -39,35 +39,23 @@ hccl_test是昇腾官方提供的HCCL性能测试工具，详见[HCCL性能测�
 
 备注：hccl_test 为可选依赖。运行 PyTorch 用例请参见 [PyTorch 用例示例](#33-pytorch用例示例)。
 
-### 2.3 QEMU 部署（仅 AICPU 模式、x86_64 宿主需要）
+### 2.3 AICPU 运行环境安装
 
-AICPU 展开模式在 x86_64 宿主上需要 QEMU 用户态模拟（linux-user 模拟 aarch64）。系统自带的 qemu-user-static 可直接使用；版本低于 **10.2.4** 时不支持 `-tb-size` 限制翻译代码缓存，QEMU 常驻内存较大，可能严重影响性能，按照如下操作安装 **10.2.4 及以上**版本。
+HCCL-VM 运行时会加载并模拟执行 AICPU device 侧符号，x86_64 宿主需要 QEMU 用户态模拟（linux-user 模拟 aarch64）：
+
+- **运行期**：优先使用系统自带或 apt 安装的 QEMU（`qemu-user-static` 提供 `qemu-aarch64-static`），也可通过 `HCCL_VM_QEMU_PATH` 指定本地已有程序。
+- **部署**：`build.sh --full` 和 `build.sh --level1` 会在构建安装后自动调用 `build_pkg.sh`，从 CANN 安装目录解压 `aicpu_hccl.tar.gz` 和 `aicpu_hcomm.tar.gz`，部署 AICPU device 侧符号，无需单独执行；部署失败时构建返回失败。编译安装步骤见 [3.1 手动构建&安装](#31-手动构建安装)。
 
 ```bash
-# 1) 构建依赖（gcc/make/ninja 一般已随系统或本工具安装存在）
-sudo apt-get install -y meson flex bison libglib2.0-dev libpcre2-dev libffi-dev
-
-# 2) 官方源码归档（示例为 10.2.4，10.2.4 及以上版本均可）
-curl -fsSL -O https://download.qemu.org/qemu-10.2.4.tar.xz
-tar -xf qemu-10.2.4.tar.xz && cd qemu-10.2.4
-
-# 3) 构建 aarch64 linux-user 静态版本
-mkdir build && cd build
-../configure --target-list=aarch64-linux-user --static --disable-system --disable-tools \
-    --disable-docs --disable-guest-agent --disable-slirp
-make -j$(nproc) qemu-aarch64
-
-# 4) 部署并配置（部署路径可自定义，示例为 /opt/qemu-10.2.4）
-sudo mkdir -p /opt/qemu-10.2.4/bin
-sudo cp qemu-aarch64 /opt/qemu-10.2.4/bin/qemu-aarch64-static
-export HCCL_VM_QEMU_PATH=/opt/qemu-10.2.4/bin/qemu-aarch64-static
-export HCCL_VM_QEMU_TB_SIZE=16
+sudo apt install -y qemu-user-static binfmt-support
 ```
+
+系统自带版本低于 **10.2.4** 时不支持 `-tb-size` 限制翻译代码缓存，QEMU 常驻内存较大，大规模场景可能严重影响性能；如需自行编译 10.2.4 及以上版本，见 [3.1.1 QEMU 源码编译（可选）](#311-qemu-源码编译可选x86_64-宿主)。原生 ARM 主机不需要 QEMU。
 
 运行行为与提示：
 
 - 设备进程启动时打印实际使用的 QEMU 程序路径、版本与 `-tb-size` 请求值。
-- `HCCL_VM_QEMU_PATH` 未设置/无效、或指向不支持 `-tb-size` 的旧版 QEMU 时**不会中断**：自动回退（按 PATH 查找 `qemu-aarch64-static` / 不传 `-tb-size`）并打 WARN，包含实际回退到的程序与版本、以及“翻译缓存未限制，QEMU 内存可能过大”提示。仅当全机找不到任何 `qemu-aarch64-static` 时 AICPU 模式启动失败。
+- `HCCL_VM_QEMU_PATH` 未设置/无效、或指向不支持 `-tb-size` 的旧版 QEMU 时**不会中断**：自动回退（按 PATH 查找 `qemu-aarch64-static` / 不传 `-tb-size`）并打 WARN，包含实际回退到的程序与版本、以及“翻译缓存未限制，QEMU 内存可能过大”提示。仅当全机找不到任何 `qemu-aarch64-static` 时 AICPU 运行环境启动失败。
 - `HCCL_VM_QEMU_TB_SIZE` 为 QEMU 翻译代码缓存（MiB）：未设置默认 `16`；`0` 表示委托 QEMU 自身默认策略（不是禁用缓存）。不限制缓存可能会显著增大 QEMU 常驻内存并引发换页。
 
 ---
@@ -97,15 +85,40 @@ git clone https://gitcode.com/cann/hcomm.git
 sudo apt-get update
 sudo apt install build-essential cmake libboost-all-dev rdma-core libibverbs-dev pkg-config gcc-aarch64-linux-gnu g++-aarch64-linux-gnu qemu-user-static binfmt-support
 
-# 4. 编译HCCL-VM工具，下载hcomm代码之后，工具源码所在路径：/home/workspace/hcomm/test/hccl_vm
+# 4. 编译安装 HCCL-VM 工具并自动部署 AICPU device 侧符号
+# 下载 hcomm 代码之后，工具源码所在路径：/home/workspace/hcomm/test/hccl_vm
 cd /home/workspace/hcomm/test/hccl_vm
 source /home/workspace/Ascend/cann/set_env.sh
 export HCCL_CODE_HOME=/home/workspace/hccl
 export HCOMM_CODE_HOME=/home/workspace/hcomm
 bash ./build.sh --full
+```
 
-# 5.从CANN安装目录拷贝解压aicpu_hcxx.tar.gz
-bash build_pkg.sh
+`--full` 已包含 device 侧构建，无需额外执行 `build.sh --aicpu` 或 `build_pkg.sh`。自动部署仅使用当前 CANN 中已有的 AICPU 包，不重新编译 HCCL/HCOMM；加上 `--pkg` 时，在部署完成后生成包含 AICPU 库的 `hccl_vm_install.tar.gz`。无参数构建仍只更新 host，`--aicpu` 仍只更新 device；如需单独刷新已安装 CANN 的 AICPU 库，可执行 `bash build_pkg.sh`。
+
+#### 3.1.1 QEMU 源码编译（可选，x86_64 宿主）
+
+默认优先使用系统自带或 apt 安装的 QEMU（见 [2.3](#23-aicpu-运行环境安装)）。如需 10.2.4 及以上版本以限制翻译代码缓存、降低大规模场景内存占用，可按以下步骤自行编译：
+
+```bash
+# 1) 构建依赖（gcc/make/ninja 一般已随系统或本工具安装存在）
+sudo apt-get install -y meson flex bison libglib2.0-dev libpcre2-dev libffi-dev
+
+# 2) 官方源码归档（示例为 10.2.4，10.2.4 及以上版本均可）
+curl -fsSL -O https://download.qemu.org/qemu-10.2.4.tar.xz
+tar -xf qemu-10.2.4.tar.xz && cd qemu-10.2.4
+
+# 3) 构建 aarch64 linux-user 静态版本
+mkdir build && cd build
+../configure --target-list=aarch64-linux-user --static --disable-system --disable-tools \
+    --disable-docs --disable-guest-agent --disable-slirp
+make -j$(nproc) qemu-aarch64
+
+# 4) 部署并配置（部署路径可自定义，示例为 /opt/qemu-10.2.4）
+sudo mkdir -p /opt/qemu-10.2.4/bin
+sudo cp qemu-aarch64 /opt/qemu-10.2.4/bin/qemu-aarch64-static
+export HCCL_VM_QEMU_PATH=/opt/qemu-10.2.4/bin/qemu-aarch64-static
+export HCCL_VM_QEMU_TB_SIZE=16
 ```
 
 ### 3.2 使用示例
@@ -160,9 +173,9 @@ cd /home/workspace/hcomm/test/hccl_vm/hccl_vm_install/bin
 
 #### 3.2.3 AICPU模式
 
-AICPU展开模式需要将算法展开步骤放到设备侧执行，因此hccl-vm工具需要将HCCL的设备侧的符号编译并模拟执行。由于设备侧符号是ARM架构的，因此在X86环境上编译时需要借助交叉编译器，运行时需要借助QEMU实现AICPU模式的模拟运行。
+AICPU展开模式需要将算法展开步骤放到设备侧执行，因此hccl-vm工具需要将HCCL的设备侧的符号编译并模拟执行。x86_64宿主运行时需要QEMU模拟执行 device 侧代码，安装与部署见 [2.3 AICPU 运行环境安装](#23-aicpu-运行环境安装)。
 
-X86宿主上运行AICPU模式借助QEMU用户态模拟：未配置 `HCCL_VM_QEMU_PATH` 时自动回退 PATH 中的 `qemu-aarch64-static` 并打告警（含实际版本），不影响启动；系统自带版本低于 10.2.4 时无法限制翻译代码缓存、内存占用较高，大规模场景可能引发换页、影响性能，可参考 [2.3 QEMU 部署](#23-qemu-部署仅-aicpu-模式x86_64-宿主需要) 安装 10.2.4 及以上版本并配置 `HCCL_VM_QEMU_PATH`。原生ARM主机不需要QEMU。
+X86宿主上通过QEMU用户态模拟执行 device 侧代码：未配置 `HCCL_VM_QEMU_PATH` 时自动回退 PATH 中的 `qemu-aarch64-static` 并打告警（含实际版本），不影响启动；系统自带版本低于 10.2.4 时无法限制翻译代码缓存、内存占用较高，大规模场景可能引发换页、影响性能，可参考 [2.3 AICPU 运行环境安装](#23-aicpu-运行环境安装) 安装 10.2.4 及以上版本并配置 `HCCL_VM_QEMU_PATH`。原生ARM主机不需要QEMU。
 
 1. 环境变量配置。
 
@@ -256,6 +269,8 @@ HCCL-VM 支持运行部分 PyTorch 的 `aclgraph` 图模式集合通信脚本。
 #### 3.3.1 环境准备
 
 先完成 HCCL-VM 构建安装和 CANN 环境配置，并准备已安装兼容版本 `torch`、`torch_npu` 的 Python 虚拟环境。PyTorch 暂时仅支持 Ascend950 系列；如需使用 Ascend960 系列，需要安装 A6 ops 包，并将拓扑集群配置中的 `soc_version` 修改为 `Ascend960DT_961BY` 等真实型号。
+
+需要注意：目前模拟器支持的 AIV 算子数量有限，相当一部分的 torch 计算无法正常完成，如 `print(tensor)` 和 `tensor.clone()` 等均会因为调用到了不支持的计算算子导致运行异常。
 
 ```bash
 cd /home/workspace/hcomm/test/hccl_vm/hccl_vm_install/bin
@@ -374,9 +389,10 @@ export HCOMM_CODE_HOME=/home/workspace/hcomm
 | `HCCL_VM_SERVER_INDEX` | PyTorch 进程模拟的**叶子节点（host节点）**序号，从 `0` 开始；仅在 `HCCL_VM_ENABLE_PYTORCH=1` 时生效，须与测试脚本的 `--server_index` 一致。server形态下叶子节点即 server；**POD形态（4层拓扑）下叶子节点为 board**，故按 board 计数与编号。 | `export HCCL_VM_SERVER_INDEX=0` |
 | `HCCLVM_ENABLE_DUMP_DATA` | 1. 使能性能仿真文件输出落盘。若使能，则在测试用例执行过程中输出3个runner_hcclvm_*_data.bin文件和1个ccu_channel_jetty_config.xml文件供性能仿真使用. <br> 2.使能Runner插件dump input\&output数据。若使能，则在测试用例执行过程中，会将每个算子的input\&output数据dump到all\_rank\_input\_output.txt文件中 | `export HCCLVM_ENABLE_DUMP_DATA=1 使能，export HCCLVM_ENABLE_DUMP_DATA=0 或不配置该环境变量 禁用` |
 | `HCCL_VM_RES_STAT_DUMP` | 使能劫持层资源统计落盘：设置后，业务进程 finalize 时将各设备资源计数（内存/Jetty/QP/Notify/AIV core 等）导出为 CSV，输出到安装目录 `data/stat/<podId>_<serverId>_<boardId>_<设备ID>_res_<时间戳>.csv`（`boardId` 为 POD 形态 4 层拓扑下的 board 序号，server 形态恒为 `0`）；未设置（默认）不导出。 | `export HCCL_VM_RES_STAT_DUMP=1` |
-| `HCCL_VM_QEMU_PATH` | 仅AICPU模式、x86_64宿主生效：外部QEMU程序的非空绝对路径（目标为可执行普通文件，允许指向普通文件的符号链接）。未设置/无效时自动回退 PATH 查找 `qemu-aarch64-static` 并打 WARN（含实际程序与版本）；全机找不到时 AICPU 启动失败。部署步骤见[2.3 QEMU 部署](#23-qemu-部署仅-aicpu-模式x86_64-宿主需要) | `export HCCL_VM_QEMU_PATH=/opt/qemu-10.2.4/bin/qemu-aarch64-static` |
-| `HCCL_VM_QEMU_TB_SIZE` | 仅AICPU模式、x86_64宿主生效：QEMU翻译代码缓存（MiB）。未设置默认`16`；`0`表示显式传`-tb-size 0`、由QEMU自身默认策略决定（不是禁用缓存）；仅接受可解析到uint32_t的十进制数字串，非法值告警并回退默认16。指向不支持`-tb-size`的旧版QEMU时不传该选项并告警内存可能过大。 | `export HCCL_VM_QEMU_TB_SIZE=16` |
+| `HCCL_VM_QEMU_PATH` | x86_64宿主生效（AICPU 运行时）：外部QEMU程序的非空绝对路径（目标为可执行普通文件，允许指向普通文件的符号链接）。未设置/无效时自动回退 PATH 查找 `qemu-aarch64-static` 并打 WARN（含实际程序与版本）；全机找不到时 AICPU 运行环境启动失败。部署步骤见[2.3 AICPU 运行环境安装](#23-aicpu-运行环境安装) | `export HCCL_VM_QEMU_PATH=/opt/qemu-10.2.4/bin/qemu-aarch64-static` |
+| `HCCL_VM_QEMU_TB_SIZE` | x86_64宿主生效（AICPU 运行时）：QEMU翻译代码缓存（MiB）。未设置默认`16`；`0`表示显式传`-tb-size 0`、由QEMU自身默认策略决定（不是禁用缓存）；仅接受可解析到uint32_t的十进制数字串，非法值告警并回退默认16。指向不支持`-tb-size`的旧版QEMU时不传该选项并告警内存可能过大。 | `export HCCL_VM_QEMU_TB_SIZE=16` |
 | `HCCL_UB_MULTI_CHANNEL_NUM` | HCCL 侧环境变量，由 proxy 桩读取（`HcclConfigGetInfo` 的 `HCCL_CONFIG_TYPE_UB_MULTI_CHANNEL_NUM` 查询项同口径）：一个 channel 上并行的 jetty 数。随算子落库到 `opDetails.ubMultiChannelNum`，`@estimate` 轻量性能仿真插件据此折算端口带宽利用率（`multi_port_utilization_low` 各档 `+= (n-1)×jetty_utilization_step`，上限 1.0；见 `docs/light_performance/simulator_design.md` 7.2 节）。未设置/非法/`0` 回落 `1`（不使能多 jetty，直接用原利用率表）。 | `export HCCL_UB_MULTI_CHANNEL_NUM=8` |
+`HCCL_VM_LOG_MODE` | 设置模拟器日志类型：(1)stub(默认) : 使用模拟器spdlog控制日志等级和落盘;(2)cann : 复用cann日志模块，日志等级和落盘完全交由cann日志能力控制。| `export HCCL_VM_LOG_MODE=cann`
 
 ### 4.2 HCCL-Test用例构建
 
@@ -567,32 +583,26 @@ links:
       # ... board1~board7 同理
 ```
 
-配置示例（跨board直连场景，需配置 `src_board_id` ≠ `dst_board_id`，layer0 直连域跨 board 时作用域自动为 pod）：
+配置示例（`ascend950_server_topo_1dpod64.yaml`，8 board × 8卡，POD 形态，板内直连：每 board 内 die0/die1 各 4 卡全互联 + 交叉直连）：
 
 ```yaml
-soc_version: "Ascend950"
-device_num: 16                        # 2个board × 8卡
-board_num: 2
-hardware_type: "950D-1D-POD-16P-topo"
-
+device_num: 64
+board_num: 8                          # 8个board → 每board 8卡
 device_group:
   - {group_id: 1, device_list: [0, 1, 2, 3]}
   - {group_id: 2, device_list: [4, 5, 6, 7]}
-
 links:
-  - link_mode: "fullmesh"             # 每board内8卡经die1全互联
+  - link_mode: "fullmesh"             # 每board内die0/die1各4卡全互联
     connections:
-      - {board_id: 0, die_id: 1, net_instance_id: 0, topo_instance_id: 0, device_id: [0, 1, 2, 3, 4, 5, 6, 7]}
-      - {board_id: 1, die_id: 1, net_instance_id: 1, topo_instance_id: 1, device_id: [0, 1, 2, 3, 4, 5, 6, 7]}
+      - {board_id: 0, die_id: 0, net_instance_id: 0, topo_instance_id: 0, device_id: [0, 1, 2, 3]}
+      - {board_id: 0, die_id: 1, net_instance_id: 0, topo_instance_id: 0, device_id: [4, 5, 6, 7]}
+      # ... board1~board7 同理
   - link_mode: "enum"
     device_to_device_links:
-      # 跨board直连: src_board_id(0) ≠ dst_board_id(1), die0的4卡交叉直连
+      # 板内直连: 每board内die0的4卡与die1的4卡交叉直连
       - {src_board_id: 0, net_instance_id: 0, topo_instance_id: 0, src_die_id: 0, src_device_id: [0, 1, 2, 3],
-         dst_board_id: 1, dst_die_id: 0, dst_device_id: [4, 5, 6, 7]}
-    device_to_switch_links:           # dst为交换机, 只需单个board_id声明device所属board
-      - {board_id: 0, die_id: 0, devices_range: [0, 7]}
-      - {board_id: 1, die_id: 0, devices_range: [0, 7]}
-      # ... board0 die1 / board1 die1 同理
+         dst_board_id: 0, dst_die_id: 1, dst_device_id: [4, 5, 6, 7]}
+      # ... board1~board7 同理
 ```
 
 配置示例（`ascend960_pod_topo_clos.yaml`，框内全交换、无板内直连，links不带board_id即复制扩展到全部board）：
@@ -621,7 +631,7 @@ links:
 6. `net_instance_scope` 声明的 layer 必须在拓扑中真实存在。
 
 > `fullmesh`/`device_to_switch_links`/`matrix` 条目用单个 `board_id`（两端同board）；`device_to_device_links`
-> 用 `src_board_id`/`dst_board_id` 声明两端归属，**支持跨board PEER2PEER 直连**（如 hf：board0↔board1 全交叉）。
+> 用 `src_board_id`/`dst_board_id` 声明两端归属，**支持跨board PEER2PEER 直连**（如 board0↔board1 全交叉，需配置 `src_board_id ≠ dst_board_id`）。
 > ranktable.json 的 `device_id` 为board内物理id、`local_id` 为POD全局id（与POD级topo.json同口径）。
 
 #### 4.3.2 集群拓扑配置文件说明
@@ -1042,7 +1052,7 @@ HCCL-VM Runner插件支持数据类如下：
 
 **硬件规格**：
 
-目前本工具仅适配支持Ascend950芯片。单server内最大支持8张卡；超过8张卡，需要跨server运行。默认内置存储适用 1～128 卡的通信域，无需配置数据库。
+目前本工具适配支持Ascend950和Ascend960芯片。默认内置存储适用 1～128 卡的通信域，无需配置数据库。
 
 ### 4.6 HCCL-VM插件功能
 
@@ -1067,9 +1077,10 @@ Runner插件支持通过 `hccl-vm plugin install/uninstall` 命令进行安装�
 #### 4.6.2 Checker插件
 
 Checker插件，即算法分析器插件：功能是将hccl生成的所有task形成一个DAG图，并且通过分析DAG图，判断是否存在内存冲突；通过模拟执行DAG图，判断是否存在语义错误等问题。
+
 算法分析器插件，是由用户自行通过命令启动执行。
 
-Checker 插件当前使用 Checker V3 执行单算子校验。Checker V3 大图校验默认开启：每个 sync window 内的多个算子会合并成一张大图，执行跨算子同步资源冲突校验。单算子 Checker V3 和大图校验可以通过 `manifest.json` 中的配置参数分别控制；老版本 Checker 已移除，`enable_old_checker` 不再是有效配置项。
+Checker 插件当前使用 Checker V3 执行单算子校验。Checker V3 大图校验默认开启：每个 sync window 内的多个算子会合并成一张大图，执行跨算子同步资源冲突校验。单算子 Checker V3 和大图校验可以通过 `manifest.json` 中的配置参数分别控制。
 
 ```json
 
@@ -1147,12 +1158,10 @@ data_size(Bytes): | aveg_time(us): | alg_bandwidth(GB/s): | check_result:
 
 #### 4.8.2 Checker插件结果
 
-在hccl-vm终端内执行hccl-vm plugin run @checker后，Checker校验流程及结果会打印在终端内，用于需关注是否存在[error]级别日志和最终校验结果：
-
-大图校验按每个sync window执行一次。大图校验失败不会阻断其他校验流程，需通过日志中的`BigGraphCheckerV3 failed`或`Big graph sync-conflict check failed`等`error`级别日志识别。
+在hccl-vm终端内执行hccl-vm plugin run @checker后，Checker校验流程及结果会打印在终端内，用户需关注在日志文件中是否存在[error]级别日志和最终校验结果：
 
 ```bash
-[info][PID:144373][TID:144880][main.cc][RunChecker] [RunChecker] op[0] Checker Success.
+[HCCL_VL-CHECKER][CHECKER_RUN_SUMMARY] All Success (Total Op: 4, Big Grapth: 1)
 ```
 
 ---
@@ -1283,6 +1292,8 @@ HCCL-VM 通过 `LD_PRELOAD` 多层劫持模拟 HCCL 通信算子：Level 0 劫�
 
 执行 `bash ./build.sh --level1` 只编译北向相关代码（proxy level0/1/2 + 支撑库 + hccl-vm + device 侧 + aiv_kernel），hcomm 源码仓变为可选（提供时连带构建 checker/runner 插件）。产物 `hccl-vm` 仅支持 `--level 1`；`--full` 等全量构建支持 `--level 1/2`。
 
+与 `--full` 一致，构建安装后会自动从当前 CANN 部署 AICPU 包，无需额外执行 `build_pkg.sh`；hcomm 源码仓可选，但 CANN 中仍需具备 `aicpu_hccl.tar.gz` 和 `aicpu_hcomm.tar.gz`。
+
 #### 4.10.3 运行期：运行北向（--level 1）
 
 前置条件：安装目录 `lib/<arch>/` 下存在 `libhccl_proxy_level1.so`（AICPU 模式还需 `lib/aarch64/libhccl_device_proxy_level1.so`），否则启动报错退出。
@@ -1320,5 +1331,5 @@ HCCL-VM 通过 `LD_PRELOAD` 多层劫持模拟 HCCL 通信算子：Level 0 劫�
 
 ---
 
-**文档版本**：v1.3。
-**最后更新**：2026-10-31。
+**文档版本**：v1.4。
+**最后更新**：2026-11-12。

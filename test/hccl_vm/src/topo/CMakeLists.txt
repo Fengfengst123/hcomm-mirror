@@ -31,7 +31,7 @@ target_include_directories(topo PRIVATE
 
 hcclvm_apply_common_flags(topo)
 
-target_link_libraries(topo PRIVATE log)
+target_link_libraries(topo PRIVATE log device_spec)
 
 # 日志染色: 模块 tag
 target_compile_definitions(topo PRIVATE HCCL_VM_MODULE="TOPO")

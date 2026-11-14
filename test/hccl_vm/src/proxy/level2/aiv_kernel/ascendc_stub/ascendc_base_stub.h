@@ -35,7 +35,7 @@ typedef __uint8_t__ uint8_t;
 #endif
 
 namespace AscendC {
-extern int64_t block_num;
+extern thread_local int64_t block_num;
 extern thread_local int64_t block_idx;
 
 extern __aicore__ inline int64_t GetBlockIdx() { return block_idx; }

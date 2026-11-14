@@ -220,29 +220,45 @@ TEST_F(DeviceMemoryManagerTest, ReleasePhyMem_NullName_Fail)
 
 TEST_F(DeviceMemoryManagerTest, MapDevPtrHostPtr_Normal_Success)
 {
+    constexpr uint64_t deviceKey = 1;
     void* devPtr = (void*)0x1000;
     void* hostPtr = (void*)0x2000;
-    EXPECT_NO_THROW(sim::DeviceMemoryManager::GetInstance().MapDevPtrHostPtr(devPtr, hostPtr));
-    void* result = sim::DeviceMemoryManager::GetInstance().GetHostPtrByDevPtr(devPtr);
+    EXPECT_NO_THROW(sim::DeviceMemoryManager::GetInstance().MapDevPtrHostPtr(deviceKey, devPtr, hostPtr));
+    void* result = sim::DeviceMemoryManager::GetInstance().GetHostPtrByDevPtr(deviceKey, devPtr);
     EXPECT_EQ(result, hostPtr);
-    sim::DeviceMemoryManager::GetInstance().UnmapDevPtrHostPtr(devPtr);
+    sim::DeviceMemoryManager::GetInstance().UnmapDevPtrHostPtr(deviceKey, devPtr);
 }
 
 TEST_F(DeviceMemoryManagerTest, UnmapDevPtrHostPtr_AfterMap_Success)
 {
+    constexpr uint64_t deviceKey = 1;
     void* devPtr = (void*)0x1000;
     void* hostPtr = (void*)0x2000;
-    sim::DeviceMemoryManager::GetInstance().MapDevPtrHostPtr(devPtr, hostPtr);
-    EXPECT_NO_THROW(sim::DeviceMemoryManager::GetInstance().UnmapDevPtrHostPtr(devPtr));
-    void* result = sim::DeviceMemoryManager::GetInstance().GetHostPtrByDevPtr(devPtr);
+    sim::DeviceMemoryManager::GetInstance().MapDevPtrHostPtr(deviceKey, devPtr, hostPtr);
+    EXPECT_NO_THROW(sim::DeviceMemoryManager::GetInstance().UnmapDevPtrHostPtr(deviceKey, devPtr));
+    void* result = sim::DeviceMemoryManager::GetInstance().GetHostPtrByDevPtr(deviceKey, devPtr);
     EXPECT_EQ(result, nullptr);
 }
 
 TEST_F(DeviceMemoryManagerTest, GetHostPtrByDevPtr_NotExist_ReturnsNull)
 {
     void* devPtr = (void*)0x9999;
-    void* result = sim::DeviceMemoryManager::GetInstance().GetHostPtrByDevPtr(devPtr);
+    void* result = sim::DeviceMemoryManager::GetInstance().GetHostPtrByDevPtr(1, devPtr);
     EXPECT_EQ(result, nullptr);
+}
+
+// 同一 devPtr 数值在不同 deviceKey 下互不覆盖：多 rank 同址数值的唯一性靠 deviceKey 维度。
+TEST_F(DeviceMemoryManagerTest, MapDevPtrHostPtr_SamePtrDiffDeviceKey_Independent)
+{
+    void* devPtr = (void*)0x1000;
+    auto& mgr = sim::DeviceMemoryManager::GetInstance();
+    mgr.MapDevPtrHostPtr(1, devPtr, (void*)0x2000);
+    mgr.MapDevPtrHostPtr(7, devPtr, (void*)0x3000);
+    EXPECT_EQ(mgr.GetHostPtrByDevPtr(1, devPtr), (void*)0x2000);
+    EXPECT_EQ(mgr.GetHostPtrByDevPtr(7, devPtr), (void*)0x3000);
+    mgr.UnmapDevPtrHostPtr(1, devPtr);
+    EXPECT_EQ(mgr.GetHostPtrByDevPtr(7, devPtr), (void*)0x3000);
+    mgr.UnmapDevPtrHostPtr(7, devPtr);
 }
 
 // SetUp 已写入仅校验模式，集成路径走仅校验模式开分支。仅校验模式关时不引流由 VmemDecisionTest 覆盖。

@@ -88,6 +88,31 @@ HcclResult Loader::LoadOpExecutionKeys(std::vector<sim::operation::OpExecutionKe
         groupIt->second.push_back(entry);
     }
 
+    // 按算子完成(出栈)序重排 keys：opIter 是入栈/开始序，嵌套调用场景（算子执行期
+    // LaunchWarmupVOperator 再入同类算子）外层先开始、后完成，opIter 序与真实执行序相反。
+    // endSeq 在算子桩退栈时按进程内单调序号打标；collective 各 rank 锁步推进，同一算子
+    // 各 rank 的 endSeq 一致，这里仍按组内最小值聚合以容忍个别 rank 缺标。
+    // stable_sort 保证 endSeq 全部未打标(0 → UINT32_MAX)时退回原 id 升序(= opIter 升序)，
+    // 与历史行为一致（顺序调用场景两种序本来就相同，重排是 no-op）。
+    std::map<sim::operation::OpExecutionKey, uint32_t> minEndSeqByKey;
+    for (const auto& group : opExecutionEntriesByKey_) {
+        uint32_t minEndSeq = UINT32_MAX;
+        for (const sim::operation::OpExecutionIndexEntry& entry : group.second) {
+            if (entry.endSeq != 0) {
+                minEndSeq = std::min(minEndSeq, entry.endSeq);
+            }
+        }
+        minEndSeqByKey.emplace(
+            sim::operation::OpExecutionKey{
+                std::get<0>(group.first), std::get<1>(group.first), std::get<2>(group.first)},
+            minEndSeq);
+    }
+    std::stable_sort(
+        keys.begin(), keys.end(),
+        [&minEndSeqByKey](const sim::operation::OpExecutionKey& lhs, const sim::operation::OpExecutionKey& rhs) {
+            return minEndSeqByKey.at(lhs) < minEndSeqByKey.at(rhs);
+        });
+
     HCCL_VM_INFO("Loaded operator execution keys, recordCount={}, opCount={}", entries.size(), keys.size());
     return HcclResult::HCCL_SUCCESS;
 }

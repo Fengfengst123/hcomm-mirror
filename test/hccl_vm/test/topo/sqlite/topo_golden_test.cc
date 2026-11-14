@@ -551,16 +551,10 @@ TEST_P(ClusterTopoGoldenTest, ClusterTopoMatchGolden)
             }
             const std::string name = entry.path().filename().string();
             if (name.rfind("board", 0) == 0 && name.size() > 5) {
-                const std::string numStr = name.substr(5);
-                bool allDigits = true;
-                for (char c : numStr) {
-                    if (!std::isdigit(static_cast<unsigned char>(c))) {
-                        allDigits = false;
-                        break;
-                    }
-                }
-                if (allDigits) {
-                    boardIds.push_back(std::stoi(numStr));
+                try {
+                    boardIds.push_back(std::stoi(name.substr(5)));
+                } catch (const std::exception&) {
+                    continue;
                 }
             }
         }

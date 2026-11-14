@@ -201,7 +201,16 @@ public:
      * 调用方不得在持有该引用期间触发会重置 task 元数据的操作。
      */
     const HcclVmTaskMetaData& GetHvmTaskMetaData() const;
-    void InitCcuInfo(DevType& devType, std::vector<uint64_t>& resourceBaseAddr);
+    /**
+     * @brief 填充 CCU 解码上下文：devType + per-(deviceId, dieId) 的 CCU 资源基址表。
+     *
+     * ★ 基址取代原 0x123123123/0x456456456 假常量（设计文档 §2.2 #8 / §4.5.5）：
+     *   遍历 Device 表，逐 (device, die) 走全项目唯一入口 sim::runtime::GetCcuResourceBaseAddr
+     *   （DB Ccu.resource_addr 优先、yaml 规格回退）。表维度同步升级为 (deviceId, dieId)——
+     *   真实基址 per-device 唯一，旧"只有 die 维度"的 vector 是 P3 的直接体现。
+     */
+    void
+    InitCcuInfo(DevType& devType, std::map<TaskGraphGeneratorV3::DeviceId, std::vector<uint64_t>>& resourceBaseAddr);
     void BeginOpGroup(const std::string& commName, uint64_t commHash, uint32_t opIter);
     std::string GetCurrentCommName() const;
     uint64_t GetCurrentCommHash() const;

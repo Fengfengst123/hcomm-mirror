@@ -31,6 +31,12 @@
 #include "sim_common_defs.h"
 #include "sim_ip_address.h"
 
+namespace sim {
+namespace devspec {
+    struct DeviceSpec;
+}
+} // namespace sim
+
 namespace sim::runtime {
 extern thread_local uint64_t g_cur_device_key;
 // 当前线程正在执行算子的本地 Communicator 表行 id; 它不是 HcclComm 句柄, 也不是整个通信域共用的 id.
@@ -72,6 +78,81 @@ aclError GetServerByKey(uint64_t serverKey, Server& server);
 aclError UpdateDeviceLogicId(uint64_t serverKey, uint32_t phyDevId, uint32_t logicDevId, uint32_t userId);
 aclError UpdateSuperDeviceId(uint32_t logicDevId, uint32_t superDeviceId);
 aclError GetCcuFromDeviceByDieId(uint64_t deviceKey, uint8_t dieId, Ccu& ccu);
+
+/*==================== device 规格查询（设计文档 §4.8.3）====================
+ * 数据源是 config/device/*.yaml，由 InitClusterStaticTopoData 落库为运行时产物。
+ * ★ 消费方必须实现回退链：DB 未命中（表空 / mock-comm 路径不经落库，见 §4.8.7 / O9）
+ *   → 回退 DeviceSpecRegistry 直接读 yaml。
+ */
+/// 按 spec 名（= yaml 文件名主干）查头信息。
+aclError GetDeviceSpecByName(const std::string& name, DeviceSpec& out);
+/// 按 device 主键查其绑定的 spec 头信息（经 DeviceSpecBinding）。
+aclError GetDeviceSpecByDeviceKey(uint64_t deviceKey, DeviceSpec& out);
+/// 取某 spec 的全部区域行（按 offset 升序）。
+bool GetDeviceSpecRegions(uint64_t specId, std::vector<DeviceSpecRegion>& out);
+/// 取某 spec 的全部 MS bank 窗口行（按 ccua_index 升序）。
+bool GetDeviceSpecMsWindows(uint64_t specId, std::vector<DeviceSpecMsWindow>& out);
+/// 取某 spec 的全部 die 偏移行（按 die_id 升序）。
+bool GetDeviceSpecDies(uint64_t specId, std::vector<DeviceSpecDie>& out);
+/// 取某 spec 的全部分区段行（按 offset 升序）。
+bool GetDeviceSpecPartitions(uint64_t specId, std::vector<DeviceSpecPartition>& out);
+/// 取全部已落库的 spec 头信息。
+bool GetAllDeviceSpecs(std::vector<DeviceSpec>& out);
+
+/**
+ * @brief 取某 (device, die) 的 CCU 资源空间基址 —— **全项目唯一入口**。
+ *
+ * 取代此前散落在 8 处的 `0x123123123` / `0x456456456` 硬编码（设计文档 §2.2）。
+ *
+ * 解析顺序：
+ *   ① DB `Ccu.resource_addr`（拓扑初始化时由 FillCcu 按 device 规格写入，per-rank per-die 唯一）
+ *   ② 回退：按 `Device.soc_version` → DeviceSpecRegistry 读 yaml 推导
+ *      （mock-comm 路径不经 InitClusterStaticTopoData，DB 无行，见 §4.8.7 / O9）
+ *
+ * @param deviceKey Device 表主键
+ * @param dieId     die 序号
+ * @param baseAddr  [out] CCU 资源空间基址，如 rank0 die0 = 0x8e00000000
+ * @return 两条路径都拿不到时返回 false（调用方须显式处理，不得回退到硬编码常量）
+ *
+ * ★ 成功结果按 (deviceKey, dieId) 进程级缓存，重复调用不产生 SQL（见 ResetDeviceSpecCache）。
+ */
+bool GetCcuResourceBaseAddr(uint64_t deviceKey, uint32_t dieId, uint64_t& baseAddr);
+
+/**
+ * @brief 取某 device 绑定的 device 规格（yaml 权威源）—— CCU 资源规格的**唯一读取入口**。
+ *
+ * 取代此前散落在 proxy level1 / runner / checker 三侧、各自硬编码的容量表与区域偏移表
+ * （`CCU_V1_CAPACITY`/`CCU_V2_CAPACITY`/`V1_*_OFFSET`/`XN_*_ADDR_A6`/`CCU_MS_START_ADDR` 等，
+ * 设计文档 §2.5 / §4.5.4-4.5.6）。容量、区域偏移/步长、MS 交织几何全部由本规格的
+ * regions/ms 派生，不再出现字面量。
+ *
+ * 解析顺序（与 GetCcuResourceBaseAddr 同源）：
+ *   ① DB `DeviceSpecBinding` → `DeviceSpec`（拓扑初始化时由 PersistDeviceSpecs 落库）
+ *   ② 回退：按 `Device.soc_version` → DeviceSpecRegistry 读 yaml（mock-comm 路径不落库）
+ *
+ * @param deviceKey Device 表主键
+ * @return 命中返回规格指针（进程级常驻、只读，可安全长期持有）；两条路径都拿不到返回 nullptr，
+ *         调用方须显式处理，**不得回退到任何硬编码常量**（设计文档 §2.2）。
+ *
+ * ★ 本函数与 GetCcuResourceBaseAddr 的结果均进程级缓存（见 ResetDeviceSpecCache 注释），
+ *   重复调用不产生 SQL。
+ */
+const sim::devspec::DeviceSpec* GetDeviceSpec(uint64_t deviceKey);
+
+/**
+ * @brief 清空 device 规格解析缓存（Device.soc_version 与 (device,die) → CCU 基址）。
+ *
+ * 缓存前提：两者都是 `Scope::Static` 数据 —— 由 InitClusterStaticTopoData 在 start 阶段
+ * 一次性写入，运行期不再变更；而 `Db::` 薄层按其合同**不缓存**（db_sim_runner_ops.h），
+ * 每次 GetById/GetOneByPred 都是一条 SQL。规格解析又处在 CCU 的热点路径上
+ * （proxy L1 每次资源分配 / 每次取址、A5 每条通道、checker 每卡启动解析），
+ * 故在此按 key 常驻，把重复解析降为 0 次读库（设计文档 §4.5.5/§4.5.6 的"规格只解析一次"口径）。
+ *
+ * 需要显式清空的场景：① 同一进程内重新初始化拓扑；② 经 `hccl-vm table update` 改了
+ * Device.soc_version；③ UT 重置 DB / DeviceSpecRegistry。
+ */
+void ResetDeviceSpecCache();
+
 aclError GetContextByDevId(uint32_t deviceId, Context& context);
 aclError GetPortByName(uint64_t serverKey, uint32_t phyDevId, const std::string& name, Port& port);
 aclError GetEndPointByIpAddr(const std::string& ip, EndPoint& endPoint);

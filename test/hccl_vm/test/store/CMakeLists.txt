@@ -94,6 +94,28 @@ set_target_properties(test_sim_shm_memory_common PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/output/bin"
 )
 
+# AllocVirMem 的 per-segment first-fit 分段分配器（设计文档 §4.5.7 / 验收 A5）。
+# 依赖 device_spec 提供的真实 address_space 分段，故需 device yaml 与 device_spec 库。
+add_executable(test_device_memory_manager_alloc device_memory_manager_alloc_test.cc)
+target_include_directories(test_device_memory_manager_alloc PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/include/store
+    ${CMAKE_SOURCE_DIR}/src/device_spec
+)
+target_link_libraries(test_device_memory_manager_alloc PRIVATE
+    pthread rt store runtime_state operation_data device_spec log yaml-cpp::yaml-cpp
+)
+target_compile_definitions(test_device_memory_manager_alloc PRIVATE
+    HCCLVM_DEVICE_SPEC_TEST_DIR="${CMAKE_SOURCE_DIR}/asset/cluster_model/config/device"
+)
+set_target_properties(test_device_memory_manager_alloc PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/output/bin"
+)
+if(TARGET third_party_yaml_cpp)
+    add_dependencies(test_device_memory_manager_alloc third_party_yaml_cpp)
+endif()
+add_test(NAME test_device_memory_manager_alloc COMMAND test_device_memory_manager_alloc)
+
 add_executable(test_sim_data_dump sim_data_dump_test.cc
     ${CMAKE_SOURCE_DIR}/src/common/sim_data_dump.cc
     ${CMAKE_SOURCE_DIR}/test/hccl_plugin_manager/hccl_plugin_manager_stub.cc

@@ -34,6 +34,8 @@ namespace fs = std::filesystem;
 #include "sim_ip_address.h"
 #include "runtime_state/db_sim_runner_ops.h"
 #include "storage/table_access.h"
+#include "device_spec/device_spec_registry.h"
+#include "device_spec/rank_address_space.h"
 
 namespace {
 // EID(128bit)地址分配规则(位序从高到低):
@@ -1089,10 +1091,14 @@ void FillDevice(sim::runtime::Device& deviceDb, uint64_t serverKey, const Device
     deviceDb.id = 0;
 }
 
-void FillCcu(sim::runtime::Ccu& ccu, uint64_t deviceKey, uint32_t dieId)
+void FillCcu(sim::runtime::Ccu& ccu, uint64_t deviceKey, uint32_t dieId, uint64_t resourceAddr)
 {
     ccu.device_id = deviceKey;
     ccu.die_id = dieId;
+    // ★ 修 P7：此前 resource_addr 恒为 0（字段与注释齐备但 FillCcu 从不写），
+    //   导致 proxy/runner/checker 各自硬编码 0x123123123 / 0x456456456。
+    //   现由 device 规格推导：ccuDieBase(rankIdx, dieId)，per-rank per-die 唯一。
+    ccu.resource_addr = resourceAddr;
     ccu.status = 0;
     ccu.id = 0;
 }
@@ -1129,6 +1135,168 @@ void FillEndPoint(sim::runtime::EndPoint& endPoint, uint64_t deviceKey, const Po
 }
 } // namespace
 
+/**
+ * @brief 把 config/device/*.yaml 的规格落库（设计文档 §4.8.1）。
+ *
+ * 在 InitClusterStaticTopoData 的事务内调用，与 Server/Device/Ccu 同批提交保证原子性。
+ * yaml 是唯一权威源，本组表是运行时产物（§4.8.6）；消费方查不到时必须回退读 yaml
+ * （mock-comm 路径不经本函数，见 §4.8.7 / O9）。
+ *
+ * 幂等：按 name 已存在的 spec 直接复用其 id，不重复插入。
+ *
+ * @param txn         写事务
+ * @param nameToSpecId [out] spec.name → DeviceSpec.id
+ */
+HcclVmResult PersistDeviceSpecs(HcclSim::Storage::Transaction& txn, std::map<std::string, uint64_t>& nameToSpecId)
+{
+    nameToSpecId.clear();
+    auto& reg = sim::devspec::DeviceSpecRegistry::GetInstance();
+    if (reg.Size() == 0 && !reg.LoadAll()) {
+        // 加载失败不阻断拓扑初始化：消费方会回退读 yaml（§4.3.2 回退链）。
+        HCCL_VM_WARN(
+            "device spec registry unavailable ({}), skip DeviceSpec persistence; "
+            "consumers will fall back to reading config/device/*.yaml",
+            reg.LastError());
+        return HcclVmResult::HCCL_SIM_SUCCESS;
+    }
+    const auto specs = reg.All();
+    if (specs.empty()) {
+        HCCL_VM_WARN("no device spec loaded, skip DeviceSpec persistence");
+        return HcclVmResult::HCCL_SIM_SUCCESS;
+    }
+
+    for (const auto* spec : specs) {
+        // 幂等：同名已存在则复用其 id。
+        // ★ 直接查表而非调 GetDeviceSpecByName —— 后者在"查不到"时打 ERROR，
+        //   而首次落库时"查不到"是正常路径，会造成误报噪音。
+        uint64_t specId = 0;
+        auto existed = sim::runtime::Db::GetOneByPred<sim::runtime::DeviceSpec>(
+            HcclSim::Storage::Eq(&sim::runtime::DeviceSpec::name, spec->name));
+        if (existed.ok()) {
+            specId = existed->id;
+            nameToSpecId[spec->name] = specId;
+            HCCL_VM_INFO("device spec \"{}\" already persisted (id={}), reuse", spec->name, specId);
+            continue;
+        }
+
+        sim::runtime::DeviceSpec row{};
+        row.id = 0;
+        (void)strncpy(row.name, spec->name.c_str(), sizeof(row.name) - 1);
+        row.ccu_version = static_cast<uint8_t>(spec->ccuVersion);
+        row.die_num = static_cast<uint8_t>(spec->dieNum);
+        row.spec_version = spec->specVersion;
+        row.rank_base = spec->addr.rankBase;
+        row.rank_stride = spec->addr.rankStride;
+        row.rank_window_size = spec->addr.rankWindowSize;
+        row.ccu_window_offset = spec->addr.ccuWindowOffset;
+        row.ccu_window_size = spec->addr.ccuWindowSize;
+        row.ccu_die_size = spec->addr.ccuDieSize;
+        row.resource_space_size = spec->resourceSpaceSize;
+        row.reserved_sync_slots = spec->reservedSyncSlots;
+        row.count_xn_num = spec->countXnNum;
+
+        std::vector<sim::runtime::DeviceSpec> headRows{row};
+        auto headBatch = HcclSim::Storage::InsertMany(headRows.data(), headRows.size(), txn);
+        if (!headBatch.ok()) {
+            HCCL_VM_ERROR("insert DeviceSpec({}) failed: {}", spec->name, headBatch.diagnostic);
+            return HcclVmResult::HCCL_SIM_E_INTERNAL;
+        }
+        specId = headRows[0].id;
+        nameToSpecId[spec->name] = specId;
+
+        // 子表：regions
+        std::vector<sim::runtime::DeviceSpecRegion> regionRows;
+        regionRows.reserve(spec->regions.size());
+        for (const auto& r : spec->regions) {
+            sim::runtime::DeviceSpecRegion rr{};
+            rr.id = 0;
+            rr.spec_id = specId;
+            (void)strncpy(rr.name, r.name.c_str(), sizeof(rr.name) - 1);
+            rr.type = static_cast<uint16_t>(r.type);
+            rr.offset = r.offset;
+            rr.size = r.size;
+            rr.entry_size = r.entrySize;
+            rr.count = r.count;
+            regionRows.push_back(rr);
+        }
+        if (!regionRows.empty()) {
+            auto b = HcclSim::Storage::InsertMany(regionRows.data(), regionRows.size(), txn);
+            if (!b.ok()) {
+                HCCL_VM_ERROR("insert DeviceSpecRegion({}) failed: {}", spec->name, b.diagnostic);
+                return HcclVmResult::HCCL_SIM_E_INTERNAL;
+            }
+        }
+
+        // 子表：MS bank 窗口
+        std::vector<sim::runtime::DeviceSpecMsWindow> msRows;
+        msRows.reserve(spec->ms.windows.size());
+        for (const auto& w : spec->ms.windows) {
+            sim::runtime::DeviceSpecMsWindow wr{};
+            wr.id = 0;
+            wr.spec_id = specId;
+            wr.ccua_index = w.index;
+            wr.offset = w.offset;
+            wr.size = w.size;
+            msRows.push_back(wr);
+        }
+        if (!msRows.empty()) {
+            auto b = HcclSim::Storage::InsertMany(msRows.data(), msRows.size(), txn);
+            if (!b.ok()) {
+                HCCL_VM_ERROR("insert DeviceSpecMsWindow({}) failed: {}", spec->name, b.diagnostic);
+                return HcclVmResult::HCCL_SIM_E_INTERNAL;
+            }
+        }
+
+        // 子表：die 偏移
+        std::vector<sim::runtime::DeviceSpecDie> dieRows;
+        dieRows.reserve(spec->addr.ccuDieOffsets.size());
+        for (size_t d = 0; d < spec->addr.ccuDieOffsets.size(); ++d) {
+            sim::runtime::DeviceSpecDie dr{};
+            dr.id = 0;
+            dr.spec_id = specId;
+            dr.die_id = static_cast<uint32_t>(d);
+            dr.offset = spec->addr.ccuDieOffsets[d];
+            dieRows.push_back(dr);
+        }
+        if (!dieRows.empty()) {
+            auto b = HcclSim::Storage::InsertMany(dieRows.data(), dieRows.size(), txn);
+            if (!b.ok()) {
+                HCCL_VM_ERROR("insert DeviceSpecDie({}) failed: {}", spec->name, b.diagnostic);
+                return HcclVmResult::HCCL_SIM_E_INTERNAL;
+            }
+        }
+
+        // 子表：rank 窗口分区段（user_mem 多段 + ccu）
+        std::vector<sim::runtime::DeviceSpecPartition> partRows;
+        partRows.reserve(spec->addr.partitions.size());
+        std::map<std::string, uint32_t> segSeq;
+        for (const auto& p : spec->addr.partitions) {
+            sim::runtime::DeviceSpecPartition pr{};
+            pr.id = 0;
+            pr.spec_id = specId;
+            (void)strncpy(pr.name, p.name.c_str(), sizeof(pr.name) - 1);
+            pr.seg_index = segSeq[p.name]++;
+            pr.offset = p.offset;
+            pr.size = p.size;
+            partRows.push_back(pr);
+        }
+        if (!partRows.empty()) {
+            auto b = HcclSim::Storage::InsertMany(partRows.data(), partRows.size(), txn);
+            if (!b.ok()) {
+                HCCL_VM_ERROR("insert DeviceSpecPartition({}) failed: {}", spec->name, b.diagnostic);
+                return HcclVmResult::HCCL_SIM_E_INTERNAL;
+            }
+        }
+
+        HCCL_VM_INFO(
+            "device spec persisted: name={} id={} ccu_version={} die_num={} "
+            "resource_space_size={:#x} regions={} ms_windows={} dies={} partitions={}",
+            spec->name, specId, static_cast<uint32_t>(spec->ccuVersion), spec->dieNum, spec->resourceSpaceSize,
+            regionRows.size(), msRows.size(), dieRows.size(), partRows.size());
+    }
+    return HcclVmResult::HCCL_SIM_SUCCESS;
+}
+
 HcclVmResult AscendClusterTopoParser::InitClusterStaticTopoData()
 {
     // 静态拓扑批量写入合并为单事务提交（T1 重排：逐 server、device ≤128 一窗、
@@ -1141,6 +1309,12 @@ HcclVmResult AscendClusterTopoParser::InitClusterStaticTopoData()
         return HcclVmResult::HCCL_SIM_E_INTERNAL;
     }
     auto& writeTxn = *txnResult;
+    // device 规格落库（§4.8.1）：先于 Device/Ccu 批，供 Ccu.resource_addr 推导使用
+    std::map<std::string, uint64_t> specNameToId;
+    if (PersistDeviceSpecs(writeTxn, specNameToId) != HcclVmResult::HCCL_SIM_SUCCESS) {
+        HCCL_VM_ERROR("persist device specs failed");
+        return HcclVmResult::HCCL_SIM_E_INTERNAL;
+    }
     // Port 批处理：Port/EndPoint/EndPointPortMapping 三段批量 + ip→endpointId
     // 索引（成功批次才加入 ID 关联；同一 IP 保留最先插入，与原语义一致）
     const auto flushPortBatch = [this](
@@ -1231,19 +1405,67 @@ HcclVmResult AscendClusterTopoParser::InitClusterStaticTopoData()
             HCCL_VM_ERROR("batch insert devices failed: {}", deviceBatch.diagnostic);
             return HcclVmResult::HCCL_SIM_E_INTERNAL;
         }
-        // Ccu 批：每 device 依次 die=0、1（device_id 来自 Device 批回填）
+        // Ccu 批：每 device 依次 die=0..die_num-1（device_id 来自 Device 批回填）
+        // ★ die 数改读 device 规格（原硬编码 dieId < 2U，见 O4）
+        // ★ resource_addr 由 ccuDieBase(rankIdx, dieId) 推导（修 P7）
         std::vector<sim::runtime::Ccu> ccuRows;
+        std::vector<sim::runtime::DeviceSpecBinding> bindingRows;
         ccuRows.reserve(deviceRows.size() * 2U);
+        bindingRows.reserve(deviceRows.size());
         for (const auto& deviceRow : deviceRows) {
-            for (uint32_t dieId = 0; dieId < 2U; ++dieId) {
+            const uint64_t deviceKey = deviceRow.id;
+            // 解析该 device 的规格：Device.soc_version → registry（大小写不敏感最长前缀）
+            const sim::devspec::DeviceSpec* spec = nullptr;
+            const std::string socVer(deviceRow.soc_version);
+            if (!socVer.empty()) {
+                spec = sim::devspec::DeviceSpecRegistry::GetInstance().FindBySocVersion(socVer);
+            }
+            uint32_t dieNum = 2U; // 兜底：与改造前一致
+            uint64_t ccuDieBase0 = 0;
+            uint64_t ccuDieStride = 0;
+            if (spec != nullptr) {
+                dieNum = spec->dieNum;
+                const sim::devspec::RankAddressSpace ras(spec->addr);
+                // rankIdx := Device 主键 - 1，与 AllocVirMem 同源（§4.4.4 / D5）。
+                // ⚠ O14：aclrtReserveMemAddress 等调用点传的是 physical_id（0 起），
+                //   与此处的 PK（1 起）不是同一 id 空间，待 S2-2 统一。
+                const uint32_t rankIdx = (deviceKey == 0) ? 0U : static_cast<uint32_t>(deviceKey - 1);
+                ccuDieBase0 = ras.CcuDieBase(rankIdx, 0);
+                ccuDieStride = (spec->dieNum > 1 && spec->addr.ccuDieOffsets.size() > 1) ?
+                                   (spec->addr.ccuDieOffsets[1] - spec->addr.ccuDieOffsets[0]) :
+                                   spec->addr.ccuDieSize;
+                auto idIt = specNameToId.find(spec->name);
+                if (idIt != specNameToId.end()) {
+                    sim::runtime::DeviceSpecBinding bind{};
+                    bind.id = 0;
+                    bind.device_id = deviceKey;
+                    bind.spec_id = idIt->second;
+                    bindingRows.push_back(bind);
+                }
+            } else if (!socVer.empty()) {
+                HCCL_VM_WARN(
+                    "device {:d} soc_version \"{}\" 未命中任何 device spec，"
+                    "Ccu.resource_addr 将留 0（消费方须回退读 yaml）",
+                    deviceKey, socVer);
+            }
+            for (uint32_t dieId = 0; dieId < dieNum; ++dieId) {
+                const uint64_t resAddr
+                    = (spec != nullptr && ccuDieBase0 != 0) ? (ccuDieBase0 + dieId * ccuDieStride) : 0ULL;
                 ccuRows.emplace_back();
-                FillCcu(ccuRows.back(), deviceRow.id, dieId);
+                FillCcu(ccuRows.back(), deviceKey, dieId, resAddr);
             }
         }
         auto ccuBatch = HcclSim::Storage::InsertMany(ccuRows.data(), ccuRows.size(), writeTxn);
         if (!ccuBatch.ok()) {
             HCCL_VM_ERROR("batch insert ccus failed: {}", ccuBatch.diagnostic);
             return HcclVmResult::HCCL_SIM_E_INTERNAL;
+        }
+        if (!bindingRows.empty()) {
+            auto bindBatch = HcclSim::Storage::InsertMany(bindingRows.data(), bindingRows.size(), writeTxn);
+            if (!bindBatch.ok()) {
+                HCCL_VM_ERROR("batch insert device spec bindings failed: {}", bindBatch.diagnostic);
+                return HcclVmResult::HCCL_SIM_E_INTERNAL;
+            }
         }
         // Port/EndPoint/Mapping：按 ≤kInsertBatchMaxRows 分块冲刷(每块内 Port→EndPoint→Mapping)
         std::vector<std::pair<const Port*, uint64_t>> portRefs;
@@ -1308,6 +1530,10 @@ HcclVmResult AscendClusterTopoParser::InitClusterStaticTopoData()
         HCCL_VM_ERROR("commit static topo batch write transaction failed");
         return HcclVmResult::HCCL_SIM_E_INTERNAL;
     }
+    // Device.soc_version / Ccu.resource_addr / DeviceSpec* 均为本次写入的静态数据，
+    // 而它们的解析结果被进程级缓存（见 ResetDeviceSpecCache 注释）：同一进程内重复
+    // 初始化拓扑（start→run、UT 重建库）时必须失效，否则读到上一轮的旧解析结果。
+    sim::runtime::ResetDeviceSpecCache();
     HCCL_VM_DEBUG("InitClusterStaticTopoData completed successfully!");
     return HcclVmResult::HCCL_SIM_SUCCESS;
 }

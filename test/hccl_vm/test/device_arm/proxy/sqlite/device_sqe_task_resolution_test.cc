@@ -12,7 +12,7 @@
 // （SDMA memcpy/reduce、UDMA WRITE/READ/reduce、WriteWithNotify 数据段）改用
 // ResolveTaskAddress 一次定位后，任务字段必须与输入语义一致；inline notify
 // 分支不做地址解析；任一地址解析失败不插入伪造任务（无零偏移/零属主任务）。
-// 完整身份链：OpDetailTab（g_currOpDetailId）→ TaskIdentity；远端 EID →
+// 完整身份链：OpDetailTab（CurrOpDetailId()）→ TaskIdentity；远端 EID →
 // EndPoint → rmtDeviceId；通信域双成员 → GetCommRankByDeviceId。
 #include <cstdint>
 #include <cstring>
@@ -137,7 +137,7 @@ protected:
         peerComm.device_id = rmtDevId;
         ASSERT_NE(runnerdb_test::InsertRecord<sim::runtime::Communicator>(peerComm), 0U);
 
-        // 任务身份（OP_DATA_DB.OpDetailTab + g_currOpDetailId）
+        // 任务身份（OP_DATA_DB.OpDetailTab + CurrOpDetailId()）
         sim::operation::OpDetailTab detail{};
         detail.pid = static_cast<uint32_t>(getpid());
         detail.deviceId = static_cast<uint32_t>(localDevId);
@@ -146,7 +146,7 @@ protected:
         detail.streamId = 9;
         const uint64_t detailId = runnerdb_test::InsertRecord<sim::operation::OpDetailTab>(detail);
         ASSERT_NE(detailId, 0U);
-        sim::operation::g_currOpDetailId = static_cast<uint32_t>(detailId);
+        sim::operation::CurrOpDetailId() = static_cast<uint32_t>(detailId);
 
         // 远端 EID：SQE 字节序与 GetRmtDeviceIdByEid 的翻转+IpAddress 编码保持一致，
         // EndPoint.eid 按产品相同变换写入（不依赖 EID 内部格式假设）
@@ -170,7 +170,7 @@ protected:
 
     void TearDown() override
     {
-        sim::operation::g_currOpDetailId = 0;
+        sim::operation::CurrOpDetailId() = 0;
         SetCurDeviceKey(0);
         runnerdb_test::CleanUpDatabases(kRunnerDbPath, kOpDbPath);
     }

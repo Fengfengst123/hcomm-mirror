@@ -49,6 +49,7 @@ target_link_libraries(checker PRIVATE
     loader
     runtime_state
     operation_data
+    device_spec
 
     store
     common

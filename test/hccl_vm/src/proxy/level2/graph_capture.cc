@@ -89,15 +89,22 @@ uint32_t CloneOpDetailForReplay(uint32_t origOpDetailId)
     const bool hasMem = sim::operation::QueryOpMemInfoByOpDetailId(origOpDetailId, origMem) == 0;
 
     orig.id = 0; // 交给 DB 自增新 id
+    // endSeq 是完成(出栈)序号，不随采集期记录继承；重放克隆在重放时刻即时打标（见下）。
+    orig.endSeq = 0;
     if (sim::operation::InsertOpDetail(orig) != 0) {
         HCCL_VM_WARN("InsertOpDetail failed for replay clone, fallback to orig opDetailId={}", origOpDetailId);
         return origOpDetailId;
     }
-    const uint32_t newOpDetailId = sim::operation::g_currOpDetailId;
+    const uint32_t newOpDetailId = sim::operation::CurrOpDetailId();
+    // 重放同步执行，克隆落库即视为该次算子完成：按进程内完成序打 endSeq，
+    // 保证 checker 的完成序排序对图模式重放算子同样成立。
+    if (sim::operation::AssignOpEndSeq(newOpDetailId) != 0) {
+        HCCL_VM_WARN("AssignOpEndSeq failed for replay clone, opDetailId={}", newOpDetailId);
+    }
 
     if (hasMem) {
         origMem.id = 0;
-        // InsertOpMem 会把 opDetailId 覆盖为 g_currOpDetailId（= newOpDetailId），自动关联新 opDetail。
+        // InsertOpMem 会把 opDetailId 覆盖为 CurrOpDetailId()（= newOpDetailId），自动关联新 opDetail。
         if (sim::operation::InsertOpMem(origMem) != 0) {
             HCCL_VM_WARN("InsertOpMem failed for replay clone, opDetailId={}", newOpDetailId);
         }
@@ -365,7 +372,7 @@ bool RecordThreadTaskAction(uint64_t streamId, const HcclTaskMetaData& taskMeta)
             return false;
     }
     action.streamId = streamId;
-    action.opDetailId = sim::operation::g_currOpDetailId;
+    action.opDetailId = sim::operation::CurrOpDetailId();
     action.commId = taskMeta.commId;
     action.taskMeta = taskMeta; // 完整拷贝(含 streamId)，重放 InsertTaskToCollection 沿用该流
     mIt->second.actions.push_back(std::move(action));
@@ -541,7 +548,7 @@ bool PrepareModelReplay(uint64_t modelId, ModelReplayContext& context)
         // 兼容数据量为0等空算子场景：无任何 action 可重放，仅告警，不再回放边界任务。
         HCCL_VM_WARN("model[{}] has no captured action (empty/no-op graph), skip replay boundary tasks", modelId);
     } else {
-        sim::operation::g_currOpDetailId = context.boundaryOpDetailId;
+        sim::operation::CurrOpDetailId() = context.boundaryOpDetailId;
     }
     return true;
 }
@@ -552,7 +559,7 @@ int ReplayModelActions(uint64_t modelId, const ModelReplayContext& context)
         const auto identity = context.opDetailIds.find(action.opDetailId);
         const uint32_t replayOpDetailId = identity == context.opDetailIds.end() ? 0 : identity->second;
         if (action.type != GraphActionType::UNKNOWN_KERNEL) {
-            sim::operation::g_currOpDetailId = replayOpDetailId;
+            sim::operation::CurrOpDetailId() = replayOpDetailId;
         }
         switch (action.type) {
             case GraphActionType::AICPU_KERNEL:
@@ -566,7 +573,7 @@ int ReplayModelActions(uint64_t modelId, const ModelReplayContext& context)
                 // 重放 = 重新走 AIV 完整下发路径（与 aclrtLaunchKernelWithHostArgs 正常下发共用
                 // LaunchAivKernelRaw）：launchIdx 重自增 + VirtualExecuteAivKernel 重新跑 x86 AIV stub
                 // + 重插 AIV_GRAPH，关联本次重放的 opDetail；runner 的 TaskAivGraph 据此重新跑 AIV 仿真。
-                sim::operation::g_currOpDetailId = replayOpDetailId;
+                sim::operation::CurrOpDetailId() = replayOpDetailId;
                 LaunchAivKernelRaw(
                     action.kernelName.c_str(), action.soName.c_str(), action.aivNumBlocks,
                     action.aivHostArgs.empty() ? nullptr : action.aivHostArgs.data(),
@@ -584,7 +591,7 @@ int ReplayModelActions(uint64_t modelId, const ModelReplayContext& context)
             case GraphActionType::NOTIFY_RECORD: {
                 // 二期：重放 = 重插 NOTIFY_RECORD（taskMeta），关联本次重放的 opDetail
                 HcclTaskMetaData taskMeta = action.taskMeta;
-                sim::operation::g_currOpDetailId = replayOpDetailId;
+                sim::operation::CurrOpDetailId() = replayOpDetailId;
                 uint32_t index{0};
                 auto insRet = InsertTaskToCollection(&taskMeta, &index);
                 if (insRet != HcclSim::HcclVmResult::HCCL_SIM_SUCCESS) {
@@ -603,7 +610,7 @@ int ReplayModelActions(uint64_t modelId, const ModelReplayContext& context)
                     HcclSim::Storage::Set(&sim::runtime::Notify::value, 0));
 
                 HcclTaskMetaData taskMeta = action.taskMeta;
-                sim::operation::g_currOpDetailId = replayOpDetailId;
+                sim::operation::CurrOpDetailId() = replayOpDetailId;
                 uint32_t index{0};
                 auto insRet = InsertTaskToCollection(&taskMeta, &index);
                 if (insRet != HcclSim::HcclVmResult::HCCL_SIM_SUCCESS) {
@@ -617,7 +624,7 @@ int ReplayModelActions(uint64_t modelId, const ModelReplayContext& context)
                 // 重放 = 重新走 CCU 完整下发路径（与 rtCCULaunch 正常下发共用 LaunchCcuKernelRaw）：
                 // index 重分配 + GenCaModelCcuToml + sqe dump + 重插 CCU_GRAPH，关联本次重放的 opDetail；
                 // runner 的 TaskCcuGraph 据此重新跑 CCU 仿真、重新产数据面行为。
-                sim::operation::g_currOpDetailId = replayOpDetailId;
+                sim::operation::CurrOpDetailId() = replayOpDetailId;
 #ifdef HCCLVM_LEVEL1_ONLY
                 // level1 裁剪模式未编译 CCU 下发桩(hccp_ccu_stub.cc), 重放跳过并显式告警
                 HCCL_VM_WARN(

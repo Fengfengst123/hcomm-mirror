@@ -21,38 +21,51 @@
 #include <cstdio>
 #include <cstdlib>
 #include <fcntl.h>
+#include <mutex>
+#include <new>
+#include <unordered_set>
 #include <sys/types.h>
 #include <unistd.h>
 
 namespace sim {
 namespace round_slot {
 
-    static int g_slotFd = -1;      // 保持打开到进程退出（写入依赖它，不显式 close）
-    static uint64_t g_slotKey = 0; // 本进程占用的槽位 = deviceKey（= Device 表主键）
-    static pid_t g_slotPid = 0;    // fork 防护：只有登记进程本人写自己的槽
+    // 每 deviceKey 一份槽位上下文：单进程多线程用例（examples）下 8 个 rank 线程在
+    // 同一进程内以不同 deviceKey 各登记一次，进程退出时写 8 个槽；多进程用例
+    // （hccl_test）每进程一个 key，行为与历史"进程只登记一次"完全等价。
+    struct SlotCtx {
+        int fd;       // 保持打开到进程退出（写入依赖它，不显式 close）
+        uint64_t key; // 占用的槽位 = deviceKey（= Device 表主键）
+        pid_t pid;    // fork 防护：只有登记进程本人写自己的槽
+    };
+    static std::mutex g_slotLock;
+    static std::unordered_set<uint64_t> g_attachedKeys;
 
     // on_exit 回调：退出链上执行，只用裸 syscall（选 on_exit 而非 atexit/析构：不受 dlclose 影响）
-    static void WriteSlotMark(int /*status*/, void* /*arg*/)
+    static void WriteSlotMark(int /*status*/, void* arg)
     {
-        if (g_slotPid == 0 || g_slotPid != getpid() || g_slotFd < 0 || g_slotKey == 0) {
+        const auto* ctx = static_cast<const SlotCtx*>(arg);
+        if (ctx == nullptr || ctx->pid != getpid() || ctx->fd < 0 || ctx->key == 0) {
             return; // fork 出来的子进程（exec 前）继承的回调不写父进程的槽
         }
         const char one = 1;
-        ssize_t written = pwrite(g_slotFd, &one, 1, static_cast<off_t>(g_slotKey));
+        ssize_t written = pwrite(ctx->fd, &one, 1, static_cast<off_t>(ctx->key));
         (void)written; // 失败不重试：Host 数不够就不发标志
     }
 
-    // 门控调用（aclrtSetDevice 里 deviceKey 确定之后）：只登记第一次；deviceKey 为 0 不登记
+    // 门控调用（aclrtSetDevice 里 deviceKey 确定之后）：同一 deviceKey 只登记一次，
+    // 不同 deviceKey（单进程多线程的其余 rank 线程）各自登记；deviceKey 为 0 不登记
     static inline void HvmRoundSlotAttach(uint64_t deviceKey) noexcept
     {
-        static bool attached = false;
-        if (attached) {
-            return; // 一个进程只认第一次拿到的 deviceKey
-        }
         if (deviceKey == 0) {
             return;
         }
-        attached = true;
+        {
+            std::lock_guard<std::mutex> lock(g_slotLock);
+            if (g_attachedKeys.count(deviceKey) != 0) {
+                return; // 本进程已登记过该 key
+            }
+        }
 
         const char* root = getenv("HCCL_VM_RESOURCE_ROOT"); // Host 已 setenv，全链继承
         if (root == nullptr || root[0] == '\0') {
@@ -68,10 +81,20 @@ namespace round_slot {
         if (fd < 0) {
             return;
         }
-        g_slotKey = deviceKey;
-        g_slotFd = fd;
-        g_slotPid = getpid();
-        on_exit(WriteSlotMark, nullptr);
+        auto* ctx = new (std::nothrow) SlotCtx{fd, deviceKey, getpid()};
+        if (ctx == nullptr) {
+            close(fd);
+            return;
+        }
+        {
+            std::lock_guard<std::mutex> lock(g_slotLock);
+            if (!g_attachedKeys.insert(deviceKey).second) {
+                delete ctx;
+                close(fd);
+                return; // 并发登记竞争失败：另一线程已登记同 key
+            }
+        }
+        on_exit(WriteSlotMark, ctx);
     }
 
 } // namespace round_slot

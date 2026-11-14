@@ -16,7 +16,7 @@
 #                           (如 hccl_res_expt.h 中的 ThreadType 等类型)、ACL runtime。
 #   hcomm 源码(脚本 clone) : ① 承载 checker 本体(即 test/hccl_vm)；② 提供 hcomm 内部
 #                           源码(src/platform、framework、base_comm…)供 checker 编译。
-#   hccl 源码(脚本 clone)  : 提供 hccl 内部源码(src/ops、hcomm_dlsym…)供 checker 编译
+#   hccl 源码(脚本 clone)  : 提供 hccl 内部源码(src/ops、hco mm_dlsym…)供 checker 编译
 #                           device/AICPU/AIV。上述内部源码 CANN 包里不包含。
 #
 # 官方(正常)配套方向：CANN 版本为锚 -> hcomm/hccl 源码用与该 CANN 版本一致的发布
@@ -72,7 +72,7 @@ HCCL_TEST_BIN_DIR=""        # build_hccl_test 写入：hccl_test 可执行文件
 PKG_MGR=""                  # detect_pkg_mgr 写入：apt（Ubuntu/Debian）或 dnf（HCE/openEuler/EulerOS）
 SUDO_PREFIX=""              # setup_sudo 解析：root 为空；非 root 有 sudo 为 "sudo"
 SUDO_KEEPALIVE_PID=""       # sudo 授权保活后台进程 PID（cleanup_sudo 负责回收）
-STEP_TOTAL=9                # 编译 HCCL-VM(7) → 编译安装子包(8) → 编译 hccl_test(9)
+STEP_TOTAL=8                # 编译 HCCL-VM 并部署 AICPU 包(7) → 编译 hccl_test(8)
 LOG_DIR=""
 RUN_TS=""
 
@@ -224,12 +224,11 @@ show_help() {
     echo "取得完整 CheckerL2 源码后，在仓库根目录直接运行:"
     echo "  bash ./hccl_vm_installer"
     echo ""
-    echo "脚本将自动完成以下 9 步："
+    echo "脚本将自动完成以下 ${STEP_TOTAL} 步："
     echo "  1-3. 检查环境、磁盘、安装依赖"
     echo "  4-6. 拉取 hcomm/hccl 源码、检测/下载安装 CANN"
-    echo "  7.   编译 HCCL-VM 工具"
-    echo "  8.   编译安装 HCCL/HCOMM 子包（build_pkg.sh 执行）"
-    echo "  9.   编译 hccl_test（--skip-hccl-test 可跳过）"
+    echo "  7.   编译 HCCL-VM 工具并自动部署 CANN 中的 AICPU 包"
+    echo "  8.   编译 hccl_test（--skip-hccl-test 可跳过）"
     echo ""
     echo "用法:"
     echo "  bash hccl_vm_installer [选项]"
@@ -1274,7 +1273,7 @@ clean_thirdparty_dl_cache() {
 
 # 编译 HCCL-VM 工具（对应 README §3.1 的 bash ./build.sh --full）
 build_hccl_vm() {
-    info "编译 HCCL-VM 工具..."
+    info "编译 HCCL-VM 工具并部署 AICPU 包..."
     if [ ! -d "${CHECKER_PATH}" ]; then
         error "未找到 checker 源码目录: ${CHECKER_PATH}。checker 存在于 hcomm 的竞赛/主线分支，不在发布 tag；若用 --hcomm-ref 指向了发布 tag，请改回 competition/campus-2026 或 master，或用 --checker-path 指定。"
     fi
@@ -1302,62 +1301,22 @@ build_hccl_vm() {
         wait "${build_pid}" || rc=$?
     fi
     if [ "${rc}" -ne 0 ]; then
-        warn "编译失败（日志: ${build_log}）。常见原因："
+        warn "编译或 AICPU 包部署失败（日志: ${build_log}）。常见原因："
         tail -n 20 "${build_log}" >&2
         echo "  ① 第三方库下载失败(网络/SSL)：已清理下载缓存，重跑本脚本即可重新下载；" >&2
         echo "  ② gcc 超出 build.md 前置依赖范围(7.3.0–13.3.x，管宿主+交叉)：Ubuntu 25.04/26.04 的 gcc14/15 会使 yaml-cpp 等第三方编译失败，请在满足该范围的环境(如 22.04/24.04)运行；" >&2
         echo "  ③ CANN 与 hccl 不配套(device 侧报 ThreadType 未声明等)：换配套 CANN，见 https://gitcode.com/cann/release-management/ ；" >&2
         echo "  ④ 架构适配问题(aarch64)：确认 CANN 安装包与当前架构一致（linux-aarch64），交叉编译工具链已正确安装（x86_64 宿主需 gcc-aarch64-linux-gnu）；" >&2
+        echo "  ⑤ AICPU 包部署失败：确认 CANN 的 conf/ascend_package_load.ini 及其配置的 aicpu_hccl.tar.gz、aicpu_hcomm.tar.gz 存在，详细错误见上述日志；" >&2
         echo "  仍无法解决可带完整日志到 https://gitcode.com/cann/hcomm/issues 反馈。" >&2
         clean_thirdparty_dl_cache
-        error "编译未通过（完整日志: ${build_log}）。"
+        error "编译或 AICPU 包部署未通过（完整日志: ${build_log}）。"
     fi
     # 产物落地校验：build.sh 退 0 不代表二进制一定生成
     local bin="${CHECKER_PATH}/hccl_vm_install/bin/hccl-vm"
     if [ ! -x "${bin}" ]; then
         error "编译进程已结束但未找到可执行产物: ${bin}。请查看日志 ${build_log} 后重试。"
     fi
-}
-
-# 执行 build_pkg.sh 获得aicpu在device侧的符号（使用 hcomm 仓库自带的 build_pkg.sh）
-# build_pkg.sh 位于 CHECKER_PATH（即 hcomm/test/hccl_vm/）下，步骤 4 已 clone 完成
-# 需要以下环境变量：
-#   ASCEND_HOME_PATH  - CANN 安装目录（source CANN set_env.sh 后导出）
-#   HCCL_CODE_HOME    - hccl 源码目录（build_hccl_vm 已导出）
-#   HCOMM_CODE_HOME   - hcomm 源码目录（build_hccl_vm 已导出）
-# 通过 --tool_path 传入 checker 安装路径（即 CHECKER_PATH）
-build_hcomm_hccl_pkg() {
-    info "执行 build_pkg.sh 获得 aicpu 运行在 device 侧的符号..."
-    local pkg_script="${CHECKER_PATH}/build_pkg.sh"
-    local pkg_log="${LOG_DIR}/build-pkg-${RUN_TS}.log"
-
-    # build_pkg.sh 随 hcomm 仓库一起下发（步骤 4 clone），直接使用本地副本
-    if [ ! -f "${pkg_script}" ]; then
-        error "未找到 build_pkg.sh: ${pkg_script}。请确认 hcomm 源码（分支 ${HCOMM_REF}）中包含 test/hccl_vm/build_pkg.sh。"
-    fi
-
-    # 执行 build_pkg.sh：编译 hccl + hcomm 子包并安装到 CANN 目录
-    info "编译日志: ${pkg_log}"
-    local rc=0
-    if [ "${VERBOSE}" = true ]; then
-        HCCL_VM_PATH="${CHECKER_PATH}" bash "${pkg_script}" --tool_path "${CHECKER_PATH}" 2>&1 | tee "${pkg_log}" || rc=${PIPESTATUS[0]}
-    else
-        info "开始执行 build_pkg.sh。实时日志: tail -f ${pkg_log}"
-        HCCL_VM_PATH="${CHECKER_PATH}" bash "${pkg_script}" --tool_path "${CHECKER_PATH}" > "${pkg_log}" 2>&1 &
-        local pkg_pid=$!
-        spin_on_pid "${pkg_pid}" "编译子包中"
-        wait "${pkg_pid}" || rc=$?
-    fi
-    if [ "${rc}" -ne 0 ]; then
-        warn "执行 build_pkg.sh 失败，末尾日志："
-        tail -n 20 "${pkg_log}" >&2
-        echo "  完整日志: ${pkg_log}" >&2
-        echo "  若为第三方库下载失败(网络/SSL)：已清理下载缓存，重跑即可重新下载；若为 gcc 超出 build.md 前置依赖范围(7.3.0–13.3.x)请在满足该范围的环境(如 22.04/24.04)运行。" >&2
-        echo "  也可手动执行: bash ${pkg_script} --tool_path ${CHECKER_PATH}" >&2
-        clean_thirdparty_dl_cache
-        error "执行 build_pkg.sh 失败，请检查日志后重试。"
-    fi
-    info "执行 build_pkg.sh 完成！"
 }
 
 # 按 README §4.7 准备 /etc/hccl_rootinfo.json：HCCL 初始化通信域时从该文件读 topo.json 路径，
@@ -1375,7 +1334,7 @@ setup_hccl_rootinfo() {
     fi
 }
 
-# 第 9 步：编译 hccl_test（增值步骤，失败只 WARN 不阻断）。
+# 第 8 步：编译 hccl_test（增值步骤，失败只 WARN 不阻断）。
 build_hccl_test() {
     if [ "${SKIP_HCCL_TEST}" = true ]; then
         HCCL_TEST_RESULT="skipped"
@@ -1649,11 +1608,9 @@ main() {
     resolve_cann "${snapshot}"
     step 6 "${STEP_TOTAL}" "拉取 hccl 源码（${HCCL_REF}）"
     clone_repo "hccl" "https://gitcode.com/cann/hccl.git" "${HCCL_REF}" "${HCCL_PATH}"
-    step 7 "${STEP_TOTAL}" "编译 HCCL-VM"
+    step 7 "${STEP_TOTAL}" "编译 HCCL-VM 并部署 AICPU 包"
     build_hccl_vm
-    step 8 "${STEP_TOTAL}" "解析 aicpu_hcxx.tar.gz 得到 device 侧符号"
-    build_hcomm_hccl_pkg
-    step 9 "${STEP_TOTAL}" "编译 hccl_test"
+    step 8 "${STEP_TOTAL}" "编译 hccl_test"
     build_hccl_test
 
     success_summary

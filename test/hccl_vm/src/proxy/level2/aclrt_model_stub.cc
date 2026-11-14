@@ -206,6 +206,17 @@ rtError_t rtModelExecute(rtModel_t mdl, rtStream_t stm, uint32_t flag)
         return kRtErrorInvalidValue;
     }
 
+    // 图模式主流修正：克隆 OpDetail 采集期记录的是 master_stream（采集流），而本接口
+    // 入参流（resources_str.stream）才是重放触发的真实主流，直接精确回写。
+    // （旧实现在 aclrtSynchronizeStream 内按“设备维度 id 最大行”猜测修正，嵌套调用下
+    // 会串写算子主流，已移除并收敛到此处。）
+    if (replay.boundaryOpDetailId != 0
+        && sim::operation::UpdateOpDetailMainStream(replay.boundaryOpDetailId, mainStreamId) != 0) {
+        HCCL_VM_ERROR(
+            "rtModelExecute, model={} update replay opDetail main stream failed, opDetailId={}, mainStreamId={}",
+            modelId, replay.boundaryOpDetailId, mainStreamId);
+    }
+
     // 空 action（数据量为 0 的空算子等）无动作可重放：不插入 MODEL_EXEC 边界任务，直接成功返回，
     // 避免 checker 对孤立边界任务做模型执行配对校验时报错。
     if (replay.actions.empty()) {
@@ -220,7 +231,7 @@ rtError_t rtModelExecute(rtModel_t mdl, rtStream_t stm, uint32_t flag)
     // 重放（现有逻辑：action 重发到 action.streamId=采集流，落在 StartSub/EndSub 之间）
     int ret = ReplayModelActions(modelId, replay);
 
-    sim::operation::g_currOpDetailId = replay.boundaryOpDetailId;
+    sim::operation::CurrOpDetailId() = replay.boundaryOpDetailId;
     // 重放后：从流 EndSub + 主流 End
     InsertModelExecTask(execSeq, MODEL_EXEC_END_SUB, modelId, subStreamId, mainStreamId);
     InsertModelExecTask(execSeq, MODEL_EXEC_END, modelId, mainStreamId, subStreamId);

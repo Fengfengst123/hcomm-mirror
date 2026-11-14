@@ -15,12 +15,53 @@
 #include <cstdint>
 #include <cstring>
 #include <fcntl.h>
+#include <pthread.h>
+#include <signal.h>
 #include <unistd.h>
 #include <sys/uio.h>
 
 #include "sim_log.h"
 
 namespace sim {
+
+namespace {
+    // SIGPIPE 屏蔽守卫：写管道时若对端已死，内核在 write 返回 EPIPE 之前会递送 SIGPIPE，
+    // 默认处置直接终止整个进程（DestroyProcess 的 SHUTDOWN 写已实际命中该路径）。
+    // 构造期屏蔽本线程 SIGPIPE；析构期消费掉写期间挂起的 SIGPIPE 后恢复原掩码。
+    class SigPipeBlockGuard {
+    public:
+        // 构造：屏蔽本线程的 SIGPIPE，保存原信号掩码。失败时 m_blocked=false（不改动掩码）。
+        SigPipeBlockGuard()
+        {
+            sigset_t newMask;
+            sigemptyset(&newMask);
+            sigaddset(&newMask, SIGPIPE);
+            m_blocked = (pthread_sigmask(SIG_BLOCK, &newMask, &m_oldMask) == 0);
+        }
+
+        // 析构：消费挂起的 SIGPIPE（防止恢复掩码后立即递送杀进程），再恢复原掩码。
+        ~SigPipeBlockGuard()
+        {
+            if (!m_blocked) {
+                return;
+            }
+            sigset_t pending;
+            sigpending(&pending);
+            if (sigismember(&pending, SIGPIPE) == 1) {
+                sigset_t waitMask;
+                sigemptyset(&waitMask);
+                sigaddset(&waitMask, SIGPIPE);
+                timespec zero{0, 0};
+                sigtimedwait(&waitMask, nullptr, &zero);
+            }
+            pthread_sigmask(SIG_SETMASK, &m_oldMask, nullptr);
+        }
+
+    private:
+        sigset_t m_oldMask{};
+        bool m_blocked = false;
+    };
+} // namespace
 
 int PipeBlockRead(int fd, void* buf, size_t len)
 {
@@ -50,6 +91,7 @@ int PipeBlockRead(int fd, void* buf, size_t len)
 
 int PipeBlockWrite(int fd, const void* buf, size_t len)
 {
+    SigPipeBlockGuard sigPipeGuard;
     const uint8_t* ptr = static_cast<const uint8_t*>(buf);
     size_t remaining = len;
     while (remaining > 0) {
@@ -76,6 +118,7 @@ int PipeBlockWrite(int fd, const void* buf, size_t len)
 
 int PipeBlockWriteV(int fd, struct iovec* iov, int iovcnt)
 {
+    SigPipeBlockGuard sigPipeGuard;
     if (iov == nullptr || iovcnt <= 0) {
         HCCL_VM_ERROR("PipeBlockWriteV: invalid iov segments: {}", iovcnt);
         return -1;
@@ -217,31 +260,6 @@ void PipeClose(int& fd)
         close(fd);
         fd = -1;
     }
-}
-
-int PipeChildSetup(PipePair& h2d, PipePair& d2h, int targetReadFd, int targetWriteFd)
-{
-    // 子进程不写 h2d，不读 d2h
-    close(h2d.writeFd);
-    close(d2h.readFd);
-
-    // 重定向到固定 fd
-    dup2(h2d.readFd, targetReadFd);
-    dup2(d2h.writeFd, targetWriteFd);
-
-    // 清除 CLOEXEC 标记（execvp 后保留）
-    fcntl(targetReadFd, F_SETFD, 0);
-    fcntl(targetWriteFd, F_SETFD, 0);
-
-    // 关闭原始 fd（如果与目标 fd 不同）
-    if (h2d.readFd != targetReadFd) {
-        close(h2d.readFd);
-    }
-    if (d2h.writeFd != targetWriteFd) {
-        close(d2h.writeFd);
-    }
-
-    return 0;
 }
 
 } // namespace sim

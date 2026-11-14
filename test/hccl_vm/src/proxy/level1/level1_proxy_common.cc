@@ -1725,6 +1725,39 @@ EngineCtxRegistry& EngineCtxRegistry::Instance()
     return inst;
 }
 
+/**
+ * @brief 释放一条上下文占用的内存（AICPU/AIV 走 aclrtFree，其余走 free）。
+ * @param addr 上下文地址；0 表示无内存可释放。
+ * @param engineVal CommEngine 枚举数值。
+ */
+void EngineCtxRegistry::ReleaseCtxAddr(uint64_t addr, uint64_t engineVal)
+{
+    if (addr == 0) {
+        return;
+    }
+    void* devAddr = reinterpret_cast<void*>(addr);
+    CommEngine engine = static_cast<CommEngine>(engineVal);
+    if (engine == COMM_ENGINE_AICPU || engine == COMM_ENGINE_AICPU_TS || engine == COMM_ENGINE_AIV) {
+        aclrtFree(devAddr);
+    } else {
+        free(devAddr);
+    }
+}
+
+/**
+ * @brief 创建（或重建）一条通信引擎上下文。
+ *
+ * key 使用逻辑身份 (commId, ctxTagHash, engine)：三者组合进程内唯一，避免单进程
+ * 多 rank 场景下"设备地址数值跨 device 重复"导致不同 rank 的上下文互相覆盖。
+ * 同一身份重复创建时先释放旧内存再覆盖（旧实现按地址做 key，重复创建会残留孤儿条目）。
+ *
+ * @param commId 通信域主键（HcclComm 句柄数值）。
+ * @param ctxTag 引擎标签，nullptr 视为空串。
+ * @param engine 通信引擎类型。
+ * @param size 上下文大小（字节）。
+ * @param ctx 输出：新建上下文地址。
+ * @return HCCL_SUCCESS 成功；其他为失败码。
+ */
 HcclResult EngineCtxRegistry::Create(uint64_t commId, const char* ctxTag, CommEngine engine, uint64_t size, void** ctx)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
@@ -1747,87 +1780,104 @@ HcclResult EngineCtxRegistry::Create(uint64_t commId, const char* ctxTag, CommEn
         return HCCL_E_PARA;
     }
 
-    uint64_t addr = reinterpret_cast<uint64_t>(devAddr);
+    const EngineCtxKey key{commId, HashCtxTag(ctxTag), static_cast<uint64_t>(engine)};
+    auto existing = m_map.find(key);
+    if (existing != m_map.end()) {
+        HCCL_VM_WARN(
+            "{}: duplicate ctx, replace old addr={:p}, commId={:d}, engine={:d}", __func__,
+            reinterpret_cast<void*>(existing->second.addr), commId, static_cast<int>(engine));
+        ReleaseCtxAddr(existing->second.addr, existing->second.engine);
+    }
+
     sim::runtime::HcclEngineCtx entry{};
     entry.id = 0;
     entry.commId = commId;
-    entry.ctxTag = HashCtxTag(ctxTag);
-    entry.engine = static_cast<uint64_t>(engine);
+    entry.ctxTag = std::get<1>(key);
+    entry.engine = std::get<2>(key);
     entry.size = size;
-    entry.addr = addr;
+    entry.addr = reinterpret_cast<uint64_t>(devAddr);
 
-    m_map[addr] = entry;
+    m_map[key] = entry;
     *ctx = devAddr;
     return HCCL_SUCCESS;
 }
 
+/**
+ * @brief 按逻辑身份查询上下文。
+ * @param commId 通信域主键。
+ * @param ctxTag 标签哈希（HashCtxTag 结果）。
+ * @param engineVal CommEngine 枚举数值。
+ * @param ctx 输出：上下文地址。
+ * @param size 输出：上下文大小。
+ * @return 找到返回 true，否则 false。
+ */
 bool EngineCtxRegistry::Get(uint64_t commId, uint64_t ctxTag, uint64_t engineVal, void** ctx, uint64_t* size)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
-    for (auto& kv : m_map) {
-        auto& entry = kv.second;
-        if (entry.commId == commId && entry.ctxTag == ctxTag && entry.engine == engineVal) {
-            *ctx = reinterpret_cast<void*>(entry.addr);
-            *size = entry.size;
-            return true;
-        }
+    auto it = m_map.find(EngineCtxKey{commId, ctxTag, engineVal});
+    if (it == m_map.end()) {
+        return false;
     }
-    return false;
+    *ctx = reinterpret_cast<void*>(it->second.addr);
+    *size = it->second.size;
+    return true;
 }
 
+/**
+ * @brief 拷贝数据到指定上下文的偏移处。
+ * @param commId 通信域主键。
+ * @param ctxTag 标签哈希。
+ * @param engineVal CommEngine 枚举数值。
+ * @param srcCtx 源数据。
+ * @param size 拷贝长度。
+ * @param dstCtxOffset 目标上下文内偏移。
+ * @return HCCL_SUCCESS 成功；HCCL_E_NOT_FOUND / HCCL_E_PARA / HCCL_E_INTERNAL 失败。
+ */
 HcclResult EngineCtxRegistry::Copy(
     uint64_t commId, uint64_t ctxTag, uint64_t engineVal, const void* srcCtx, uint64_t size, uint64_t dstCtxOffset)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
-    for (auto& kv : m_map) {
-        auto& entry = kv.second;
-        if (entry.commId == commId && entry.ctxTag == ctxTag && entry.engine == engineVal) {
-            if (dstCtxOffset + size > entry.size) {
-                return HCCL_E_PARA;
-            }
-            void* dstPtr = reinterpret_cast<void*>(entry.addr + dstCtxOffset);
-            CommEngine engine = static_cast<CommEngine>(engineVal);
-            if (engine == COMM_ENGINE_AICPU || engine == COMM_ENGINE_AICPU_TS || engine == COMM_ENGINE_AIV) {
-                aclError aclRet = aclrtMemcpy(
-                    dstPtr, static_cast<size_t>(size), srcCtx, static_cast<size_t>(size), ACL_MEMCPY_HOST_TO_DEVICE);
-                if (aclRet != ACL_SUCCESS) {
-                    HCCL_VM_ERROR("{}: aclrtMemcpy H2D failed, ret={:d}", __func__, static_cast<int>(aclRet));
-                    return HCCL_E_INTERNAL;
-                }
-            } else {
-                std::memcpy(dstPtr, srcCtx, static_cast<size_t>(size));
-            }
-            return HCCL_SUCCESS;
-        }
+    auto it = m_map.find(EngineCtxKey{commId, ctxTag, engineVal});
+    if (it == m_map.end()) {
+        return HCCL_E_NOT_FOUND;
     }
-    return HCCL_E_NOT_FOUND;
+    auto& entry = it->second;
+    if (dstCtxOffset + size > entry.size) {
+        return HCCL_E_PARA;
+    }
+    void* dstPtr = reinterpret_cast<void*>(entry.addr + dstCtxOffset);
+    CommEngine engine = static_cast<CommEngine>(engineVal);
+    if (engine == COMM_ENGINE_AICPU || engine == COMM_ENGINE_AICPU_TS || engine == COMM_ENGINE_AIV) {
+        aclError aclRet = aclrtMemcpy(
+            dstPtr, static_cast<size_t>(size), srcCtx, static_cast<size_t>(size), ACL_MEMCPY_HOST_TO_DEVICE);
+        if (aclRet != ACL_SUCCESS) {
+            HCCL_VM_ERROR("{}: aclrtMemcpy H2D failed, ret={:d}", __func__, static_cast<int>(aclRet));
+            return HCCL_E_INTERNAL;
+        }
+    } else {
+        std::memcpy(dstPtr, srcCtx, static_cast<size_t>(size));
+    }
+    return HCCL_SUCCESS;
 }
 
+/**
+ * @brief 按逻辑身份销毁一条上下文并释放其内存。
+ * @param commId 通信域主键。
+ * @param ctxTag 标签哈希。
+ * @param engineVal CommEngine 枚举数值。
+ * @return 删除的条目数（0 或 1）。
+ */
 uint32_t EngineCtxRegistry::Destroy(uint64_t commId, uint64_t ctxTag, uint64_t engineVal)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     HCCL_VM_INFO("{}: ctxTag={:d}", __func__, ctxTag);
-    uint32_t removed = 0;
-    CommEngine engine = static_cast<CommEngine>(engineVal);
-    bool isDeviceMem = (engine == COMM_ENGINE_AICPU || engine == COMM_ENGINE_AICPU_TS || engine == COMM_ENGINE_AIV);
-    for (auto it = m_map.begin(); it != m_map.end();) {
-        auto& entry = it->second;
-        if (entry.commId == commId && entry.ctxTag == ctxTag && entry.engine == engineVal) {
-            void* devAddr = reinterpret_cast<void*>(entry.addr);
-            if (devAddr != nullptr) {
-                if (isDeviceMem) {
-                    aclrtFree(devAddr);
-                } else {
-                    free(devAddr);
-                }
-            }
-            it = m_map.erase(it);
-            ++removed;
-        } else {
-            ++it;
-        }
+    auto it = m_map.find(EngineCtxKey{commId, ctxTag, engineVal});
+    if (it == m_map.end()) {
+        return 0;
     }
-    return removed;
+    ReleaseCtxAddr(it->second.addr, it->second.engine);
+    m_map.erase(it);
+    return 1;
 }
 
 void EngineCtxRegistry::DestroyByCommId(uint64_t commId)
@@ -1836,15 +1886,7 @@ void EngineCtxRegistry::DestroyByCommId(uint64_t commId)
     std::lock_guard<std::mutex> lock(m_mutex);
     for (auto it = m_map.begin(); it != m_map.end();) {
         if (it->second.commId == commId) {
-            void* devAddr = reinterpret_cast<void*>(it->second.addr);
-            if (devAddr != nullptr) {
-                CommEngine engine = static_cast<CommEngine>(it->second.engine);
-                if (engine == COMM_ENGINE_AICPU || engine == COMM_ENGINE_AICPU_TS || engine == COMM_ENGINE_AIV) {
-                    aclrtFree(devAddr);
-                } else {
-                    free(devAddr);
-                }
-            }
+            ReleaseCtxAddr(it->second.addr, it->second.engine);
             it = m_map.erase(it);
         } else {
             ++it;
@@ -1857,15 +1899,7 @@ void EngineCtxRegistry::ResetAll()
     HCCL_VM_INFO("{}", __func__);
     std::lock_guard<std::mutex> lock(m_mutex);
     for (auto& kv : m_map) {
-        void* devAddr = reinterpret_cast<void*>(kv.second.addr);
-        if (devAddr != nullptr) {
-            CommEngine engine = static_cast<CommEngine>(kv.second.engine);
-            if (engine == COMM_ENGINE_AICPU || engine == COMM_ENGINE_AICPU_TS || engine == COMM_ENGINE_AIV) {
-                aclrtFree(devAddr);
-            } else {
-                free(devAddr);
-            }
-        }
+        ReleaseCtxAddr(kv.second.addr, kv.second.engine);
     }
     m_map.clear();
 }

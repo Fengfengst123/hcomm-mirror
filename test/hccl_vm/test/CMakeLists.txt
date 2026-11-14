@@ -36,6 +36,7 @@ include_directories(
 
 add_subdirectory(cmd)
 add_subdirectory(device_arm)
+add_subdirectory(device_spec)
 add_subdirectory(plugin)
 add_subdirectory(proxy)
 add_subdirectory(simulation)

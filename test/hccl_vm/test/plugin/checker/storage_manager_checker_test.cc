@@ -838,11 +838,11 @@ TEST_F(StorageManagerCheckerTest, Trans2CheckerParam_WithOpDetail)
 TEST_F(StorageManagerCheckerTest, InitCcuInfo_Default)
 {
     DevType devType;
-    std::vector<uint64_t> resourceBaseAddr;
+    // ★ 基址表已升级为 per-(deviceId, dieId)，且不再注入 0x123123123/0x456456456 假常量：
+    //   无 Device 表数据（UT 环境无拓扑落库）时表为空，消费方解码将显式报错而非误信假地址。
+    std::map<TaskGraphGeneratorV3::DeviceId, std::vector<uint64_t>> resourceBaseAddr;
     StorageManager::GetInstance().InitCcuInfo(devType, resourceBaseAddr);
-    EXPECT_EQ(resourceBaseAddr.size(), 2);
-    EXPECT_EQ(resourceBaseAddr[0], 0x123123123);
-    EXPECT_EQ(resourceBaseAddr[1], 0x456456456);
+    EXPECT_TRUE(resourceBaseAddr.empty());
 }
 
 TEST_F(StorageManagerCheckerTest, InitCcuInfo_WithOpDetail)
@@ -853,12 +853,11 @@ TEST_F(StorageManagerCheckerTest, InitCcuInfo_WithOpDetail)
     StorageManager::GetInstance().Trans2CheckerParam(detailTab, detail);
 
     DevType devType;
-    std::vector<uint64_t> resourceBaseAddr;
+    std::map<TaskGraphGeneratorV3::DeviceId, std::vector<uint64_t>> resourceBaseAddr;
     StorageManager::GetInstance().InitCcuInfo(devType, resourceBaseAddr);
     EXPECT_EQ(static_cast<int>(devType), 2);
-    EXPECT_EQ(resourceBaseAddr.size(), 2);
-    EXPECT_EQ(resourceBaseAddr[0], 0x123123123);
-    EXPECT_EQ(resourceBaseAddr[1], 0x456456456);
+    // devType 透传不受影响；基址表按 Device 表填充，UT 无拓扑数据时为空（不注入假常量）。
+    EXPECT_TRUE(resourceBaseAddr.empty());
 }
 
 TEST_F(StorageManagerCheckerTest, SetDataId_DoesNotLoadCheckerParam)

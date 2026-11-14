@@ -11,6 +11,9 @@
 
 set -e
 
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
 function usage() {
   echo "Usage:"
   echo "  sh build.sh [-h | --help]"
@@ -20,7 +23,9 @@ function usage() {
   echo ""
   echo "Options:"
   echo "    -h, --help     Print usage"
-  echo "    --pkg <PATH>    Set ascend package install path, default /usr/local/Ascend/cann"
+  echo "    --pkg          Package the installation after build and AICPU deployment"
+  echo "    --full         Build host and device, then deploy AICPU kernel packages from CANN"
+  echo "    --aicpu        Build device side only"
   echo "    --package-path <PATH>"
   echo "                   Set ascend package install path, default /usr/local/Ascend/cann"
   echo "    --hcomm-path <PATH>"
@@ -31,6 +36,7 @@ function usage() {
   echo "                   present (--hcomm-path/HCOMM_CODE_HOME) the hcomm-dependent"
   echo "                   plugins (checker/runner) are also built. Mutually"
   echo "                   exclusive with --full/--aicpu"
+  echo "                   Deploys AICPU kernel packages from CANN after building"
     echo "    --version <VERSION>"
     echo "                   Set build version to <VERSION>"
     echo "    --cmake-arg <ARG>"
@@ -233,17 +239,13 @@ build_host() {
 
     # 检查编译是否成功
     if [[ $? -eq 0 ]]; then
-        echo "Build completed successfully!"
+        echo "Host build completed successfully!"
     else
         echo "Build failed!"
         exit 1
     fi
 
-    if [[ $package_enable == true ]]; then
-        cd ..
-        tar -czvf hccl_vm_install.tar.gz hccl_vm_install
-        echo "Package completed successfully!"
-    fi
+    cd ..
 }
 
 build_device() {
@@ -253,7 +255,8 @@ build_device() {
     cd build_device_top
     # 与 build_host 一致透传 level1 开关: 否则 level1 模式下 device 配置
     # (BUILD_DEVICE_ARM=ON) 仍会触发顶层对 HCOMM_CODE_HOME 的强制检查
-    cmake -DBUILD_DEVICE_ARM=ON -DBUILD_LEVEL1_ONLY=$level1_only_enable ${cmake_extra_args[@]+"${cmake_extra_args[@]}"} .. && make -j"$(calc_make_jobs)"
+    cmake -DBUILD_DEVICE_ARM=ON -DBUILD_LEVEL1_ONLY=$level1_only_enable ${cmake_extra_args[@]+"${cmake_extra_args[@]}"} ..
+    make -j"$(calc_make_jobs)"
     cd ..
 }
 
@@ -266,4 +269,16 @@ elif [[ "${BUILD_MODE}" == "FULL" || "${BUILD_MODE}" == "LEVEL1" ]]; then
     # 再构建 host 北向组件; 缺 device 会在 aclrtSetDevice 拉起 AICPU 子进程时失败
     build_device
     build_host
+    # 默认模式仅从已安装的 CANN 解包部署，不重新构建 HCCL/HCOMM。
+    # 显式绑定本次构建目录和 CANN 路径，避免继承其他安装的环境变量。
+    echo "Deploying AICPU kernel packages from CANN..."
+    ASCEND_HOME_PATH="${ASCEND_CANN_PACKAGE_PATH}" HCCL_VM_PATH="${SCRIPT_DIR}" \
+        bash "${SCRIPT_DIR}/build_pkg.sh" --tool_path "${SCRIPT_DIR}"
+    echo "AICPU kernel deployment completed successfully!"
+fi
+
+# 完整构建必须在部署后打包，确保归档中包含 AICPU 算子库。
+if [[ $package_enable == true && "${BUILD_MODE}" != "DEVICE" ]]; then
+    tar -czvf hccl_vm_install.tar.gz hccl_vm_install
+    echo "Package completed successfully!"
 fi

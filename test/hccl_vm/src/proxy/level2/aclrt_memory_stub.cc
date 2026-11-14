@@ -163,7 +163,8 @@ void* GetRealPtrByAddr(const void* virPtr)
     const auto& virMem = *virMemRes;
     void* virStartPtr = (void*)(uintptr_t)virMem.start_ptr;
     void* devStartPtr = (void*)(uintptr_t)virMem.dev_mapped_ptr;
-    auto hostPtr = sim::DeviceMemoryManager::GetInstance().GetHostPtrByDevPtr(virStartPtr);
+    // 反查按 (deviceKey, start_ptr) 复合键：start_ptr 为 host 侧每设备独立编址，deviceKey 兜底消歧。
+    auto hostPtr = sim::DeviceMemoryManager::GetInstance().GetHostPtrByDevPtr(virMem.device_id, virStartPtr);
     if (hostPtr == nullptr) {
         HCCL_VM_ERROR("can not find host ptr by dev ptr:{:p}", virStartPtr);
         return nullptr;
@@ -363,8 +364,14 @@ bool GetDevMappedMemPtr(
         }
 
         isDevMapped = true;
-        *devPtr = (void*)rspPayload.ptr;
-        HCCL_VM_INFO("PIPE_CMD_GET_DEV_PTR vir mem by device {:p}", (void*)rspPayload.ptr);
+        // device 子进程返回的 shm 真实映射址：device 进程布局一致，跨 device 数值可能重复。
+        // host 侧所有按该址的索引都带 deviceKey 维度（DB 查询带 device_id，
+        // m_devPtrHostPtrMap 为 (deviceKey, devPtr) 复合键），且该址在 device 进程内
+        // 可直接解引用（kernel args / 共享结构体原样携带），不得加偏移变换。
+        *devPtr = reinterpret_cast<void*>(rspPayload.ptr);
+        HCCL_VM_INFO(
+            "PIPE_CMD_GET_DEV_PTR vir mem by device {:p} (devPhyId={:d})", reinterpret_cast<void*>(rspPayload.ptr),
+            devPhyId);
     } else {
         *devPtr = *virPtr;
     }
@@ -460,8 +467,8 @@ aclError aclrtMalloc(void** devPtr, size_t size, aclrtMemMallocPolicy policy)
     }
 
     *devPtr = isDevMapped ? devMappedPtr : virPtr;
-    // 缓存设备地址到host地址
-    sim::DeviceMemoryManager::GetInstance().MapDevPtrHostPtr(virPtr, hostPtr);
+    // 缓存设备地址到host地址（按归属设备 deviceKey 复合键，多 rank 同址数值下唯一）
+    sim::DeviceMemoryManager::GetInstance().MapDevPtrHostPtr(deviceId, virPtr, hostPtr);
     HCCL_VM_STAT_MEM_ALLOC_DEV(deviceId, size);
     HCCL_VM_INFO("malloc dev addr:{:p}, devMapAddr:{:p} memName:{}, size:{:d}", virPtr, devMappedPtr, memName, size);
     return ACL_SUCCESS;
@@ -564,10 +571,11 @@ aclError aclrtFree(void* devPtr)
 
     // 先取这块内存的真实地址，判断它是否在复用区（必须在 Unmap 之前取）。
     // 第二次释放时映射已删、取不到地址，就按非复用区处理，天然幂等。
-    void* backing = sim::DeviceMemoryManager::GetInstance().GetHostPtrByDevPtr(devPtr);
+    // 按 (deviceKey, devPtr) 复合键查/删：devPtr 为 device 进程映射址，跨 rank 数值可能重复。
+    void* backing = sim::DeviceMemoryManager::GetInstance().GetHostPtrByDevPtr(deviceId, devPtr);
 
     // 去缓存设备地址到host地址
-    sim::DeviceMemoryManager::GetInstance().UnmapDevPtrHostPtr(devPtr);
+    sim::DeviceMemoryManager::GetInstance().UnmapDevPtrHostPtr(deviceId, devPtr);
 
     // 删除内存
     sim::DeviceMemoryManager::GetInstance().FreeVirMem(devPhyId, devPtr);

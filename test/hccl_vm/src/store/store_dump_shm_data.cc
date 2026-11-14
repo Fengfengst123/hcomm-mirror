@@ -493,9 +493,35 @@ HcclVmResult CreateSimSynData(
     hvmSynData.model_info.comm.data_type = opDetails.dataType;
     hvmSynData.model_info.comm.data_count = opDetails.opV1.count;
     hvmSynData.model_info.comm.op_expansion_mode = opTab.opExpansionMode;
-    // 保留占位（与 checker 侧一致）
-    hvmSynData.model_info.comm.ccu0_resource_base_addr = 0x123123123;
-    hvmSynData.model_info.comm.ccu1_resource_base_addr = 0x456456456;
+    // CCU 资源基址：按 src rank 对应的 device 解析 die0/die1 的真实基址。
+    // ★ 取代原先的占位常量 0x123123123 / 0x456456456（该字段此前"写入但无人读"，
+    //   消费方各自重新硬编码，见设计文档 §2.2 P8）。字段位置与类型不变，仅值变为真值。
+    {
+        uint64_t srcDeviceKey = 0;
+        for (const auto& entry : deviceToRank) {
+            if (entry.second == opTab.srcRank) {
+                srcDeviceKey = entry.first;
+                break;
+            }
+        }
+        if (srcDeviceKey == 0 && !deviceToRank.empty()) {
+            // 反查不到（如单 rank 或 rank 映射缺失）时退化为任一 device，并告警
+            srcDeviceKey = deviceToRank.begin()->first;
+            HCCL_VM_WARN("cannot resolve device by srcRank {}, fallback to device {}", opTab.srcRank, srcDeviceKey);
+        }
+        uint64_t ccu0Addr = 0;
+        uint64_t ccu1Addr = 0;
+        if (srcDeviceKey != 0 && sim::runtime::GetCcuResourceBaseAddr(srcDeviceKey, 0, ccu0Addr)
+            && sim::runtime::GetCcuResourceBaseAddr(srcDeviceKey, 1, ccu1Addr)) {
+            hvmSynData.model_info.comm.ccu0_resource_base_addr = ccu0Addr;
+            hvmSynData.model_info.comm.ccu1_resource_base_addr = ccu1Addr;
+        } else {
+            // 解析失败时留 0（明确的"未知"），不回退到假地址——避免消费方误信
+            hvmSynData.model_info.comm.ccu0_resource_base_addr = 0;
+            hvmSynData.model_info.comm.ccu1_resource_base_addr = 0;
+            HCCL_VM_ERROR("resolve ccu resource base addr failed for srcDevice {}, write 0", srcDeviceKey);
+        }
+    }
     hvmSynData.model_info.all2AllDataDes.sendType = opDetails.opV2.sendDataType;
     hvmSynData.model_info.all2AllDataDes.recvType = opDetails.opV2.recvDataType;
     hvmSynData.model_info.all2AllDataDes.sendCount = opDetails.opV2.sendCount;

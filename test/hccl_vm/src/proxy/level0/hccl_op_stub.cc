@@ -42,18 +42,42 @@ using sim::runtime::g_cur_device_key;
 extern "C" uint8_t GetOpExpansionMode();
 
 namespace {
+// SetupCommunicator 在覆写 g_cur_comm_key 前暂存的“进入本算子前”值；
+// 紧随其后构造的 ScopedOperatorCommunicator 取走作为弹栈恢复目标。
+// （guard 构造点在 SetupCommunicator 之后，无法自行快照覆写前的值。）
+thread_local uint64_t g_commKeyBeforeSetup = 0;
+
 class ScopedOperatorCommunicator {
 public:
-    ScopedOperatorCommunicator() = default;
+    ScopedOperatorCommunicator() : savedCommKey_(g_commKeyBeforeSetup), savedOpContext_(sim::operation::SaveOpContext())
+    {}
 
     ~ScopedOperatorCommunicator()
     {
+        // 弹栈（算子结束）：
+        // 1) 若本作用域确实落库了新算子（CurrOpDetailId 相对入栈快照发生变化），
+        //    为其打上完成序号 endSeq —— checker 据此按“先出栈在前”成图；
+        // 2) 恢复进入算子前的通信域键与算子上下文。嵌套调用（如算子执行期
+        //    LaunchWarmupVOperator 再入 alltoallv）依赖该恢复：内层退出后外层
+        //    的 g_cur_comm_key/CurrOpDetailId 回到外层值，外层后续任务/算法名/
+        //    主流修正仍归属外层自己的 opDetail（此前内层析构把 g_cur_comm_key
+        //    硬置 0、CurrOpDetailId 停留在内层 id，外层任务全部错挂 opDetailId=0）。
+        const uint32_t ownOpDetailId = sim::operation::CurrOpDetailId();
+        if (ownOpDetailId != savedOpContext_.opDetailId) {
+            (void)sim::operation::AssignOpEndSeq(ownOpDetailId);
+        }
         // 通信域只在当前 HCCL 算子同步执行期间有效；离开算子后不允许 TLS 状态泄漏。
-        g_cur_comm_key = 0;
+        // 恢复而非清零：最外层算子恢复到进入前的 0（无泄漏），嵌套内层恢复到外层值。
+        g_cur_comm_key = savedCommKey_;
+        sim::operation::RestoreOpContext(savedOpContext_);
     }
 
     ScopedOperatorCommunicator(const ScopedOperatorCommunicator&) = delete;
     ScopedOperatorCommunicator& operator=(const ScopedOperatorCommunicator&) = delete;
+
+private:
+    uint64_t savedCommKey_;
+    sim::operation::OpContextSnapshot savedOpContext_;
 };
 
 static HcclResult SetupCommunicator(HcclComm comm, uint64_t deviceKey, uint32_t& curRank, uint32_t& rankSize)
@@ -97,6 +121,9 @@ static HcclResult SetupCommunicator(HcclComm comm, uint64_t deviceKey, uint32_t&
     }
 
     // 任务记录使用本进程的 Communicator 表行 ID，不能使用 HcclComm 句柄或跨 rank 的 comm_id 字符串。
+    // 覆写前暂存“进入本算子前”的 comm key，供紧随构造的 ScopedOperatorCommunicator 弹栈恢复：
+    // 最外层恢复到 0（无 TLS 泄漏），嵌套内层恢复到外层的 comm key（不清零、不踩坏外层）。
+    g_commKeyBeforeSetup = g_cur_comm_key;
     g_cur_comm_key = member.value->id;
     return HcclResult::HCCL_SUCCESS;
 }
@@ -2151,10 +2178,49 @@ HcclResult _Z18GetRunSideIsDeviceRb(bool& isDeviceSide)
     return HcclResult::HCCL_SUCCESS;
 }
 
-// 自定义算子入口劫持
+// 自定义算子入口劫持：透明转发（不解释尾部参数）
+//
+// 该两个接口在固定 6 参数之后还挂过多种尾部布局（ApiTestParam 结构体、
+// (uint32,uint64)、(float,uint64) 等），桩若按某一种写死，转发时就会截断/错位。
+// 这里改用 GCC 的 __builtin_apply_args/__builtin_apply：把“本函数收到的全部参数”
+// 原样喂给真实实现，桩完全不关心尾部参数的类型、个数和大小。
+//
+// 返回值：__builtin_apply 的结果是“返回值所在内存块”的指针，配合 __builtin_return
+// 可把真实返回值原样带回给调用方（实测 int/enum 返回值正确，含 float 尾部参数的场景）。
+// 注意 __builtin_return 是直接从本函数返回，会跳过作用域析构，故此处手动清理 g_cur_comm_key。
+
+namespace {
+    // __builtin_apply 的“栈参数区”大小，需覆盖最宽尾部布局（ApiTestParam 296B），留余量到 512B。
+    constexpr size_t kHcclVmApplyStackBytes = 512;
+
+    // BuildOpDetailsV1 返回 std::vector<uint8_t>（堆分配）。__builtin_return 是裸返回，会跳过本函数作用域
+    // 内所有析构，因此把 blob 的构造/析构关在 helper 内部，保证每次调用都正常释放。
+    static int RecordSendOpDetail(
+        uint32_t curRank, uint32_t rankSize, uint32_t destRank, HcclComm comm, aclrtStream stream, const void* sendBuf,
+        uint64_t count, HcclDataType dataType, uint64_t dataSize)
+    {
+        const auto details = BuildOpDetailsV1(count, dataType, 0, 0, HcclCMDType::HCCL_CMD_SEND);
+        return RecordOpDbInfo(
+            HcclCMDType::HCCL_CMD_SEND, curRank, reinterpret_cast<uint64_t>(stream), sendBuf, dataSize, nullptr, 0,
+            details, 0, rankSize, curRank, destRank, {}, comm);
+    }
+
+    static int RecordRecvOpDetail(
+        uint32_t curRank, uint32_t rankSize, uint32_t srcRank, HcclComm comm, aclrtStream stream, const void* recvBuf,
+        uint64_t count, HcclDataType dataType, uint64_t dataSize)
+    {
+        const auto details = BuildOpDetailsV1(count, dataType, 0, 0, HcclCMDType::HCCL_CMD_RECEIVE);
+        return RecordOpDbInfo(
+            HcclCMDType::HCCL_CMD_RECEIVE, curRank, reinterpret_cast<uint64_t>(stream), nullptr, 0, recvBuf, dataSize,
+            details, 0, rankSize, srcRank, curRank, {}, comm);
+    }
+} // namespace
+
 HcclResult HcclSendCustom(
     void* sendBuf, uint64_t count, HcclDataType dataType, uint32_t destRank, HcclComm comm, aclrtStream stream)
 {
+    // 必须在任何调用之前捕获入参寄存器（GCC 在函数入口保存 rdi..r9/xmm0..7 与栈参数区）
+    void* applyArgs = __builtin_apply_args();
     uint32_t curRank = 0;
     uint32_t rankSize = 0;
     const HcclResult setupRet = SetupCommunicator(comm, g_cur_device_key, curRank, rankSize);
@@ -2175,26 +2241,25 @@ HcclResult HcclSendCustom(
         return HcclResult::HCCL_E_NOT_SUPPORT;
     }
     const uint64_t dataSize = count * typeSize;
-    const auto details = BuildOpDetailsV1(count, dataType, 0, 0, HcclCMDType::HCCL_CMD_SEND);
-    if (RecordOpDbInfo(
-            HcclCMDType::HCCL_CMD_SEND, curRank, reinterpret_cast<uint64_t>(stream), sendBuf, dataSize, nullptr, 0,
-            details, 0, rankSize, curRank, destRank, {}, comm)
-        != 0) {
+    if (RecordSendOpDetail(curRank, rankSize, destRank, comm, stream, sendBuf, count, dataType, dataSize) != 0) {
         return HcclResult::HCCL_E_PARA;
     }
 
-    using Func = HcclResult (*)(void*, uint64_t, HcclDataType, uint32_t, HcclComm, aclrtStream);
-    const auto func = reinterpret_cast<Func>(sim::DlsymRealWithFallback(__func__, "libhccl.so"));
-
-    if (func == nullptr) {
+    void* realFunc = sim::DlsymRealWithFallback(__func__, "libhccl.so");
+    if (realFunc == nullptr) {
         return HcclResult::HCCL_E_NOT_SUPPORT;
     }
-    return func(sendBuf, count, dataType, destRank, comm, stream);
+    // 真实算子在此执行（g_cur_comm_key 仍有效，与改造前一致）
+    void* applyRet = __builtin_apply(reinterpret_cast<void (*)(...)>(realFunc), applyArgs, kHcclVmApplyStackBytes);
+    // __builtin_return 直接返回，跳过 scopedCommunicator 析构，这里手动补齐其清理动作
+    g_cur_comm_key = 0;
+    __builtin_return(applyRet);
 }
 
 HcclResult HcclRecvCustom(
     void* recvBuf, uint64_t count, HcclDataType dataType, uint32_t srcRank, HcclComm comm, aclrtStream stream)
 {
+    void* applyArgs = __builtin_apply_args();
     uint32_t curRank = 0;
     uint32_t rankSize = 0;
     const HcclResult setupRet = SetupCommunicator(comm, g_cur_device_key, curRank, rankSize);
@@ -2215,21 +2280,19 @@ HcclResult HcclRecvCustom(
         return HcclResult::HCCL_E_NOT_SUPPORT;
     }
     const uint64_t dataSize = count * typeSize;
-    const auto details = BuildOpDetailsV1(count, dataType, 0, 0, HcclCMDType::HCCL_CMD_RECEIVE);
-    if (RecordOpDbInfo(
-            HcclCMDType::HCCL_CMD_RECEIVE, curRank, reinterpret_cast<uint64_t>(stream), nullptr, 0, recvBuf, dataSize,
-            details, 0, rankSize, srcRank, curRank, {}, comm)
-        != 0) {
+    if (RecordRecvOpDetail(curRank, rankSize, srcRank, comm, stream, recvBuf, count, dataType, dataSize) != 0) {
         return HcclResult::HCCL_E_PARA;
     }
 
-    using Func = HcclResult (*)(void*, uint64_t, HcclDataType, uint32_t, HcclComm, aclrtStream);
-    const auto func = reinterpret_cast<Func>(sim::DlsymRealWithFallback(__func__, "libhccl.so"));
-
-    if (func == nullptr) {
+    void* realFunc = sim::DlsymRealWithFallback(__func__, "libhccl.so");
+    if (realFunc == nullptr) {
         return HcclResult::HCCL_E_NOT_SUPPORT;
     }
-    return func(recvBuf, count, dataType, srcRank, comm, stream);
+    // 真实算子在此执行（g_cur_comm_key 仍有效，与改造前一致）
+    void* applyRet = __builtin_apply(reinterpret_cast<void (*)(...)>(realFunc), applyArgs, kHcclVmApplyStackBytes);
+    // __builtin_return 直接返回，跳过 scopedCommunicator 析构，这里手动补齐其清理动作
+    g_cur_comm_key = 0;
+    __builtin_return(applyRet);
 }
 
 #ifdef __cplusplus

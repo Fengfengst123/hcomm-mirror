@@ -11,6 +11,10 @@
 include_directories(${HCOMM_VM_ROOT_PATH}/src)
 add_subdirectory(utils)
 add_subdirectory(common)
+# device 规格的唯一权威解析与地址计算库（设计文档 §4.3.1 / D2）。
+# 纯计算、只依赖 log(含 InstallPath) + yaml-cpp，故置于 proxy/store/plugin 之前，
+# 便于 store(S4 分段分配器)、proxy、runner、checker 共同链接。
+add_subdirectory(device_spec)
 add_subdirectory(proxy)
 # 把后端无关 storage 抽象层加入正式 hccl-vm 构建。
 add_subdirectory(storage)
@@ -111,6 +115,7 @@ target_link_libraries(hccl-vm
     common
     store
     topo
+    device_spec
     loader
     # 主程序只链接公共 storage 合同；具体引擎由后端模块经收集器接入 storage
     #（客户库依赖经 PUBLIC 传递），本层不出现具体后端名。

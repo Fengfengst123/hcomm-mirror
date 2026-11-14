@@ -94,7 +94,7 @@ namespace DpuSim {
 
         // 与 device 直写路径同一物理表：device 进程 ppid == 本进程 pid；
         // opDetailId 原样携带 device 推送时刻的值（InsertOpTask 的直写路径也会
-        // 在插入时刻覆写为 g_currOpDetailId，语义逐字节一致）。
+        // 在插入时刻覆写为 CurrOpDetailId()，语义逐字节一致）。
         const uint32_t pid = static_cast<uint32_t>(getpid());
         // 严格按水位排水：[head, target)。用 published 会把 mark 之后（本请求
         // 回调之后）的设备推送提前落库，与回调直写在同一条设备流上交织，

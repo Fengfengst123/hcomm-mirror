@@ -189,6 +189,22 @@ set_target_properties(test_negotiation_stub PROPERTIES
 )
 target_link_libraries(test_negotiation_stub gtest_main)
 
+# test_level1_other_stub —— level1 杂项桩（含 HcclAicpuKernelLaunch）单测
+add_executable(test_level1_other_stub level1_other_stub_test.cc)
+target_sources(test_level1_other_stub PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/proxy/level1/level1_other_stub.cc
+)
+target_include_directories(test_level1_other_stub PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/proxy/level1
+)
+set_target_properties(test_level1_other_stub PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/output/bin"
+)
+target_link_libraries(test_level1_other_stub gtest_main)
+target_link_options(test_level1_other_stub PRIVATE
+    -Wl,--unresolved-symbols=ignore-in-object-files
+)
+
 # test_sim_sub_process_manager —— AICPU device 子进程 QEMU 启动配置合同
 # （HCCL_VM_QEMU_PATH/HCCL_VM_QEMU_TB_SIZE：路径校验、TB 解析与十进制重序列化、
 #  argv 顺序、PATH 同名不抢先、既有环境继承、READY 协议）。

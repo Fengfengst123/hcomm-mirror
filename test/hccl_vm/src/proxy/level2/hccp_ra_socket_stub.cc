@@ -15,6 +15,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#include <algorithm>
 #include <iostream>
 #include <mutex>
 #include <pthread.h>
@@ -66,6 +68,9 @@ struct FdInfo {
 
     std::vector<uint8_t> peerStream; // 估算模式：幻影对端回放字节流（本端 Send 镜像）
     size_t peerOffset;               // 估算模式：已回放偏移
+
+    uint64_t totalSent = 0;     // 本 fd 累计发送字节
+    uint64_t totalReceived = 0; // 本 fd 累计接收字节
 };
 struct SocketWrapInitInfo {
     int family;
@@ -107,6 +112,65 @@ static constexpr uint32_t kPhantomSlotBase = 0x80000000u;
 static std::atomic<uint32_t> g_phantomSlotSeq{kPhantomSlotBase};
 static inline uint32_t NextPhantomSlot() { return g_phantomSlotSeq.fetch_add(1, std::memory_order_relaxed); }
 static inline bool IsPhantomSlot(uint32_t slotIdx) { return slotIdx >= kPhantomSlotBase; }
+
+// ===== 估算模式：UB 对称内存 LSA 环交换的幻影应答（发1收1：收一条给一条） =====
+// 环交换协议只统计"署名(memberId) != 本端"的收包，镜像回弹的本端署名永不被计数
+// → collected 停 1/N 超时。应答 = 自报包复印 + 署名按 1,2,3... 逐个改写（单进程
+// 仿真语义：幻影成员与本端共享数据）。与 hcomm 的耦合仅剩两个不可绕开的事实：
+//   ① tag 前缀 "ub_mem_sym_"（环 socket 身份；改名 → 条件永假 → 退回纯镜像）；
+//   ② 署名是包内第二个 u32（不改它收包永不被计数；结构变更 → 应答带本端署名被
+//      丢弃 → 退化为超时）。
+// 预算守卫（署名 ≤ 成员数-1）不可省（实测双证）：协议对全员槽位做布局校验，统一
+// 署名留空槽即败（member[2] layout[offset:0,size:0]）；agent 先收后发，无守卫会把
+// 上轮残留灌给本轮（member[1] layout[offset:<pid>,size:0]）。成员数复用 level0 桩的
+// ranktable 读取（与 hcomm 格式无关）。环上收发全在 agent 单线程，无需加锁。
+constexpr const char* KUB_MEM_LSA_TAG = "ub_mem_sym_";
+static std::vector<uint8_t> g_ubmemPacket; // 本轮自报包（应答模板）
+static uint32_t g_ubmemTeamSize = 0;       // 成员数（DB rank_size；0=未解析）
+static uint32_t g_ubmemSelf = UINT32_MAX;  // 本端署名（首个环上包闩定）
+static uint32_t g_ubmemMember = 0;         // 下一条应答署名（自报包置 1，逐条 +1）
+
+// 复用 level0 mpi_stub 的实现（跨 so 动态解析），从 RANK_TABLE_FILE 读取通信域成员数。
+// mpi_stub.cc 整体位于 extern "C" 块（MPI 劫持需 C 链接），故声明须同为 C 链接。
+extern "C" bool TryGetRankSizeFromRankTable(uint32_t& rankSize);
+
+// LSA 环收发统一入口：Send 路径（bytes 非空）自报包开新一轮、转发包静默消费；
+// Recv 路径（bytes 为空）流读空且预算未用尽时注入一条应答。返回 true 表示字节已
+// 消费（仅 Send 路径有意义），无需再走通用镜像。
+static bool HandleUbmemLsaRingEstimate(FdInfo* fd, const uint8_t* bytes, size_t size)
+{
+    if (fd->tag.rfind(KUB_MEM_LSA_TAG, 0) != 0) {
+        return false;
+    }
+    if (bytes == nullptr) { // Recv：流读空且预算未用尽 → 给一条应答
+        if (!g_ubmemPacket.empty() && fd->peerOffset == fd->peerStream.size()
+            && g_ubmemMember <= g_ubmemTeamSize - 1U) {
+            std::vector<uint8_t> phantom(g_ubmemPacket);
+            std::memcpy(phantom.data() + sizeof(uint32_t), &g_ubmemMember, sizeof(g_ubmemMember));
+            ++g_ubmemMember;
+            fd->peerStream.insert(fd->peerStream.end(), phantom.begin(), phantom.end());
+        }
+        return true;
+    }
+    if (size < 2 * sizeof(uint32_t)) {
+        return true; // 连署名字段都不完整，防御性吞掉
+    }
+    uint32_t memberId = 0;
+    std::memcpy(&memberId, bytes + sizeof(uint32_t), sizeof(memberId));
+    if (g_ubmemSelf == UINT32_MAX) {
+        g_ubmemSelf = memberId; // 每轮首包恒为自报包，其署名即本端下标
+    }
+    if (memberId != g_ubmemSelf) {
+        return true; // 转发包：本端已处理过的幻影包，静默消费
+    }
+    if (g_ubmemTeamSize == 0) { // 成员数复用 level0 的 ranktable 读取，失败回落环最小 2
+        (void)TryGetRankSizeFromRankTable(g_ubmemTeamSize);
+        g_ubmemTeamSize = std::max(g_ubmemTeamSize, 2U);
+    }
+    g_ubmemPacket.assign(bytes, bytes + size); // 新一轮模板 = 本次自报包
+    g_ubmemMember = 1U;
+    return true;
+}
 
 #ifdef __cplusplus
 extern "C" {
@@ -203,7 +267,7 @@ int RaSocketWrapBatchInit(
 int RaSocketDeinit(void* socketHandle)
 {
     auto* info = static_cast<SocketInfo*>(socketHandle);
-    HCCL_VM_INFO(" delete socketHandle:{:p}", static_cast<void*>(info));
+    HCCL_VM_DEBUG(" delete socketHandle:{:p}", static_cast<void*>(info));
     delete info;
     return 0;
 }
@@ -406,8 +470,8 @@ int RaGetSockets(unsigned int role, struct SocketInfoT conn[], unsigned int num,
                 if (!pairRes.ok()) {
                     if (pairRes.code != HcclSim::Storage::DbCode::NOT_FOUND) {
                         HCCL_VM_ERROR(
-                            "RaGetSockets backend failure: tag:{}, tagHash:0x{:x}({}), code:{}, diagnostic:{}",
-                            conn[i].tag, tagHash, tagHash, static_cast<int>(pairRes.code), pairRes.diagnostic);
+                            "RaGetSockets backend failure: tag:{}, tagHash:0x{:x}, code:{}, diagnostic:{}", conn[i].tag,
+                            tagHash, static_cast<int>(pairRes.code), pairRes.diagnostic);
                     }
                     std::this_thread::sleep_for(std::chrono::milliseconds(500));
                     continue;
@@ -443,8 +507,10 @@ int RaGetSockets(unsigned int role, struct SocketInfoT conn[], unsigned int num,
             FillFdPeerInfo(fd, conn[i]);
         }
 
-        HCCL_VM_INFO(
-            " get socket tag:{} slotIdx:{} role:{} peerDevice:{}", conn[i].tag, slotIdx, role, fd->peerDeviceId);
+        HCCL_VM_INFO(" get socket tag:{} slotIdx:{} role:{}", conn[i].tag, slotIdx, role);
+        if (sim::IsEstimateMode()) {
+            HCCL_VM_INFO("  peerDevice:{}", fd->peerDeviceId);
+        }
     }
     return 0;
 }
@@ -453,6 +519,12 @@ int RaSocketBatchClose(struct SocketCloseInfoT conn[], unsigned int num)
 {
     for (int i = 0; i < num; i++) {
         auto* fd = static_cast<FdInfo*>(conn[i].fdHandle);
+        if (fd->tag.rfind(KUB_MEM_LSA_TAG, 0) == 0) { // 环 fd 关闭：状态复位，防跨通信域串用
+            g_ubmemPacket.clear();
+            g_ubmemTeamSize = 0;
+            g_ubmemSelf = UINT32_MAX;
+            g_ubmemMember = 0;
+        }
         {
             std::lock_guard<std::mutex> lock(g_tagCacheMutex);
             for (auto it = g_tagCache.begin(); it != g_tagCache.end(); ++it) {
@@ -538,8 +610,13 @@ int RaSocketSend(const void* fdHandle, const void* data, unsigned long long size
     if (sim::IsEstimateMode() && fd != nullptr) {
         // 时序关联——RaGetQpAttr已记录待绑QP, 此刻绑定到本socket真实对端
         BindDpuPendingQps(fd->peerDeviceId, fd->peerEid, fd->localEid);
-        // 幻影对端：本端 Send 的字节镜像进对端回放流，供本端 Recv 读回（对端消息与本端同构）
         const uint8_t* bytes = static_cast<const uint8_t*>(data);
+        if (HandleUbmemLsaRingEstimate(fd, bytes, static_cast<size_t>(size))) {
+            // LSA 环：已处理，不再走通用镜像（镜像只能回弹本端字节，给不出对端内容）
+            *sentSize = size;
+            return 0;
+        }
+        // 幻影对端：本端 Send 的字节镜像进对端回放流，供本端 Recv 读回（对端消息与本端同构）
         fd->peerStream.insert(fd->peerStream.end(), bytes, bytes + size);
         *sentSize = size;
         return 0;
@@ -550,13 +627,18 @@ int RaSocketSend(const void* fdHandle, const void* data, unsigned long long size
         return -1;
     }
     *sentSize = ret;
+    if (ret > 0) {
+        fd->totalSent += static_cast<uint64_t>(ret);
+        HCCL_VM_INFO(" send tag:{} slotIdx:{} size:{} totalSent:{}", fd->tag, fd->slot_idx, ret, fd->totalSent);
+    }
     return 0;
 }
 
 int RaSocketRecv(const void* fdHandle, void* data, unsigned long long size, unsigned long long* receivedSize)
 {
     auto* fd = const_cast<FdInfo*>(static_cast<const FdInfo*>(fdHandle));
-    if (sim::IsEstimateMode()) {
+    if (sim::IsEstimateMode() && fd != nullptr) {
+        (void)HandleUbmemLsaRingEstimate(fd, nullptr, 0U); // LSA 环按需应答（收一条给一条）
         // 幻影对端：空槽不再返回 SOCK_EAGAIN，改为从镜像字节流按序排出对端消息
         size_t avail = fd->peerStream.size() - fd->peerOffset;
         if (avail == 0) {
@@ -579,6 +661,10 @@ int RaSocketRecv(const void* fdHandle, void* data, unsigned long long size, unsi
         return -1;
     }
     *receivedSize = ret;
+    if (ret > 0) {
+        fd->totalReceived += static_cast<uint64_t>(ret);
+        HCCL_VM_INFO(" recv tag:{} slotIdx:{} size:{} totalRecv:{}", fd->tag, fd->slot_idx, ret, fd->totalReceived);
+    }
     return 0;
 }
 

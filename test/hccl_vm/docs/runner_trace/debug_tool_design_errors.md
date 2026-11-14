@@ -6,7 +6,7 @@
 
 ## 一、可行性问题（必须修正）
 
-### P0-1: CKE Wait 流程与插桩设计不匹配
+### P0-1: Event Wait 流程与插桩设计不匹配
 
 **严重程度**: P0（方案可行性错误）
 
@@ -19,7 +19,7 @@ WaitCkeProcess() → CKE 不满足 → ccuSimulator_->SetWaitCKEFlag(true) → r
 → UpdateLoopStatus() 返回 false → ExecuteInstr() 返回 false → Execute() 返回 false
 ```
 
-关键：CKE 不满足时，`Run()` 内部的 `WaitCkeProcess` 发现 CKE 不满足就设置 waitCKE 标志后直接 return，**不调用 Process()，不修改任何资源**。因此：
+关键：Event 不满足时，`Run()` 内部的 `WaitCkeProcess` 发现 Event 不满足就设置 waitCKE 标志后直接 return，**不调用 Process()，不修改任何资源**。因此：
 - 执行前快照 = 执行后快照（delta 为空）
 - 不应该捕获 snapshotAfter 和计算 delta
 
@@ -47,7 +47,7 @@ CcuTraceCollector::RecordWaitSpin(rankId_, dieId_, curInstrId,
 return false;
 ```
 
-直到 CKE 通过后才创建完整 entry（合并之前的自旋信息）。
+直到 Event 通过后才创建完整 entry（合并之前的自旋信息）。
 
 ---
 
@@ -131,7 +131,7 @@ CcuSimulator::SetCurrentSqeTaskId(sqeTaskId);  // Simulator 内部使用
 
 文档 4.1 中每条指令前后各做一次 `CaptureResourceSnapshot()`（全量读取所有资源），开销极大：
 
-- 单个 snapshot：4096×8(XN) + 4096×8(GSA) + 1024×2(CKE) ≈ 67KB
+- 单个 snapshot：4096×8(Variable) + 4096×8(Address) + 1024×2(Event) ≈ 67KB
 - 每条指令前后各一次 ≈ 134KB
 - 10000 条指令 ≈ 1.34GB（仅 snapshot 数据）
 
@@ -181,7 +181,7 @@ uint64_t CcuExecutorBase::UpdateAddress(uint64_t addr, uint16_t addrExpandCoef) 
 
 涉及 5 个参数：`addr`（原始地址）、`addrExpandCoef`（扩展系数）、`loopExtendNum`、`gsaOffset`、`curLoopCnt`、`loopIterStepGSA`。
 
-当前 `CcuExecutionContext` 只有一个简单的 `gsaOffset` 字段，无法完整恢复 Loop 内 GSA 地址偏移的计算过程。
+当前 `CcuExecutionContext` 只有一个简单的 `gsaOffset` 字段，无法完整恢复 Loop 内 Address 地址偏移的计算过程。
 
 **修正建议**:
 
@@ -286,7 +286,7 @@ struct CcuInstrTraceDetail {
 **问题描述**:
 
 文档 3.4 采用 JSON 作为序列化格式，但 JSON 的弱点：
-- 每个 uint64_t 的 XN/GSA 值需要字符串表示（`"0x7f3a0000"`），8 字节变 ~16 字节
+- 每个 uint64_t 的 Variable/Address 值需要字符串表示（`"0x7f3a0000"`），8 字节变 ~16 字节
 - 大量冗余的 key 名称重复（`"xnChanges"` 在每条 entry 中重复出现）
 - 10000 条指令的 JSON 文件可达 50MB+
 - 前端加载和解析大 JSON 文件耗时严重
@@ -401,7 +401,7 @@ struct CcuTraceNonCcuEntry {
 
 | 优先级 | 编号 | 问题 | 类型 | 修正要点 |
 |--------|------|------|------|---------|
-| P0 | P0-1 | CKE Wait 时不应计算 delta | 可行性错误 | waitCKE 时只记录关键字段，CKE 通过后才创建完整 entry |
+| P0 | P0-1 | Event Wait 时不应计算 delta | 可行性错误 | waitCKE 时只记录关键字段，Event 通过后才创建完整 entry |
 | P0 | P0-2 | globalSeqId/execRound 维护位置错误 | 可行性错误 | 全局上下文由 SequentialExecutor 管理，传参给 Simulator |
 | P0 | P0-3 | 全量 snapshot 性能瓶颈 | 性能瓶颈 | ResourceManager 拦截变更 + 初始快照 + 定期 checkpoint |
 | P1 | P1-1 | Loop 偏移公式不完整 | 信息缺失 | 补充 iterStepGSA/curLoopCnt/extendNum/addrExpandCoef |

@@ -75,7 +75,7 @@ light_performance 插件读取 db 文件 ──生成──> 性能仿真所需�
 │  └───────────┘   └───────────────┘   └───────────┘   └────────────────┘  │
 │   sqlite 读取       SQE→Task 映射      simpy 离散事件     json + trace    │
 │   BLOB 解码         notify 配对        端口带宽共享                        │
-│   算子分组          CCU 微码展开       HBM 动态共享                        │
+│   算子分组          CCU 微码展开       片上内存动态共享                        │
 │                                        eid→端口解析                       │
 │  输入: data/hccl_vm_data.db (+ data/hccl_sim.db, ranktable.json)          │
 │  输出: (SimConfig, DependencyGraph, TopoResolver) → makespan →            │
@@ -828,10 +828,10 @@ DependencyGraph 只描述该 rank 的任务及其依赖。**跨 rank 的配对�
 | NOTIFY_RECORD (1) | waitRank != 本端 rank | `NOTIFY_RECORD`（跨 rank post：节点保留，不配对） | notify_id=int, src=local_rank, dst=对端 rank（未解析退 INVALID） | 固定 remote_record_delay，不触发 Event |
 | NOTIFY_WAIT (0) | recordRank == 本端 rank | `NOTIFY_WAIT` | 同上 | 等待 Event |
 | NOTIFY_WAIT (0) | recordRank != 本端 rank | `NOTIFY_WAIT`（跨 rank wait：节点保留，不配对） | notify_id=int, src=对端 rank（未解析退 INVALID）, dst=local_rank | 固定 remote_wait_delay |
-| MEM_CPY (3) | jettyId == INVALID | `MEMCPY` | size=len, src/dst_rank=taskData 端点 rank（未填退本端） | HBM 动态共享带宽 |
+| MEM_CPY (3) | jettyId == INVALID | `MEMCPY` | size=len, src/dst_rank=taskData 端点 rank（未填退本端） | 片上内存动态共享带宽 |
 | MEM_CPY (3) | jettyId 有效, write 方向 | `UB_WRITE_OR_READ` | size=len, src_rank=local, dst_rank=对端 rank, src/dst_eid, jetty_id, protocol, is_write=True | 端口 write 方向带宽共享 |
 | MEM_CPY (3) | jettyId 有效, read 方向 | `UB_WRITE_OR_READ` | size=len, src_rank=对端 rank, dst_rank=local, src/dst_eid, jetty_id, protocol, is_write=False | 端口 read 方向带宽共享 |
-| REDUCE (2) | jettyId == INVALID | `REDUCE_INLINE` | size=dataCount, data_type=任务级 dataType 枚举名, src/dst_rank 同 MEMCPY 本地分支 | HBM 动态共享带宽 |
+| REDUCE (2) | jettyId == INVALID | `REDUCE_INLINE` | size=dataCount, data_type=任务级 dataType 枚举名, src/dst_rank 同 MEMCPY 本地分支 | 片上内存动态共享带宽 |
 | REDUCE (2) | jettyId 有效 | 同 MEM_CPY 走网分支（5.7 节近似） | 同上（含 data_type） | 同上 |
 | WRITE_WITH_NOTIFY (7) | 恒 write 方向（本端 src → 远端 dst，无方向推断） | `WRITE_WITH_NOTIFY`（**单任务，不拆分**） | size=len, notify_id=notifyId, src_rank=local, dst_rank=对端 rank（未解析经 eid→rank 索引回退）, src/dst_eid, jetty_id, protocol, is_write=True；isReduce=1 时 data_type=dataType 枚举名 | 端口 write 方向带宽共享 + 写落地后 notify 固定 record 时延（remote） |
 | CCU_GRAPH (4) | — | （展开，第 6 章） | — | — |
@@ -966,7 +966,7 @@ host 侧 stream 同步点（样例主流上每轮迭代出现一次），表示 
 
 - 走网（jettyId 有效）：按 `UB_WRITE_OR_READ` 计端口带宽时延
   （方向同 5.5 节判定）。
-- 不走网（jettyId INVALID）：映射为 `REDUCE_INLINE`，按 HBM 带宽动态共享计延
+- 不走网（jettyId INVALID）：映射为 `REDUCE_INLINE`，按片上内存带宽动态共享计延
   （`size / hbm_bandwidth`）；计算时延暂未单列（后续可按 `dataType×dataCount` 标定，
   见 10.1 节 data_type 字段缺口）。
 
@@ -1070,14 +1070,14 @@ checker `ccu_task_transform_instruct_a6_v3.cc`，11.3.3 节）；A5/A6 指令集
 
 | 指令大类 | 代表指令 | light_performance 行为 | 产出 Task |
 |----------|---------|----------------------|-----------|
-| LOAD（寄存器写） | LoadSqeArgsToXn/GSA、LoadImd、LoadX、算逻（A6 Add/Sub/…） | 更新寄存器模型，数据面**不产生节点**；A6 LOAD 类普遍携带 `setCKE` 尾部字段（mask 非零 → 本端 `NOTIFY_RECORD`，checker `ProcessSetMask` 语义）；A6 Load/Store（HBM↔Variable 数据面）不建模 HBM 内容，寄存器不回填（仅保留 setCKE 同步语义，告警留痕） | —（A6 setCKE 非零时 Notify_Record） |
+| LOAD（寄存器写） | LoadSqeArgsToXn/GSA、LoadImd、LoadX、算逻（A6 Add/Sub/…） | 更新寄存器模型，数据面**不产生节点**；A6 LOAD 类普遍携带 `setCKE` 尾部字段（mask 非零 → 本端 `NOTIFY_RECORD`，checker `ProcessSetMask` 语义）；A6 Load/Store（片上内存↔Variable 数据面）不建模片上内存内容，寄存器不回填（仅保留 setCKE 同步语义，告警留痕） | —（A6 setCKE 非零时 Notify_Record） |
 | CTRL: SetCKE/SetCKBit | 置 Event 位 | 本端 → `NOTIFY_RECORD`（登记 Event 记账，带 mask）；远端目标（跨 rank post，SyncCKE 等）→ 远端 `NOTIFY_RECORD`（不配对，6.6 节） | Notify_Record |
 | CTRL: Wait/Jmp/Fence | 等 Event 位 / 跳转 / 栅栏 | Event wait（A5 内嵌 waitCKE 字段）: 位不足则暂停该 queue 指针；位齐生成 `NOTIFY_WAIT`（按贡献位拆分，带 mask）；依赖远端位的 wait → 远端 `NOTIFY_WAIT`（不配对，固定时延，6.6 节）。A6 独立 Wait 指令（Variable 值比较自旋，checker `TransformWaitInstr`）: 满足直通无节点；未满足 = 依赖对端远端寄存器写（SyncWtX/TransMem notify）→ 顶层按停滞消解生成远端 `NOTIFY_WAIT`（固定 `remote_wait_delay`），循环体内直接生成节点继续。Jmp: A5 按 `Xn[conditionXnId] != expectData` 求值（checker `TransformJmpInstrA5` 语义）；A6 支持 6 种条件码（==/!=/>/>=/</<=，≥6 无条件）+ 相对/绝对两模式（jumpMode，目标 `Xn[relTarInstrXnId]`）；目标限当前指令窗口内，越界告警直通；循环体内直通；带步数预算防御后向跳转死循环。Fence（仅 A6）: checker 不支持，告警直通（队列串行模型下顺序天然保证） | Notify_Wait |
 | CTRL: ClearCKE | wait + 清位 | wait 语义；A6 按 checker `ClearWaitMask` 语义清除本次消费的 wait 位（`clearMask != 0` 为 checker 不支持场景，告警 + 宽容清除目标位） | Notify_Wait |
 | CTRL: Loop/LoopGroup | 循环 | loopCnt 来自寄存器，**合并展开**（6.5 节，失败回退全展开）；A6 Loop `mode==1` 为条件展开（`wishCKEBit == Xp.loopCtxId + 1024` 命中才执行，恒走全展开路径） | 无（体内指令按本表映射；合并路径下数据任务 size × 总迭代数） |
 | TRANS（搬运） | LocMem↔LocMS/RmtMem/RmtMS（A5）、本地 4 码 + 统一 TransMem dmaOpCode（A6） | 按角色映射（6.3.2） | `Memcpy`/`Ub_Write_Or_Read` |
 | TRANS: Sync（跨 rank 同步） | SyncCKE/GSA/Xn（A5）、SyncXnWtx/SyncAtx（A6） | 远端置位/通知 → 远端 `NOTIFY_RECORD`（不配对，6.6 节）；值同步为远端寄存器写，不建节点 | Notify_Record（远端） |
-| REDUCE | Add/Max/Min | 同 SQE REDUCE 近似（5.7 节）；CcuBuffer 为 rank 本地 buffer，恒本地 HBM 规约 | `Reduce_Inline` |
+| REDUCE | Add/Max/Min | 同 SQE REDUCE 近似（5.7 节）；CcuBuffer 为 rank 本地 buffer，恒本地片上内存规约 | `Reduce_Inline` |
 
 #### 6.3.2 TRANS 传输角色判定（与 checker `ccu_loop_merge_v3.cc:73-144` 一致）
 
@@ -1085,7 +1085,7 @@ checker `ccu_task_transform_instruct_a6_v3.cc`，11.3.3 节）；A5/A6 指令集
 
 | src | dst | 角色 | hccl_sim Task |
 |-----|-----|------|---------------|
-| 本端 | 本端 | LOCAL_COPY | `Memcpy`（HBM 动态共享） |
+| 本端 | 本端 | LOCAL_COPY | `Memcpy`（片上内存动态共享） |
 | 本端 | 远端 | WRITE | `Ub_Write_Or_Read`（src_rank=local, dst_rank=对端, is_write=True） |
 | 远端 | 本端 | READ | `Ub_Write_Or_Read`（src_rank=对端, dst_rank=local, is_write=False） |
 
@@ -1127,8 +1127,8 @@ checker `ccu_task_transform_instruct_a6_v3.cc`，11.3.3 节）；A5/A6 指令集
 class CcuRegisterModel:
     xn:    dict[(dev, die, id)] -> int      # 通用寄存器（长度/循环计数等）
     cke:   dict[(dev, die, ckeId)] -> int   # CKE 位图（置位/清位）
-    gsa:   dict[(dev, die, id)] -> int      # A5 Address 寄存器（A6 无 GSA，仅 xn/cke）
-    seen_post: dict[key, list[PostRecord]]  # Event post 记账（配对用）
+    gsa:   dict[(dev, die, id)] -> int      # A5 GSA 寄存器（A6 无 GSA，仅 xn/cke）
+    seen_post: dict[key, list[PostRecord]]  # CKE post 记账（配对用）
 
     key = (waitDeviceId, dieId, ckeId)
     PostRecord = {record_device_id, cke_mask, remaining_mask, task_id, is_local}
@@ -1189,14 +1189,14 @@ class CcuRegisterModel:
   消除"整条队列逐任务串行"的失真。
 - **loop 展开**（合并优先，对齐 checker `ccu_loop_merge_v3.cc`）：
   - `Loop`/`LoopGroup` 指令的迭代数来自寄存器，在解释执行时已知：
-     - A5：LoopGroup 参数在 Variable（LoopNum[61:55]/RepeatNum[54:48]/NoRepeatNum[47:41]）
-      与 Xm（gsaOffset/MSOffset/ckeOffset），Loop 迭代数在 Xn[xmId] 低 13 位；
-     - A6：LoopGroup 参数改由 **Variable/Xm/Xp 三寄存器**承载（checker
-       `LoopGroupXnA6/XmA6/XpA6`）——Variable：`loopInsCnt:10 | expandOffset:9 |
+    - A5：LoopGroup 参数在 Variable（LoopNum[61:55]/RepeatNum[54:48]/NoRepeatNum[47:41]）
+      与 Xm（gsaOffset/CcuBufferOffset/ckeOffset），Loop 迭代数在 Variable[xmId] 低 13 位；
+    - A6：LoopGroup 参数改由 **Variable/Xm/Xp 三寄存器**承载（checker
+      `LoopGroupXnA6/XmA6/XpA6`）——Variable：`loopInsCnt:10 | expandOffset:9 |
       expandCnt:9`，Xm：`ckOffset:10 | msOffset:11 | gsaOffset:32`，
       Xp：`xnIdOffset:32`（GetXnId 偏移量，6.4 节）；Loop 的迭代数在
-       `Xn[GetXnId(xmId)]` 低 13 位、Address 步长在 `Xn[xnId]` 低 32 位、上下文 id
-      在 `Xn[xpId]` 低 9 位；`mode==1` 为**条件 Loop**——仅当指令
+      `Variable[GetXnId(xmId)]` 低 13 位、Address 步长在 `Variable[xnId]` 低 32 位、上下文 id
+      在 `Variable[xpId]` 低 9 位；`mode==1` 为**条件 Loop**——仅当指令
       `wishCKEBit == loopCtxId + 1024`（`A6_LOOP_BOARD_ENTRY`）时展开，否则
       本展开跳过（checker `ProcessLoopIns`），且条件 Loop 恒走全展开路径
       （checker `CollectLoopExpandA6` 拒绝合并）。
@@ -1227,7 +1227,7 @@ class CcuRegisterModel:
   - **合并发射**（`EmitMergedLoopInstrsV3` 语义）：循环体按 sample 展开
     （curExpandCnt=0）执行**一次**，逐槽位 wait → 数据任务 → set → 清 wait 位；
     数据任务 size = 单次长度 × (展开数 × 迭代数)（时序等价折叠，与 checker
-    AddBatchTransMem/AddBatchReduce 的批量任务一致）；其余展开的 Event 寄存器
+     AddBatchTransMem/AddBatchReduce 的批量任务一致）；其余展开的 Event 寄存器
     位图按 or/clear 幂等性重放，保证循环后寄存器状态与全展开一致（仅
     PostRecord 任务记账不重复建立）。发射窗口内的全部任务（数据任务与折叠后
     的 notify 任务）携带 `loop_cnt`（展开后的 loop 数 = 扩展 N 次后的 N+1）与
@@ -1243,7 +1243,7 @@ class CcuRegisterModel:
   - A6 LoopGroup 配置校验（`loopInsCnt≤512`、`expandCnt≤511`、
     `expandOffset≤511` 且 `expandOffset≤loopInsCnt`，checker
     `TransformLoopGroupInstr`）不满足时告警跳过整个 LoopGroup（防御异常
-    寄存器值导致的失控展开）；"loop 内 waitCKE 不得重复 Event ID"校验见上
+     寄存器值导致的失控展开）；"loop 内 waitCKE 不得重复 Event ID"校验见上
     合并前置校验 #5（`ccu_task_transform_instruct_a6_v3.cc:1126-1146`）。
 
 ### 6.5.1 合并 loop 流水线并发恢复（loop 标签 + 特征链消解）
@@ -1253,7 +1253,7 @@ class CcuRegisterModel:
 wait/set 握手**不是**。真实微码执行时，LoopGroup 的 N 份展开并发发射，每份展开
 内部再按 M 次内层迭代流水推进（典型每次迭代 4KB 量级），循环体内的
 `TransMemToMs → setCKE → waitCKE → TransLocMsToRmtMem / TransLocMsToLocMem`
-是**逐迭代的细粒度握手**：第 k+1 迭代的 HBM→CcuBuffer 预取（memcpy 引擎）与第 k 迭代
+是**逐迭代的细粒度握手**：第 k+1 迭代的片上内存→CcuBuffer 预取（memcpy 引擎）与第 k 迭代
 的走网写 + 本地拷出（通道 / memcpy 引擎）重叠，稳态吞吐 ≈ max(各相位总量)。
 合并折叠后，逐迭代握手退化为**单对** wait/record 节点，语义变为"前段全部数据
 （× N × M 迭代）完成 → 后段才可开始"的**全量屏障**——流水线并发被折叠成串行。
@@ -1276,11 +1276,11 @@ set 0:1..0x40) → TransLocMsToLocMem(4KB, set 0x80) → waitCKE(0:ff)`；LoopGr
 - 真实执行：稳态 ≈ max(预取 95.95, 7 端口写 2526.48) us；
 - 当前成图：串行 95.95 + 2526.48 us。
 - **量化**（样例 db ALLGATHER，本节修复前后实测）：makespan **2657.52 →
-  2561.54 us**。消除 95.95 us 串行预取相位；预取与本地拷出并发后经 HBM 动态共享
+  2561.54 us**。消除 95.95 us 串行预取相位；预取与本地拷出并发后经片上内存动态共享
   各 191.79 us（流水线稳态的正确表达，7.5 节），7 端口走网写 2526.48 us 成为唯一
-  关键路径。误差上界：两相位分属不同引擎（HBM 预取 vs 走网写）且时长相当时，
+  关键路径。误差上界：两相位分属不同引擎（片上内存预取 vs 走网写）且时长相当时，
   loop 体耗时被高估接近 **2×**（串行 t1+t2 vs 稳态 max(t1,t2)）；同引擎相位
-  （如纯 HBM 的预取+拷出）串行化误差被 HBM 动态共享吸收（总量不变）；
+  （如纯片上内存的预取+拷出）串行化误差被片上内存动态共享吸收（总量不变）；
   误差随合并 loop 个数线性累加。
 
 **正确性前提——合并校验不变量**：6.5 节合并前置校验 #2（wait/set 掩码体内
@@ -1420,7 +1420,7 @@ fork/汇合边由组装期基于剪枝后序列重算（7.4.1 节无环论证继
 2. `Task` 模型扩字段，trace/dump/JSON 呈现需同步（11 章口径）；
 3. "完全并发 + 带宽管理器仲裁"是流水线**稳态**近似：忽略流水线填充/排空
    延迟（单迭代 4KB 量级，亚微秒，可忽略）与逐迭代握手的**速率**开销
-   （若 Event 引擎吞吐为瓶颈需专门速率模型，当前折叠 / 删除均按单次计，
+    （若 Event 引擎吞吐为瓶颈需专门速率模型，当前折叠 / 删除均按单次计，
    与修复前口径一致，登记 10.3 节 #21）；
 4. 全展开回退路径（`mf > 0`）不经此消解——其逐迭代 wait/record 为真实 4KB
    粒度握手，但迭代间重叠同样被队列链串行化；该路径节点数大、当前样例未
@@ -1444,7 +1444,7 @@ dump `nodes[]` / input_builder 回路）+ `DependencyGraph.remove_task()`
 loop 从流改名呈现（`export_trace`，见上）。验证：
 样例 ALLGATHER db 跨引擎场景 makespan 2657.521 → 2561.541 us（56 → 54
 任务，pb=1，9 单元全部 fork 重接前一骨架节点 rwt22，与手工原型逐项一致）；
-归档库回归——同引擎相位场景（mv→mv 均 HBM）makespan 不变（零误差场景，
+ 归档库回归——同引擎相位场景（mv→mv 均片上内存）makespan 不变（零误差场景，
 理论预期）、SQE-only 库 pb=0 不受影响。`loop_tag` 作为任务持久属性保留，
 供后续性能仿真（如逐 loop 带宽/速率建模，10.3 节 #21）消费。
 
@@ -1469,7 +1469,7 @@ expand_ccu(device_id, die_id, sqe_params, instr_space, dep_graph, reg_model):
                 ptr[q] += 1; progress = True
             if ptr[q] 到窗口尾: 当前上下文完成, 同 queue 后一上下文入活跃集
         if not progress:
-            # 停滞 = 存在依赖远端 Event 的 wait (跨 rank, 单 rank 图中不可见)
+            # 停滞 = 存在依赖远端 CKE 的 wait (跨 rank, 单 rank 图中不可见)
             对停滞 queue: 生成远端 Notify_Wait 节点 (notify_id+mask, 固定时延),
                 再重放该指令其余部分 (本地 set / 数据搬运), 继续推进
     SQE 流挂接 (7.4.1 节): 占位自 SQE 流移除 (任务图不引入占位节点);
@@ -1484,15 +1484,15 @@ expand_ccu(device_id, die_id, sqe_params, instr_space, dep_graph, reg_model):
 - **跨 rank post-wait 不建边、但保留同步任务节点**（单 rank 成图，与 checker 的
   主要区别）：checker 的 `GenerateRawCcuGraphsV3`（`ccu_task_transform_v3.cc:1275-1406`）
   让多 rank 的 CCU 图交替推进、跨 rank post 相互解锁；本插件只有单 rank 指令数据：
-  - post 到远端 Event / 远端寄存器通知的指令 → 生成远端 `Notify_Record` 节点
-    （src=本端、dst=INVALID → 固定 `remote_record_delay`，不登记本地 Event 记账、
+   - post 到远端 Event / 远端寄存器通知的指令 → 生成远端 `Notify_Record` 节点
+     （src=本端、dst=INVALID → 固定 `remote_record_delay`，不登记本地 Event 记账、
     不参与配对）：
     - A5：SyncCKE 的 `rmtCKEId/locCKEMask`、SyncGSA/SyncXn 的
       `setRmtCKEId/setRmtCKEMask`、TransLocMSToRmtMS 的 `setRmtCKE`（与 checker
       `AddPost` 的触发条件一致）；
     - A6：TransMem `dmaOpCode=5` 的写后 notify 与 `0x1A` 远端原子计数、
       SyncXnWtx 的 `notifyValid=1` notify、SyncAtx 的原子同步——远端目标类型
-      （Variable/Event）由对端地址映射解析（checker `GetXnAndTypeIdByAddr`），单 rank
+       （Variable/Event）由对端地址映射解析（checker `GetXnAndTypeIdByAddr`），单 rank
       不可得，一律按远端 record 近似（mask 取通知值低 16 位仅供 trace 显示）。
     SyncGSA/SyncXn（A5）与 SyncXnWtx 主写（A6）的值同步仅为远端寄存器写
     （checker 在对端图上建节点/写状态），本端不单独生成任务。
@@ -1517,7 +1517,7 @@ expand_ccu(device_id, die_id, sqe_params, instr_space, dep_graph, reg_model):
   （`g_allRankChannelInfo`: channelId → 对端），但以 RankEidMap 的通信域 rank
   替代 checker 的物理 dstDeviceId。
 - **规约任务**（REDUCE 微码）：CcuBuffer 为 rank 本地 buffer（checker 对全部 msId 恒
-  `GenSliceFromMs` + `AddLocalBatchReduce`），规约恒为本地 HBM 操作，src/dst 均填
+  `GenSliceFromMs` + `AddLocalBatchReduce`），规约恒为本地片上内存操作，src/dst 均填
   本端 rank；跨 rank 数据已在先行的 Rmt* 角色搬运中计费，规约不再重复走网。
 - **本地任务**（本地搬运 Memcpy、本地规约 Reduce_Inline）：src/dst 均填本端 rank。
 - **is_write**：CCU 产出的 UB 任务均显式携带（write=True / read=False），
@@ -1531,7 +1531,7 @@ expand_ccu(device_id, die_id, sqe_params, instr_space, dep_graph, reg_model):
 | Loop 合并（BatchTransMem/BatchReduce、资源冲突检查、producedMasks 配平） | **同等实现**（6.5 节：前置校验 + 折叠发射 + 回退全展开；内存切片合并不需要——仿真只关心数据量与时序） | 对齐 checker 语义消除节点膨胀 |
 | SQE 归并为 TaskCcuGraph（`IsContiguousCcuSqe` 连续才并入 + `CcuMissionKey` 最新节点追加） | **同等实现**（6.1 节：连续段切分派发上下文，各上下文独立窗口重放 + 顺序消费 args；寄存器/Event 跨上下文共享，同 queue 上下文按派发序串行） | 对齐 checker 多次 dispatch（窗口回绕重发）语义，曾因归并为单一上下文丢失第二次 dispatch 数据搬运（10.3 节 #20 已修复） |
 | GetRemoteRankByChannel（channelId → dstDeviceId/dstDieId，经 Communicator 表映射 rank） | 对端 eid（reid）→ RankEidMap/ranktable 索引 → 通信域 rank（4.8/6.7 节） | estimate 模式 Communicator 表仅本 rank 一行；ccuChannels.rankId 字段为 endpoint deviceId 不可用 |
-| AllRankParamRecorder 完整地址空间映射（Variable/Event/PFE/CHANNEL/JETTY/MISSION/CcuBuffer …）+ HBM 数据内容 + 远端地址→寄存器反查（`GetXnAndTypeIdByAddr`） | 仅保留 xn/cke/gsa/通道 四类；A6 Load/Store 的 HBM 数据面与远端目标反查不建模（6.4 节、`_MissionContextA6` 偏差清单） | 仿真只需长度与对端；数据内容/远端寄存器号不影响时序 |
+| AllRankParamRecorder 完整地址空间映射（Variable/Event/PFE/CHANNEL/JETTY/MISSION/CcuBuffer …）+ 片上内存数据内容 + 远端地址→寄存器反查（`GetXnAndTypeIdByAddr`） | 仅保留 xn/cke/gsa/通道 四类；A6 Load/Store 的片上内存数据面与远端目标反查不建模（6.4 节、`_MissionContextA6` 偏差清单） | 仿真只需长度与对端；数据内容/远端寄存器号不影响时序 |
 | A6 checker 报错中止场景（未支持 dmaOpCode/dstType、clearType!=1、clearMask!=0、LoopGroup 配置非法、LoadX/StoreX 间接号越界等） | 降级为告警 + 跳过数据面（同步语义仍执行）或跳过指令 | 性能工具容忍不完整/异常数据，保持队列骨架完整 |
 | CcuTraceInfo 溯源、ccu_convert_config.json 生成 | 去除 | 校验/重写工具专属 |
 | CheckAllPostMatch 报错 | 降级为告警 + 诊断统计 | 适应单 rank 数据 |
@@ -1546,7 +1546,7 @@ expand_ccu(device_id, die_id, sqe_params, instr_space, dep_graph, reg_model):
 | TRANS 类 | 12 条：Mem↔CcuBuffer 全组合 + SyncCKE/GSA/Xn | 7 条：本地 4 种 + 统一 TransMem（dmaOpCode 区分）+ SyncWtX/SyncAtX |
 | REDUCE 类 | Add/Max/Min（msId 列表寻址，≤8 CcuBuffer） | ReduceAdd/Max/Min（同一结构，无内嵌 waitCKE） |
 | Loop 寄存器 | v1.loop{xnId, startInstrId, endInstrId}，loopCnt 在 Variable | v2.loop{xpId(上下文), xnId, xmId(迭代数), mode}，mode==1 条件展开（6.5 节） |
-| LoopGroup 参数 | Variable：LoopNum[61:55]/RepeatNum[54:48]/NoRepeatNum[47:41]；Xm：gsaOffset/MSOffset/ckeOffset | Variable：loopInsCnt:10/expandOffset:9/expandCnt:9；Xm：ckOffset:10/msOffset:11/gsaOffset:32；Xp：xnIdOffset:32 |
+| LoopGroup 参数 | Variable：LoopNum[61:55]/RepeatNum[54:48]/NoRepeatNum[47:41]；Xm：gsaOffset/CcuBufferOffset/ckeOffset | Variable：loopInsCnt:10/expandOffset:9/expandCnt:9；Xm：ckOffset:10/msOffset:11/gsaOffset:32；Xp：xnIdOffset:32 |
 | 寄存器号寻址 | 载荷字段直用 | `GetXnId`：bit15=1 时按循环 xnIdOffset 偏移（6.4 节） |
 | 内嵌同步字段 | TRANS/REDUCE 普遍携带 waitCKE + setCKE + clearType | 本地 TRANS/REDUCE 仅 setCKE（wait 由独立 SetCKBit/ClearCKE/Wait 指令承担） |
 | 通道/长度取值 | 通道为指令立即数字段 | 通道/长度均为 Variable 寄存器值（`Xn[xcId]`/`Xn[xlId]`） |
@@ -1611,7 +1611,7 @@ result = sim.run(trace_filepath=None, max_trace_events=0)   # → dict
 | `port_bandwidth` | dict | `{}` | `"die/port"` → 带宽（B/s）。一个 eid 可对应多端口，按端口逐个配置，总带宽求和 |
 | `default_port_bandwidth` | float | `53.125e9` | 未配置端口默认带宽（425 Gbps = 53.125 GBps）；JSON 值单位 GBps |
 | `port_type` | str | `"x4"` | 端口类型（`x2`/`x4`），权威来源 db `Server.port_type`（server/pod 拓扑配置 `port_type` 字段经 servers_info.json 入库）。配置带宽为 x4 基准，`x2` 时非 d2h 端口带宽减半（见下"端口类型缩放"） |
-| `hbm_bandwidth` | float | `1.4e12` | HBM 带宽，用于 Reduce_Inline/Memcpy；JSON 值单位 GBps |
+| `hbm_bandwidth` | float | `1.4e12` | 片上内存带宽，用于 Reduce_Inline/Memcpy；JSON 值单位 GBps |
 | `bw_profile_set` | BandwidthProfileSet? | `None` | 带宽利用率配置集，None 时利用率为 100%（含多 jetty 折算步长 `jetty_utilization_step`，见下） |
 
 #### 端口带宽配置格式
@@ -1639,7 +1639,7 @@ result = sim.run(trace_filepath=None, max_trace_events=0)   # → dict
 server；未定位到时回退全表唯一值；旧库无 `port_type` 列时默认 `x4`），再经
 `SimConfig.with_port_type()` 落到配置。`get_port_bandwidth()` 对**非 d2h**
 端口乘以 `port_type_scale`（`x4=1.0`、`x2=0.5`），即 x2 端口带宽减半；
-`d2h_bandwidth` 与 HBM 带宽不受影响。命令行 `--port-type` 可覆盖 db 值。
+`d2h_bandwidth` 与片上内存带宽不受影响。命令行 `--port-type` 可覆盖 db 值。
 
 #### 带宽利用率配置 (`bw_profile_set`)
 
@@ -1731,8 +1731,8 @@ eid 为空串，字符串属性为 `""`）：
 |----------|---------|------|
 | `NOTIFY_RECORD` | 固定时延（本地另触发 Event） | 本地 = `is_local_notify`(src==dst)；未配对本地 record 仅固定时延 |
 | `NOTIFY_WAIT` | 等 Event / 固定时延 | matched→等 record 的 Event；未匹配/远端→固定 `remote_wait_delay` |
-| `REDUCE_INLINE` | HBM 动态共享 | `size / hbm_bandwidth`，与其他 HBM 任务共享带宽 |
-| `MEMCPY` | HBM 动态共享 | 同上（HBM 拷贝，非网络传输） |
+| `REDUCE_INLINE` | 片上内存动态共享 | `size / hbm_bandwidth`，与其他片上内存任务共享带宽 |
+| `MEMCPY` | 片上内存动态共享 | 同上（片上内存拷贝，非网络传输） |
 | `UB_INLINE_WRITE` | 固定时延（同 Notify_Record：local/remote record_delay） | notify inline 写；SQE 成图路径不产出，仅旧输入路径（task.txt）使用 |
 | `UB_WRITE_OR_READ` | 端口带宽共享（write/read 两方向独立计费） | 网络数据收发；`is_write` 由成图显式携带（SQE 走网任务两方向统一映射此类型） |
 | `WRITE_WITH_NOTIFY` | 端口 write 方向共享 + 写后 notify 固定时延 | 网络写 + 附带 notify 单任务，与 db `WRITE_WITH_NOTIFY` (7) 一一对应；notify 按远端 record 固定时延（对端 wait 不在本 db） |
@@ -1911,8 +1911,8 @@ extra_edges 列表；DOT 紫色虚线 cluster + 蓝色点线 extra 边，HTML �
 
 **量化效果**（样例 db REDUCE_SCATTER iter0，66 任务）：队列并行化使 makespan
 20,404.20 → 5,149.36 us（≈3.96x）；后续两项修正进一步降至 **2,753.71 us**：
-① 远端 CcuBuffer 规约修正（6.3.2 节，规约恒本地 HBM）——原第二相位 128MB 规约按
-网络读计费 ~2526 us，修正后为 HBM ~96 us；② 跨 rank 同步节点补全（6.6 节）——
+① 远端 CcuBuffer 规约修正（6.3.2 节，规约恒本地片上内存）——原第二相位 128MB 规约按
+网络读计费 ~2526 us，修正后为片上内存 ~96 us；② 跨 rank 同步节点补全（6.6 节）——
 14 个依赖远端置位的 wait 此前被跳过（读单元提前至 t≈0 发射），修正后按固定
 远端时延仿真。10 个异步单元改挂 10 条虚拟流（fork 边 10、挂接/汇合边按
 SQE 邻居与 queue 串行情况生成）——首相位 8 单元并发（7 个走网读单元各
@@ -1922,7 +1922,7 @@ SQE 邻居与 queue 串行情况生成）——首相位 8 单元并发（7 个�
 
 ### 7.5 带宽共享机制（`_BandwidthManager`）
 
-#### 通用管理器（端口与 HBM 复用同一模型）
+#### 通用管理器（端口与片上内存复用同一模型）
 
 - **单管理进程模型**：新传输加入时 `interrupt` 管理进程，管理进程按当前并发数 N
   均分带宽：`bw_per = 总带宽 / N`。
@@ -1934,8 +1934,8 @@ SQE 邻居与 queue 串行情况生成）——首相位 8 单元并发（7 个�
   jetty（7.2 节"多 jetty 折算"）。
 - 有效带宽 = `(总带宽 / N) × 利用率(min_remaining, N)`；计算最早完成时间，
   timeout 结算进度；有加入/完成时重算。
-- **HBM 动态共享**：`Reduce_Inline` 与 `Memcpy` 共用一个 HBM 管理器
-  （利用率恒 1.0）——多个 HBM 任务并发时均分 HBM 带宽（与旧版每任务独立
+- **片上内存动态共享**：`Reduce_Inline` 与 `Memcpy` 共用一个片上内存管理器
+  （利用率恒 1.0）——多个片上内存任务并发时均分片上内存带宽（与旧版每任务独立
   `size / hbm_bandwidth` 不同，见 10.3 节）。
 
 #### 双方向独立
@@ -2038,7 +2038,7 @@ Start/Wall Duration **显示**单位为 ns（缺省 ms）。
 | 2 | stream_id str → **int**；notify_id str → **int**（INVALID=0xFFFFFFFF） | `dependency_graph.py`/成图侧同步 |
 | 3 | 端口由 `port` int 字段指定 → **eid 实时解析**（write 查 src_eid / read 查 dst_eid） | `topo_resolver.py` + 成图侧填 eid |
 | 4 | 单位制：JSON 时延 s → **us**、带宽 B/s → **GBps**、端口键 int → **"die/port"** | `config.py` from_dict 换算 |
-| 5 | HBM 时延 `size/bw` 独立 → **动态共享**（Reduce_Inline+Memcpy 共用管理器） | `_BandwidthManager` 复用 |
+| 5 | 片上内存时延 `size/bw` 独立 → **动态共享**（Reduce_Inline+Memcpy 共用管理器） | `_BandwidthManager` 复用 |
 | 6 | `run()` 返回 makespan → **结果 dict**；仿真器两参 → **三参**（+topo_resolver） | `simulator.py` |
 | 7 | 时延公式分散 → `task_timing.py` 单点 | 已收编 |
 
@@ -2179,7 +2179,7 @@ eid 空串，其余字符串 `""`）：
 | AIV_GRAPH (taskType=5) | 无 | 跳过 + 告警（新旧模型一致，均不支持） |
 | WRITE_WITH_NOTIFY (taskType=7，db 新增) | `WRITE_WITH_NOTIFY`（新增，第 7 种） | 单任务映射（**不拆分**为写 + NOTIFY_RECORD）：写恒 write 方向走端口带宽共享，附带 notify 按固定 record 时延（5.2 节，10.3 节 #19 已支持） |
 | 旧 `REMOTE_RECORD` / `REMOTE_WAIT` | 已合并入 `NOTIFY_RECORD` / `NOTIFY_WAIT`（src≠dst 表达远端） | db 单 rank 路径的跨 rank notify 以 `src≠dst` 生成远端节点（5.2 节，保留节点不配对） |
-| 旧 `MEMCPY`（网络传输） | 语义变更：新 `Memcpy` = HBM 拷贝 | 网络传输改由 `Ub_Write_Or_Read`（write/read 方向区分）表达；`Ub_Inline_Write` 仅保留 notify inline 写语义（固定时延） |
+| 旧 `MEMCPY`（网络传输） | 语义变更：新 `Memcpy` = 片上内存拷贝 | 网络传输改由 `Ub_Write_Or_Read`（write/read 方向区分）表达；`Ub_Inline_Write` 仅保留 notify inline 写语义（固定时延） |
 | 旧 `LOCAL_COPY` | 拆分为 `Memcpy`（纯拷贝）/ `Reduce_Inline`（规约） | REDUCE 不走网 → Reduce_Inline |
 | 旧 `MemcpyDirection` 枚举（direction 字段） | 已删除 | 方向由任务类型 + rank/eid 填值表达（5.5 节） |
 | 旧 `sync_stream_delay` 配置项 | 已随类型缺口取消 | 并入 local_record_delay 复用 |
@@ -2201,8 +2201,8 @@ eid 空串，其余字符串 `""`）：
 5. **SimConfig 单位制与端口键变更**：JSON 时延 s→**us**、带宽 B/s→**GBps**、
     端口键 int→**"die/port"** 字符串；旧配置文件不兼容（本次已同步样例
     `src/plugin/light_performance/sim_config.json`）。
-6. **HBM 动态共享语义变化**：旧版每任务独立 `size / hbm_bandwidth`，新版
-   Reduce_Inline+Memcpy 并发时均分 HBM 带宽（利用率恒 1.0 的管理器）；结果口径
+6. **片上内存动态共享语义变化**：旧版每任务独立 `size / hbm_bandwidth`，新版
+   Reduce_Inline+Memcpy 并发时均分片上内存带宽（利用率恒 1.0 的管理器）；结果口径
    有差异。
 7. **利用率查询基准 `min_remaining`**：同组并发任务以最小剩余数据量查利用率档位，
    与旧版"各任务按自身 data_size 查询"不同——组内小任务会拖低大任务的利用率档。
@@ -2341,8 +2341,8 @@ JSON 中出现的任务类型全集（7 种）：
 |--------------------------|---------|------|
 | `Notify_Record` | 固定时延（本地另触发 Event） | notify 置位（record / Event post） |
 | `Notify_Wait` | 等 Event / 固定时延 | notify 等待（wait / Event wait） |
-| `Reduce_Inline` | HBM 动态共享 | 本地规约（计算近似为搬运，5.7 节） |
-| `Memcpy` | HBM 动态共享 | 本地拷贝（HBM，非网络） |
+| `Reduce_Inline` | 片上内存动态共享 | 本地规约（计算近似为搬运，5.7 节） |
+| `Memcpy` | 片上内存动态共享 | 本地拷贝（片上内存，非网络） |
 | `Ub_Inline_Write` | 固定时延（同 Notify_Record） | notify inline 写（仅旧输入路径） |
 | `Ub_Write_Or_Read` | 端口带宽共享（write/read 方向独立计费） | 网络数据收发（SQE 走网任务两方向统一映射） |
 | `Write_With_Notify` | 端口 write 方向带宽共享 + 写后 notify 固定时延 | 网络写 + 附带 notify（与 db `WRITE_WITH_NOTIFY` 一一对应，5.2 节） |
@@ -2381,10 +2381,10 @@ op 名（已切换 `profInfo.profTaskType` 驱动，10.3 节 #18 落地）；"�
 | `NOTIFY_RECORD` (1) | waitDev == 本设备（SDMA/本地 notify） | `Notify_Record` | `TASK_NOTIFY_RECORD` → `Notify_Record` ✓ | 本地 record：参与配对，触发 Event |
 | `NOTIFY_RECORD` (1) | waitDev != 本设备（SDMA/本地 notify） | `Notify_Record` | `TASK_NOTIFY_RECORD` → `Notify_Record` ✓ | 跨 rank post：节点保留不配对，src≠dst → 固定 `remote_record_delay` |
 | `NOTIFY_RECORD` (1) | UBDMA WQE `inlineEn==1`（notify inline 写） | `Ub_Inline_Write` | `TASK_UB_INLINE_WRITE` → `Ub_Inline_Write` ✓ | notify inline 写（名字已归还，11.4.4 节）；内部 TaskType 仍为 Notify_Record（固定 record 时延） |
-| `REDUCE` (2) | jettyId == INVALID | `Reduce_Inline` | `TASK_REDUCE_INLINE` → `Reduce_Inline` ✓ | 本地规约：HBM 动态共享计费 |
+| `REDUCE` (2) | jettyId == INVALID | `Reduce_Inline` | `TASK_REDUCE_INLINE` → `Reduce_Inline` ✓ | 本地规约：片上内存动态共享计费 |
 | `REDUCE` (2) | jettyId 有效 + write 方向 | `Ub_Reduce_Inline` | `TASK_UB_REDUCE_INLINE` → `Ub_Reduce_Inline` ✓ | 走网规约近似（5.7 节），内部 TaskType=Ub_Inline_Write，端口 write 方向计费 |
 | `REDUCE` (2) | jettyId 有效 + read 方向 | `Ub_Reduce_Inline` | `TASK_UB_REDUCE_INLINE` → `Ub_Reduce_Inline` ✓ | 同上，内部 TaskType=Ub_Write_Or_Read，read 方向计费 |
-| `MEM_CPY` (3) | jettyId == INVALID（同设备） | `Memcpy` | `TASK_SDMA` → `Memcpy` ✓ | 本地拷贝：HBM 动态共享计费；profInfo.linkType=ONCHIP |
+| `MEM_CPY` (3) | jettyId == INVALID（同设备） | `Memcpy` | `TASK_SDMA` → `Memcpy` ✓ | 本地拷贝：片上内存动态共享计费；profInfo.linkType=ONCHIP |
 | `MEM_CPY` (3) | jettyId == INVALID（跨设备 SDMA SQE） | `Memcpy` | `TASK_SDMA` → `Memcpy` ✓ | 跨片 SDMA 搬运；同为 Memcpy，差异由 profInfo.linkType=PCIE / transportType=SDMA 表达（11.4 节） |
 | `MEM_CPY` (3) | jettyId 有效 + write 方向 | `Ub_Write_Or_Read` | `TASK_UB` → `Ub_Write_Or_Read` ✓ | 网络发送（方向不编码进类型名，由 direction/is_write 表达）；内部 TaskType=Ub_Inline_Write |
 | `MEM_CPY` (3) | jettyId 有效 + read 方向 | `Ub_Write_Or_Read` | `TASK_UB` → `Ub_Write_Or_Read` ✓ | 网络接收；内部 TaskType=Ub_Write_Or_Read |
@@ -2438,10 +2438,10 @@ A6 总表见 11.3.3 节。
 | CTRL (0x1) | Loop (0x0) | **无** | 须由 LoopGroup 触发；单独出现属异常，告警跳过 |
 | CTRL (0x1) | LoopGroup (0x1) | （无直接节点） | 循环控制：合并/展开循环体（6.5 节），体内指令按本表映射；合并路径下数据任务 size × 总迭代数，且发射的任务携带 loop_cnt（展开后 loop 数）/ loop_iter_cnt（单 loop 自循环次数），总迭代数 = 两字段之积 |
 | CTRL (0x1) | Jmp (0x5) | **无** | 条件跳转：`Xn[conditionXnId] != expectData` 时 pc 跳至 `Xn[dstInstrXnId]` 所指指令（checker `TransformJmpInstrA5` 语义，目标限当前指令窗口内，越界告警直通）；循环体内直通（合并前置校验已拒绝含 JMP 的循环体）；带步数预算防御后向跳转死循环 |
-| TRANS (0x2) | LocMemToLocMs (0x0)、LocMsToLocMem (0x2)、LocMsToLocMs (0x5)、LocMemToLocMem (0xA) | `Memcpy`（src/dst_buf_type 标注 mem/ms） | 本地搬运（LOCAL_COPY 角色，6.3.2 节），HBM 动态共享 |
+| TRANS (0x2) | LocMemToLocMs (0x0)、LocMsToLocMem (0x2)、LocMsToLocMs (0x5)、LocMemToLocMem (0xA) | `Memcpy`（src/dst_buf_type 标注 mem/ms） | 本地搬运（LOCAL_COPY 角色，6.3.2 节），片上内存动态共享 |
 | TRANS (0x2) | LocMsToRmtMem (0x3)、LocMemToRmtMem (0x9)、LocMsToRmtMs (0x7)、RmtMemToLocMs (0x1)、RmtMsToLocMem (0x4)、RmtMsToLocMs (0x6)、RmtMemToLocMem (0x8) | `Ub_Write_Or_Read`（is_write 区分方向, src/dst_buf_type 标注 mem/ms） | 跨 die/卡搬运（write/read 角色统一类型，6.3.2 节）；对端 rank 经通道 reid → eid→rank 索引解析（4.8/6.7 节） |
 | TRANS (0x2) | SyncCKE (0xB)、SyncGSA (0xC)、SyncXN (0xD) | 本端 post 部分 → `Notify_Record`；远端 post 部分 → `Notify_Record`（远端，不配对） | 远端置位字段（SyncCKE 的 `rmtCKEId/locCKEMask`、SyncGSA/SyncXN 的 `setRmtCKEId/setRmtCKEMask`）生成远端 record 节点（src=本端、dst=INVALID → 固定 `remote_record_delay`，不登记本地记账），计入 `remote_posts`（6.6 节）；SyncGSA/SyncXN 携带第二个远端 post 时同样生成；内嵌 `waitCKE` 可产出 `Notify_Wait` |
-| REDUCE (0x3) | Add (0x0)、Max (0x1)、Min (0x2) | `Reduce_Inline` | 规约计算近似为搬运（5.7 节）；CcuBuffer 恒为 rank 本地 buffer（msId 高位仅寻址编码，6.3.2 节），本地 HBM 计费 |
+| REDUCE (0x3) | Add (0x0)、Max (0x1)、Min (0x2) | `Reduce_Inline` | 规约计算近似为搬运（5.7 节）；CcuBuffer 恒为 rank 本地 buffer（msId 高位仅寻址编码，6.3.2 节），本地片上内存计费 |
 | （子图挂接） | —（成图阶段合成，非微码） | 无（不产生任务节点） | 挂接依赖全部经 extra 边表达（7.4.1 节）：入口边 SQE 前驱→骨架头/骨架前单元头、出口边 mission 完成集→SQE 后继；任务图中不凭空产生任何节点 |
 
 #### 11.3.2 内嵌同步字段（跨指令通用）
@@ -2474,7 +2474,7 @@ pack(1)）；寄存器号普遍经 `GetXnId`（bit15 寻址模式，6.4 节）�
 | 指令大类 (type) | 指令 (code) | JSON 任务类型 | 说明 |
 |----------------|------------|--------------|------|
 | LOAD (0x0) | LoadSqeArgsToX (0x1)、LoadImdToX (0x2)、LoadX (0x6)、StoreX (0x7)、ClearX (0x8)、Nop (0x9)、算逻 Add (0xD)/Sub (0xE)/Mul (0xF)/And (0x10)/Or (0x11)/Not (0x12)/Xor (0x13)/Shl (0x14)/Shr (0x15)/Popcnt (0x16) | 数据面**无**；`setCKEMask != 0` 时叠加 `Notify_Record` | 统一 Variable 寄存器读写（无 Address）：SQE args 顺序消费（6.1 节）、立即数装载、间接读写（LoadX/StoreX，oMode 0=立即数偏移/1=寄存器偏移）、区间清零（ClearX）、64 位回绕算逻（Mul 取低 32 位乘积、移位量 0x3F 截断、Shl/Shr 支持逻辑/算术/循环三型）；除 Nop 外均携带尾部 setCKE 字段（checker `ProcessSetMask`，mask 非零 → 本端 post 节点） |
-| LOAD (0x0) | Load (0xA)、Store (0xB) | 数据面**无**；setCKE 叠加 `Notify_Record` | HBM ↔ Variable 数据面：HBM 内容不建模（checker 经 AllRankParamRecorder 读写数据），寄存器不回填，告警留痕；仅保留同步语义 |
+| LOAD (0x0) | Load (0xA)、Store (0xB) | 数据面**无**；setCKE 叠加 `Notify_Record` | 片上内存 ↔ Variable 数据面：片上内存内容不建模（checker 经 AllRankParamRecorder 读写数据），寄存器不回填，告警留痕；仅保留同步语义 |
 | CTRL (0x1) | SetCKBit (0x2) | `Notify_Record`（+ 内嵌 `waitCKE` 叠加 `Notify_Wait`） | wait → 本端 post → clearType==1 时清 wait 位（checker 仅支持 clearType=1，其余告警跳过清位） |
 | CTRL (0x1) | ClearCKE (0x4) | `Notify_Wait`（内嵌 `waitCKE`） | wait 后按 checker `ClearWaitMask` 语义清除消费的 wait 位；`clearMask != 0` 为 checker 不支持场景（告警 + 宽容清除目标位） |
 | CTRL (0x1) | Loop (0x0) | **无** | 须由 LoopGroup 触发；单独出现告警跳过。`mode==1` 条件 Loop：`wishCKEBit == Xp.loopCtxId + 1024` 命中才展开（6.5 节） |
@@ -2482,13 +2482,13 @@ pack(1)）；寄存器号普遍经 `GetXnId`（bit15 寻址模式，6.4 节）�
 | CTRL (0x1) | Jmp (0x5) | **无** | 条件跳转：conditionType 0~5（==/!=/>/>=/</<=）、≥6 无条件；jumpMode 0=相对 pc（模 0x10000）/1=绝对指令号，目标取 `Xn[relTarInstrXnId]`；限当前指令窗口，越界告警直通；循环体内直通；步数预算防御死循环 |
 | CTRL (0x1) | Wait (0x7) | 未满足时远端 `Notify_Wait` | Variable 值比较自旋（conditionType 同 Jmp，缺省按等于）：满足直通无节点；未满足 = 依赖对端远端寄存器写 → 顶层停滞消解/循环体内直接生成远端 wait 节点（固定 `remote_wait_delay`，任务 id 标签 `xwt`，计入 `remote_waits`） |
 | CTRL (0x1) | Fence (0x8) | **无** | checker 不支持（报错中止）；此处告警直通（队列串行模型下顺序天然保证） |
-| TRANS (0x2) | TransLocMemToLocMS (0x0)、TransLocMSToLocMem (0x2)、TransLocMSToLocMS (0x5)、TransLocMemToLocMem (0x6) | `Memcpy`（src/dst_buf_type 标注 mem/ms） | 本地搬运（长度 `Xn[GetXnId(xlId)]`）；无内嵌 waitCKE，尾部 setCKE 叠加 `Notify_Record` |
-| TRANS (0x2) | TransMem (0x10) | `Ub_Write_Or_Read`（dmaOpCode 3/5=write、6=read）；notify/原子 → 远端 `Notify_Record` | 统一走网搬运：通道 = `Xn[GetXnId(xcId)]` 寄存器值 → 对端 rank/eid 解析同 A5（4.8/6.7 节）；`msIdMode==1` 时 write 源 / read 目的为本地 CcuBuffer（buf_type=ms）；dmaOpCode 5 的写后 notify 与 0x1A 远端原子计数（无数据面）按远端 record 近似（mask=通知值低 16 位）；`udfEnable` 走网规约按普通 UB 搬运计费（5.7 节近似）；0x19 及其余 dmaOpCode / `udfType != 0` 告警跳过数据面（setCKE post 仍执行） |
+| TRANS (0x2) | TransLocMemToLocMS (0x0)、TransLocMSToLocMem (0x2)、TransLocMSToLocMS (0x5)、TransLocMemToLocMem (0x6) | `Memcpy`（src/dst_buf_type 标注 mem/ms） | 本地搬运（长度 `Variable[GetXnId(xlId)]`）；无内嵌 waitCKE，尾部 setCKE 叠加 `Notify_Record` |
+| TRANS (0x2) | TransMem (0x10) | `Ub_Write_Or_Read`（dmaOpCode 3/5=write、6=read）；notify/原子 → 远端 `Notify_Record` | 统一走网搬运：通道 = `Variable[GetXnId(xcId)]` 寄存器值 → 对端 rank/eid 解析同 A5（4.8/6.7 节）；`msIdMode==1` 时 write 源 / read 目的为本地 CcuBuffer（buf_type=ms）；dmaOpCode 5 的写后 notify 与 0x1A 远端原子计数（无数据面）按远端 record 近似（mask=通知值低 16 位）；`udfEnable` 走网规约按普通 UB 搬运计费（5.7 节近似）；0x19 及其余 dmaOpCode / `udfType != 0` 告警跳过数据面（setCKE post 仍执行） |
 | TRANS (0x2) | SyncXnWtx (0xD)、SyncAtx (0xE) | 远端 `Notify_Record`（近似）；SyncAtx 另有 setCKE → 本端 `Notify_Record` | 跨 rank 寄存器同步：SyncWtX 的 `notifyValid==1` notify 与 SyncAtx 的原子写按远端 record 近似（远端目标类型单 rank 不可解析，6.6 节）；主值同步为远端寄存器写不建节点（A5 SyncXn 同口径）；SyncWtX 尾部 setCKE 字段 checker 不消费（本端不 post）；通道不可解析告警跳过（`eid_unresolved`） |
-| REDUCE (0x3) | ReduceAdd (0x0)、ReduceMax (0x1)、ReduceMin (0x2) | `Reduce_Inline` | 本地 CcuBuffer 批量规约（msId[8] 列表 + `Xn[XnIdLength]` 长度）；无内嵌 waitCKE，尾部 setCKE 叠加 `Notify_Record`；CcuBuffer 恒本地 HBM 计费（6.3.2 节） |
+| REDUCE (0x3) | ReduceAdd (0x0)、ReduceMax (0x1)、ReduceMin (0x2) | `Reduce_Inline` | 本地 CcuBuffer 批量规约（msId[8] 列表 + `Variable[XnIdLength]` 长度）；无内嵌 waitCKE，尾部 setCKE 叠加 `Notify_Record`；CcuBuffer 恒本地片上内存计费（6.3.2 节） |
 | （子图挂接） | —（成图阶段合成，非微码） | 无（不产生任务节点） | 同 A5（7.4.1 节 extra 边挂接） |
 
-> A6 与 checker 的既定偏差（HBM 数据面、远端目标类型解析、checker 报错场景的
+> A6 与 checker 的既定偏差（片上内存数据面、远端目标类型解析、checker 报错场景的
 > 宽容降级等）汇总见 `_MissionContextA6` 类 docstring 与 6.7 节对照表；
 > loop 合并/流水线并发恢复（6.5/6.5.1 节）、队列并行化（7.4.1 节）、SQE 归并
 > 与停滞消解（6.1/6.6 节）等框架机制两代共用。
@@ -2515,9 +2515,9 @@ db 任务与仿真任务类型经 db taskType 列匹配（11.2 节），profInfo
 
 | 值 | 枚举 | JSON 显示字符串（op 名） | 仿真 TaskType（时延模型分类） | light_perf 出现场景 |
 |---|---|---|---|---|
-| 0 | TASK_SDMA | `Memcpy` | `Memcpy`（jettyId 无效，HBM 计费）/ `Ub_Inline_Write`·`Ub_Write_Or_Read`（jettyId 有效按方向，端口计费） | 本地拷贝、跨片 SDMA SQE（linkType 区分，11.4.2）✓ |
-| 1 | TASK_RDMA | `RDMASend` | `Memcpy`（jettyId 无效，HBM 计费近似） | DPU host ibv 普通读写（`RDMASend`，hcomm UbMemTransport::Write/Read 同口径）✓ |
-| 2 | TASK_REDUCE_INLINE | `Reduce_Inline` | `Reduce_Inline`（jettyId 无效，HBM 计费）/ `Ub_Inline_Write`·`Ub_Write_Or_Read`（走网近似，5.7 节，端口计费） | 本地规约 ✓ |
+| 0 | TASK_SDMA | `Memcpy` | `Memcpy`（jettyId 无效，片上内存计费）/ `Ub_Inline_Write`·`Ub_Write_Or_Read`（jettyId 有效按方向，端口计费） | 本地拷贝、跨片 SDMA SQE（linkType 区分，11.4.2）✓ |
+| 1 | TASK_RDMA | `RDMASend` | `Memcpy`（jettyId 无效，片上内存计费近似） | DPU host ibv 普通读写（`RDMASend`，hcomm UbMemTransport::Write/Read 同口径）✓ |
+| 2 | TASK_REDUCE_INLINE | `Reduce_Inline` | `Reduce_Inline`（jettyId 无效，片上内存计费）/ `Ub_Inline_Write`·`Ub_Write_Or_Read`（走网近似，5.7 节，端口计费） | 本地规约 ✓ |
 | 3 | TASK_REDUCE_TBE | `Reduce_TBE` | —（不出现） | 910 代预留，不出现 |
 | 4 | TASK_NOTIFY_RECORD | `Notify_Record` | `Notify_Record` | SDMA/本地 notify record ✓ |
 | 5 | TASK_NOTIFY_WAIT | `Notify_Wait` | `Notify_Wait` | notify wait ✓ |

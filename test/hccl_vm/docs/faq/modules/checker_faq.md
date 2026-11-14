@@ -162,7 +162,7 @@ GRAPH_RESOURCE_NOT_FOUND (107)
 
 #### FAQ-CHK108
 
-**标题:** 寄存器或 HBM 未初始化
+**标题:** 寄存器或片上内存未初始化
 
 **错误码:**
 ```
@@ -176,7 +176,7 @@ GRAPH_REGISTER_UNINITIALIZED (108)
 [GenGraphCCU] [ErrorCode: 108] Failed to read HBM content before it was initialized, rankId=2, dieId=0, instrId=73, hbmAddr=0x1000
 ```
 
-**问题现象:** 当前指令在读取寄存器或 HBM 内容时，没有找到对应的已初始化数据，通常说明前序写入链路没有正确建立。
+**问题现象:** 当前指令在读取寄存器或片上内存内容时，没有找到对应的已初始化数据，通常说明前序写入链路没有正确建立。
 
 **定位指导:**
 ```
@@ -332,7 +332,7 @@ GRAPH_LOOP_MERGE_ERROR (113)
 **定位指导:**
 ```
 【可能原因】
-1. Loop 串行、并行展开时出现资源冲突（内存地址、CKE 等）。
+1. Loop 串行、并行展开时出现资源冲突（内存地址、Event 等）。
 注: Loop 合并失败后会尝试正常展开，可能会影响性能。
 
 【排查步骤】

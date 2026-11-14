@@ -43,6 +43,16 @@
 #include "sqlite/simulation_storage_test_helper.h"
 #include "sim_log.h"
 
+// hccp_ra_socket_stub.cc 经 extern "C" 跨 so 引用 level0 mpi_stub 的
+// TryGetRankSizeFromRankTable（从 RANK_TABLE_FILE 读取通信域成员数）。
+// 本 UT 只链接 level2 源码（无 level0），提供桩实现满足链接；
+// UT 用例不驱动 LSA estimate 路径，返回 false 即走环最小成员数回落。
+extern "C" bool TryGetRankSizeFromRankTable(uint32_t& rankSize)
+{
+    rankSize = 0;
+    return false;
+}
+
 // 同步族声明（与 hccp_ra_socket_stub.cc 实现签名一致，镜像 async 测试文件口径）
 extern "C" {
 int RaSocketInit(int mode, struct rdev rdevInfo, void** socketHandle);

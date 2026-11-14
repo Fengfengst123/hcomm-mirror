@@ -13,7 +13,9 @@
 #include <cstdint>
 
 namespace AscendC {
-int64_t block_num = 0;
+// block_num 与 block_idx 同为 kernel 执行的"硬件视角"状态：单进程多 rank 线程并发
+// 下发时各自写入本线程 launch 的核数，必须线程私有，否则并发 launch 互相覆盖。
+thread_local int64_t block_num = 0;
 thread_local int64_t block_idx = 0;
 
 std::string GetPipeName(pipe_t pipe)

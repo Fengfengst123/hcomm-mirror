@@ -22,6 +22,7 @@
 #include "sim_log.h"
 #include "ccu_reduce_operator.h"
 #include "runtime_state/sim_models.h"
+#include "runtime_state/db_sim_runner_common.h"
 #include "store_sim_shm_memory_common.h"
 
 using namespace std;
@@ -59,7 +60,10 @@ void CcuResourceManager::Init(
     } else {
         HCCL_VM_ERROR("ccu version {} not supported", static_cast<int>(ccuResData_.version));
     }
-    ccuResourceBaseAddr_ = ccuResourceBaseAddr;
+    // ★ per-(rank, die) 存储：原实现 `ccuResourceBaseAddr_ = ccuResourceBaseAddr` 是
+    //   last-writer-wins——真实基址 per-rank 唯一，多 device 初始化后只剩最后一个 device 的
+    //   基址，其余 rank 的地址反查全部错位（设计文档 §4.5.4 P3）。
+    ccuResourceBaseAddr_[rankId] = ccuResourceBaseAddr;
 }
 
 void CcuResourceManager::InitInstrInfo(int rankId, int dieId, const CcuInstrData& ccuInstrInfo)
@@ -375,158 +379,160 @@ uint64_t* CcuResourceManager::GetXnAddr(int rankId, int dieId, uint16_t xnId) co
     }
 }
 
-const uint64_t XN_OFFSET_ADDR_A6 = 0x100000;
-const uint64_t XN_CKB_ADDR_A6 = 0x140000;
-const uint64_t XN_PFE_ADDR_A6 = 0x148000;
-const uint64_t XN_CHANNEL_ADDR_A6 = 0x150000;
-const uint64_t XN_JETTY_ADDR_A6 = 0x170000;
-const uint64_t XN_MISSION_ADDR_A6 = 0x178000;
-const uint64_t XN_LOOP_ADDR_A6 = 0x180000;
-const uint64_t XN_CCUA0_MS_ADDR_A6 = 0x4000000; // MS的起始地址CCU0为64M
-const uint64_t XN_CCUA1_MS_ADDR_A6 = 0x4200000; // MS的起始地址CCU1为66M
-const uint64_t XN_CCUA2_MS_ADDR_A6 = 0x4400000; // MS的起始地址CCU2为68M
-const uint64_t XN_CCUA3_MS_ADDR_A6 = 0x4600000; // MS的起始地址CCU3为70M
-const uint64_t XN_MS_SIZE_A6 = 4096;            // 每个MS占 4KB（与 GenSliceFromMs 的 msId*4096 口径一致）
-const uint64_t MS_INTERLEAVE_NUM = 8;           // 每组8个MS
-const uint64_t CCUA_MS_ADDR_GAP = 0x200000;     // CCUA寄存器的MS地址间隔
-const uint64_t CCUA_NUM_A6 = 4;
-const uint64_t GROUP_TOTAL_MS = MS_INTERLEAVE_NUM * CCUA_NUM_A6; // 一组总共32个MS
-
-const uint64_t CCU_MS_START_ADDR[4]
-    = {XN_CCUA0_MS_ADDR_A6, XN_CCUA1_MS_ADDR_A6, XN_CCUA2_MS_ADDR_A6, XN_CCUA3_MS_ADDR_A6};
-
-bool CcuResourceManager::GetMSIdByAddr(uint32_t dieId, uint64_t addr, uint16_t& msId)
+namespace {
+/**
+ * CcuComponerntType（runner/checker 对外枚举）⟷ devspec::CcuResType（device 规格区域类型）。
+ *
+ * ★ 地址↔id 的区偏移/步长/容量/MS 几何全部由 CcuAddressSpace 按 device 规格提供，
+ *   此处仅做类型标签映射——取代原 XN_*_ADDR_A6 / CCU_MS_START_ADDR / MS_INTERLEAVE_NUM
+ *   等字面量常量块与 findBaseAddr/findTypeByAddr/findBaseSize 三份手写转换
+ *   （设计文档 §2.3/§2.4/§2.5、§4.5.4：改为持有 CcuAddressSpace）。
+ */
+sim::devspec::CcuResType ToResType(CcuComponerntType type)
 {
-    if (dieId >= ccuResourceBaseAddr_.size()) {
-        HCCL_VM_ERROR("dieId is out of range, dieId=[{}]", dieId);
-        return false;
-    }
-    uint64_t msAddr = addr - ccuResourceBaseAddr_[dieId];
-    uint64_t ccuIndex{UINT64_MAX};
-    for (uint64_t i = 0; i < CCUA_NUM_A6; ++i) {
-        uint64_t ccuEnd = CCU_MS_START_ADDR[i] + CCUA_MS_ADDR_GAP;
-        if (msAddr >= CCU_MS_START_ADDR[i] && msAddr < ccuEnd) {
-            ccuIndex = i;
-            break;
-        }
-    }
-    if (ccuIndex == UINT64_MAX) {
-        HCCL_VM_ERROR("msAddr is out of range, msAddr=[{}],addr=[{}]", msAddr, addr);
-        return false;
-    }
-    uint64_t localOffset = msAddr - CCU_MS_START_ADDR[ccuIndex];
-    uint64_t localMsIndex = localOffset / XN_MS_SIZE_A6;
-    uint64_t groupIndex = localMsIndex / MS_INTERLEAVE_NUM;
-    uint64_t posInGroup = localMsIndex % MS_INTERLEAVE_NUM;
-    msId = groupIndex * GROUP_TOTAL_MS + ccuIndex * MS_INTERLEAVE_NUM + posInGroup;
-    return true;
-}
-
-// 根据type的类型找基础地址
-uint64_t findBaseAddr(CcuComponerntType type)
-{
-    if (type == CcuComponerntType::XN_A6) {
-        return XN_OFFSET_ADDR_A6;
-    } else if (type == CcuComponerntType::CKE_A6) {
-        return XN_CKB_ADDR_A6;
-    } else if (type == CcuComponerntType::PFE_A6) {
-        return XN_PFE_ADDR_A6;
-    } else if (type == CcuComponerntType::CHANNEL_A6) {
-        return XN_CHANNEL_ADDR_A6;
-    } else if (type == CcuComponerntType::JETTY_A6) {
-        return XN_JETTY_ADDR_A6;
-    } else if (type == CcuComponerntType::MISSION_A6) {
-        return XN_MISSION_ADDR_A6;
-    } else if (type == CcuComponerntType::LOOP_A6) {
-        return XN_LOOP_ADDR_A6;
-    } else {
-        return 0x000000000;
+    switch (type) {
+        case CcuComponerntType::XN_A6:
+            return sim::devspec::CcuResType::XN;
+        case CcuComponerntType::CKE_A6:
+            return sim::devspec::CcuResType::CKE;
+        case CcuComponerntType::PFE_A6:
+            return sim::devspec::CcuResType::PFE;
+        case CcuComponerntType::CHANNEL_A6:
+            return sim::devspec::CcuResType::CHANNEL;
+        case CcuComponerntType::JETTY_A6:
+            return sim::devspec::CcuResType::JETTY;
+        case CcuComponerntType::MISSION_A6:
+            return sim::devspec::CcuResType::MISSION;
+        case CcuComponerntType::LOOP_A6:
+            return sim::devspec::CcuResType::LOOP;
+        default:
+            return sim::devspec::CcuResType::UNKNOWN;
     }
 }
 
-// 根据地址值来找到类型
-CcuComponerntType findTypeByAddr(uint64_t addr)
+CcuComponerntType ToComponentType(sim::devspec::CcuResType type)
 {
-    if (addr >= XN_OFFSET_ADDR_A6 && addr < XN_CKB_ADDR_A6) {
-        return CcuComponerntType::XN_A6;
-    } else if (addr >= XN_CKB_ADDR_A6 && addr < XN_PFE_ADDR_A6) {
-        return CcuComponerntType::CKE_A6;
-    } else if (addr >= XN_PFE_ADDR_A6 && addr < XN_CHANNEL_ADDR_A6) {
-        return CcuComponerntType::PFE_A6;
-    } else if (addr >= XN_CHANNEL_ADDR_A6 && addr < XN_JETTY_ADDR_A6) {
-        return CcuComponerntType::CHANNEL_A6;
-    } else if (addr >= XN_JETTY_ADDR_A6 && addr < XN_MISSION_ADDR_A6) {
-        return CcuComponerntType::JETTY_A6;
-    } else if (addr >= XN_MISSION_ADDR_A6 && addr < XN_LOOP_ADDR_A6) {
-        return CcuComponerntType::MISSION_A6;
-    } else if (addr >= XN_LOOP_ADDR_A6 && addr < XN_LOOP_ADDR_A6 + 0x8000) {
-        return CcuComponerntType::LOOP_A6;
-    } else {
-        return CcuComponerntType::UNKNOWN;
+    switch (type) {
+        case sim::devspec::CcuResType::XN:
+            return CcuComponerntType::XN_A6;
+        case sim::devspec::CcuResType::CKE:
+            return CcuComponerntType::CKE_A6;
+        case sim::devspec::CcuResType::PFE:
+            return CcuComponerntType::PFE_A6;
+        case sim::devspec::CcuResType::CHANNEL:
+            return CcuComponerntType::CHANNEL_A6;
+        case sim::devspec::CcuResType::JETTY:
+            return CcuComponerntType::JETTY_A6;
+        case sim::devspec::CcuResType::MISSION:
+            return CcuComponerntType::MISSION_A6;
+        case sim::devspec::CcuResType::LOOP:
+            return CcuComponerntType::LOOP_A6;
+        default:
+            return CcuComponerntType::UNKNOWN;
     }
 }
+} // namespace
 
-// 根据type的类型返回寄存器每块的数量
-uint16_t findBaseSize(CcuComponerntType type)
+uint64_t CcuResourceManager::BaseAddr(int rankId, uint32_t dieId) const
 {
-    if (type == CcuComponerntType::XN_A6 || type == CcuComponerntType::CKE_A6 || type == CcuComponerntType::PFE_A6) {
-        return 8;
-    } else if (
-        type == CcuComponerntType::CHANNEL_A6 || type == CcuComponerntType::JETTY_A6
-        || type == CcuComponerntType::LOOP_A6) {
-        return 32;
-    } else if (type == CcuComponerntType::MISSION_A6) {
-        return 64;
-    } else {
+    const auto it = ccuResourceBaseAddr_.find(rankId);
+    if (it == ccuResourceBaseAddr_.end() || dieId >= it->second.size()) {
+        HCCL_VM_ERROR("ccu base addr not initialized, rankId=[{}] dieId=[{}]", rankId, dieId);
         return 0;
     }
+    return it->second[dieId];
 }
 
-// 通过XnId所在的地址值来找到XnId
-bool CcuResourceManager::GetXnAndTypeIdByAddr(uint32_t dieId, uint64_t xnAddr, CcuComponerntType& type, uint16_t& xnId)
+const sim::devspec::CcuAddressSpace* CcuResourceManager::AddrSpace(int rankId)
 {
-    if (dieId >= ccuResourceBaseAddr_.size()) {
-        HCCL_VM_ERROR("dieId is out of range, dieId=[{}]", dieId);
+    const auto cached = addrSpaces_.find(rankId);
+    if (cached != addrSpaces_.end()) {
+        return cached->second.get();
+    }
+    const auto* spec = sim::runtime::GetDeviceSpec(static_cast<uint64_t>(rankId));
+    if (spec == nullptr) {
+        HCCL_VM_ERROR("resolve device spec failed, rankId=[{}]", rankId);
+        return nullptr;
+    }
+    auto space = std::make_unique<sim::devspec::CcuAddressSpace>(*spec);
+    const auto* raw = space.get();
+    addrSpaces_.emplace(rankId, std::move(space));
+    return raw;
+}
+
+bool CcuResourceManager::GetMSIdByAddr(int rankId, uint32_t dieId, uint64_t addr, uint16_t& msId)
+{
+    const uint64_t base = BaseAddr(rankId, dieId);
+    const auto* space = AddrSpace(rankId);
+    if (base == 0 || space == nullptr) {
         return false;
     }
-    type = findTypeByAddr(xnAddr - ccuResourceBaseAddr_[dieId]);
-    if (type == CcuComponerntType::UNKNOWN) {
+    uint32_t id = 0;
+    if (!space->MsAddrToId(base, addr, id) || id > UINT16_MAX) {
+        HCCL_VM_ERROR("ms addr decode failed, rankId=[{}] dieId=[{}] addr=[0x{:x}]", rankId, dieId, addr);
+        return false;
+    }
+    msId = static_cast<uint16_t>(id);
+    return true;
+}
+
+bool CcuResourceManager::GetXnAndTypeIdByAddr(
+    int rankId, uint32_t dieId, uint64_t xnAddr, CcuComponerntType& type, uint16_t& xnId)
+{
+    type = CcuComponerntType::UNKNOWN;
+    const uint64_t base = BaseAddr(rankId, dieId);
+    const auto* space = AddrSpace(rankId);
+    if (base == 0 || space == nullptr) {
+        return false;
+    }
+    sim::devspec::CcuResType resType = sim::devspec::CcuResType::UNKNOWN;
+    uint64_t id = 0;
+    if (!space->AddrToResId(base, xnAddr, resType, id)) {
+        HCCL_VM_ERROR("unknown type, rankId=[{}] dieId=[{}] addr=[0x{:x}] base=[0x{:x}]", rankId, dieId, xnAddr, base);
+        return false;
+    }
+    if (id > UINT16_MAX) {
+        HCCL_VM_ERROR("res id out of range, addr=[0x{:x}] id=[{}]", xnAddr, id);
+        return false;
+    }
+    type = ToComponentType(resType);
+    xnId = static_cast<uint16_t>(id);
+    return true;
+}
+
+bool CcuResourceManager::GetXnIdByAddr(
+    int rankId, uint32_t dieId, CcuComponerntType type, uint64_t xnAddr, uint16_t& xnId)
+{
+    const uint64_t base = BaseAddr(rankId, dieId);
+    const auto* space = AddrSpace(rankId);
+    if (base == 0 || space == nullptr) {
+        return false;
+    }
+    uint64_t id = 0;
+    // ★ 带上界校验（AddrToIdOfType 内置 id < count），修掉原 "需要判断界限 todo"（P10）。
+    if (!space->AddrToIdOfType(base, ToResType(type), xnAddr, id) || id > UINT16_MAX) {
         HCCL_VM_ERROR(
-            "unknown type, addr=[{}],dieId=[{}],ccuResourceBaseAddr_[dieId]=[{}]", xnAddr, dieId,
-            ccuResourceBaseAddr_[dieId]);
+            "addr not in region, rankId=[{}] dieId=[{}] type=[{}] addr=[0x{:x}]", rankId, dieId, static_cast<int>(type),
+            xnAddr);
         return false;
     }
-    uint64_t baseAddr = findBaseAddr(type) + ccuResourceBaseAddr_[dieId];
-    uint16_t sizeofXn = findBaseSize(type);
-    xnId = static_cast<uint16_t>((xnAddr - baseAddr) / static_cast<uint64_t>(sizeofXn));
+    xnId = static_cast<uint16_t>(id);
     return true;
 }
 
-// 通过XnId所在的地址值来找到XnId
-bool CcuResourceManager::GetXnIdByAddr(uint32_t dieId, CcuComponerntType type, uint64_t xnAddr, uint16_t& xnId)
+bool CcuResourceManager::GetAddrByXnId(
+    int rankId, uint32_t dieId, CcuComponerntType type, uint16_t xnId, uint64_t& xnAddr)
 {
-    if (dieId >= ccuResourceBaseAddr_.size()) {
-        HCCL_VM_ERROR("dieId is out of range, dieId=[{}]", dieId);
+    const uint64_t base = BaseAddr(rankId, dieId);
+    const auto* space = AddrSpace(rankId);
+    if (base == 0 || space == nullptr) {
         return false;
     }
-    // 需要判断界限  todo
-    uint64_t baseAddr = findBaseAddr(type) + ccuResourceBaseAddr_[dieId];
-    uint16_t sizeofXn = findBaseSize(type);
-    xnId = static_cast<uint16_t>((xnAddr - baseAddr) / static_cast<uint64_t>(sizeofXn));
-    return true;
-}
-
-// 通过XnId所在的地址值来找到XnId
-bool CcuResourceManager::GetAddrByXnId(uint32_t dieId, CcuComponerntType type, uint16_t xnId, uint64_t& xnAddr)
-{
-    // 需要判断界限  todo
-    if (dieId >= ccuResourceBaseAddr_.size()) {
-        HCCL_VM_ERROR("dieId is out of range, dieId=[{}]", dieId);
+    if (!space->ResIdToAddr(base, ToResType(type), xnId, xnAddr)) {
+        HCCL_VM_ERROR(
+            "id out of region, rankId=[{}] dieId=[{}] type=[{}] id=[{}]", rankId, dieId, static_cast<int>(type), xnId);
         return false;
     }
-    uint64_t baseAddr = findBaseAddr(type) + ccuResourceBaseAddr_[dieId];
-    uint16_t sizeofXn = findBaseSize(type);
-    xnAddr = baseAddr + static_cast<uint64_t>(xnId) * sizeofXn;
     return true;
 }
 

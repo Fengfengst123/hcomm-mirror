@@ -1537,10 +1537,11 @@ HCCP Network API
 │   └── 完成轮询: RaPollCq
 ├── 数据平面 - UB
 |   ├── 初始化: RaCtxInit/RaCtxDeinit (统一上下文)
-│   ├── Jetty管理: RaCtxQpCreate/Destroy/Import
+│   ├── Jetty管理: RaCtxQpCreate/Destroy/Import/Bind
 │   ├── JFC管理: RaCtxCqCreate/Destroy
 │   ├── 内存管理: RaCtxLmemRegister/RmemImport
-│   └── Token管理: RaCtxTokenIdAlloc/Free
+│   ├── Token管理: RaCtxTokenIdAlloc/Free
+│   └── 工作请求: RaBatchSendWr
 ├── 异步操作
 │   ├── RaSocketBatchConnectAsync
 │   ├── RaCtxQpCreateAsync/DestroyAsync
@@ -1637,12 +1638,15 @@ HCCP Network API
 | `RaCtxChanDestroy`      | 销毁通道         | `ctxHandle`, `chanHandle`                                        | `hccp_stub.cc:2005` |
 | `RaCtxCqCreate`         | 创建CQ           | `ctxHandle`, `CqInfoT`, `cqHandle`                               | `hccp_stub.cc:2142` |
 | `RaCtxCqDestroy`        | 销毁CQ           | `ctxHandle`, `cqHandle`                                          | `hccp_stub.cc:2148` |
-| `RaCtxQpCreate`         | 创建QP/Jetty     | `ctxHandle`, `QpCreateAttr`, `QpCreateInfo`, `qpHandle`          | `hccp_stub.cc:1526` |
+| `RaCtxQpCreate`         | 创建QP/Jetty     | `ctxHandle`, `QpCreateAttr`, `QpCreateInfo`, `qpHandle`          | `hccp_stub.cc:1254` |
 | `RaCtxQpQueryBatch`     | 批量查询QP       | `qpHandle[]`, `JettyAttr[]`, `num`                               | `hccp_stub.cc:2106` |
 | `RaCtxQpDestroy`        | 销毁QP/Jetty     | `qpHandle`                                                       | `hccp_stub.cc:2012` |
-| `RaCtxQpImport`         | 导入Jetty        | `ctxHandle`, `QpImportInfoT`, `remQpHandle`                      | `hccp_stub.cc:1633` |
-| `RaCtxQpUnimport`       | 取消导入Jetty    | `ctxHandle`, `remQpHandle`                                       | `hccp_stub.cc:1725` |
-| `RaCtxGetAuxInfo`       | 获取辅助信息     | `ctxHandle`, `HccpAuxInfoIn`, `HccpAuxInfoOut`                   | `hccp_stub.cc:2749` |
+| `RaCtxQpImport`         | 导入Jetty        | `ctxHandle`, `QpImportInfoT`, `remQpHandle`                      | `hccp_stub.cc:1321` |
+| `RaCtxQpUnimport`       | 取消导入Jetty    | `ctxHandle`, `remQpHandle`                                       | `hccp_stub.cc:1425` |
+| `RaCtxQpBind`           | 绑定Jetty        | `qpHandle`, `remQpHandle`                                        | `hccp_stub.cc:1394` |
+| `RaCtxQpUnbind`         | 解绑Jetty        | `qpHandle`                                                       | `hccp_stub.cc:2112` |
+| `RaBatchSendWr`         | 批量发送         | `qpHandle`, `SendWrData[]`, `SendWrResp[]`, `num`, `completeNum` | `hccp_stub.cc:2135` |
+| `RaCtxGetAuxInfo`       | 获取辅助信息     | `ctxHandle`, `HccpAuxInfoIn`, `HccpAuxInfoOut`                   | `hccp_stub.cc:2270` |
 | `RaCtxGetCrErrInfoList` | 获取CR错误       | `ctxHandle`, `CrErrInfo[]`, `num`                                | `hccp_stub.cc:2276` |
 
 ###### 异步操作接口
@@ -1747,7 +1751,7 @@ HCCP Network API
 1. `RaSocketPair`需要两个`RaSocket`（client端和server端）才能建立连接。
 2. `RaQP.state`必须经历RESET→INIT→RTR→RTS的状态转换才能正常通信。
 3. `RaMR.lkey`用于本地访问，`RaMR.rkey`用于远端RDMA访问。
-4. `RaJetty`通过`RaCtxQpImport`操作与对端Jetty建立逻辑连接。
+4. `RaJetty`通过`Bind`操作与对端Jetty建立逻辑连接。
 5. `RaLmem`必须注册后，`RaRmem`才能从对端导入并访问。
 
 **NDA(Network Direct Access)直接访问机制**：
@@ -1829,8 +1833,8 @@ HCCP Network API
 | **RaNdaQP**      | -                            | `RaNdaQpCreate`                                          | -                                          | -                                          |
 | **RaNdaCQ**      | -                            | `RaNdaCqCreate`                                          | -                                          | `RaNdaCqDestroy`                           |
 | **RaContext**    | `RaCtxInit`                  | -                                                        | `RaGetDevBaseAttr`, `RaGetDevEidInfoList`, `RaGetDevEidInfoNum`, `RaGetEidByIp`, `RaCtxGetAsyncEvents` | `RaCtxDeinit`                              |
-| **RaJetty**      | -                            | `RaCtxQpCreate`                                          | `RaCtxQpQueryBatch`      | `RaCtxQpDestroy`                           |
-| **EndPointPair**      | -                            | -                                         | `RaCtxQpImport`, `RaCtxQpUnimport` | - |
+| **RaJetty**      | -                            | `RaCtxQpCreate`                                          |  `RaBatchSendWr`, `RaCtxQpQueryBatch` | `RaCtxQpDestroy`        |
+| **EndPointPair**      | -                            | -                                         | `RaCtxQpBind`, `RaCtxQpUnbind`, `RaCtxQpImport`, `RaCtxQpUnimport` | - |
 | **RaJfc**        | -                            | `RaCtxCqCreate`                                          | `RaCtxGetAuxInfo`, `RaCtxGetCrErrInfoList` | `RaCtxCqDestroy`                           |
 | **RaCr**         | -                            | -                                                        | `RaCtxGetAuxInfo`                          | -                                          |
 | **RaLmem**       | -                            | `RaCtxLmemRegister`                                      | -                                          | `RaCtxLmemUnregister`                      |
@@ -1857,7 +1861,7 @@ HCCP Network API
 | RaCQE.wr_id                | `RaSendWr`, `RaSendWrV2`, `RaSendWrlist`, `RaRecvWrlist` 设置             |
 | RaCQE.status               | `RaPollCq` 返回                                                          |
 | RaJetty.state              | `RaCtxQpQueryBatch` 返回                                                 |
-| RaJetty.jetty_id  | `RaCtxQpCreate` 设置                                      |
+| RaJetty.jetty_id/peer_jetty_handle  | `RaCtxQpBind`, `RaCtxQpImport` 设置                                      |
 | RaMR.local_key/remote_key                | `RaMrReg` 参数设置                                                       |
 | RaLmem.id            | `RaCtxTokenIdAlloc` 预分配                                               |
 | RaTp.tp_type               | `RaGetTpInfoListAsync` 返回                                              |

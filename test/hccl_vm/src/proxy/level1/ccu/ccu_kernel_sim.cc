@@ -36,6 +36,7 @@
 #include <sstream>
 #include <string>
 #include <thread>
+#include <tuple>
 #include <utility>
 #include <vector>
 #include <unistd.h>
@@ -184,28 +185,36 @@ namespace CcuSim {
         }
 
         /**
-         * @brief 交换轮次分配：本进程内 (opIter, dieId) 下"第 k 个发生交换活动的 launch"的序号。
+         * @brief 交换轮次分配：本进程内 (commId, rankId, opIter, dieId) 下第 k 个发生交换活动的 launch 的序号。
          *
          * round 不用全局 launchIdx（不同 rank 的 kernel 发射序列不同——Mesh/NHR、条数不一，
          * 全局计数会让跨 rank 的 round 错位），也不按交换坐标独立计数（发布/读取次数不对称
          * 时错位——如 RS 发布 slot1 但从不读对端 slot1、AG 才读，读方计数比发布方少 1，会
          * 静默命中上一轮发布的旧值）。改为 launch 粒度占号：同一逻辑 launch 的发布方/读取方
          * 必然同号（同一算子在各 rank 的每 die 交换 launch 序列一致），与 kernel 读写槽位
-         * 是否对称彻底解耦。旧 op 的序号项按 CCU_SYNC_OP_KEEP 窗口裁剪，防连跑时无限增长。
+         * 是否对称彻底解耦。commId/rankId 用于隔离同进程模拟的多通信域、多 rank，计数键不参与
+         * 跨 rank 交换资源匹配。旧 op 的序号项按 CCU_SYNC_OP_KEEP 窗口裁剪，防连跑时无限增长。
+         * @param opIter 当前算子迭代序号。
+         * @param commId 当前 launch 所属通信域。
+         * @param rankId 当前 launch 所属通信域内 rank。
+         * @param dieId 当前 launch 所属 die。
+         * @return 当前执行身份独立计数空间中的下一个交换轮次。
          */
-        uint32_t AllocSyncRound(uint32_t opIter, uint32_t dieId)
+        uint32_t AllocSyncRound(uint32_t opIter, uint64_t commId, uint32_t rankId, uint32_t dieId)
         {
+            using RoundKey = std::tuple<uint32_t, uint64_t, uint32_t, uint32_t>;
             static std::mutex counterMutex;
-            static std::map<uint64_t, uint32_t> roundCounters; // (opIter, dieId) -> 下一个可用轮次
+            static std::map<RoundKey, uint32_t> roundCounters;
             std::lock_guard<std::mutex> lock(counterMutex);
             if (opIter >= CCU_SYNC_OP_KEEP) {
-                // map 按 (opIter, dieId) 升序，过老 op 的项集中在头部，逐个摘除即可。
-                const uint64_t minKeepKey = static_cast<uint64_t>(opIter - (CCU_SYNC_OP_KEEP - 1U)) << 32U;
+                // tuple 以 opIter 为首元素，过老 op 的项集中在头部，逐个摘除即可。
+                const uint32_t minKeepOp = opIter - (CCU_SYNC_OP_KEEP - 1U);
+                const RoundKey minKeepKey = std::make_tuple(minKeepOp, 0ULL, 0U, 0U);
                 while (!roundCounters.empty() && roundCounters.begin()->first < minKeepKey) {
                     roundCounters.erase(roundCounters.begin());
                 }
             }
-            const uint64_t ckey = (static_cast<uint64_t>(opIter) << 32U) | dieId;
+            const RoundKey ckey = std::make_tuple(opIter, commId, rankId, dieId);
             return roundCounters[ckey]++;
         }
 
@@ -408,6 +417,13 @@ namespace CcuSim {
             std::vector<uint32_t> loopBodyExitIdx;  /**< 每个 loop 的 LOOP_BODY_EXIT 轨迹索引。 */
             std::vector<SimCcuLoopGroup> groups;    /**< 按 GroupCreate 顺序。 */
             std::map<uint64_t, std::pair<uint64_t, uint32_t>> channelVarSources; /**< 通道派生变量来源（交换区）。 */
+            std::set<uint64_t>
+                localWrittenVars; /**< 录制期已被纯覆盖写（LoadArg/LoadMem/VarAssignImm/VarAssignVar）
+                                       覆盖取值的变量句柄：其通道来源已注销，禁止 NoteChannelVarSource
+                                       再注册（覆盖"先本地写、后注册"的顺序）。
+                                       注意：VAR_OP_VAR、VAR_OP_IMM、VAR_NOT 等读改写不参与注销——其消费
+                                       变量当前值，频道变量的当前值恰是待懒解析的交换基值（如 reduce_scatter
+                                       的 scratch 基址 += 偏移后作跨端写目标，注销会导致基值退化为 0）。 */
             CcuResult funcRet{CcuResult::CCU_SUCCESS}; /**< kernelFunc 返回值（异常时 CCU_E_INTERNAL）。 */
         };
 
@@ -444,7 +460,7 @@ namespace CcuSim {
         uint32_t SyncRoundForLaunch(SimCcuExecContext& ctx)
         {
             if (!ctx.syncRoundAssigned) {
-                ctx.syncRound = AllocSyncRound(sim::operation::GetCurOpIter(), ctx.dieId);
+                ctx.syncRound = AllocSyncRound(sim::operation::GetCurOpIter(), ctx.commId, ctx.rankId, ctx.dieId);
                 ctx.syncRoundAssigned = true;
             }
             return ctx.syncRound;
@@ -507,16 +523,25 @@ namespace CcuSim {
                    | ((eventHandle & 0xFFFFFFFFULL) << 4U) | static_cast<uint64_t>(bit & 0xFU);
         }
 
-        /** @brief 通道位资源 id：真机 (设备对方向, CKE槽位, bit) 的 u64 压平。
-         *  布局：0xD 段 | srcRank(16b,bit[59:44]) | dstRank(16b,bit[43:28]) | notifyIdx(8b,bit[15:8]) | bit(4b)。
+        /** @brief 通道位资源 id：真机 (设备对方向, die, CKE槽位, bit, 算子) 的 u64 压平。
+         *  布局：0xD 段 | srcRank(16b,bit[59:44]) | dstRank(16b,bit[43:28]) | opIter(12b,bit[27:16])
+         *       | notifyIdx(8b,bit[15:8]) | dieId(4b,bit[7:4]) | bit(4b)。
          *  两侧无需通信即可推导同一 id：record 方由 (ctx.rankId, channel.remoteRankId)、wait 方由
          *  (channel.remoteRankId, ctx.rankId) 得到同一方向化 rank 对；不依赖任何单侧实体
-         *  （channel 句柄 / DB notifyId 均为单侧值，两侧不同号会导致跨 rank 配对失败）。 */
-        uint64_t ChannelBitNotifyId(uint32_t srcRank, uint32_t dstRank, uint32_t notifyIdx, uint32_t bit)
+         *  （channel 句柄 / DB notifyId 均为单侧值，两侧不同号会导致跨 rank 配对失败）。
+         *  opIter/dieId 两个隔离维度对齐 SimCcuSyncKey 的修复史（ccu_kernel_sim.cc SimCcuSyncKey
+         *  注释）：缺 opIter 时同 (src,dst,slot,bit) 坐标被同一同步窗口内的后续算子复用，大图校验
+         *  把不同算子的 record/wait 混进同一 notify 桶误报多打一；缺 dieId 时同一 rank 的多个 die
+         *  对同一 peer 的同槽位通知算出相同 id，单算子内即碰撞（ Checker 报 602 many-to-one）。
+         *  两侧各自取本端 ctx.dieId / GetCurOpIter()，依赖单 die 对称假设（HcclChannel 无
+         *  remoteDieId 字段），与 SimCcuSyncKey 一致。 */
+        uint64_t ChannelBitNotifyId(
+            uint32_t srcRank, uint32_t dstRank, uint32_t notifyIdx, uint32_t bit, uint32_t dieId, uint32_t opIter)
         {
             return CCU_CHANNEL_NOTIFY_ID_BASE | (static_cast<uint64_t>(srcRank & 0xFFFFU) << 44U)
-                   | (static_cast<uint64_t>(dstRank & 0xFFFFU) << 28U)
-                   | (static_cast<uint64_t>(notifyIdx & 0xFFU) << 8U) | static_cast<uint64_t>(bit & 0xFU);
+                   | (static_cast<uint64_t>(dstRank & 0xFFFFU) << 28U) | (static_cast<uint64_t>(opIter & 0xFFFU) << 16U)
+                   | (static_cast<uint64_t>(notifyIdx & 0xFFU) << 8U) | (static_cast<uint64_t>(dieId & 0xFU) << 4U)
+                   | static_cast<uint64_t>(bit & 0xFU);
         }
 
         /** @brief 算逻求值 lhs <op> rhs（ADD/SUB/MUL/AND/OR/XOR/SHL/SHR；移位 >=64 归 0）。 */
@@ -1299,7 +1324,9 @@ namespace CcuSim {
             }
         }
 
-        /** @brief 通道同步按 CKE 位拆分下发（语义同 ExecRecordEventBits，id 为通道位资源）。 */
+        /** @brief 通道同步按 CKE 位拆分下发（语义同 ExecRecordEventBits，id 为通道位资源）。
+         *  opIter/dieId 由 ctx 本地推导（两侧对称假设，见 ChannelBitNotifyId 注释），
+         *  record/wait 两侧据此得到同一 id。 */
         void ExecRecordChannelBits(
             SimCcuExecContext* ctx, bool isRecord, uint32_t srcRank, uint32_t dstRank, uint32_t notifyIdx,
             uint16_t mask, const char* opName)
@@ -1307,14 +1334,17 @@ namespace CcuSim {
             if (ctx == nullptr) {
                 return;
             }
+            const uint32_t dieId = ctx->dieId;
+            const uint32_t opIter = sim::operation::GetCurOpIter();
             for (uint32_t bit = 0; bit < 16U; ++bit) {
                 const uint16_t bitMask = static_cast<uint16_t>(1U << bit);
                 if ((mask & bitMask) == 0U) {
                     continue;
                 }
                 ExecRecordNotify(
-                    ctx, isRecord, srcRank, dstRank, ChannelBitNotifyId(srcRank, dstRank, notifyIdx, bit),
-                    static_cast<uint8_t>(bit), opName);
+                    ctx, isRecord, srcRank, dstRank,
+                    ChannelBitNotifyId(srcRank, dstRank, notifyIdx, bit, dieId, opIter), static_cast<uint8_t>(bit),
+                    opName);
             }
         }
 
@@ -2405,6 +2435,8 @@ namespace CcuSim {
                 MarkReplayErr(replayErr, "load arg out of range", prim);
             } else {
                 ctx.varValues[prim.dst] = value;
+                // 注：被 LoadArg 覆盖的通道变量来源已在录制期注销（NoteLocalVarWrite），
+                // entry.channelVarSources 不含该句柄，此处无需再擦除。
                 HCCL_VM_INFO("ccu replay var: 0x{:x} <= taskArgs[{}] = {} (0x{:x})", prim.dst, aux, value, value);
             }
         }
@@ -3265,13 +3297,50 @@ namespace CcuSim {
         return MakeSimCcuHandle(SimCcuHandleTag::EVENT, 0U, static_cast<uint32_t>(seq & 0xFFFFFFFFULL));
     }
 
-    /** @brief 登记通道派生变量来源 varHandle→(channel, varIndex)，供回放期懒解析交换值。 */
+    /**
+     * @brief 录制期记录"纯覆盖写变量"：注销其通道懒解析来源并加入本地写集合。
+     *
+     * 用途：kernel 模板常先取通道变量（NoteChannelVarSource 注册）再被本地写覆盖取值
+     * （如 alltoallv 的 input[0] 经 LoadArg 绑本地参数）。若回放期仍按通道变量懒解析，
+     * 会等待一个对端永远不会发布的 XN 槽位（varIndex=0），触发 10s 超时与
+     * "no row at all" 报错。录制期注销一次，全 launch 回放生效，不受每 launch
+     * 从 entry 重拷贝 ctx 副本的影响。
+     * 仅挂接纯覆盖写原语（LOAD_ARG/LOAD_MEM/VAR_ASSIGN_IMM/VAR_ASSIGN_VAR，其丢弃
+     * 变量旧值）；VAR_OP_VAR、VAR_OP_IMM、VAR_NOT 等读改写不得挂接：其消费变量当前值，
+     * 频道变量的当前值恰是待懒解析的交换基值（如 reduce_scatter 的 scratch 基址 += 偏移后作
+     * 跨端写目标，注销会使基值退化为 0）。
+     * @param varHandle 被纯覆盖写改写的变量句柄。
+     */
+    void NoteLocalVarWrite(uint64_t varHandle)
+    {
+        SimCcuRecordContext* rctx = ActiveRecordCtx();
+        if (rctx == nullptr) {
+            // 非录制期调用（与 NoteChannelVarSource 同等口径）：静默返回。
+            return;
+        }
+        if (rctx->channelVarSources.erase(varHandle) != 0U) {
+            HCCL_VM_INFO("ccu channel var binding revoked by local write, var=0x{:x}", varHandle);
+        }
+        rctx->localWrittenVars.insert(varHandle);
+    }
+
+    /**
+     * @brief 登记通道派生变量来源 varHandle→(channel, varIndex)，供回放期懒解析交换值。
+     * @param varHandle 通道派生变量句柄；已在本地写集合中的句柄拒绝注册（其值以本地写为准）。
+     */
     void NoteChannelVarSource(uint64_t varHandle, uint64_t channelHandle, uint32_t varIndex)
     {
         SimCcuRecordContext* rctx = ActiveRecordCtx();
         if (rctx == nullptr) {
             // 非录制期调用（理论不可达：桩仅在录制窗口被调用）；静默返回，回放侧退化为默认值 0。
             HCCL_VM_WARN("ccu channel var source noted outside record window, var=0x{:x}", varHandle);
+            return;
+        }
+        if (rctx->localWrittenVars.count(varHandle) != 0U) {
+            // 该变量已被本地写覆盖取值，注册会引入对端永不发布的槽位等待（见 NoteLocalVarWrite）。
+            HCCL_VM_INFO(
+                "ccu channel var binding skipped (locally written), var=0x{:x}, channel={}, varIndex={}", varHandle,
+                channelHandle, varIndex);
             return;
         }
         rctx->channelVarSources[varHandle] = {channelHandle, varIndex};
@@ -3285,6 +3354,7 @@ namespace CcuSim {
     /** @brief 录制 var = 立即数（VAR_ASSIGN_IMM）。 */
     void PrimVarAssignImm(uint64_t varHandle, uint64_t immediate)
     {
+        NoteLocalVarWrite(varHandle);
         SimCcuPrim& prim = AppendPrim(SimCcuPrimKind::VAR_ASSIGN_IMM);
         prim.dst = varHandle;
         prim.src = immediate;
@@ -3293,14 +3363,17 @@ namespace CcuSim {
     /** @brief 录制 var = var（VAR_ASSIGN_VAR）。 */
     void PrimVarAssignVar(uint64_t dstVar, uint64_t srcVar)
     {
+        NoteLocalVarWrite(dstVar);
         SimCcuPrim& prim = AppendPrim(SimCcuPrimKind::VAR_ASSIGN_VAR);
         prim.dst = dstVar;
         prim.src = srcVar;
     }
 
-    /** @brief 录制 var = varA op varB（VAR_OP_VAR）。 */
+    /** @brief 录制 var = varA op varB（VAR_OP_VAR；读改写，保留通道来源供基值懒解析）。 */
     void PrimVarOpVar(uint64_t resVar, uint64_t varA, uint64_t varB, SimCcuVarOp op)
     {
+        // 注意：VAR_OP_* 是读改写（如 scratch += offset），频道变量的当前值即待解析的
+        // 交换基值，不得注销其通道来源（见 NoteLocalVarWrite）。
         SimCcuPrim& prim = AppendPrim(SimCcuPrimKind::VAR_OP_VAR);
         prim.dst = resVar;
         prim.varA = varA;
@@ -3308,9 +3381,10 @@ namespace CcuSim {
         prim.op = static_cast<uint8_t>(op);
     }
 
-    /** @brief 录制 var = varA op 立即数（VAR_OP_IMM）。 */
+    /** @brief 录制 var = varA op 立即数（VAR_OP_IMM；读改写，保留通道来源供基值懒解析）。 */
     void PrimVarOpImm(uint64_t resVar, uint64_t varA, uint64_t immediate, SimCcuVarOp op)
     {
+        // 同上：读改写不注销通道来源。
         SimCcuPrim& prim = AppendPrim(SimCcuPrimKind::VAR_OP_IMM);
         prim.dst = resVar;
         prim.varA = varA;
@@ -3318,9 +3392,10 @@ namespace CcuSim {
         prim.op = static_cast<uint8_t>(op);
     }
 
-    /** @brief 录制 var = ~varA（VAR_NOT）。 */
+    /** @brief 录制 var = ~varA（VAR_NOT；读改写，保留通道来源供基值懒解析）。 */
     void PrimVarNot(uint64_t resVar, uint64_t varA)
     {
+        // 同上：读改写不注销通道来源。
         SimCcuPrim& prim = AppendPrim(SimCcuPrimKind::VAR_NOT);
         prim.dst = resVar;
         prim.src = varA;
@@ -3391,6 +3466,7 @@ namespace CcuSim {
     /** @brief 录制 var = LoadArg(argId)（LOAD_ARG，回放期绑定 Launch 参数）。 */
     void PrimLoadArg(uint64_t varHandle, uint32_t argId)
     {
+        NoteLocalVarWrite(varHandle);
         SimCcuPrim& prim = AppendPrim(SimCcuPrimKind::LOAD_ARG);
         prim.dst = varHandle;
         prim.aux = argId;
@@ -3399,6 +3475,7 @@ namespace CcuSim {
     /** @brief 录制 var = LoadMem(addr, num)（LOAD_MEM / LOAD_MEM_VAR）。 */
     void PrimLoadMem(uint64_t varHandle, uint64_t addr, uint32_t num, bool addrIsVar)
     {
+        NoteLocalVarWrite(varHandle);
         SimCcuPrim& prim = AppendPrim(addrIsVar ? SimCcuPrimKind::LOAD_MEM_VAR : SimCcuPrimKind::LOAD_MEM);
         prim.dst = varHandle;
         prim.src = addr;

@@ -75,6 +75,8 @@ set_target_properties(test_binary_data_operator_checker PROPERTIES
 add_executable(test_storage_manager_checker storage_manager_checker_test.cc main.cc)
 target_sources(test_storage_manager_checker PRIVATE
     ${CHECKER_SRC}/utils/storage_manager.cc
+    # UT 桩替代真实 ccu_base_resolver.cc：避免链入 runtime_state 与测试内 mock 冲突（见桩文件注释）
+    ccu_base_resolver_test_stub.cc
     ${CHECKER_SRC}/utils/binary_data_operator.cc
     ${CHECKER_SRC}/log/log_stub.cc
 )

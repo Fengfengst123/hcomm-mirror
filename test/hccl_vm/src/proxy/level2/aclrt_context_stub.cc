@@ -85,6 +85,9 @@ aclError aclrtDestroyContext(aclrtContext context)
 
     (void)sim::runtime::Db::Delete<sim::runtime::Stream>(HcclSim::Storage::Eq(&sim::runtime::Stream::id, ret->id));
     (void)sim::runtime::Db::Delete<sim::runtime::Context>(HcclSim::Storage::Eq(&sim::runtime::Context::id, ctxId));
+    // 本函数不走 SetCurrCtxTls（TLS 的 current_ctx_id 保持原值），若销毁的正是当前 ctx，
+    // 需显式失效 GetCurrDeviceId 的本线程记忆，保持"ctx 已销毁 → 查库失败返回 0"的原语义。
+    sim::runtime::InvalidateCurrDeviceTls();
     return ACL_SUCCESS;
 }
 

@@ -142,7 +142,7 @@ protected:
 
     void TearDown() override
     {
-        sim::operation::g_currOpDetailId = 0;
+        sim::operation::CurrOpDetailId() = 0;
         SetCurDeviceKey(0);
         ::close(pipeFds_[0]);
         ::close(pipeFds_[1]);

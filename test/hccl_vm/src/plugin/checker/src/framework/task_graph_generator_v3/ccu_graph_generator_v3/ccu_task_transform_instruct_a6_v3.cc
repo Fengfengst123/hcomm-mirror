@@ -2333,7 +2333,8 @@ namespace TaskGraphGeneratorV3 {
                     CHK_GET_XN_V3(curCcuTask, queId, xnId, xnAddr);
                     uint16_t xnIdRmt = 0;
                     CcuComponerntType ccuType{CcuComponerntType::UNKNOWN};
-                    CHK_RET(AllRankParamRecorder::Global()->GetXnAndTypeIdByAddr(dieId, xnAddr, ccuType, xnIdRmt));
+                    CHK_RET(AllRankParamRecorder::Global()->GetXnAndTypeIdByAddr(
+                        rmtDeviceId, rmtDieId, xnAddr, ccuType, xnIdRmt));
                     if (ccuType == CcuComponerntType::XN_A6) {
                         CHK_RET(AllRankParamRecorder::Global()->SetXn(
                             rmtDeviceId, rmtDieId, xnIdRmt, static_cast<uint64_t>(notifyOrAtomicValue)));
@@ -2386,8 +2387,8 @@ namespace TaskGraphGeneratorV3 {
                 uint16_t xnIdRmt = 0;
                 uint16_t xnId = GetXnId(instr->v2.transMem.xnId, loopGroupParam);
                 CHK_GET_XN_V3(curCcuTask, queId, xnId, xnAddr);
-                CHK_RET(
-                    AllRankParamRecorder::Global()->GetXnIdByAddr(dieId, CcuComponerntType::XN_A6, xnAddr, xnIdRmt));
+                CHK_RET(AllRankParamRecorder::Global()->GetXnIdByAddr(
+                    rmtDeviceId, rmtDieId, CcuComponerntType::XN_A6, xnAddr, xnIdRmt));
                 uint64_t oldValue = 0;
                 CHK_GET_XN_V3(curCcuTask, queId, xnIdRmt, oldValue);
                 // 1. 首先判断最高位vld
@@ -2473,7 +2474,8 @@ namespace TaskGraphGeneratorV3 {
             // 将Xs内容写到Xd中
             uint16_t xdIdRmt{0};
             CcuComponerntType ccuType{CcuComponerntType::UNKNOWN};
-            CHK_RET(AllRankParamRecorder::Global()->GetXnAndTypeIdByAddr(dieId, xdValue, ccuType, xdIdRmt));
+            CHK_RET(
+                AllRankParamRecorder::Global()->GetXnAndTypeIdByAddr(rmtDeviceId, rmtDieId, xdValue, ccuType, xdIdRmt));
             if (ccuType == CcuComponerntType::XN_A6) {
                 CHK_RET(AllRankParamRecorder::Global()->SetXn(rmtDeviceId, rmtDieId, xdIdRmt, xsValue));
             } else if (ccuType == CcuComponerntType::CKE_A6) {
@@ -2494,7 +2496,7 @@ namespace TaskGraphGeneratorV3 {
                 CHK_GET_XN_V3(curCcuTask, queId, xnId, xnAddr);
                 uint16_t cekIdRmtId = 0;
                 CHK_RET(AllRankParamRecorder::Global()->GetXnIdByAddr(
-                    dieId, CcuComponerntType::CKE_A6, xnAddr, cekIdRmtId));
+                    rmtDeviceId, rmtDieId, CcuComponerntType::CKE_A6, xnAddr, cekIdRmtId));
                 uint32_t notifyValue = instr->v2.syncWtX.value;
                 CHK_RET(ProcessSetMask(
                     rmtDeviceId, rmtDieId, curCcuTask, queId, cekIdRmtId, static_cast<uint64_t>(notifyValue)));
@@ -2539,7 +2541,8 @@ namespace TaskGraphGeneratorV3 {
             // 根据xdAddr获取xdIdRmt
             uint16_t xdIdRmt{0};
             CcuComponerntType ccuType{CcuComponerntType::UNKNOWN};
-            CHK_RET(AllRankParamRecorder::Global()->GetXnIdByAddr(dieId, CcuComponerntType::XN_A6, xdAddr, xdIdRmt));
+            CHK_RET(AllRankParamRecorder::Global()->GetXnIdByAddr(
+                rmtDeviceId, rmtDieId, CcuComponerntType::XN_A6, xdAddr, xdIdRmt));
             // write with atomic操作处理
             uint64_t oldValue = 0;
             CHK_RET(AllRankParamRecorder::Global()->GetXn(rmtDeviceId, rmtDieId, xdIdRmt, oldValue));

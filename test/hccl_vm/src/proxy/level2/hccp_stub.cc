@@ -48,6 +48,7 @@
 #include "operation_data/operation_data_ops.h"
 #include "runtime_state/db_sim_runner_common.h"
 #include "runtime_state/db_sim_runner_ops.h"
+#include "device_spec/device_spec_registry.h"
 #include "storage/table_access.h"
 #include "store_sim_run_mode.h"
 #include "ibv_dpu_stub.h"
@@ -1722,6 +1723,40 @@ int RaCtxQpImportAsync(void* ctxHandle, struct QpImportInfoT* info, void** remQp
     return ret;
 }
 
+int RaCtxQpBind(void* qpHandle, void* remQpHandle)
+{
+    if (qpHandle == nullptr || remQpHandle == nullptr) {
+        HCCL_VM_ERROR("invalid params, qpHandle: {}, remQpHandle: {}", qpHandle, remQpHandle);
+        return -1;
+    }
+
+    uint64_t localQpId = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(qpHandle));
+    uint64_t remoteQpId = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(remQpHandle));
+
+    auto localQpOpt = sim::runtime::Db::GetById<sim::runtime::RaJetty>(localQpId);
+    if (!localQpOpt.ok()) {
+        HCCL_VM_ERROR("local QP {:d} not found", localQpId);
+        return -1;
+    }
+
+    auto remoteQpOpt = sim::runtime::Db::GetById<sim::runtime::RaJetty>(remoteQpId);
+    if (!remoteQpOpt.ok()) {
+        HCCL_VM_ERROR("remote QP {:d} not found", remoteQpId);
+        return -1;
+    }
+
+    auto update = sim::runtime::Db::Update<sim::runtime::RaJetty>(
+        HcclSim::Storage::Eq(&sim::runtime::RaJetty::id, localQpId),
+        HcclSim::Storage::Set(&sim::runtime::RaJetty::peer_jetty_handle, remoteQpId),
+        HcclSim::Storage::Set(&sim::runtime::RaJetty::state, 3));
+    if (!update.ok()) {
+        return -1;
+    }
+
+    HCCL_VM_INFO("bind local QP {:d} remote QP {:d}", localQpId, remoteQpId);
+    return 0;
+}
+
 int RaCtxQpUnimport(void* ctxHandle, void* remQpHandle)
 {
     uint64_t localRaDevId = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ctxHandle));
@@ -2061,115 +2096,74 @@ int GetCcuMemInfo(struct TlvMsg* sendMsg, struct TlvMsg* recvMsg)
     rsp.die_id = dieId;
     rsp.num = 0;
 
-    uint64_t ccu_die0_base_addr = 0x123123123;
-    uint64_t ccu_die1_base_addr = 0x456456456;
-
-    // ccu指令空间： 1MByte
-    ccu_mem_info ccu_inst_mem = {0, 0, {0}};
-    if (dieId == 0) {
-        ccu_inst_mem.mem_va = ccu_die0_base_addr;
-    } else if (dieId == 1) {
-        ccu_inst_mem.mem_va = ccu_die1_base_addr;
+    /**
+     * ★ 区域表由 device 规格驱动，取代原先的 9 段硬编码累加表（假基址 + INS@base、
+     *   GSA@+0x100000、其后每段 +0x8000，设计文档 §2.2/§2.3）。
+     *
+     * 修掉的两个缺陷（设计文档 §2.3）：
+     *   缺陷 1：原实现**不区分 A5/A6**，对 A6 也返回 V1 风格的 INS@0x0 + 0x8000 步进表，
+     *           而 A6 的 XN 实际在 0x100000、CKE 在 0x140000。现由 spec.regions 生成，
+     *           A5 得 9 段（含 GSA@0x900000、INS@0x800000），A6 得 8 段（无 GSA、INS@0x0）。
+     *   缺陷 2：原实现 size 与 stride 语义混用（注释写"实际预留 32KByte"，GSA→XN 步进
+     *           0x8000 但 mem_size 只报 0x6000）。现统一报 region.size（预留的地址空间
+     *           extent），与 spec 的 offset/size 一一对应、自洽无歧义。
+     *
+     * ★★ 列表首条必须是覆盖整个 CCU 资源空间的窗口条目（mem_va == dieBase ==
+     *   GET_BASIC_INFO 上报的 resourceAddr，mem_size == resource_space_size，A5/A6 均 72MiB）：
+     *   hcomm CcuComponent::CreateCcuRmaBuffer 以 `memVa == resourceAddr` 等值匹配建立
+     *   ccuRmaBufferMap（loop channel 依赖之），任何 region 的 offset 都 ≥ 0x100000/0x800000，
+     *   缺了首条窗口即匹配不到 → CreateLoopChannels 失败（HCCL_E_NOT_FOUND）→ 建链中止。
+     *   旧硬编码表把 INS 放在 base 上恰好满足该契约；spec 化后必须显式补窗口条目。
+     */
+    const uint64_t devKey = sim::runtime::GetCurrDeviceId();
+    if (devKey == 0) {
+        HCCL_VM_ERROR("GetCcuMemInfo: cannot resolve current device (GetCurrDeviceId returned 0)");
+        return -1;
     }
-    ccu_inst_mem.mem_size = 0x100000;
-    rsp.list[rsp.num++] = ccu_inst_mem;
-
-    uint64_t ccu_die0_gsa_offset = ccu_die0_base_addr + 0x100000;
-    uint64_t ccu_die1_gsa_offset = ccu_die1_base_addr + 0x100000;
-    // ccu gsa寄存器： size = 24KByte, 实际预留32KByte
-    ccu_mem_info ccu_gsa_mem = {0, 0, {0}};
-    if (dieId == 0) {
-        ccu_gsa_mem.mem_va = ccu_die0_gsa_offset;
-    } else if (dieId == 1) {
-        ccu_gsa_mem.mem_va = ccu_die1_gsa_offset;
+    uint64_t dieBase = 0;
+    if (!sim::runtime::GetCcuResourceBaseAddr(devKey, static_cast<uint32_t>(dieId), dieBase) || dieBase == 0) {
+        HCCL_VM_ERROR(
+            "GetCcuMemInfo: resolve ccu base addr failed, dev={} die={}", devKey, static_cast<uint32_t>(dieId));
+        return -1;
     }
-    ccu_gsa_mem.mem_size = 0x6000;
-    rsp.list[rsp.num++] = ccu_gsa_mem;
-
-    // ccu Xn寄存器： size = 24KByte, 实际预留32KByte
-    uint64_t ccu_die0_xn_offset = ccu_die0_gsa_offset + 0x8000;
-    uint64_t ccu_die1_xn_offset = ccu_die1_gsa_offset + 0x8000;
-    ccu_mem_info ccu_xn_mem = {0, 0, {0}};
-    if (dieId == 0) {
-        ccu_xn_mem.mem_va = ccu_die0_xn_offset;
-    } else if (dieId == 1) {
-        ccu_xn_mem.mem_va = ccu_die1_xn_offset;
+    sim::runtime::DeviceSpec specRow{};
+    if (sim::runtime::GetDeviceSpecByDeviceKey(devKey, specRow) != ACL_SUCCESS) {
+        HCCL_VM_ERROR("GetCcuMemInfo: cannot find device spec for dev={}", devKey);
+        return -1;
     }
-    ccu_xn_mem.mem_size = 0x6000;
-    rsp.list[rsp.num++] = ccu_xn_mem;
-
-    // ccu CKB寄存器： size = 8KByte, 实际预留32KByte
-    uint64_t ccu_die0_ckb_offset = ccu_die0_xn_offset + 0x8000;
-    uint64_t ccu_die1_ckb_offset = ccu_die1_xn_offset + 0x8000;
-    ccu_mem_info ccu_ckb_mem = {0, 0, {0}};
-    if (dieId == 0) {
-        ccu_ckb_mem.mem_va = ccu_die0_ckb_offset;
-    } else if (dieId == 1) {
-        ccu_ckb_mem.mem_va = ccu_die1_ckb_offset;
+    std::vector<sim::runtime::DeviceSpecRegion> regions;
+    if (!sim::runtime::GetDeviceSpecRegions(specRow.id, regions) || regions.empty()) {
+        HCCL_VM_ERROR("GetCcuMemInfo: no regions for spec id={}", specRow.id);
+        return -1;
     }
-    ccu_ckb_mem.mem_size = 0x2000;
-    rsp.list[rsp.num++] = ccu_ckb_mem;
 
-    // ccu PFE表： size = 256Byte, 实际预留32KByte
-    uint64_t ccu_die0_pfe_offset = ccu_die0_ckb_offset + 0x8000;
-    uint64_t ccu_die1_pfe_offset = ccu_die1_ckb_offset + 0x8000;
-    ccu_mem_info ccu_pfe_mem = {0, 0, {0}};
-    if (dieId == 0) {
-        ccu_pfe_mem.mem_va = ccu_die0_pfe_offset;
-    } else if (dieId == 1) {
-        ccu_pfe_mem.mem_va = ccu_die1_pfe_offset;
+    // 首条：CCU 资源空间整体窗口（见上方 ★★ 契约说明）。
+    ccu_mem_info resWindow = {0, 0, {0}};
+    resWindow.mem_va = dieBase;
+    resWindow.mem_size = (specRow.resource_space_size > UINT32_MAX) ?
+                             UINT32_MAX :
+                             static_cast<unsigned int>(specRow.resource_space_size);
+    rsp.list[rsp.num++] = resWindow;
+
+    // regions 已按 offset 升序（GetDeviceSpecRegions 保证），与原生成的
+    // instr→gsa→xn→ckb→pfe→channel→jetty→mission→loop 顺序一致（A6 无 gsa）。
+    constexpr uint32_t kMaxListEntries = sizeof(rsp.list) / sizeof(rsp.list[0]);
+    for (const auto& r : regions) {
+        if (rsp.num >= kMaxListEntries) {
+            HCCL_VM_WARN(
+                "GetCcuMemInfo: region list truncated at {} entries (spec has {})", kMaxListEntries, regions.size());
+            break;
+        }
+        ccu_mem_info info = {0, 0, {0}};
+        info.mem_va = dieBase + r.offset;
+        // mem_size 取预留的地址空间 extent；unsigned int 足够（单区域最大 0x100000）
+        info.mem_size = (r.size > UINT32_MAX) ? UINT32_MAX : static_cast<unsigned int>(r.size);
+        rsp.list[rsp.num++] = info;
     }
-    ccu_pfe_mem.mem_size = 0x100;
-    rsp.list[rsp.num++] = ccu_pfe_mem;
 
-    // ccu channel映射表： size = 8KByte, 实际预留32KByte
-    uint64_t ccu_die0_channel_offset = ccu_die0_pfe_offset + 0x8000;
-    uint64_t ccu_die1_channel_offset = ccu_die1_pfe_offset + 0x8000;
-    ccu_mem_info ccu_channel_mem = {0, 0, {0}};
-    if (dieId == 0) {
-        ccu_channel_mem.mem_va = ccu_die0_channel_offset;
-    } else if (dieId == 1) {
-        ccu_channel_mem.mem_va = ccu_die1_channel_offset;
-    }
-    ccu_channel_mem.mem_size = 0x2000;
-    rsp.list[rsp.num++] = ccu_channel_mem;
-
-    // ccu jetty context表： size = 4KByte, 实际预留32KByte
-    uint64_t ccu_die0_ctx_offset = ccu_die0_channel_offset + 0x8000;
-    uint64_t ccu_die1_ctx_offset = ccu_die1_channel_offset + 0x8000;
-    ccu_mem_info ccu_ctx_mem = {0, 0, {0}};
-    if (dieId == 0) {
-        ccu_ctx_mem.mem_va = ccu_die0_ctx_offset;
-    } else if (dieId == 1) {
-        ccu_ctx_mem.mem_va = ccu_die1_ctx_offset;
-    }
-    ccu_ctx_mem.mem_size = 0x1000;
-    rsp.list[rsp.num++] = ccu_ctx_mem;
-
-    // ccu mission context表： size = 1KByte, 实际预留32KByte
-    uint64_t ccu_die0_mission_offset = ccu_die0_ctx_offset + 0x8000;
-    uint64_t ccu_die1_mission_offset = ccu_die1_ctx_offset + 0x8000;
-    ccu_mem_info ccu_mission_mem = {0, 0, {0}};
-    if (dieId == 0) {
-        ccu_mission_mem.mem_va = ccu_die0_mission_offset;
-    } else if (dieId == 1) {
-        ccu_mission_mem.mem_va = ccu_die1_mission_offset;
-    }
-    ccu_mission_mem.mem_size = 0x1000;
-    rsp.list[rsp.num++] = ccu_mission_mem;
-
-    // ccu loop context表： size = 12.5KB, 实际预留32KByte
-    uint64_t ccu_die0_loop_offset = ccu_die0_mission_offset + 0x8000;
-    uint64_t ccu_die1_loop_offset = ccu_die1_mission_offset + 0x8000;
-    ccu_mem_info ccu_loop_mem = {0, 0, {0}};
-    if (dieId == 0) {
-        ccu_loop_mem.mem_va = ccu_die0_loop_offset;
-    } else if (dieId == 1) {
-        ccu_loop_mem.mem_va = ccu_die1_loop_offset;
-    }
-    ccu_loop_mem.mem_size = 0x3000;
-    rsp.list[rsp.num++] = ccu_loop_mem;
-
+    HCCL_VM_INFO(
+        "GetCcuMemInfo: dev={} die={} dieBase={:#x} windowSize={:#x} regionEntries={} totalEntries={}", devKey,
+        static_cast<uint32_t>(dieId), dieBase, resWindow.mem_size, regions.size(), rsp.num);
     memcpy(recvMsg->data, &rsp, sizeof(rsp));
     return 0;
 }
@@ -2604,6 +2598,39 @@ int RaCtxQpQueryBatch(void* qpHandle[], struct JettyAttr attr[], unsigned int* n
     return -1;
 }
 
+int RaCtxQpUnbind(void* qpHandle)
+{
+    if (qpHandle == nullptr) {
+        HCCL_VM_ERROR("qpHandle is null");
+        return -1;
+    }
+
+    uint64_t jtyId = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(qpHandle));
+    auto jtyOpt = sim::runtime::Db::GetById<sim::runtime::RaJetty>(jtyId);
+    if (!jtyOpt.ok()) {
+        HCCL_VM_WARN("QP {:d} not found", jtyId);
+        return 0;
+    }
+
+    auto update = sim::runtime::Db::Update<sim::runtime::RaJetty>(
+        HcclSim::Storage::Eq(&sim::runtime::RaJetty::id, jtyId),
+        HcclSim::Storage::Set(&sim::runtime::RaJetty::peer_jetty_handle, 0),
+        HcclSim::Storage::Set(&sim::runtime::RaJetty::state, 0));
+    if (!update.ok()) {
+        return -1;
+    }
+
+    HCCL_VM_INFO("unbind QP {:d}, reset to RESET state", jtyId);
+    return 0;
+}
+
+int RaBatchSendWr(
+    void* qpHandle, struct SendWrData wrList[], struct SendWrResp opResp[], unsigned int num, unsigned int* completeNum)
+{
+    HCCL_VM_ERROR("not support");
+    return -1;
+}
+
 int RaCtxCqCreate(void* ctxHandle, struct CqInfoT* info, void** cqHandle)
 {
     *cqHandle = reinterpret_cast<void*>(static_cast<uintptr_t>(0xabcdU));
@@ -2861,6 +2888,7 @@ int RaRdevGetAttr(void* rdevHandle, struct RdevAttr* attr)
         return -1;
     }
     attr->status = PORT_STATUS_ACTIVE;
+    // RoCE 下 maxReadSize/maxWriteSize/maxMsgSize 为 union，读写共用同一单次传输上限
     attr->maxMsgSize = 256U * 1024U * 1024U;
     attr->maxQpWr = 32768U;
     attr->maxCqe = 65535U;

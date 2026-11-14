@@ -132,7 +132,7 @@ flowchart TD
 3. **交付快照**：控制面 → 数据面，`HcclCommQueryCcuRegisterContext` 交付 RegisterContext 只读快照（资源 range 视图 + die 元数据 + controlOps 函数表）。
 4. **回调控制面**：数据面 → 控制面，经 controlOps 表 / 4 个 C API（`include/hcomm/hcomm_ccu_{res,channel,instruction,launch}_api.h`）查询 Channel POD、下发微码；翻译产物由控制面走 TLV 驱动接口写入硬件指令槽。
 5. **任务提交**：数据面组 `CcuTaskParam(dieId/missionId/instStartId/args[13])` → `rtCCULaunch` 提交流。
-6. **硬件执行**：CCU Mission 执行微码，URMA 引擎搬运数据，XN/GSA/CKE 完成同步。
+6. **硬件执行**：CCU Mission 执行微码，URMA 引擎搬运数据，Variable/Address/Event 完成同步。
 
 ## 构建期边界保障
 
