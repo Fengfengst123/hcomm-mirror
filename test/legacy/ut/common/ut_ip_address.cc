@@ -174,3 +174,45 @@ TEST_F(IpAddressTest, Ut_Constructor_When_Input_Eid_Expect_Equal_To_IPV6)
         EXPECT_EQ(ipAddress0.GetBinaryAddress().addr6.s6_addr[i], ipAddress1.GetBinaryAddress().addr6.s6_addr[i]);
     }
 }
+
+TEST_F(IpAddressTest, Ut_GetBinStream_When_EidAddress_Expect_RealIpv6StringSerialized)
+{
+    Eid eidInput = IpAddress::StrToEID("fe80000000000000020461fffe9df156");
+    IpAddress ip(eidInput);
+
+    BinaryStream bs;
+    ip.GetBinStream(bs);
+    std::vector<char> buf;
+    bs.Dump(buf);
+    // 布局：family(4B) + scopeID(4B) + 46B 地址字符串 + eid.raw(16B)
+    ASSERT_EQ(buf.size(), 4U + 4U + 46U + 16U);
+    // 46B 字符串必须是真实 IPv6 串（而非 "::" 占位），保证旧版本读端可正确解析地址
+    std::string serializedAddr(buf.begin() + 8, buf.begin() + 8 + 46);
+    EXPECT_EQ(serializedAddr.c_str(), ip.GetIpStr());
+}
+
+TEST_F(IpAddressTest, Ut_GetBinStream_When_EidAddress_Expect_RoundTripPreservesEidAndAddr)
+{
+    Eid eidInput = IpAddress::StrToEID("fe80000000000000020461fffe9df156");
+    IpAddress ip(eidInput);
+
+    BinaryStream bs;
+    ip.GetBinStream(bs);
+    IpAddress readBack(bs);
+    EXPECT_EQ(readBack.GetFamily(), AF_INET6);
+    EXPECT_EQ(readBack.GetEid(), eidInput);
+    EXPECT_EQ(readBack.GetIpStr(), ip.GetIpStr());
+    EXPECT_EQ(memcmp(readBack.GetBinaryAddress().addr6.s6_addr, ip.GetBinaryAddress().addr6.s6_addr, URMA_EID_LEN), 0);
+}
+
+TEST_F(IpAddressTest, Ut_GetUniqueId_When_EidAddress_Expect_RoundTripPreservesEidAndAddr)
+{
+    Eid eidInput = IpAddress::StrToEID("fe80000000000000020461fffe9df156");
+    IpAddress ip(eidInput);
+
+    std::vector<char> uniqueId = ip.GetUniqueId();
+    IpAddress readBack(uniqueId);
+    EXPECT_EQ(readBack.GetFamily(), AF_INET6);
+    EXPECT_EQ(readBack.GetEid(), eidInput);
+    EXPECT_EQ(readBack.GetIpStr(), ip.GetIpStr());
+}

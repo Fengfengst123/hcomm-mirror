@@ -168,6 +168,51 @@ TEST_F(RankGraphBuilderTest, Ut_Build_When_Normal_Expect_Success)
     EXPECT_NE(1, path2.size());
 }
 
+// 优化：Build 成功后 rankGraph 全量 Dump 受日志级别门控，DEBUG 未开启时跳过 Dump，构建结果不受影响
+TEST_F(RankGraphBuilderTest, Ut_Build_When_LogLevelNotDebug_Expect_Success)
+{
+    MOCKER_CPP(&PhyTopoBuilder::Build).stubs().with(mockcpp::any()).will(returnValue(HCCL_SUCCESS));
+    MOCKER_CPP(&RankGraphBuilder::BuildFromRankTable).stubs().will(returnValue(HCCL_SUCCESS));
+    MOCKER_CPP(&RankGraphBuilder::BuildPeer2PeerLinks).stubs().will(returnValue(HCCL_SUCCESS));
+    MOCKER_CPP(&RankGraphBuilder::UpdateTopoInstForMyRankOnly).stubs().will(returnValue(HCCL_SUCCESS));
+    MOCKER_CPP(&RankGraphBuilder::SetEndpointDesc).stubs().will(returnValue(HCCL_SUCCESS));
+    MOCKER_CPP(&DetourService::InsertDetourLinks).stubs().with(mockcpp::any()).will(returnValue(HCCL_SUCCESS));
+    MOCKER(HcclCheckLogLevel).stubs().will(returnValue(false));
+    MOCKER_CPP(&RankGraph::Dump).expects(never()); // DEBUG未开启时全量Dump必须被跳过
+
+    RankGraphBuilder rankGraphBuilder;
+    EXPECT_NO_THROW(rankGraphBuilder.Build(test::MakeRankTable2p(), "topo.json", 0));
+}
+
+// DEBUG 日志开启时执行全量 Dump，构建结果同样不受影响
+TEST_F(RankGraphBuilderTest, Ut_Build_When_LogLevelDebug_Expect_Success)
+{
+    MOCKER_CPP(&PhyTopoBuilder::Build).stubs().with(mockcpp::any()).will(returnValue(HCCL_SUCCESS));
+    MOCKER_CPP(&RankGraphBuilder::BuildFromRankTable).stubs().will(returnValue(HCCL_SUCCESS));
+    MOCKER_CPP(&RankGraphBuilder::BuildPeer2PeerLinks).stubs().will(returnValue(HCCL_SUCCESS));
+    MOCKER_CPP(&RankGraphBuilder::UpdateTopoInstForMyRankOnly).stubs().will(returnValue(HCCL_SUCCESS));
+    MOCKER_CPP(&RankGraphBuilder::SetEndpointDesc).stubs().will(returnValue(HCCL_SUCCESS));
+    MOCKER_CPP(&DetourService::InsertDetourLinks).stubs().with(mockcpp::any()).will(returnValue(HCCL_SUCCESS));
+    MOCKER(HcclCheckLogLevel).stubs().will(returnValue(true));
+    MOCKER_CPP(&RankGraph::Dump).expects(atLeast(1)); // DEBUG开启时全量Dump必须被执行
+
+    RankGraphBuilder rankGraphBuilder;
+    EXPECT_NO_THROW(rankGraphBuilder.Build(test::MakeRankTable2p(), "topo.json", 0));
+}
+
+// RecoverBuild（快照恢复主链路）成功后的全量 Dump 同样受日志级别门控，DEBUG 未开启时跳过
+TEST_F(RankGraphBuilderTest, Ut_RecoverBuild_When_LogLevelNotDebug_Expect_DumpSkipped)
+{
+    PhyTopo::GetInstance()->Clear();
+    MOCKER(HcclCheckLogLevel).stubs().will(returnValue(false));
+    MOCKER_CPP(&RankGraph::Dump).expects(never()); // DEBUG未开启时全量Dump必须被跳过
+
+    RankGraphBuilder rankGraphBuilder;
+    TopoInfo topoInfo = test::MakeTwoPeerClosTopo();
+    std::unique_ptr<RankGraph> rankGraph = rankGraphBuilder.RecoverBuild(test::MakeRankTable2p(), topoInfo, 0);
+    EXPECT_NE(nullptr, rankGraph);
+}
+
 // 无UB兜底场景：rank table中本rank level0带pcie_fallback显式标记时，Build将标志持久化进RankGraph
 TEST_F(RankGraphBuilderTest, Ut_Build_When_Level0PcieFallback_Expect_FlagPersistedInRankGraph)
 {

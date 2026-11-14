@@ -867,7 +867,10 @@ RankGraph::CreateSubRankGraph(const std::vector<u32>& rankIds, std::unique_ptr<R
     subRankGraph->InitFinish();
 
     HCCL_INFO("[subRankGraph] Build success!");
-    subRankGraph->Dump();
+    // 优化：超大图全量Dump构造Describe大字符串，日志级别不满足时直接跳过
+    if (UNLIKELY(HcclCheckLogLevel(DLOG_DEBUG))) {
+        subRankGraph->Dump();
+    }
     return HCCL_SUCCESS;
 }
 

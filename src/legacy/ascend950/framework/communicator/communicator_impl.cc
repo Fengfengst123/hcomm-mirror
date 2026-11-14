@@ -111,11 +111,12 @@ static std::shared_ptr<RankGraph> TakeRankGraphOwnership(std::unique_ptr<RankGra
 }
 
 static void PrepareRankGraphMetadata(
-    const RankTableInfo& inputRankTableInfo, const TopoInfo& inputTopoInfo,
-    std::unique_ptr<RankTableInfo>& outputRankTableInfo, std::shared_ptr<TopoInfo>& outputTopoInfo)
+    RankTableInfo&& inputRankTableInfo, TopoInfo&& inputTopoInfo, std::unique_ptr<RankTableInfo>& outputRankTableInfo,
+    std::shared_ptr<TopoInfo>& outputTopoInfo)
 {
-    auto preparedRankTableInfo = std::make_unique<RankTableInfo>(inputRankTableInfo);
-    auto preparedTopoInfo = std::make_shared<TopoInfo>(inputTopoInfo);
+    // 优化：两个入参均以&&传入显式声明消耗语义（调用点std::move），直接move避免262144卡级ranktable与百万级边表topoInfo深拷贝
+    auto preparedRankTableInfo = std::make_unique<RankTableInfo>(std::move(inputRankTableInfo));
+    auto preparedTopoInfo = std::make_shared<TopoInfo>(std::move(inputTopoInfo));
 
     outputRankTableInfo = std::move(preparedRankTableInfo);
     outputTopoInfo = std::move(preparedTopoInfo);
@@ -1372,11 +1373,17 @@ HcclResult CommunicatorImpl::InitRankGraph(const string& ranktableM)
 
     RankGraphBuildResult buildResult{};
     HcclResult ret = bridge->buildFromString(ranktableM, topoPath, myRank, buildResult);
+    // 参数类错误（如ranktable语法错误）原样上抛，保持与历史 HCCL_E_PARA 接口契约一致
+    CHK_PRT_RET(
+        ret == HCCL_E_PARA,
+        HCCL_ERROR("[%s] build rank graph failed with param error, errNo[0x%016llx].", __func__, HCCL_ERROR_CODE(ret)),
+        HCCL_E_PARA);
     CHK_PRT_RET(
         ret != HCCL_SUCCESS,
         HCCL_ERROR("[%s] build rank graph failed, errNo[0x%016llx].", __func__, HCCL_ERROR_CODE(ret)), HCCL_E_INTERNAL);
     // 三项结果来自同一个 builder，必须一起更新，避免通信域持有不一致的拓扑快照。
-    CHK_RET(InitRankGraph(std::move(buildResult.rankGraph), buildResult.rankTableInfo, buildResult.topoInfo));
+    CHK_RET(InitRankGraph(
+        std::move(buildResult.rankGraph), std::move(buildResult.rankTableInfo), std::move(buildResult.topoInfo)));
     return HCCL_SUCCESS;
 }
 
@@ -1429,11 +1436,17 @@ HcclResult CommunicatorImpl::InitRankGraph(const RankTableInfo& ranktable)
 
     RankGraphBuildResult buildResult{};
     HcclResult ret = bridge->buildFromRankTable(ranktable, topoPath, myRank, buildResult);
+    // 参数类错误原样上抛，保持与历史 HCCL_E_PARA 接口契约一致
+    CHK_PRT_RET(
+        ret == HCCL_E_PARA,
+        HCCL_ERROR("[%s] build rank graph failed with param error, errNo[0x%016llx].", __func__, HCCL_ERROR_CODE(ret)),
+        HCCL_E_PARA);
     CHK_PRT_RET(
         ret != HCCL_SUCCESS,
         HCCL_ERROR("[%s] build rank graph failed, errNo[0x%016llx].", __func__, HCCL_ERROR_CODE(ret)), HCCL_E_INTERNAL);
     // 同步安装本次构建得到的 RankGraph、RankTableInfo 和 TopoInfo。
-    CHK_RET(InitRankGraph(std::move(buildResult.rankGraph), buildResult.rankTableInfo, buildResult.topoInfo));
+    CHK_RET(InitRankGraph(
+        std::move(buildResult.rankGraph), std::move(buildResult.rankTableInfo), std::move(buildResult.topoInfo)));
     return HCCL_SUCCESS;
 }
 
@@ -1452,7 +1465,7 @@ HcclResult CommunicatorImpl::InitRankGraph(std::unique_ptr<RankGraph>& inputRank
 }
 
 HcclResult CommunicatorImpl::InitRankGraph(
-    std::shared_ptr<RankGraph> inputRankGraph, const RankTableInfo& inputRankTableInfo, const TopoInfo& inputTopoInfo)
+    std::shared_ptr<RankGraph> inputRankGraph, RankTableInfo&& inputRankTableInfo, TopoInfo&& inputTopoInfo)
 {
     if (inputRankGraph == nullptr) {
         HCCL_ERROR("[%s] Init RankGraph failed, inputRankGraph is nullptr", __func__);
@@ -1461,7 +1474,8 @@ HcclResult CommunicatorImpl::InitRankGraph(
 
     std::unique_ptr<RankTableInfo> preparedRankTableInfo;
     std::shared_ptr<TopoInfo> preparedTopoInfo;
-    PrepareRankGraphMetadata(inputRankTableInfo, inputTopoInfo, preparedRankTableInfo, preparedTopoInfo);
+    PrepareRankGraphMetadata(
+        std::move(inputRankTableInfo), std::move(inputTopoInfo), preparedRankTableInfo, preparedTopoInfo);
 
     const u32 preparedRankSize = inputRankGraph->GetRankSize();
     // 以下移动赋值均不分配内存，确保三个拓扑对象只在准备完整后一起发布。
@@ -1469,13 +1483,19 @@ HcclResult CommunicatorImpl::InitRankGraph(
     ranktableInfo = std::move(preparedRankTableInfo);
     topoInfo = std::move(preparedTopoInfo);
     rankSize = preparedRankSize;
-    HCCL_RUN_INFO("[CommunicatorImpl::%s] rankTableInfo: %s", __func__, ranktableInfo->Describe().c_str());
-    HCCL_RUN_INFO("[CommunicatorImpl][%s] topoInfo[%s]", __func__, topoInfo->Describe().c_str());
+    if (UNLIKELY(HcclCheckLogLevel(DLOG_DEBUG))) {
+        HCCL_DEBUG("[CommunicatorImpl][%s] rankTableInfo: %s", __func__, ranktableInfo->Describe().c_str());
+        HCCL_DEBUG("[CommunicatorImpl][%s] topoInfo[%s]", __func__, topoInfo->Describe().c_str());
+    }
     TRY_CATCH_RETURN(CheckRankGraph(););
     CHK_RET(SaveTopoDesc(id));
-    std::vector<LinkData> fullLinks = GetFullMeshLinks();
-    for (auto link : fullLinks) {
-        HCCL_RUN_INFO("[CommunicatorImpl][%s] link[%s]", __func__, link.Describe().c_str());
+    // 优化：GetFullMeshLinks + 逐link Describe打印为124万行级日志开销，ranktableInfo/topoInfo Describe同理，
+    // 以上打印已由RUN_INFO降级为DEBUG，仅在DEBUG日志开启时执行，避免13W/20W卡规模下刷屏
+    if (UNLIKELY(HcclCheckLogLevel(DLOG_DEBUG))) {
+        std::vector<LinkData> fullLinks = GetFullMeshLinks();
+        for (auto link : fullLinks) {
+            HCCL_DEBUG("[CommunicatorImpl][%s] link[%s]", __func__, link.Describe().c_str());
+        }
     }
     return HCCL_SUCCESS;
 }
@@ -1718,17 +1738,9 @@ bool CommunicatorImpl::GetCommAiCpuTSFeatureFlag() const
     return commExecuteConfig.accState == AcceleratorState::AICPU_TS;
 }
 
-const DevType& CommunicatorImpl::GetDevType() const
-{
-    HCCL_INFO("CommunicatorImpl::DevType is %s", devType.Describe().c_str());
-    return devType;
-}
+const DevType& CommunicatorImpl::GetDevType() const { return devType; }
 
-shared_ptr<RankGraph> CommunicatorImpl::GetRankGraph() const
-{
-    HCCL_INFO("CommunicatorImpl::GetRankGraph ");
-    return rankGraph;
-}
+shared_ptr<RankGraph> CommunicatorImpl::GetRankGraph() const { return rankGraph; }
 
 DataBufManager& CommunicatorImpl::GetDataBufferManager() const
 {
@@ -2475,7 +2487,8 @@ HcclResult CommunicatorImpl::RecoverRankGraphData(SnapShotComm& snapShotComm, co
 
     std::unique_ptr<RankTableInfo> preparedRankTableInfo;
     std::shared_ptr<TopoInfo> preparedTopoInfo;
-    PrepareRankGraphMetadata(buildResult.rankTableInfo, buildResult.topoInfo, preparedRankTableInfo, preparedTopoInfo);
+    PrepareRankGraphMetadata(
+        std::move(buildResult.rankTableInfo), std::move(buildResult.topoInfo), preparedRankTableInfo, preparedTopoInfo);
 
     const u32 preparedRankSize = buildResult.rankGraph->GetRankSize();
     // 仅在恢复结果和两份元数据准备完整后，用不分配内存的移动赋值整体替换拓扑状态。

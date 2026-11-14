@@ -151,7 +151,10 @@ HcclResult PhyTopoBuilder::Build(const std::string& topoPath)
     PhyTopo::GetInstance()->InitFinish();
 
     HCCL_DEBUG("[PhyTopoBuilder::%s]build physic topo success.", __func__);
-    PhyTopo::GetInstance()->Dump();
+    // 优化：超大拓扑全量Dump构造Describe大字符串，日志级别不满足时直接跳过
+    if (UNLIKELY(HcclCheckLogLevel(DLOG_DEBUG))) {
+        PhyTopo::GetInstance()->Dump();
+    }
     return HCCL_SUCCESS;
 }
 
@@ -367,7 +370,10 @@ HcclResult PhyTopoBuilder::RecoverBuild(const TopoInfo& topoInfo)
     PhyTopo::GetInstance()->InitFinish();
 
     HCCL_DEBUG("[PhyTopoBuilder::%s]build physic topo success.", __func__);
-    PhyTopo::GetInstance()->Dump();
+    // 优化：超大拓扑全量Dump构造Describe大字符串，日志级别不满足时直接跳过
+    if (UNLIKELY(HcclCheckLogLevel(DLOG_DEBUG))) {
+        PhyTopo::GetInstance()->Dump();
+    }
     return HCCL_SUCCESS;
 }
 

@@ -512,8 +512,7 @@ private:
     HcclResult InitRankGraph(const string& ranktableM);
     HcclResult InitRankGraph(std::unique_ptr<RankGraph>& inputRankGraph);
     HcclResult InitRankGraph(
-        std::shared_ptr<RankGraph> inputRankGraph, const RankTableInfo& inputRankTableInfo,
-        const TopoInfo& inputTopoInfo);
+        std::shared_ptr<RankGraph> inputRankGraph, RankTableInfo&& inputRankTableInfo, TopoInfo&& inputTopoInfo);
     HcclResult InitRankGraph(const RankTableInfo& ranktable);
     void CheckRankGraph() const;
     void CheckRankGraphAddrs() const;

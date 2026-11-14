@@ -18,6 +18,7 @@
 #include <list>
 #include <vector>
 #include <string>
+#include <linux/limits.h>
 #include <securec.h>
 #include <hccl/hccl_types.h>
 #include "hccl/base.h"
@@ -489,4 +490,52 @@ TEST_F(HcomutCommManagerTest, ut_SetCommAcceleratorV2_When_CcuOnlyMode_And_CcuUn
     EXPECT_EQ(g_setAcceleratorReceived, HcclAccelerator::AICPU_TS);
     EXPECT_EQ(commManager.SetCommAcceleratorV2(communicator.get(), 5), HCCL_SUCCESS);
     EXPECT_EQ(g_setAcceleratorReceived, HcclAccelerator::AICPU_TS);
+}
+
+TEST_F(HcomutCommManagerTest, Ut_HcomLoadRankTableFileV2_When_NormalFile_Expect_Success)
+{
+    std::string filePath{HCOMM_CODE_ROOT_DIR "/test/legacy/ut/framework/interface/hcom_comm/testranktable.json"};
+    MOCKER(aclrtGetDevice).stubs().will(returnValue(0));
+
+    std::string rankTableM;
+    HcclResult ret = HcomLoadRankTableFileV2(filePath.c_str(), rankTableM);
+    EXPECT_EQ(ret, HCCL_SUCCESS);
+    // 一次read直读预分配string，内容与文件一致
+    std::ifstream infoFile(filePath, std::ifstream::in | std::ifstream::ate);
+    ASSERT_TRUE(infoFile.is_open());
+    std::streamsize fileSize = infoFile.tellg();
+    std::string expect;
+    expect.resize(static_cast<size_t>(fileSize));
+    infoFile.seekg(0, std::ifstream::beg);
+    infoFile.read(&expect[0], fileSize);
+    EXPECT_EQ(rankTableM, expect);
+}
+
+TEST_F(HcomutCommManagerTest, Ut_HcomLoadRankTableFileV2_When_EmptyFile_Expect_Para)
+{
+    const std::string emptyPath = "/tmp/hcomm_ut_empty_ranktable.json";
+    std::ofstream ofs(emptyPath);
+    ofs.close();
+    MOCKER(aclrtGetDevice).stubs().will(returnValue(0));
+
+    std::string rankTableM;
+    HcclResult ret = HcomLoadRankTableFileV2(emptyPath.c_str(), rankTableM);
+    EXPECT_EQ(ret, HCCL_E_PARA);
+    std::remove(emptyPath.c_str());
+}
+
+TEST_F(HcomutCommManagerTest, Ut_HcomLoadRankTableFileV2_When_NonexistentPath_Expect_Para)
+{
+    MOCKER(aclrtGetDevice).stubs().will(returnValue(0));
+    std::string rankTableM;
+    HcclResult ret = HcomLoadRankTableFileV2("/tmp/hcomm_ut_no_such_file.json", rankTableM);
+    EXPECT_EQ(ret, HCCL_E_PARA);
+}
+
+TEST_F(HcomutCommManagerTest, Ut_HcomLoadRankTableFileV2_When_PathTooLong_Expect_Para)
+{
+    std::string longPath(PATH_MAX, 'a');
+    std::string rankTableM;
+    HcclResult ret = HcomLoadRankTableFileV2(longPath.c_str(), rankTableM);
+    EXPECT_EQ(ret, HCCL_E_PARA);
 }

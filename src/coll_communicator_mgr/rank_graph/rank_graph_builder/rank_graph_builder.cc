@@ -56,7 +56,10 @@ unique_ptr<RankGraph> RankGraphBuilder::Build(const string& ranktableM, const st
         InternalException, "BuildRankGraph failed with internal error");
 
     HCCL_INFO("[RankGraphBuilder] Build VirtualTopo success!");
-    rankGraph_->Dump();
+    // 优化：超大图全量Dump构造Describe大字符串，日志级别不满足时直接跳过
+    if (UNLIKELY(HcclCheckLogLevel(DLOG_DEBUG))) {
+        rankGraph_->Dump();
+    }
     return std::move(rankGraph_);
 }
 
@@ -78,7 +81,10 @@ unique_ptr<RankGraph> RankGraphBuilder::Build(const RankTableInfo& ranktable, co
         InternalException, "BuildRankGraph failed with internal error");
 
     HCCL_INFO("[RankGraphBuilder] Build VirtualTopo success!");
-    rankGraph_->Dump();
+    // 优化：超大图全量Dump构造Describe大字符串，日志级别不满足时直接跳过
+    if (UNLIKELY(HcclCheckLogLevel(DLOG_DEBUG))) {
+        rankGraph_->Dump();
+    }
     return std::move(rankGraph_);
 }
 
@@ -1005,7 +1011,10 @@ RankGraphBuilder::RecoverBuild(const RankTableInfo& rankTableInfo, const TopoInf
         InternalException, "BuildRankGraph failed with internal error");
 
     HCCL_INFO("[RankGraphBuilder] Build VirtualTopo success!");
-    rankGraph_->Dump();
+    // 优化：超大图全量Dump构造Describe大字符串，日志级别不满足时直接跳过
+    if (UNLIKELY(HcclCheckLogLevel(DLOG_DEBUG))) {
+        rankGraph_->Dump();
+    }
     return std::move(rankGraph_);
 }
 

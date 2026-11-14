@@ -359,14 +359,19 @@ public:
 
     void GetBinStream(BinaryStream& binaryStream) const
     {
-        std::string ipStr = GetIpStr();
+        // 直接 inet_ntop 到栈上缓冲，避免 GetIpStr 的 string 分配/拷贝中转（万卡级序列化时每 rank 数十次调用）。
+        // 线上格式与内容均不变：family + scopeID + 46B 地址字符串 + eid.raw，跨版本读端可正确解析。
         char dst[INET6_ADDRSTRLEN]{0};
-        int sret = strcpy_s(dst, sizeof(dst), ipStr.data());
-        if (sret != 0) {
-            auto msg = StringFormat(
-                "[Get][UniqueId]errNo[0x%016llx] memory copy failed. ret[%d]",
-                HCOM_ERROR_CODE(HcclResult::HCCL_E_MEMORY), sret);
-            THROW<InternalException>(msg);
+        const void* src = nullptr;
+        if (family_ == AF_INET) {
+            src = &binaryAddr_.addr;
+        } else if (family_ == AF_INET6) {
+            src = &binaryAddr_.addr6;
+        } else {
+            THROW<NotSupportException>(StringFormat("Unsupported Address Family: %d", family_));
+        }
+        if (inet_ntop(family_, src, dst, INET6_ADDRSTRLEN) == nullptr) {
+            THROW<InvalidParamsException>("Invalid Binary Network Address");
         }
         binaryStream << family_ << scopeID_ << dst;
         binaryStream << eid_.raw; // 保存eid.raw
