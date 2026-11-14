@@ -13,7 +13,7 @@
 extern thread_local s32 g_hcclDeviceId;
 
 // 内部函数（未在头文件中声明），为 UT 直接验证做前向声明
-HcclResult ValidateAndInitRootInfoScalable(
+HcclResult ValidateRootInfoScalableParams(
     uint32_t nRanks, uint32_t nRoot, uint32_t rank, uint32_t nExtRoot, const HcclCommConfig* config, HcclComm* comm,
     const HcclRootInfo* rootInfoList);
 HcclResult
@@ -297,7 +297,7 @@ TEST_F(HcclCommInitRootInfoScalableTest, Ut_HcclCommInitRootInfoScalable_When_Co
     Ut_Comm_Destroy(comm);
 }
 
-TEST_F(HcclCommInitRootInfoScalableTest, Ut_ValidateAndInitRootInfoScalable_When_AllValid_Expect_HCCL_SUCCESS)
+TEST_F(HcclCommInitRootInfoScalableTest, Ut_ValidateRootInfoScalableParams_When_AllValid_Expect_HCCL_SUCCESS)
 {
     Ut_Device_Set(0);
     HcclCommConfig config;
@@ -305,7 +305,7 @@ TEST_F(HcclCommInitRootInfoScalableTest, Ut_ValidateAndInitRootInfoScalable_When
     HcclRootInfo rootInfos[4];
     FillScalableRootInfos(rootInfos, 4);
 
-    HcclResult ret = ValidateAndInitRootInfoScalable(8, 4, 0, 0, &config, &comm, rootInfos);
+    HcclResult ret = ValidateRootInfoScalableParams(8, 4, 0, 0, &config, &comm, rootInfos);
     EXPECT_EQ(ret, HCCL_SUCCESS);
 
     Ut_Comm_Destroy(comm);

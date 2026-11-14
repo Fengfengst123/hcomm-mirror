@@ -12,6 +12,8 @@ set(rootinfo_detect_sources
     rank_info_detect_service.cc
     rank_info_detect_client.cc
     rank_info_detect.cc
+    rank_info_detect_scalable.cc
+    root_group_strategy.cc
     bootstrap_ip.cc
     rank_info_dispatcher.cc
     socket_agent.cc

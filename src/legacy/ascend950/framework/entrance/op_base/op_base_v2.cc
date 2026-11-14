@@ -2104,6 +2104,116 @@ HcclResult HcclCommInitRootInfoConfigV2(
     return HCCL_SUCCESS;
 }
 
+// 从 rootInfoList[0] 解析 scalable 通信域名字：优先用户配置 commName，缺省回退 root[0] identifier。
+static HcclResult
+ParseScalableCommIdentifier(const HcclRootInfo* rootInfoList, const HcclCommConfig* config, string& identifier)
+{
+    HcclScalableRootHandleV2 root0Handle{};
+    s32 sRet = memcpy_s(&root0Handle, sizeof(root0Handle), rootInfoList[0].internal, sizeof(root0Handle));
+    if (sRet != EOK) {
+        HCCL_ERROR("[ParseScalableCommIdentifier] memcpy root0 scalable info fail. errno[%d]", sRet);
+        return HCCL_E_MEMORY;
+    }
+    root0Handle.rootHandle.identifier[ROOTINFO_IDENTIFIER_MAX_LENGTH - 1] = '\0';
+    identifier = strlen(config->hcclCommName) != 0 ? config->hcclCommName : root0Handle.rootHandle.identifier;
+    return HCCL_SUCCESS;
+}
+
+HcclResult HcclGetRootInfoScalableV2(HcclRootInfo* rootInfo)
+{
+    const RootInfoDetectBridge* bridge = GetRootInfoDetectBridgeScalable();
+    CHK_PRT_RET(
+        bridge == nullptr || bridge->getRootInfoScalable == nullptr,
+        HCCL_ERROR("[%s] RootInfoDetect scalable bridge is not registered.", __func__), HCCL_E_INTERNAL);
+    return bridge->getRootInfoScalable(rootInfo);
+}
+
+HcclResult HcclCommInitRootInfoScalableV2(
+    uint32_t nRanks, uint32_t nRoot, const HcclRootInfo* rootInfoList, uint32_t rank, uint32_t nExtRoot,
+    const HcclCommConfig* config, HcclComm* comm)
+{
+    HcclUs startut = TIME_NOW();
+    CHK_PTR_NULL(rootInfoList);
+    CHK_PTR_NULL(config);
+    CHK_PTR_NULL(comm);
+    HCCL_RUN_INFO(
+        "Entry-HcclCommInitRootInfoScalable V950: nRanks[%u], nRoot[%u], rank[%u], nExtRoot[%u].", nRanks, nRoot, rank,
+        nExtRoot);
+
+    // 参数校验
+    CHK_PRT_RET(
+        nRanks == 0 || nRoot == 0 || nRoot > nRanks || rank >= nRanks || nExtRoot != 0,
+        HCCL_ERROR(
+            "[%s] errNo[0x%016llx] invalid scalable params, nRanks[%u], nRoot[%u], rank[%u], nExtRoot[%u].", __func__,
+            HCCL_ERROR_CODE(HCCL_E_PARA), nRanks, nRoot, rank, nExtRoot),
+        HCCL_E_PARA);
+
+    // 获取通信域名，如果config里没有配置的话统一以 root[0] 的 identifier 作为通信域名
+    string identifier{};
+    CHK_RET(ParseScalableCommIdentifier(rootInfoList, config, identifier));
+
+    HCCL_RUN_INFO("Entry-HcclCommInitRootInfoScalable V950: identifier[%s]", identifier.c_str());
+
+    // 临时规避，在初始化通信域前声明单例保证时序
+    CHK_RET(CallSingletons());
+    HcclCommInfoV2& opbasedCommInfoV2 = GetCommInfoV2();
+    bool commExists = false;
+    {
+        std::unique_lock<std::mutex> lock(opbasedCommInfoV2.groupParamsLock);
+        commExists = opbasedCommInfoV2.hcclGroupMap.find(identifier) != opbasedCommInfoV2.hcclGroupMap.end();
+    }
+    RPT_INPUT_ERR(
+        commExists, "EI0003", vector<string>({"ccl_op", "value", "parameter", "expect"}),
+        vector<string>({"HcclCommInitRootInfoScalable", identifier, "identifier", "an identifier that is not in use"}));
+    CHK_PRT_RET(
+        commExists,
+        HCCL_ERROR(
+            "[HcclCommInitRootInfoScalableV2]errNo[0x%016llx] The comm name[%s] already exists in Group2Comm map.",
+            HCCL_ERROR_CODE(HCCL_E_PARA), identifier.c_str()),
+        HCCL_E_PARA);
+
+    HCCL_INFO("HcclCommInitRootInfoScalableV2 config->hcclBufferSize[%u] MB", config->hcclBufferSize);
+    if (UNLIKELY(config->hcclBufferSize == 0)) {
+        HCCL_ERROR("HcclCommInitRootInfoScalableV2 config: hcclBufferSize is 0 MB, invalid para");
+        return HCCL_E_PARA;
+    }
+
+    const RootInfoDetectBridge* bridge = GetRootInfoDetectBridgeScalable();
+    CHK_PRT_RET(
+        bridge == nullptr || bridge->detectRankTableScalable == nullptr,
+        HCCL_ERROR("[%s] RootInfoDetect scalable bridge is not registered.", __func__), HCCL_E_INTERNAL);
+
+    RankTableInfo rankTable{};
+    RootInfoDetectBridge::DetectContext rootInfoDetectContext;
+    HcclResult ret
+        = bridge->detectRankTableScalable(nRanks, nRoot, rootInfoList, rank, rankTable, rootInfoDetectContext);
+    if (ret != HCCL_SUCCESS) {
+        HCCL_ERROR(
+            "[%s] errNo[0x%016llx] DetectRankTableScalable failed, identifier[%s].", __func__, HCCL_ERROR_CODE(ret),
+            identifier.c_str());
+        rankTable.Dump();
+        return ret;
+    }
+
+    // 打印ranktable
+    rankTable.Dump();
+
+    // 创建通信域
+    ret = CreateCommConfigRootInfo(rank, config, identifier, rankTable, comm);
+    CHK_PRT_RET(
+        ret,
+        HCCL_ERROR(
+            "[%s] errNo[0x%016llx] create scalable comm failed, identifier[%s].", __func__, HCCL_ERROR_CODE(ret),
+            identifier.c_str()),
+        static_cast<HcclResult>(ret));
+
+    /* 关键状态记录 */
+    HCCL_RUN_INFO(
+        "HcclCommInitRootInfoScalableV2 success, take time [%lld]us, rankNum[%u], nRoot[%u], rank[%u], identifier[%s]",
+        DURATION_US(TIME_NOW() - startut), nRanks, nRoot, rank, identifier.c_str());
+    return HCCL_SUCCESS;
+}
+
 HcclResult HcclScatterV2(
     void* sendBuf, void* recvBuf, uint64_t recvCount, HcclDataType dataType, uint32_t root, HcclComm comm,
     aclrtStream stream)

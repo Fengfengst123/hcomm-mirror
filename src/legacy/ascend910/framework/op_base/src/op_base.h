@@ -70,6 +70,12 @@ HcclResult __attribute__((weak)) HcclGetRankIdV2(HcclComm comm, uint32_t* rank);
 
 HcclResult __attribute__((weak)) HcclGetRootInfoV2(HcclRootInfo* rootInfo);
 
+HcclResult __attribute__((weak)) HcclGetRootInfoScalableV2(HcclRootInfo* rootInfo);
+
+HcclResult __attribute__((weak)) HcclCommInitRootInfoScalableV2(
+    uint32_t nRanks, uint32_t nRoot, const HcclRootInfo* rootInfoList, uint32_t rank, uint32_t nExtRoot,
+    const HcclCommConfig* config, HcclComm* comm);
+
 HcclResult __attribute__((weak)) HcclGetCommNameV2(HcclComm commHandle, char* commName);
 
 HcclResult __attribute__((weak)) HcclCommInitRootInfoV2(

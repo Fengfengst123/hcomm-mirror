@@ -60,6 +60,12 @@ HcclResult HcclCommInitRootInfoV2(
 HcclResult HcclCommInitRootInfoConfigV2(
     uint32_t nRanks, const HcclRootInfo* rootInfo, uint32_t rank, const HcclCommConfig* config, HcclComm* comm);
 
+HcclResult HcclGetRootInfoScalableV2(HcclRootInfo* rootInfo);
+
+HcclResult HcclCommInitRootInfoScalableV2(
+    uint32_t nRanks, uint32_t nRoot, const HcclRootInfo* rootInfoList, uint32_t rank, uint32_t nExtRoot,
+    const HcclCommConfig* config, HcclComm* comm);
+
 HcclResult HcclGetRankSize(HcclComm comm, uint32_t* rankSize);
 
 HcclResult HcclAlltoAllVCV2(

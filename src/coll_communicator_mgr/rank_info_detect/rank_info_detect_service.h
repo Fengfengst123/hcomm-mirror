@@ -14,6 +14,8 @@
 #include <vector>
 #include <climits>
 #include "socket.h"
+#include <chrono>
+#include <functional>
 #include <unordered_map>
 #include <atomic>
 #include <condition_variable>
@@ -62,8 +64,10 @@ public:
     }
 
     RankInfoDetectService(
-        u32 devPhyId, std::shared_ptr<Socket> serverSocket, std::string identifier, vector<RaSocketWhitelist> wlistInfo)
+        u32 devPhyId, std::shared_ptr<Socket> serverSocket, std::string identifier, vector<RaSocketWhitelist> wlistInfo,
+        u32 groupFirstRank = 0)
         : devPhyId_(devPhyId),
+          groupFirstRank_(groupFirstRank),
           serverSocket_(serverSocket),
           listenPort_(serverSocket_->GetListenPort()),
           hostIp_(serverSocket_->GetLocalIp()),
@@ -130,8 +134,11 @@ public:
         connSockets_ = std::move(sockets);
     }
 
+    HcclResult SetupScalable(u32 groupSize, const std::function<HcclResult(RankTableInfo&)>& meshMergeCallback);
+
 private:
     u32 devPhyId_{0};
+    u32 groupFirstRank_{0}; // 本组首 rankId（单 root 为 0）
     shared_ptr<Socket> serverSocket_{nullptr};
     u32 listenPort_{0}; ///< 缓存 listen port，TearDown 置空 serverSocket_ 后 GetStatus/SetStatus 仍可用
     std::unordered_map<std::string, std::shared_ptr<Socket>> connSockets_{};
@@ -143,6 +150,16 @@ private:
     vector<RaSocketWhitelist> wlistInfo_{};
 
     HcclResult GetConnections(bool isInitCollect);
+    HcclResult GetConnectionsScalable(u32 groupSize);
+    HcclResult AcceptGroupConnections(
+        SocketHandle hccpHostSocketHandle, u32 hostPort, const std::chrono::steady_clock::time_point& startTime,
+        const std::chrono::seconds& timeout, u32& expectedSocketNum);
+    bool IsScalableAcceptTimeout(
+        const std::chrono::steady_clock::duration& usedTime, const std::chrono::seconds& timeout, u32 expectedSocketNum,
+        u32 groupSize);
+    bool ProcessScalableConnStatus(
+        const std::shared_ptr<Socket>& connSocket, const SocketStatus& status, u32 groupSize, u32& expectedSocketNum,
+        u32& totalRankNum, bool& isFirstAcceptTimeOut);
     HcclResult GetRankTable(bool isInitCollect = true);
     HcclResult GetRankTableForGrow();
     HcclResult BroadcastRankTable();
@@ -214,7 +231,7 @@ private:
     bool IsRemoteIpInWhiteList(const IpAddress& remoteIp) const;
 
     // DFX相关方法
-    void DisplayConnectingStatus(u32 totalSockets, u32 waitSockets);
+    void DisplayConnectingStatus(u32 totalSockets, u32 waitSockets, u32 firstRank = 0);
     void DisplayConnectedRanks();
 };
 

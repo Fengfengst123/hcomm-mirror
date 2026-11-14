@@ -33,6 +33,13 @@ using HcclRootHandleV2 = struct HcclRootHandleDefV2 {
     u32 rootRankId{UINT32_MAX}; // 当前通信域内 root rank；UINT32_MAX 表示尚未解析/当前域没有 root
 };
 
+// scalable 多 root 建链时单个 root 的完整信息（序列化进 HcclRootInfo.internal，
+// 由 HcclGetRootInfoScalableV2 填充、HcclCommInitRootInfoScalableV2 解析）。
+using HcclScalableRootHandleV2 = struct HcclScalableRootHandleDefV2 {
+    HcclRootHandleV2 rootHandle;     // 本 root 的组内 agent 服务地址
+    u32 meshPort{HCCL_INVALID_PORT}; // root 间 mesh 监听端口
+};
+
 // buffer大小
 constexpr u32 MAX_BUFFER_LEN = 100 * 1024 * 1024; // 100M
 

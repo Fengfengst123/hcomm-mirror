@@ -103,7 +103,12 @@ protected:
     static void SetUpTestCase()
     {
         std::cout << "OpbaseTestV2 tests set up." << std::endl;
-        const RootInfoDetectBridge bridge = {GetRootInfoForUt, DetectRankTableForUt, GetRootInfoWithDerivationForUt};
+        // 合并 scalar 多 root 能力后 bridge 扩为 5 槽（scalable 两槽位于派生槽之前），
+        // 改用按槽位赋值，避免聚合初始化顺序依赖；本 UT 不涉及 scalable 槽，保持为空。
+        RootInfoDetectBridge bridge{};
+        bridge.getRootInfo = GetRootInfoForUt;
+        bridge.detectRankTable = DetectRankTableForUt;
+        bridge.getRootInfoWithDerivation = GetRootInfoWithDerivationForUt;
         ASSERT_EQ(RegisterRootInfoDetectBridge(bridge), HCCL_SUCCESS);
     }
 

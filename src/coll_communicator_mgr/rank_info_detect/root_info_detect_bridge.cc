@@ -25,7 +25,13 @@ namespace {
 
 HcclResult RegisterRootInfoDetectBridge(const RootInfoDetectBridge& bridge)
 {
+    // 只发布完整回调表，避免兼容入口读取到部分可用的 bridge。
+    // scalable 两槽为可选追加槽：仅要求"同时为空或同时非空"，向后兼容旧 provider。
     if (bridge.getRootInfo == nullptr || bridge.detectRankTable == nullptr) {
+        return HCCL_E_PTR;
+    }
+    if ((bridge.getRootInfoScalable == nullptr) != (bridge.detectRankTableScalable == nullptr)) {
+        HCCL_ERROR("[%s] scalable slots must be registered in pair.", __func__);
         return HCCL_E_PTR;
     }
     auto& registeredBridge = BridgeSlot();
@@ -45,5 +51,15 @@ const RootInfoDetectBridge* GetRootInfoDetectBridge()
         return nullptr;
     }
     return &bridge;
+}
+
+const RootInfoDetectBridge* GetRootInfoDetectBridgeScalable()
+{
+    const RootInfoDetectBridge* bridge = GetRootInfoDetectBridge();
+    // scalable 槽未注册（旧 provider）时返回 nullptr，由入口侧转换为明确错误。
+    if (bridge == nullptr || bridge->getRootInfoScalable == nullptr || bridge->detectRankTableScalable == nullptr) {
+        return nullptr;
+    }
+    return bridge;
 }
 } // namespace Hccl

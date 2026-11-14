@@ -898,6 +898,8 @@ HcclResult HcclGetRootInfoScalable([[maybe_unused]] HcclRootInfo* rootInfo)
     CHK_PTR_NULL(rootInfo);
     HCCL_RUN_INFO("Entry-HcclGetRootInfoScalable:rootInfo[%p], deviceLogicId[%d] ", rootInfo, deviceLogicId);
 
+    HCCLV2_FUNC_RUN(HcclGetRootInfoScalableV2(rootInfo));
+
     // get commId from env
     CHK_RET(InitExternalInput());
     CHK_RET(InitEnvConfig());
@@ -1439,8 +1441,8 @@ HcclResult HcclCommInitRootInfoConfig(
     return ret;
 }
 
-// 参数校验 + 环境初始化
-HcclResult ValidateAndInitRootInfoScalable(
+// 参数校验
+HcclResult ValidateRootInfoScalableParams(
     uint32_t nRanks, uint32_t nRoot, uint32_t rank, uint32_t nExtRoot, const HcclCommConfig* config, HcclComm* comm,
     const HcclRootInfo* rootInfoList)
 {
@@ -1471,7 +1473,12 @@ HcclResult ValidateAndInitRootInfoScalable(
     CHK_PTR_NULL(comm);
     CHK_SMART_PTR_NULL(rootInfoList);
     CHK_PTR_NULL(config);
+    return HCCL_SUCCESS;
+}
 
+// 环境初始化
+HcclResult InitRootInfoScalableEnv()
+{
     HcclResult ret = InitExternalInput();
     CHK_PRT_RET(
         ret != HCCL_SUCCESS,
@@ -1582,8 +1589,27 @@ HcclResult HcclCommInitRootInfoScalableInner(
     [[maybe_unused]] s32 deviceLogicId = 0;
     CHK_RET(HcclDeviceRefresh(deviceLogicId));
 
-    // 参数校验 + 环境初始化
-    CHK_RET(ValidateAndInitRootInfoScalable(nRanks, nRoot, rank, nExtRoot, config, comm, rootInfoList));
+    // 参数校验
+    CHK_RET(ValidateRootInfoScalableParams(nRanks, nRoot, rank, nExtRoot, config, comm, rootInfoList));
+
+#if (!defined(HCCD)) && (!defined(CCL_KERNEL_AICPU))
+    HCCLV2_FUNC_RUN([&]() -> HcclResult {
+        void* commV2 = nullptr;
+        CHK_RET(HcclCommInitRootInfoScalableV2(nRanks, nRoot, rootInfoList, rank, nExtRoot, config, &commV2));
+        HcclResult ret = HcclCommInitCollComm(rank, &commV2, config, comm);
+        if (ret != HCCL_SUCCESS) {
+            HCCL_ERROR("[HcclCommInitRootInfoScalable]HcclCommInitCollComm failed. Destroy commV2.");
+            CHK_RET(HcclCommDestroyV2(commV2));
+            commV2 = nullptr;
+            *comm = nullptr;
+            return ret;
+        }
+        return HCCL_SUCCESS;
+    }());
+#endif
+
+    // 环境初始化
+    CHK_RET(InitRootInfoScalableEnv());
 
 #if (!defined(HCCD)) && (!defined(CCL_KERNEL_AICPU))
     // 解析 nRoot 个 HcclScalableRootHandle（rootInfoList[i].internal 由 HcclGetRootInfoScalable 填充）

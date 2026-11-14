@@ -38,6 +38,7 @@ global:
     HcclCommInitClusterInfoMemConfigV2;
     HcclCommInitClusterInfoV2;
     HcclCommInitRootInfoConfigV2;
+    HcclCommInitRootInfoScalableV2;
     HcclCommInitRootInfoV2;
     HcclCommResPrepareV2;
     HcclCommResumeV2;
@@ -71,6 +72,7 @@ global:
     HcclGetOpArgsV2;
     HcclGetRankGraphV2;
     HcclGetRankSizeV2;
+    HcclGetRootInfoScalableV2;
     HcclGetRootInfoV2;
     HcclGetTopoDescV2;
     HcclKernelEntrance;

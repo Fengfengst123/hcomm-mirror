@@ -49,7 +49,7 @@ SocketHandle HostSocketHandleManager::Create(DevId devicePhyId, const IpAddress&
     if (handles.count(ip) != 0) {
         handles[ip].second.Ref();
         HCCL_INFO(
-            "[HostSocketHandleManager::%s] devicePhyId[%u] hostIp[%d] socket has initialized,"
+            "[HostSocketHandleManager::%s] devicePhyId[%u] hostIp[%s] socket has initialized,"
             " ref[%u]",
             __func__, devicePhyId, ip.c_str(), handles[ip].second.Count());
         return handles[ip].first;

@@ -31,9 +31,17 @@ struct RootInfoDetectBridge {
     using DetectRankTableFunc = HcclResult (*)(
         u32 nRanks, u32 rank, const HcclRootHandleV2& rootHandle, RankTableInfo& rankTable,
         DetectContext& detectContext);
+    // scalable 多 root 建链回调（追加槽位，向后兼容：旧 provider 仅注册前两槽时两槽为 nullptr，
+    // 入口侧转换为 HCCL_E_INTERNAL 明确报错）。
+    using GetRootInfoScalableFunc = HcclResult (*)(HcclRootInfo* rootInfo);
+    using DetectRankTableScalableFunc = HcclResult (*)(
+        u32 nRanks, u32 nRoot, const HcclRootInfo* rootInfoList, u32 rank, RankTableInfo& rankTable,
+        DetectContext& detectContext);
 
     GetRootInfoFunc getRootInfo{nullptr};
     DetectRankTableFunc detectRankTable{nullptr};
+    GetRootInfoScalableFunc getRootInfoScalable{nullptr};
+    DetectRankTableScalableFunc detectRankTableScalable{nullptr};
 
     // root 重选时，用父通信域的 topParentIdentifier + generationIndex+1 构造 identifier
     // detectContext 输出 detect 所有权，调用方（HcclCommGetRootInfo）存入 CollComm 供 Grow 使用。
@@ -45,6 +53,8 @@ struct RootInfoDetectBridge {
 // hcomm 加载时注册一次完整回调表；注册完成前查询返回 nullptr。
 HcclResult RegisterRootInfoDetectBridge(const RootInfoDetectBridge& bridge);
 const RootInfoDetectBridge* GetRootInfoDetectBridge();
+// scalable 槽视角的查询：基础槽已注册且 scalable 两槽齐备才返回非空（旧 provider 返回 nullptr）。
+const RootInfoDetectBridge* GetRootInfoDetectBridgeScalable();
 
 } // namespace Hccl
 

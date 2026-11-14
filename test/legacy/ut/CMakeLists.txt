@@ -20,6 +20,11 @@ file(GLOB_RECURSE HCCL_V2_UTEST_FILES RELATIVE ${CMAKE_CURRENT_LIST_DIR}
 
 add_executable(hccl_v2_utest ${HCCL_V2_UTEST_FILES})
 
+# V2 entry tests require op_base_v2.cc, which is compiled into this target.
+target_sources(hccl_v2_utest PRIVATE
+    ${HCCL_CODE_ROOT}/test/ut/coll_communicator_mgr/rank_info_detect/ut_op_base_v2_scalable_utest.cc
+)
+
 FILE(GLOB_RECURSE ut_sources_list LIST_DIRECTORIES TRUE ${HCCL_LLT_ROOT}/ut)
 
 foreach (dir ${ut_sources_list})

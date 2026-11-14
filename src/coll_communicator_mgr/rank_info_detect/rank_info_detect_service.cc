@@ -835,13 +835,15 @@ void RankInfoDetectService::DisplayConnectedRanks()
     }
 }
 
-void RankInfoDetectService::DisplayConnectingStatus(u32 totalSockets, u32 waitSockets)
+void RankInfoDetectService::DisplayConnectingStatus(u32 totalSockets, u32 waitSockets, u32 firstRank)
 {
     if (totalSockets == 0 && waitSockets == 1) {
         HCCL_INFO("[RankInfoDetectService::%s] wait for first connection.", __func__);
         return;
     }
 
+    // 组内全局 rankId 映射到本组下标：本组 rank 区间为 [firstRank, firstRank + totalSockets)（单 root 时
+    // firstRank=0）。
     std::vector<bool> rankinfos(totalSockets, false);
     auto sockets = SnapshotConnSockets();
     for (auto it : sockets) { // 建立映射
@@ -851,21 +853,22 @@ void RankInfoDetectService::DisplayConnectingStatus(u32 totalSockets, u32 waitSo
             ret != HCCL_SUCCESS,
             HCCL_ERROR("[RankInfoDetectService::%s] agentId[%s] strToULong fail.", __func__, it.first.c_str()), );
         CHK_PRT_RET(
-            rankid >= totalSockets,
+            rankid < firstRank || rankid - firstRank >= totalSockets,
             HCCL_ERROR(
-                "[RankInfoDetectService::%s] invalid rankid[%u], rankSize[%u].", __func__, rankid, totalSockets), );
-        rankinfos[rankid] = true;
+                "[RankInfoDetectService::%s] invalid rankid[%u], firstRank[%u], rankSize[%u].", __func__, rankid,
+                firstRank, totalSockets), );
+        rankinfos[rankid - firstRank] = true;
     }
 
     u32 unRankCount = 0; // 只打印前三条未建链的rank
     std::vector<std::string> unsocketinfos;
-    for (u32 rankid = 0; rankid < totalSockets; rankid++) {
+    for (u32 localIndex = 0; localIndex < totalSockets; localIndex++) {
         if (unRankCount >= SOCKET_PRINT_COUNT) {
             break;
         }
-        if (!rankinfos[rankid]) {
+        if (!rankinfos[localIndex]) {
             unRankCount++;
-            std::string rankID = std::to_string(rankid);
+            std::string rankID = std::to_string(firstRank + localIndex);
             std::string agentID = std::string(16 - rankID.length(), '0') + rankID;
             unsocketinfos.push_back(agentID);
         }
@@ -950,5 +953,177 @@ HcclResult RankInfoDetectService::TearDown()
 }
 
 RankInfoDetectService::~RankInfoDetectService() { DECTOR_TRY_CATCH("RankInfoDetectService", TearDown()); }
+
+// ===== 以下为 scalable 多 root 用 =====
+
+HcclResult RankInfoDetectService::GetConnectionsScalable(u32 groupSize)
+{
+    HCCL_INFO("[RankInfoDetectService::%s] start, groupSize[%u].", __func__, groupSize);
+
+    auto startTime = std::chrono::steady_clock::now();
+    auto timeOut = std::chrono::seconds(EnvConfig::GetInstance().GetSocketConfig().GetLinkTimeOut());
+    u32 hostPort = serverSocket_->GetListenPort();
+    auto hccpHostSocketHandle = HostSocketHandleManager::GetInstance().Get(devPhyId_, hostIp_);
+    CHK_PRT_RET(
+        hccpHostSocketHandle == nullptr,
+        HCCL_ERROR("[RankInfoDetectService::%s] Get hccpHostSocketHandle fail.", __func__), HCCL_E_INTERNAL);
+
+    // 连接 groupSize 个本组 client（含 root 自身；数量以本地推导为准，不依赖 agent 上报的 rankNum）。
+    u32 expectedSocketNum = groupSize;
+    HcclResult ret = AcceptGroupConnections(hccpHostSocketHandle, hostPort, startTime, timeOut, expectedSocketNum);
+    if (ret != HCCL_SUCCESS) {
+        return ret;
+    }
+    if (GetConnSocketCount() == 0) {
+        HCCL_ERROR("[RankInfoDetectService::%s] no rank connection success.", __func__);
+        return HCCL_E_INTERNAL;
+    }
+    HCCL_INFO("[RankInfoDetectService::%s] end, all group ranks get connection socket success.", __func__);
+    return HCCL_SUCCESS;
+}
+
+HcclResult RankInfoDetectService::AcceptGroupConnections(
+    SocketHandle hccpHostSocketHandle, u32 hostPort, const std::chrono::steady_clock::time_point& startTime,
+    const std::chrono::seconds& timeOut, u32& expectedSocketNum)
+{
+    bool isFirstAcceptTimeOut = false;
+    u32 totalRankNum = 0;
+    u32 groupSize = expectedSocketNum;
+    std::string connSocketTag = RANK_INFO_DETECT_TAG + "_" + identifier_ + "_" + std::to_string(hostPort);
+    SocketStatus status = SocketStatus::INVALID;
+    while (expectedSocketNum > 0) {
+        auto topoExUsedTime = std::chrono::steady_clock::now() - startTime;
+        if (IsScalableAcceptTimeout(topoExUsedTime, timeOut, expectedSocketNum, groupSize)) {
+            break;
+        }
+        auto topoExResTime = timeOut - topoExUsedTime;
+        u32 topoExRes_i = std::chrono::duration_cast<std::chrono::seconds>(topoExResTime).count();
+        if (topoExRes_i == 0) {
+            HCCL_ERROR(
+                "[RankInfoDetectService::%s] timeOut[%lld s] is exhausted", __func__,
+                static_cast<long long>(timeOut.count()));
+            break;
+        }
+        bool whiteListDisable = EnvConfig::GetInstance().GetHostNicConfig().GetWhitelistDisable();
+        std::shared_ptr<Socket> connSocket = std::make_shared<Socket>(
+            hccpHostSocketHandle, hostIp_, hostPort, hostIp_, connSocketTag, SocketRole::SERVER, NicType::HOST_NIC_TYPE,
+            whiteListDisable);
+        EXCEPTION_CATCH(status = connSocket->GetStatus(topoExRes_i), {
+            if (status == SocketStatus::OK) {
+                status = SocketStatus::CONNECTING;
+            }
+            HCCL_ERROR("[RankInfoDetectService::%s] server get socket fail", __func__);
+        });
+        if (!ProcessScalableConnStatus(
+                connSocket, status, groupSize, expectedSocketNum, totalRankNum, isFirstAcceptTimeOut)) {
+            break;
+        }
+    }
+
+    // 处理异常流程
+    if (expectedSocketNum > 0) {
+        // totalRankNum 为客户端上报的全局规模，按此为基数填充 failedAgentIdList_（组外 rank 也会被计入）。
+        // scalable 错误路径随后直接返回、不再广播，该列表为“临终遗言”失败通知功能预留，此处保持既有语义。
+        FailedConnectionAgentIdString(totalRankNum);
+        DisplayConnectedRanks();
+        HCCL_INFO("[RankInfoDetectService::%s] end, there exist non-connected ranks.", __func__);
+        return HCCL_E_INTERNAL; // scalable 场景缺连接即失败（全局表不完整）
+    }
+    HCCL_INFO("[RankInfoDetectService::%s] all group connections accepted.", __func__);
+    return HCCL_SUCCESS;
+}
+
+bool RankInfoDetectService::IsScalableAcceptTimeout(
+    const std::chrono::steady_clock::duration& usedTime, const std::chrono::seconds& timeOut, u32 expectedSocketNum,
+    u32 groupSize)
+{
+    if (usedTime < timeOut) {
+        return false;
+    }
+    RPT_INPUT_ERR(
+        true, "EI0015", std::vector<std::string>({"error_reason"}),
+        std::vector<std::string>({StringFormat(
+            "Waiting for scalable group worker node connections timed out. "
+            "Timeout was set to %lld seconds. expected %u nodes, received %u nodes. "
+            "Check whether worker nodes are reachable and report errors.",
+            static_cast<long long>(timeOut.count()), groupSize, groupSize - expectedSocketNum)}));
+    HCCL_ERROR(
+        "[%s][%s] errNo[0x%016llx] scalable topo exchange server get socket timeOut[%lld s], "
+        "expected[%u] nodes, received[%u] nodes",
+        LOG_KEYWORDS_INIT_GROUP.c_str(), LOG_KEYWORDS_RANKTABLE_DETECT.c_str(),
+        HCOM_ERROR_CODE(HcclResult::HCCL_E_TIMEOUT), static_cast<long long>(timeOut.count()), groupSize,
+        groupSize - expectedSocketNum);
+    return true;
+}
+
+// 按连接状态推进 accept 循环（返回 false 表示应退出循环）。
+bool RankInfoDetectService::ProcessScalableConnStatus(
+    const std::shared_ptr<Socket>& connSocket, const SocketStatus& status, u32 groupSize, u32& expectedSocketNum,
+    u32& totalRankNum, bool& isFirstAcceptTimeOut)
+{
+    if (status == SocketStatus::OK) {
+        if (!IsRemoteIpInWhiteList(connSocket->GetRemoteIp())) {
+            HCCL_WARNING(
+                "[RankInfoDetectService::%s] remoteIp[%s] is not in white list, discard the connection.", __func__,
+                connSocket->GetRemoteIp().GetIpStr().c_str());
+            connSocket->Close();
+            return true;
+        }
+        // 单 root 接收逻辑会用全局 rankSize 重写计数，scalable 保持按本组剩余连接数等待。
+        u32 ignoredSocketNum = expectedSocketNum;
+        if (!RecvAndVerifyRemoteAgentIdAndRankSize(connSocket, ignoredSocketNum, totalRankNum, true)) {
+            return false;
+        }
+        expectedSocketNum--;
+        isFirstAcceptTimeOut = false;
+        HCCL_INFO("[RankInfoDetectService::%s] socket[%s] connect ok.", __func__, connSocket->Describe().c_str());
+        return true;
+    }
+    if (status == SocketStatus::CONNECTING) {
+        SaluSleep(ONE_MILLISECOND_OF_USLEEP);
+        return true;
+    }
+    if (status == SocketStatus::TIMEOUT) {
+        if (isFirstAcceptTimeOut) {
+            return true;
+        }
+        HCCL_ERROR(
+            "[%s][%s] scalable topo exchange server get socket timeout", LOG_KEYWORDS_INIT_GROUP.c_str(),
+            LOG_KEYWORDS_RANKTABLE_DETECT.c_str());
+        DisplayConnectingStatus(groupSize, expectedSocketNum, groupFirstRank_);
+        isFirstAcceptTimeOut = true;
+        return true;
+    }
+    HCCL_ERROR("[RankInfoDetectService::%s] SocketStatus[%s] error", __func__, status.Describe().c_str());
+    return false;
+}
+
+HcclResult
+RankInfoDetectService::SetupScalable(u32 groupSize, const std::function<HcclResult(RankTableInfo&)>& meshMergeCallback)
+{
+    // server 侧 ra 引用：与 TearDown 链尾的 DeInit 配对
+    TRY_CATCH_RETURN(HccpPeerManager::GetInstance().Init(HrtGetDevice()););
+
+    // 1. 按 groupSize 连接本组 rank（client 上报的全局 nRanks 仅作一致性校验）。
+    HcclResult ret = GetConnectionsScalable(groupSize);
+    CHK_PRT_RET(
+        ret != HCCL_SUCCESS,
+        HCCL_ERROR("[RankInfoDetectService::%s] GetConnectionsScalable failed, ret[%d].", __func__, ret), ret);
+
+    // 2. 组内收集 localRankTable（直接复用 GetRankTable：连接恰为组内 groupSize 个）。
+    TRY_CATCH_RETURN(CHK_RET(GetRankTable(true)););
+
+    // 3. root 间 mesh allgather 合并全局表（委托 RankInfoDetectScalable 回调，service 不感知 mesh 细节）。
+    if (meshMergeCallback != nullptr) {
+        ret = meshMergeCallback(rankTable_);
+        CHK_PRT_RET(
+            ret != HCCL_SUCCESS,
+            HCCL_ERROR("[RankInfoDetectService::%s] mesh merge callback failed, ret[%d].", __func__, ret), ret);
+    }
+
+    // 4. 组内广播全局表（直接复用 BroadcastRankTable：广播的已是 mesh 合并后的全局表）。
+    TRY_CATCH_RETURN(CHK_RET(BroadcastRankTable()););
+    return HCCL_SUCCESS;
+}
 
 } // namespace Hccl

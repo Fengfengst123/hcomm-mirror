@@ -3,7 +3,7 @@
 ## 产品支持情况
 
 <!-- npu="950" id1 -->
-- Ascend 950PR&950DT系列产品：不支持
+- Ascend 950PR&950DT系列产品：支持
 <!-- end id1 -->
 <!-- npu="A3" id2 -->
 - Atlas A3系列产品：支持
@@ -50,6 +50,7 @@ HcclResult HcclCommInitRootInfoScalable(uint32_t nRanks, uint32_t nRoot, const H
 
 - 同一通信域中所有rank的nRanks、nRoot、rootInfoList、config均应相同，且rootInfoList的内容及顺序需完全一致。
 - nRoot需满足0 < nRoot ≤ nRanks。
+- root节点的划分须与HCCL内部的分组策略一致：rank到root的归属关系由HCCL按平均分组推导（组内rankId最小的rank作为root，前nRanks%nRoot个root各多带一个rank）。用户侧划分root节点时（如为各group指定root），须保证与该策略一致，否则会导致建链失败或通信域成员不完整。
 
 ## 调用示例
 

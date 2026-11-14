@@ -25,11 +25,6 @@
 
 namespace Hccl {
 
-constexpr u32 HOST_CONTROL_BASE_PORT = 60016; // 控制面起始port，当前专用于拓扑探测使用，范围在[60016,60031]
-constexpr u32 HOST_CONTROL_PORT_COUNT = 15;
-constexpr u32 HCCL_WHITELIST_ON = 1;
-constexpr u32 HOST_SOCKET_CONN_LIMIT = 8; // HCCL_AISERVER_DEVICE_NUM (8)
-
 // 触发 rank info 的Grow收集，返回合并后的 rankTable
 HcclResult RankInfoDetect::TriggerGrowCollect(u32 newRankCount, RankTableInfo& mergedRankTable)
 {
@@ -280,7 +275,7 @@ HcclResult RankInfoDetect::SetupServer(HcclRootHandleV2& rootHandle)
     auto service = rankInfoDetectService_; // shared_ptr 副本，供线程持有
     u32 listenPort = serverSocket->GetListenPort();
     auto errorContext = hrtErrMGetErrorContextPub();
-    // 在创建线程前同步设置 RUNNING 状态，确保 SetupServer 返回时 g_detectServerStatus_ 中已有 key
+    // 在创建线程前同步设置 RUNNING 状态，确保 SetupServer 返回时服务端状态图中已有 key
     RankInfoDetectService::SetServerStatus(listenPort, RANKINFO_DETECT_SERVER_STATUS_RUNNING);
 
     HcclResult threadRet = HCCL_SUCCESS;

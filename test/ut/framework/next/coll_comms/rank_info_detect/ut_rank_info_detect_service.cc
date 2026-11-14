@@ -42,6 +42,9 @@ using namespace Hccl;
 
 namespace {
 std::string g_serviceCapturedErrorCode;
+// RecvRemoteAgentIdStub 的序号计数器：按用例重置，避免用例顺序影响 agentId 取值
+// （agentId 会被当作 rankId 校验，跨用例累加会超出 rankSize 触发 FailedConnectionAgentIdString 报错）
+int g_recvAgentIdNextRank = 0;
 void StubServiceRptInputErr(std::string error_code, std::vector<std::string> key, std::vector<std::string> value)
 {
     (void)key;
@@ -60,6 +63,7 @@ protected:
     virtual void SetUp()
     {
         std::cout << "A Test case in RankInfoDetectService SetUP" << std::endl;
+        g_recvAgentIdNextRank = 0;
         // 初始化模拟 Socket 句柄
         hccpSocketHandle = new int(0);
         MOCKER(HrtRaSocketInit).stubs().with(mockcpp::any(), mockcpp::any()).will(returnValue(hccpSocketHandle));
@@ -416,10 +420,54 @@ TEST_F(RankInfoDetectServiceTest, Ut_ParseRankTable_When_Normal_Expect_Success)
 
 bool RecvRemoteAgentIdStub(RankInfoDetectService* thisPtr, SocketAgent& connSocketAgent, std::string& agentId)
 {
-    static int nextRank = 0;
-    agentId = std::to_string(nextRank);
-    nextRank++;
+    agentId = std::to_string(g_recvAgentIdNextRank);
+    g_recvAgentIdNextRank++;
     return true;
+}
+
+TEST_F(RankInfoDetectServiceTest, Ut_ProcessScalableConnStatus_When_GroupComplete_Expect_ZeroRemaining)
+{
+    MOCKER_CPP(&RankInfoDetectService::IsRemoteIpInWhiteList).stubs().will(returnValue(true));
+    MOCKER_CPP(&RankInfoDetectService::RecvRemoteAgentId).stubs().will(invoke(RecvRemoteAgentIdStub));
+    u32 rankSize = 8;
+    MOCKER_CPP(&RankInfoDetectService::RecvRemoteRankSize)
+        .stubs()
+        .with(mockcpp::any(), outBound(rankSize))
+        .will(returnValue(true));
+
+    u32 groupSize = 4;
+    u32 expectedSocketNum = 4;
+    u32 totalRankNum = 0;
+    bool isFirstAcceptTimeOut = false;
+    for (u32 connected = 1; connected <= 4; ++connected) {
+        ASSERT_TRUE(rankInfoDetectService_->ProcessScalableConnStatus(
+            rankInfoDetectService_->serverSocket_, SocketStatus::OK, groupSize, expectedSocketNum, totalRankNum,
+            isFirstAcceptTimeOut));
+        EXPECT_EQ(expectedSocketNum, 4U - connected);
+        EXPECT_EQ(totalRankNum, 8U);
+    }
+    EXPECT_EQ(rankInfoDetectService_->connSockets_.size(), 4U);
+}
+
+TEST_F(RankInfoDetectServiceTest, Ut_ProcessScalableConnStatus_When_RankSizeMismatch_Expect_Failure)
+{
+    MOCKER_CPP(&RankInfoDetectService::IsRemoteIpInWhiteList).stubs().will(returnValue(true));
+    MOCKER_CPP(&RankInfoDetectService::RecvRemoteAgentId).stubs().will(invoke(RecvRemoteAgentIdStub));
+    u32 rankSize = 9;
+    MOCKER_CPP(&RankInfoDetectService::RecvRemoteRankSize)
+        .stubs()
+        .with(mockcpp::any(), outBound(rankSize))
+        .will(returnValue(true));
+
+    u32 groupSize = 3;
+    u32 expectedSocketNum = 3;
+    u32 totalRankNum = 8;
+    bool isFirstAcceptTimeOut = false;
+    EXPECT_FALSE(rankInfoDetectService_->ProcessScalableConnStatus(
+        rankInfoDetectService_->serverSocket_, SocketStatus::OK, groupSize, expectedSocketNum, totalRankNum,
+        isFirstAcceptTimeOut));
+    EXPECT_EQ(expectedSocketNum, 3U);
+    EXPECT_EQ(totalRankNum, 8U);
 }
 
 TEST_F(RankInfoDetectServiceTest, Ut_GetConnections_When_Last_Fail_Expect_Print_Connected_Socket)
@@ -640,6 +688,126 @@ TEST_F(RankInfoDetectServiceTest, Ut_GetConnections_When_AllRemoteIpNotInWhiteLi
     EXPECT_EQ(rankInfoDetectService_->GetConnections(true), HCCL_E_INTERNAL);
 
     EXPECT_EQ(0, rankInfoDetectService_->connSockets_.size());
+}
+
+// ============================ scalable 主路径用例（补充） ============================
+
+// 按 groupSize 收满本组连接返回成功
+TEST_F(RankInfoDetectServiceTest, Ut_GetConnectionsScalable_When_GroupComplete_Expect_Success)
+{
+    SetupMockSocketAndTimeoutConfig();
+    // 固定时钟：linkTimeOut 被 mock 为 1s，若用真实时钟，首轮 remaining = 1s - 微秒级耗时
+    // 经 duration_cast<seconds> 截断为 0，会被误判为“超时耗尽”；固定时钟使 usedTime 恒为 0。
+    MOCKER_CPP(&std::chrono::steady_clock::now)
+        .stubs()
+        .will(returnValue(std::chrono::time_point<std::chrono::steady_clock>(std::chrono::seconds(0))));
+    MOCKER_CPP(&RankInfoDetectService::IsRemoteIpInWhiteList).stubs().will(returnValue(true));
+    MOCKER_CPP(&RankInfoDetectService::RecvRemoteAgentId).stubs().will(invoke(RecvRemoteAgentIdStub));
+    u32 rankSize = 8;
+    MOCKER_CPP(&RankInfoDetectService::RecvRemoteRankSize)
+        .stubs()
+        .with(mockcpp::any(), outBound(rankSize))
+        .will(returnValue(true));
+    // groupSize=2：每建链一条前先 CONNECTING 一次再 OK（覆盖等待分支）
+    MOCKER_CPP(&Socket::GetStatus)
+        .stubs()
+        .then(returnValue((SocketStatus)SocketStatus::CONNECTING))
+        .then(returnValue((SocketStatus)SocketStatus::OK))
+        .then(returnValue((SocketStatus)SocketStatus::CONNECTING))
+        .then(returnValue((SocketStatus)SocketStatus::OK));
+
+    EXPECT_EQ(rankInfoDetectService_->GetConnectionsScalable(2), HcclResult::HCCL_SUCCESS);
+    EXPECT_EQ(rankInfoDetectService_->connSockets_.size(), 2U);
+}
+
+// 一直无连接时收敛为超时并返回 HCCL_E_INTERNAL（scalable 缺连接即失败，不降级）
+TEST_F(RankInfoDetectServiceTest, Ut_GetConnectionsScalable_When_Timeout_Expect_E_INTERNAL)
+{
+    SetupMockSocketAndTimeoutConfig();
+    // 首轮读取起始时间（0s），次轮读取执行时间（2s >= linkTimeOut 1s），触发 AcceptGroupConnections 超时分支
+    MOCKER_CPP(&std::chrono::steady_clock::now)
+        .stubs()
+        .will(returnValue(std::chrono::time_point<std::chrono::steady_clock>(std::chrono::seconds(0))))
+        .then(returnValue(std::chrono::time_point<std::chrono::steady_clock>(std::chrono::seconds(2))));
+    MOCKER_CPP(&Socket::GetStatus).stubs().will(returnValue((SocketStatus)SocketStatus::CONNECTING));
+
+    g_serviceCapturedErrorCode.clear();
+    MOCKER(RptInputErr).stubs().will(invoke(StubServiceRptInputErr));
+
+    EXPECT_EQ(rankInfoDetectService_->GetConnectionsScalable(2), HcclResult::HCCL_E_INTERNAL);
+    EXPECT_EQ(rankInfoDetectService_->connSockets_.size(), 0U);
+}
+
+// 白名单校验不通过时丢弃该连接并继续等待下一条（scalable 场景）
+TEST_F(RankInfoDetectServiceTest, Ut_GetConnectionsScalable_When_RemoteIpNotInWhiteList_Expect_DiscardAndAcceptNext)
+{
+    SetupMockSocketAndTimeoutConfig();
+    // 固定时钟：linkTimeOut 被 mock 为 1s，若用真实时钟，首轮 remaining = 1s - 微秒级耗时
+    // 经 duration_cast<seconds> 截断为 0，会被误判为“超时耗尽”；固定时钟使 usedTime 恒为 0。
+    MOCKER_CPP(&std::chrono::steady_clock::now)
+        .stubs()
+        .will(returnValue(std::chrono::time_point<std::chrono::steady_clock>(std::chrono::seconds(0))));
+    MOCKER_CPP(&RankInfoDetectService::IsRemoteIpInWhiteList).stubs().then(returnValue(false)).then(returnValue(true));
+    MOCKER_CPP(&Socket::GetStatus).stubs().will(returnValue((SocketStatus)SocketStatus::OK));
+    MOCKER_CPP(&RankInfoDetectService::RecvRemoteAgentId).stubs().will(invoke(RecvRemoteAgentIdStub));
+    u32 rankSize = 8;
+    MOCKER_CPP(&RankInfoDetectService::RecvRemoteRankSize)
+        .stubs()
+        .with(mockcpp::any(), outBound(rankSize))
+        .will(returnValue(true));
+
+    EXPECT_EQ(rankInfoDetectService_->GetConnectionsScalable(1), HcclResult::HCCL_SUCCESS);
+    EXPECT_EQ(rankInfoDetectService_->connSockets_.size(), 1U);
+}
+
+// SetupScalable：组内收集成功后 meshMergeCallback 失败时错误码透传（不再广播）
+TEST_F(RankInfoDetectServiceTest, Ut_SetupScalable_When_MeshMergeCallbackFail_Expect_ErrCodePassthrough)
+{
+    SetupMockSocketAndTimeoutConfig();
+    // 固定时钟：linkTimeOut 被 mock 为 1s，若用真实时钟，首轮 remaining = 1s - 微秒级耗时
+    // 经 duration_cast<seconds> 截断为 0，会被误判为“超时耗尽”；固定时钟使 usedTime 恒为 0。
+    MOCKER_CPP(&std::chrono::steady_clock::now)
+        .stubs()
+        .will(returnValue(std::chrono::time_point<std::chrono::steady_clock>(std::chrono::seconds(0))));
+    MOCKER_CPP(&RankInfoDetectService::IsRemoteIpInWhiteList).stubs().will(returnValue(true));
+    MOCKER_CPP(&RankInfoDetectService::RecvRemoteAgentId).stubs().will(invoke(RecvRemoteAgentIdStub));
+    u32 rankSize = 8;
+    MOCKER_CPP(&RankInfoDetectService::RecvRemoteRankSize)
+        .stubs()
+        .with(mockcpp::any(), outBound(rankSize))
+        .will(returnValue(true));
+    MOCKER_CPP(&Socket::GetStatus)
+        .stubs()
+        .then(returnValue((SocketStatus)SocketStatus::CONNECTING))
+        .then(returnValue((SocketStatus)SocketStatus::OK));
+
+    // 构造组内 rankTable 消息（[ranktable][step]），供 GetRankTable 解析
+    RankTableInfo localRankTable;
+    localRankTable.version = "2.0";
+    localRankTable.rankCount = 1;
+    NewRankInfo rankInfo{};
+    rankInfo.rankId = 0;
+    rankInfo.rankLevelInfos.emplace_back(RankLevelInfo{});
+    localRankTable.ranks.emplace_back(rankInfo);
+    BinaryStream binaryStream;
+    ASSERT_EQ(localRankTable.GetBinStream(true, binaryStream), HCCL_SUCCESS);
+    binaryStream << rankInfoDetectService_->currentStep_;
+    vector<char> rankInfoMsg;
+    binaryStream.Dump(rankInfoMsg);
+    MOCKER(aclrtMallocHostWithCfg).stubs().will(returnValue(1));
+    MOCKER(HrtMallocHost).stubs().with(mockcpp::any()).will(returnValue((void*)rankInfoMsg.data()));
+    void* msg = rankInfoMsg.data();
+    u64 msgLen = rankInfoMsg.size();
+    u64& revMsgLen = msgLen;
+    MOCKER_CPP(&SocketAgent::RecvMsg)
+        .stubs()
+        .with(outBoundP(msg, msgLen), outBound(revMsgLen), mockcpp::any())
+        .will(returnValue(true));
+
+    std::function<HcclResult(RankTableInfo&)> callback = [](RankTableInfo&) -> HcclResult {
+        return HCCL_E_NETWORK;
+    };
+    EXPECT_EQ(rankInfoDetectService_->SetupScalable(1, callback), HcclResult::HCCL_E_NETWORK);
 }
 
 // ════════════════════════════════════════════════════════════════════════════
