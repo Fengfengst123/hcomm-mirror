@@ -20,9 +20,9 @@
 
 ## 功能说明
 
-初始化HcclOpDesc结构体，用于描述AI CPU运行核函数时的算子信息。
+初始化HcclOpDesc结构体，用于描述AI CPU运行核函数时的算子信息。该结构体的设置与使用均为HCCL内置通信算子（Send和Recv）的内部实现流程，用户无需自行调用。
 
-该接口会先用0xFF填充整个结构体，再设置ABI头部信息（包含版本号、魔数、结构体大小），使结构体处于可用初始状态。调用该接口后，开发者需根据实际通信任务按需设置opDescType、opName及联合体成员（如p2p）等字段，再传入[HcclAicpuKernelLaunch](./HcclAicpuKernelLaunch.md)接口下发任务。
+该接口会先用0xFF填充整个结构体，再设置ABI头部信息（包含版本号、魔数、结构体大小），使结构体处于可用初始状态。HCCL内部调用该接口后，会根据实际通信任务按需设置opDescType、opName及联合体成员（如p2p）等字段，再传入[HcclAicpuKernelLaunch](./HcclAicpuKernelLaunch.md)接口下发任务。
 
 ## 函数原型
 
@@ -47,6 +47,8 @@ static inline HcclResult HcclOpDescInit(HcclOpDesc *opDesc)
 
 ## 调用示例
 
+以下示例为HCCL内置Send算子的内部实现示意，用户无需自行构造并下发。
+
 ```c
 HcclComm comm;
 CommEngine engine = COMM_ENGINE_AICPU_TS;
@@ -58,10 +60,10 @@ if (ret != HCCL_SUCCESS) {
     // 处理错误
 }
 
-// 初始化算子描述参数
+// 初始化算子描述参数，下发内置Send算子
 HcclOpDesc opInfo;
 HcclOpDescInit(&opInfo);
-opInfo.opDescType = 1;  // 代表Send或Receive算子
+opInfo.opDescType = 1;  // 代表Send或Recv算子
 opInfo.p2p.buffer = sendBuffer;
 opInfo.p2p.cmdType = HCCL_CMD_SEND;
 opInfo.p2p.dataType = HCCL_DATA_TYPE_FP32;
@@ -69,11 +71,11 @@ opInfo.p2p.count = dataSize;
 opInfo.p2p.remoteRank = destRank;
 opInfo.p2p.unfoldStream = userStream;
 
-// 初始化核函数信息
+// 初始化核函数信息（动态库名与核函数名均为HCCL内置Send算子的固定实现，非用户自定义）
 HcclKernelFuncInfo funcInfo;
-strncpy_s(funcInfo.kernelSoName, HCCL_KERNEL_SO_NAME_MAX_LEN, "libscatter_aicpu_kernel.so", strlen("libscatter_aicpu_kernel.so") + 1);
+strncpy_s(funcInfo.kernelSoName, HCCL_KERNEL_SO_NAME_MAX_LEN, "libhccl_aicpu_kernel.so", strlen("libhccl_aicpu_kernel.so") + 1);
 strncpy_s(funcInfo.kernelFuncName, HCCL_KERNEL_FUNC_NAME_MAX_LEN, "HcclLaunchP2pAicpuKernel", strlen("HcclLaunchP2pAicpuKernel") + 1);
-funcInfo.args = kernelArgs;
+funcInfo.args = kernelArgs;  // Send算子任务上下文，由HCCL内部构造
 funcInfo.argSize = argsSize;
 
 // 初始化核函数配置

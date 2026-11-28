@@ -20,7 +20,7 @@
 
 ## 功能说明
 
-在AI CPU上运行核函数。该接口用于下发自定义通信算子到AI CPU执行，支持在Group通信场景和非Group通信场景下使用。
+在AI CPU上运行核函数。该接口用于下发HCCL内置通信算子到AI CPU执行，支持在Group通信场景和非Group通信场景下使用。
 
 在Group通信场景下（调用了HcclGroupStart），该接口会将任务添加到Group任务队列中，等待HcclGroupEnd时统一执行；在非Group通信场景下，直接在AI CPU上运行核函数。
 
@@ -47,13 +47,12 @@ HcclResult HcclAicpuKernelLaunch(HcclComm comm, const HcclOpDesc *opInfo, const 
 
 ## 约束说明
 
-- 自定义通信算子场景使用（当前仅支持Send和Receive算子）。
+- 该接口仅供HCCL内置的Send和Recv算子使用。
 - comm必须为有效的通信域句柄（由通信域创建接口获得，调用期间保持有效）。禁止传入空指针、野指针或已销毁的句柄。
 
 ## 调用示例
 
 ```c
-// 初始化算子描述参数
 HcclComm comm;
 CommEngine engine = COMM_ENGINE_AICPU_TS;
 aclrtStream userStream;
@@ -64,9 +63,10 @@ if (ret != HCCL_SUCCESS) {
     // 处理错误
 }
 
+// 初始化算子描述参数，下发内置Send算子
 HcclOpDesc opInfo;
 HcclOpDescInit(&opInfo);
-opInfo.opDescType = 1;  // 代表Send或Receive算子
+opInfo.opDescType = 1;  // 代表Send或Recv算子
 opInfo.p2p.buffer = sendBuffer;
 opInfo.p2p.cmdType = HCCL_CMD_SEND;
 opInfo.p2p.dataType = HCCL_DATA_TYPE_FP32;
@@ -74,20 +74,17 @@ opInfo.p2p.count = dataSize;
 opInfo.p2p.remoteRank = destRank;
 opInfo.p2p.unfoldStream = userStream;
 
-// 初始化核函数信息
+// 初始化核函数信息（动态库名与核函数名均为HCCL内置Send算子的固定实现，非用户自定义）
 HcclKernelFuncInfo funcInfo;
-strncpy_s(funcInfo.kernelSoName, HCCL_KERNEL_SO_NAME_MAX_LEN, "libscatter_aicpu_kernel.so", strlen("libscatter_aicpu_kernel.so") + 1);
+strncpy_s(funcInfo.kernelSoName, HCCL_KERNEL_SO_NAME_MAX_LEN, "libhccl_aicpu_kernel.so", strlen("libhccl_aicpu_kernel.so") + 1);
 strncpy_s(funcInfo.kernelFuncName, HCCL_KERNEL_FUNC_NAME_MAX_LEN, "HcclLaunchP2pAicpuKernel", strlen("HcclLaunchP2pAicpuKernel") + 1);
-funcInfo.args = kernelArgs;
+funcInfo.args = kernelArgs;  // Send算子任务上下文，由HCCL内部构造
 funcInfo.argSize = argsSize;
 
 // 初始化核函数配置
-AicpuTimeout timeout = DeriveAicpuTimeout(param.opConfig.execTimeout);
-u16 kernelLaunchTimeout = IsHcommDefaultTimeoutSupported() ? timeout.kernelLaunchTimeout :
-ToKernelLaunchTimeout(AddAicpuTimeoutOffset(param.opConfig.execTimeout, KERNEL_TIMEOUT_OFFSET));
 HcclKernelLaunchCfg kernelLaunchCfg;
 HcclKernelLaunchCfgInit(&kernelLaunchCfg);
-kernelLaunchCfg.timeOut = kernelLaunchTimeout;
+kernelLaunchCfg.timeOut = 60;  // 超时时间，单位为秒
 
 // 运行AI CPU核函数
 ret = HcclAicpuKernelLaunch(comm, &opInfo, &funcInfo, aicpuThreadHandle, userStream, &kernelLaunchCfg);
