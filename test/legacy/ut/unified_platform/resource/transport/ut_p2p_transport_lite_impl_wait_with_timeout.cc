@@ -34,6 +34,7 @@ protected:
 
     virtual void SetUp()
     {
+        GlobalMockObject::reset();
         MOCKER(HrtGetDeviceType)
             .stubs()
             .with(outBound(Hccl::DevType((DevType)DevType::DEV_TYPE_910A2)))
@@ -55,6 +56,7 @@ protected:
     {
         std::cout << "A Test case in P2PTransportLiteImplWaitWithTimeoutTest TearDown" << std::endl;
         GlobalMockObject::verify();
+        GlobalMockObject::reset();
     }
 
     std::vector<char> GetNotifyUniqueId(u32 notifyId, u32 devPhyId)

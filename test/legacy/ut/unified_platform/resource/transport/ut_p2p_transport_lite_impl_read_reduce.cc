@@ -27,6 +27,7 @@
 using namespace Hccl;
 
 static uint32_t s_utMockTailSlot = 0;
+static std::vector<u8> s_utMockSq(AC_SQE_MAX_CNT* RTSQ_SQE_SIZE, 0);
 
 class P2PTransportLiteImplReadReduceTest : public testing::Test {
 protected:
@@ -42,8 +43,9 @@ protected:
 
     virtual void SetUp()
     {
+        GlobalMockObject::reset();
         reduceCalls_.clear();
-        mockSq.assign(AC_SQE_MAX_CNT * RTSQ_SQE_SIZE, 0);
+        s_utMockSq.assign(AC_SQE_MAX_CNT * RTSQ_SQE_SIZE, 0);
         MOCKER(HrtGetDeviceType)
             .stubs()
             .with(outBound(Hccl::DevType((DevType)DevType::DEV_TYPE_910A2)))
@@ -51,7 +53,7 @@ protected:
         MOCKER_CPP(&RtsqBase::QuerySqBaseAddr)
             .stubs()
             .with(mockcpp::any())
-            .will(returnValue(reinterpret_cast<u64>(mockSq.data())));
+            .will(returnValue(reinterpret_cast<u64>(s_utMockSq.data())));
         MOCKER_CPP(&RtsqBase::QuerySqDepth)
             .stubs()
             .with(mockcpp::any())
@@ -65,6 +67,7 @@ protected:
     {
         std::cout << "A Test case in P2PTransportLiteImplReadReduceTest TearDown" << std::endl;
         GlobalMockObject::verify();
+        GlobalMockObject::reset();
     }
 
     std::vector<char> GetNotifyUniqueId(u32 notifyId, u32 devPhyId)
@@ -138,7 +141,6 @@ protected:
         return std::make_unique<P2PTransportLiteImpl>(p2pUniqueId, callback);
     }
 
-    std::vector<u8> mockSq;
     std::vector<ReduceCall> reduceCalls_;
 };
 
