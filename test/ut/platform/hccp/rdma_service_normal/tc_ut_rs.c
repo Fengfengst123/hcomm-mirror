@@ -7066,7 +7066,7 @@ void TcRsRdevGetAttr()
     /* directFlag==UB 且 extDevCap 含 INLINE_REDUCE 位 -> isInlineReduceSupported==true */
     mocker_clean();
     gRdevGetAttrDirectFlag = DIRECT_FLAG_UB;
-    gRdevGetAttrExtDevCap = IBV_EXTEND_DEV_INLINE_REDUCE;
+    gRdevGetAttrExtDevCap = IBV_EXTEND_DEV_NDR_INLINE_REDUCE;
     mocker_invoke(RsQueryRdevCb, RsQueryRdevCbGetAttrStub, 1);
     mocker_invoke((stub_fn_t)ibv_query_port, StubIbvQueryPort, 10);
     ret = RsRdevGetAttr(phyId, rdevIndex, &attr);
@@ -7088,7 +7088,7 @@ void TcRsRdevGetAttr()
     /* directFlag==PCIE 且 extDevCap 含该位 -> isInlineReduceSupported==false */
     mocker_clean();
     gRdevGetAttrDirectFlag = DIRECT_FLAG_PCIE;
-    gRdevGetAttrExtDevCap = IBV_EXTEND_DEV_INLINE_REDUCE;
+    gRdevGetAttrExtDevCap = IBV_EXTEND_DEV_NDR_INLINE_REDUCE;
     mocker_invoke(RsQueryRdevCb, RsQueryRdevCbGetAttrStub, 1);
     mocker_invoke((stub_fn_t)ibv_query_port, StubIbvQueryPort, 10);
     ret = RsRdevGetAttr(phyId, rdevIndex, &attr);

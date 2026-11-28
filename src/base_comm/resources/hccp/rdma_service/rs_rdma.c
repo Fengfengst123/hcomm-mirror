@@ -1377,7 +1377,7 @@ RS_ATTRI_VISI_DEF int RsRdevGetAttr(unsigned int phyId, unsigned int rdevIndex, 
 
     // extDevCap 由 RsIbvQueryDeviceExtend 查询所得；仅当 D2N 直连形态为 UB 且网卡扩展能力支持 INLINE REDUCE 时才置位
     attr->isInlineReduceSupported = ((rdevCb->directFlag == DIRECT_FLAG_UB) &&
-                                     ((rdevCb->extDevCap & IBV_EXTEND_DEV_INLINE_REDUCE) != 0));
+                                     ((rdevCb->extDevCap & IBV_EXTEND_DEV_NDR_INLINE_REDUCE) != 0));
 
     hccp_dbg("phyId:%u status:%u maxMsgSize:%u maxQpWr:%u maxCqe:%u isInlineReduceSupported:%d", phyId, attr->status,
         attr->maxMsgSize, attr->maxQpWr, attr->maxCqe, attr->isInlineReduceSupported);
