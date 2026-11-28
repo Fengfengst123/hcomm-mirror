@@ -240,8 +240,7 @@ HcclResult CollAllReduceMeshExecutor::Getlevel1CommRank(SubCommInfo& level1CommI
     SubCommInfo level0CommInfo = GetSubCommInfo(COMM_LEVEL0, COMM_INDEX_0);
     u32 ringNum
         = (topoType_ == TopoType::TOPO_TYPE_8P_RING) ? LEVEL0_PLANE_NUM_IN_8PRING : LEVEL0_PLANE_NUM_IN_NPRING_SINGLE;
-    u32 commIndex = (ringNum == LEVEL0_PLANE_NUM_IN_8PRING) ? topoAttr_.devicePhyId : level0CommInfo.localRank;
-
+    u32 commIndex = (LEVEL0_PLANE_NUM_IN_8PRING == ringNum) ? topoAttr_.devicePhyId : level0CommInfo.localRank;
     if (CheckCommSize(COMM_LEVEL1, commIndex + 1) != HCCL_SUCCESS) {
         return HCCL_E_UNAVAIL;
     }

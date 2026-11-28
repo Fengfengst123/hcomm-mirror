@@ -57,7 +57,7 @@ HcclResult AllGatherSlimRing::InitSlice(std::vector<Slice>& inputSlices, u32 ran
     if (slices_.size() == 0) {
         slices_.resize(rankSize);
         inputSlices.resize(rankSize);
-        u64 sliceSize = count_ * unitSize;
+        u64 sliceSize = unitSize * count_;
         for (u32 i = 0; i < rankSize; i++) {
             slices_[i].size = sliceSize;
             slices_[i].offset = sliceSize * i;

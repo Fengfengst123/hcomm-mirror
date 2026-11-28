@@ -36,8 +36,8 @@ HcclResult CalcHDTransportReq::CalcTransportRequest(
             continue;
         }
 
-        u32 rankSize = subCommPlaneVector_[ringIndex].size();
         SingleSubCommTransport& subCommTransport = commTransport[ringIndex];
+        u32 rankSize = subCommPlaneVector_[ringIndex].size();
         subCommTransport.transportRequests.resize(rankSize);
         // 只有一张卡时不需要建链
         if (rankSize == HCCL_RANK_SIZE_EQ_ONE) {

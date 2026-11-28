@@ -54,8 +54,8 @@ __aicore__ inline void AivAllReduceDeterBig910B::EndSync(int32_t tag)
     int64_t flagOffsetBase = BASE_FLAG_OFFSET * AIV_ALL_REDUCE_DETER_910B_BIGDATA;
     uint32_t flagOffset = flagOffsetBase + (3 * rankSize_) * FLAG_SIZE;
 
-    if (blockIdx_ < rankSize_) {
-        if (targetRank != rank_) {
+    if (rankSize_ > blockIdx_) {
+        if (rank_ != targetRank) {
             PipeBarrier<PIPE_ALL>();
             SetSignalValue((__gm__ int32_t*)(GM_OUT[targetRank] + flagOffset + rank_ * FLAG_SIZE), localSetTensor, tag);
             WaitSignalValue(
@@ -162,21 +162,21 @@ AivAllReduceDeterBig910B::SumByPairs(__gm__ T* cclGMSelf, int64_t x, int64_t cou
     int64_t flagOffset3st = flagOffsetBase + (DOUBLE * rankSize_ + x) * FLAG_SIZE;
     if (x & 1) {
         if (target == 0) {
-            flagOffsetTarget = flagOffsetBase + (DOUBLE * rankSize_ + target) * FLAG_SIZE;
+            flagOffsetTarget = flagOffsetBase + (rankSize_ * DOUBLE + target) * FLAG_SIZE;
         } else {
-            flagOffsetTarget = flagOffsetBase + (rankSize_ + target) * FLAG_SIZE;
+            flagOffsetTarget = flagOffsetBase + (target + rankSize_) * FLAG_SIZE;
         }
         flagOffsetSelf = flagOffset2st;
     } else {
         flagOffsetTarget = flagOffsetBase + (DOUBLE * rankSize_ + target + multiple / DOUBLE) * FLAG_SIZE;
         int64_t multipleTemp = multiple / DOUBLE;
-        while (x + multipleTemp >= rankSize_) {
+        while (multipleTemp + x >= rankSize_) {
             multipleTemp /= DOUBLE;
         }
         if (multipleTemp <= 0) {
             flagOffsetSelf = flagOffset2st;
         } else {
-            flagOffsetSelf = flagOffset3st + multipleTemp * FLAG_SIZE;
+            flagOffsetSelf = flagOffset3st + (multipleTemp * FLAG_SIZE);
         }
     }
 
@@ -223,7 +223,7 @@ __aicore__ inline void AivAllReduceDeterBig910B::CPGM2GMAccordingFlag(
 
         uint64_t curSize = (preparedBatchCount - processedBatchCount) * UB_DB_DATA_BATCH_SIZE;
         if (preparedBatchCount * UB_DB_DATA_BATCH_SIZE > avgSizePerSlice) {
-            curSize = avgSizePerSlice - processedBatchCount * UB_DB_DATA_BATCH_SIZE;
+            curSize = avgSizePerSlice - (processedBatchCount * UB_DB_DATA_BATCH_SIZE);
         }
 
         set_flag(PIPE_S, PIPE_MTE2, EVENT_ID0);
@@ -287,7 +287,7 @@ __aicore__ inline void AivAllReduceDeterBig910B::ReduceWithFlagWrap(
 
         uint64_t curSize = (preparedBatchCount - processedBatchCount) * UB_DB_DATA_BATCH_SIZE;
         if (preparedBatchCount * UB_DB_DATA_BATCH_SIZE > avgSizePerSlice) {
-            curSize = avgSizePerSlice - processedBatchCount * UB_DB_DATA_BATCH_SIZE;
+            curSize = avgSizePerSlice - (processedBatchCount * UB_DB_DATA_BATCH_SIZE);
         }
 
         set_flag(PIPE_S, PIPE_MTE2, EVENT_ID0);

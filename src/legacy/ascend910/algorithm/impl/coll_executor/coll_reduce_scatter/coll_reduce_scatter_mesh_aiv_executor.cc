@@ -205,7 +205,7 @@ HcclResult CollReduceScatterMeshAivExecutor::KernelRun(const OpParam& param, Exe
 {
     HCCL_CONFIG_INFO(HCCL_ALG, "[%s] ReduceScatter aiv enter.", __func__);
 
-    CHK_RET(CheckCommSize(COMM_LEVEL0, COMM_INDEX_0 + 1));
+    CHK_RET(CheckCommSize(COMM_LEVEL0, 1 + COMM_INDEX_0));
     SubCommInfo level0CommInfo = GetSubCommInfo(COMM_LEVEL0, COMM_INDEX_0);
 
     void* buffersIn[MAX_RANK_SIZE];
@@ -217,16 +217,16 @@ HcclResult CollReduceScatterMeshAivExecutor::KernelRun(const OpParam& param, Exe
         "[CollReduceScatterMeshAivExecutor][KernelRun] userRank [%d] localRank [%d]", topoAttr_.userRank, localRank);
 
     for (u32 i = 0; i < localRankSize; i++) {
-        if (i != localRank) {
+        if (localRank != i) {
             CHK_RET(level0CommInfo.links[i]->GetRemoteMem(UserMemType::INPUT_MEM, &(buffersIn[i])));
             CHK_RET(level0CommInfo.links[i]->GetRemoteMem(UserMemType::OUTPUT_MEM, &(buffersOut[i])));
         } else {
-            buffersIn[i] = execMem.inputMem.ptr();
             buffersOut[i] = execMem.outputMem.ptr();
+            buffersIn[i] = execMem.inputMem.ptr();
         }
     }
     u32 numBlocks;
-    bool isOpbase = (GetWorkflowMode() == HcclWorkflowMode::HCCL_WORKFLOW_MODE_OP_BASE);
+    bool isOpbase = (HcclWorkflowMode::HCCL_WORKFLOW_MODE_OP_BASE == GetWorkflowMode());
     HCCL_DEBUG("[CollReduceScatterMeshAivExecutor][KernelRun]isOpbase is %d", isOpbase);
 
     AivOpArgs opArgs{
@@ -246,8 +246,8 @@ HcclResult CollReduceScatterMeshAivExecutor::KernelRun(const OpParam& param, Exe
     numBlocks_ = numBlocks;
     AivResourceArgs resourceArgs{param.tag,  param.stream.ptr(), buffersIn, buffersOut, execMem.inputMem.size(),
                                  numBlocks_, param.aivTag};
-    struct AivProfilingInfo aivProfilingInfo;
     AivAlgArgs algArgs{};
+    struct AivProfilingInfo aivProfilingInfo;
     algArgs.execTimeOut = topoMatcher_->GetExecTimeOutConfig();
     algArgs.execTimeOutSet = true;
     aivProfilingInfo.counter = opCounter_;

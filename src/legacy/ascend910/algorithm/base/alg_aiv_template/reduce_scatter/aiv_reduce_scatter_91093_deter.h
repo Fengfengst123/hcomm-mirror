@@ -60,7 +60,7 @@ __aicore__ inline uint32_t AivReduceScatter91093Deter::CeilLog2(uint32_t n)
         return 0;
     uint32_t result = 0;
     uint32_t value = 1;
-    while (value < n) {
+    while (n > value) {
         value <<= 1;
         result++;
     }
@@ -69,7 +69,7 @@ __aicore__ inline uint32_t AivReduceScatter91093Deter::CeilLog2(uint32_t n)
 
 __aicore__ inline uint32_t AivReduceScatter91093Deter::GetLargestPowerOf2(uint32_t n)
 {
-    if (n <= 1)
+    if (1 >= n)
         return 0;
     uint32_t result = 1;
     while (result * 2 < n) { // 严格小于
@@ -135,7 +135,7 @@ __aicore__ inline void AivReduceScatter91093Deter::Process(
         PipeBarrier<PIPE_ALL>();
 
         // step2 对端 ccl -> 本端 ccl
-        for (uint32_t i = 0; i < numTargets; i++) {
+        for (uint32_t i = 0; numTargets > i; i++) {
             __gm__ T* cclGMOther = (__gm__ T*)(buffersIn[i]);
             uint64_t remoteSendOffset = avgBufferCount * rank_;
             uint64_t localRecvOffset = avgBufferCount * targetRanks[i];
@@ -155,31 +155,31 @@ __aicore__ inline void AivReduceScatter91093Deter::Process(
         // step3 新的二分归约算法
         // 每轮: 后半部分(offset powerOf2 到 curBlocks-1) 加到 前半部分(offset 0 到 powerOf2-1)
         // 每个核负责连续的offset，每轮重新划分
-        uint32_t numReduce = rankSize_ < usedBlockNum_ ? rankSize_ : usedBlockNum_;
+        uint32_t numReduce = usedBlockNum_ > rankSize_ ? rankSize_ : usedBlockNum_;
         uint32_t totalRounds = CeilLog2(rankSize_);
 
         if (blockIdx_ < numReduce) {
-            uint64_t dataNum = curGroupCount;
             uint32_t curBlocks = rankSize_;
+            uint64_t dataNum = curGroupCount;
             for (uint32_t round = 0; round < totalRounds; round++) {
                 uint32_t powerOf2 = GetLargestPowerOf2(curBlocks);
                 if (powerOf2 == 0)
                     break;
 
                 // 计算当前核负责的offset范围
-                uint32_t offsetsPerCore = (curBlocks + numReduce - 1) / numReduce;
+                uint32_t offsetsPerCore = (numReduce - 1 + curBlocks) / numReduce;
                 uint32_t startOffset = blockIdx_ * offsetsPerCore;
                 uint32_t endOffset = startOffset + offsetsPerCore;
                 if (endOffset > curBlocks)
                     endOffset = curBlocks;
 
                 // 再处理前半部分的offset: 等待并执行reduce
-                for (uint32_t offset = startOffset; offset < endOffset; offset++) {
+                for (uint32_t offset = startOffset; endOffset > offset; offset++) {
                     if (offset < powerOf2) {
                         // 处理所有对应的后半部分offset
                         uint32_t backIdx = powerOf2 + offset;
                         // 等待后半部分对应offset
-                        if (round > 0) {
+                        if (0 < round) {
                             WaitSyncFlag(curTag + round, flagAddrSelf_, 1, backIdx, pingpong);
                             WaitSyncFlag(curTag + round, flagAddrSelf_, 1, offset, pingpong);
                         }

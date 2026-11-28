@@ -819,12 +819,12 @@ HcclResult CollReduceScatterRingFor91093Executor::Getlevel1CommRank(SubCommInfo&
         u32 commIndex = level0CommInfo.localRank;
 
         CommPlane commPlaneLevel1 = isSelectAHC ? COMM_LEVEL1_AHC : COMM_LEVEL1;
-        CHK_RET(CheckCommSize(commPlaneLevel1, commIndex + 1));
+        CHK_RET(CheckCommSize(commPlaneLevel1, 1 + commIndex));
         level1CommInfo = GetSubCommInfo(commPlaneLevel1, commIndex);
         return HCCL_SUCCESS;
     }
 
-    if (CheckCommSize(COMM_LEVEL2, COMM_INDEX_0 + 1) != HCCL_SUCCESS) {
+    if (CheckCommSize(COMM_LEVEL2, 1 + COMM_INDEX_0) != HCCL_SUCCESS) {
         return HCCL_E_UNAVAIL;
     }
     level1CommInfo = GetSubCommInfo(COMM_LEVEL2, COMM_INDEX_0);

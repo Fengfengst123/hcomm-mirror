@@ -194,27 +194,27 @@ HcclResult CollAllGatherMeshAivExecutor::KernelRun(const OpParam& param, ExecMem
 {
     HCCL_INFO("[CollAllGatherMeshAivExecutor][KernelRun]AllGather aiv enter.");
 
-    CHK_RET(CheckCommSize(COMM_LEVEL0, COMM_INDEX_0 + 1));
+    CHK_RET(CheckCommSize(COMM_LEVEL0, 1 + COMM_INDEX_0));
     SubCommInfo level0CommInfo = GetSubCommInfo(COMM_LEVEL0, COMM_INDEX_0);
 
-    void* buffersIn[MAX_RANK_SIZE];
     void* buffersOut[MAX_RANK_SIZE];
+    void* buffersIn[MAX_RANK_SIZE];
 
-    u32 localRank = level0CommInfo.localRank;
     u32 localRankSize = level0CommInfo.localRankSize;
+    u32 localRank = level0CommInfo.localRank;
     HCCL_DEBUG("[CollAllGatherMeshAivExecutor][KernelRun] userRank [%d] localRank [%d]", topoAttr_.userRank, localRank);
 
     for (u32 i = 0; i < localRankSize; i++) {
-        if (i != localRank) {
-            CHK_RET(level0CommInfo.links[i]->GetRemoteMem(UserMemType::INPUT_MEM, &(buffersIn[i])));
-            CHK_RET(level0CommInfo.links[i]->GetRemoteMem(UserMemType::OUTPUT_MEM, &(buffersOut[i])));
-        } else {
+        if (i == localRank) {
             buffersIn[i] = execMem.inputMem.ptr();
             buffersOut[i] = execMem.outputMem.ptr();
+        } else {
+            CHK_RET(level0CommInfo.links[i]->GetRemoteMem(UserMemType::INPUT_MEM, &(buffersIn[i])));
+            CHK_RET(level0CommInfo.links[i]->GetRemoteMem(UserMemType::OUTPUT_MEM, &(buffersOut[i])));
         }
     }
 
-    bool isOpbase = (GetWorkflowMode() == HcclWorkflowMode::HCCL_WORKFLOW_MODE_OP_BASE);
+    bool isOpbase = (HcclWorkflowMode::HCCL_WORKFLOW_MODE_OP_BASE == GetWorkflowMode());
     AivOpArgs opArgs{
         HcclCMDType::HCCL_CMD_ALLGATHER,
         execMem.inputPtr,
@@ -232,10 +232,10 @@ HcclResult CollAllGatherMeshAivExecutor::KernelRun(const OpParam& param, ExecMem
     numBlocks_ = numBlocks;
     AivResourceArgs resourceArgs{param.tag,  param.stream.ptr(), buffersIn, buffersOut, execMem.inputMem.size(),
                                  numBlocks_, param.aivTag};
-    AivAlgArgs algArgs{};
     struct AivProfilingInfo aivProfilingInfo;
-    algArgs.execTimeOut = topoMatcher_->GetExecTimeOutConfig();
+    AivAlgArgs algArgs{};
     algArgs.execTimeOutSet = true;
+    algArgs.execTimeOut = topoMatcher_->GetExecTimeOutConfig();
     aivProfilingInfo.counter = opCounter_;
 
     HcclResult ret = ExecuteKernelLaunch(opArgs, topoArgs, resourceArgs, algArgs, aivProfilingInfo);

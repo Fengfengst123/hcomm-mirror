@@ -52,7 +52,7 @@ HcclResult CollAllReduceOrderPreservedExecutor::CalcStreamNum(u32& streamNum)
 {
     if (topoAttr_.deviceNumPerAggregation == 1) {
         u32 level1StreamNum = CalReduceStreamNum(topoAttr_.moduleNum);
-        streamNum = std::min(level1StreamNum, DEVICE_EIGHT + DEVICE_EIGHT / FACTOR_NUM_TWO - 1);
+        streamNum = std::min(level1StreamNum, DEVICE_EIGHT + (DEVICE_EIGHT / FACTOR_NUM_TWO) - 1);
         HCCL_INFO(
             "[%s]tag[%s] single rank per module, level1StreamNum[%u], streamNum[%u]", __func__, tag_.c_str(),
             level1StreamNum, streamNum);
@@ -65,7 +65,7 @@ HcclResult CollAllReduceOrderPreservedExecutor::CalcStreamNum(u32& streamNum)
     u32 level1StreamNum = CalReduceStreamNum(topoAttr_.moduleNum);
     // 总流数上限：7（alltoall使用，提前的本地拷贝任务不需要并行）+ 4（LocalReduce使用）
     streamNum
-        = std::min(std::max(level0StreamNum - 1, level1StreamNum), DEVICE_EIGHT + DEVICE_EIGHT / FACTOR_NUM_TWO - 1);
+        = std::min(std::max(level1StreamNum, level0StreamNum - 1), DEVICE_EIGHT + DEVICE_EIGHT / FACTOR_NUM_TWO - 1);
 
     HCCL_INFO(
         "[%s]tag[%s] level0StreamNum[%u], level1StreamNum[%u], streamNum[%u]", __func__, tag_.c_str(), level0StreamNum,

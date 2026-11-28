@@ -150,7 +150,7 @@ HcclResult CollReduceScatterExecutor::RunLoop(OpParam& param, AlgResourceRespons
 {
     u32 unitSize = SIZE_TABLE[param.DataDes.dataType];
     ReduceType reduceType
-        = ((param.reduceType != HCCL_REDUCE_PROD) && (param.DataDes.dataType != HCCL_DATA_TYPE_INT64)) ?
+        = ((param.DataDes.dataType != HCCL_DATA_TYPE_INT64) && (param.reduceType != HCCL_REDUCE_PROD)) ?
               ReduceType::INLINE_REDUCE :
               ReduceType::TBE_REDUCE;
 
@@ -541,15 +541,15 @@ HcclResult CollReduceScatterExecutor::PrepareAivBuffers(
     void** dataBuffers, void** flagBuffers, UserMemType dataMemType, UserMemType flagMemType, u32 dataMemOffset,
     u32 flagMemOffset) const
 {
-    void* tmpCCLBufferData = nullptr;
-    void* tmpCCLBufferFlag = nullptr;
+    void* cclBufferData = nullptr;
+    void* cclBufferFlag = nullptr;
     for (u32 i = 0; i < rankSize; i++) {
-        if (i != rankId) {
+        if (rankId != i) {
             if (links[i + rankOffset] != nullptr) {
-                CHK_RET(links[i + rankOffset]->GetRemoteMem(dataMemType, &(tmpCCLBufferData)));
-                CHK_RET(links[i + rankOffset]->GetRemoteMem(flagMemType, &(tmpCCLBufferFlag)));
-                dataBuffers[i] = static_cast<u8*>(tmpCCLBufferData) + dataMemOffset;
-                flagBuffers[i] = static_cast<u8*>(tmpCCLBufferFlag) + flagMemOffset;
+                CHK_RET(links[i + rankOffset]->GetRemoteMem(dataMemType, &(cclBufferData)));
+                CHK_RET(links[i + rankOffset]->GetRemoteMem(flagMemType, &(cclBufferFlag)));
+                dataBuffers[i] = static_cast<u8*>(cclBufferData) + dataMemOffset;
+                flagBuffers[i] = static_cast<u8*>(cclBufferFlag) + flagMemOffset;
             }
         } else {
             dataBuffers[i] = static_cast<u8*>(inputMem.ptr()) + dataMemOffset;

@@ -26,7 +26,7 @@ void MultiRootScatterRing::SlicesDataPrepare(const u32 unitSize, const u64 total
 {
     slices_.resize(rankSize);
     u64 sliceSize = (totalCount / rankSize) * unitSize;
-    for (u32 i = 0; i < rankSize; i++) {
+    for (u32 i = 0; i < rankSize; ++i) {
         slices_[i].offset = i * sliceSize;
         slices_[i].size = sliceSize;
         HCCL_DEBUG("rank[%u] default slice[%u]: offset: [%llu] size[%llu]", interRank_, i, i * sliceSize, sliceSize);
@@ -353,7 +353,8 @@ HcclResult MultiRootScatterRing::MultiRootScatterSlicesPrep(u32 rankSize, u32 ni
 {
     u32 chunkSize = HCCL_NIC_MAX_NUM / nicSize;
     std::vector<SliceSendRange> sliceSendRangeVec;
-    for (u32 nicIdx = 0; nicIdx < nicSize; nicIdx++) {             // 计算每个网口负责的slice发送顺序
+    for (u32 nicIdx = 0; nicIdx < nicSize; nicIdx++) {
+        // 计算每个网口负责的slice发送顺序
         for (u32 sliceIdx = 0; sliceIdx < chunkSize; sliceIdx++) { // 记录每个网口发送slice的起点和终点
             SliceSendRange tempSliceSendRange;
             tempSliceSendRange.sliceIdx = nicIdx * chunkSize + sliceIdx;

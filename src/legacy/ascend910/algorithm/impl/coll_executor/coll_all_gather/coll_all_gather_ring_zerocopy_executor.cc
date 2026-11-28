@@ -92,10 +92,10 @@ HcclResult CollAllGatherRingZerocopyExecutor::SemiRingAllGather(
 
     CHK_RET(executor->Prepare(
         stream, level0CommInfo, algResResp_->paramInputMem, algResResp_->paramOutputMem, inputMem, outputMem,
-        count * SIZE_TABLE[dataType], algResResp_->slaveStreams, algResResp_->notifiesMain, algResResp_->notifiesAux,
+        SIZE_TABLE[dataType] * count, algResResp_->slaveStreams, algResResp_->notifiesMain, algResResp_->notifiesAux,
         multRingsUserMemSlice));
     HcclResult ret = executor->RegisterProfiler(
-        ((COMM_INDEX_0 + 1) << PROF_RINGINDEX_OFFSET_OF_PLANEID)
+        ((1 + COMM_INDEX_0) << PROF_RINGINDEX_OFFSET_OF_PLANEID)
             + (level0CommInfo.localRankSize << PROF_RANKSIZE_OFFSET_OF_PLANEID) + level0CommInfo.localRank,
         profStage, HCCL_EXEC_STEP_NOT_SET, stream);
     CHK_PRT_RET(

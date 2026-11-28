@@ -32,7 +32,7 @@ AivBroadcastSmall910B::Process(GM_ADDR input, GM_ADDR output, uint64_t len, int3
     if (blockIdx_ > 0) {
         return;
     }
-    if (rank_ == root) {
+    if (root == rank_) {
         // 当前卡为root时，将root的数据搬到cclbuffer
         CpGM2GM(cclGMRoot, inputGM, len);
         PipeBarrier<PIPE_ALL>();
@@ -40,9 +40,11 @@ AivBroadcastSmall910B::Process(GM_ADDR input, GM_ADDR output, uint64_t len, int3
         Record1vN(tag, CommPattern::interRank, AivNotifyType::DataSignal);
         for (uint32_t remoteRank = 0; remoteRank < rankSize_; remoteRank += 1) {
             // 等每个对端rank拿走自己的数据
-            if (remoteRank == root)
+            if (root == remoteRank) {
                 continue;
-            Wait(tag, remoteRank, AivNotifyType::Done);
+            } else {
+                Wait(tag, remoteRank, AivNotifyType::Done);
+            }
         }
         PipeBarrier<PIPE_ALL>();
     } else {

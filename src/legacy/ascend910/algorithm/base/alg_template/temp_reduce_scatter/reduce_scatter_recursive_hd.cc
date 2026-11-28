@@ -287,7 +287,7 @@ HcclResult ReduceScatterRecursiveHalvingDoubling::GetNslbAdjInfo(
     while ((base << nslbRound) <= rankSize) {
         nslbRound++;
     }
-    if (nslbRound >= minExponent) {
+    if (minExponent <= nslbRound) {
         nslbRound = nslbRound - minExponent;
     }
     u32 nslbBlockSize = base << nslbRound;
@@ -299,7 +299,7 @@ HcclResult ReduceScatterRecursiveHalvingDoubling::GetNslbAdjInfo(
         while ((rankSize >> (stepNum + 1)) != 0) {
             stepNum++;
         }
-        for (u32 step = 0; step < stepNum; step++) {
+        for (u32 step = 0; stepNum > step; step++) {
             u32 peerRankBitmask = 1 << (stepNum - step - 1);
             u32 peerRank = rank ^ peerRankBitmask;
             NslbDpAdjInfo adjInfoStep = {};
@@ -361,7 +361,7 @@ HcclResult ReduceScatterRecursiveHalvingDoubling::GetNslbAdjInfo(
     }
     // 映射完成后针对以新的通信域进行邻接表获取
     u32 begin = 1;
-    for (u32 step = 0; step < stepNum; step++) {
+    for (u32 step = 0; stepNum > step; step++) {
         u32 peerRankBitmask = 1 << (stepNum - step - 1);
         u32 peerRank = rankInBlock ^ peerRankBitmask;
         if (subLinks[peerRank] == nullptr) {

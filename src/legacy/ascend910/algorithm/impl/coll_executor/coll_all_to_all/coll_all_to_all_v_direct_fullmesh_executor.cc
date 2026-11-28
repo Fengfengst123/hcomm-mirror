@@ -21,9 +21,9 @@ HcclResult CollRunAlltoAllDirectFullmesh::Orchestrate(OpParam& param, AlgResourc
 {
     HcclUs startut = TIME_NOW();
     HcclResult ret = HCCL_SUCCESS;
-    tag_ = param.tag;
     algResResp_ = &algRes;
     AlltoAllVParam_ = param;
+    tag_ = param.tag;
 
     ExecMem execMem;
     execMem.count = 0;

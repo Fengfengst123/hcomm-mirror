@@ -67,13 +67,13 @@ HcclResult CollAllReduceOrderPreservedFor91093Executor::CalcStreamNum(u32& strea
     }
 
     // all2allStreamNum条流给alltoall
-    u32 all2allStreamNum = std::min(devNumInlocalPod, DEVICE_EIGHT);
+    u32 all2allStreamNum = std::min(DEVICE_EIGHT, devNumInlocalPod);
     // reduceStreamNum主流分给alltoall，从流给LocalReduce使用
     u32 reduceStreamNum = std::min(CalReduceStreamNum(devNumInlocalPod) - 1, DEVICE_FOUR);
     // level2StreamNum超节点间reducescatter
     u32 level2StreamNum = std::min(CalReduceStreamNum(topoAttr_.superPodNum) - 1, DEVICE_FOUR);
     // 总流数上限：7（alltoall使用，提前的本地拷贝任务不需要并行）+ 4（LocalReduce使用）
-    streamNum = std::max(all2allStreamNum + reduceStreamNum - 1, level2StreamNum);
+    streamNum = std::max(level2StreamNum, all2allStreamNum + reduceStreamNum - 1);
 
     HCCL_INFO(
         "[%s]tag[%s] all2allStreamNum[%u], reduceStreamNum[%u], level2StreamNum[%u], streamNum[%u]", __func__,
@@ -148,7 +148,7 @@ void CollAllReduceOrderPreservedFor91093Executor::CalGroupSlices(const OpParam& 
     groupSize_.clear();
     u64 sizeRemain = execMem.count * SIZE_TABLE[param.DataDes.dataType];
     for (u32 rankId = 0; rankId < topoAttr_.userRankSize; rankId++) {
-        u64 size = (sizeRemain > sizePerBlock_) ? sizePerBlock_ : sizeRemain;
+        u64 size = (sizePerBlock_ < sizeRemain) ? sizePerBlock_ : sizeRemain;
         groupSize_.push_back(size);
         sizeRemain -= size;
     }

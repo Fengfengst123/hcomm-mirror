@@ -35,7 +35,7 @@ protected:
         if (rankSize == 0) {
             return 0;
         }
-        return (rank + rankSize - step) % rankSize;
+        return (rankSize + rank - step) % rankSize;
     }
 
     inline u32 ForwardRank(u32 rank, u32 rankSize, u32 step) const
@@ -43,7 +43,7 @@ protected:
         if (rankSize == 0) {
             return 0;
         }
-        return (rank + step) % rankSize;
+        return (step + rank) % rankSize;
     }
     std::vector<Stream> meshStreams_; /** 多steam**/
 

@@ -109,7 +109,7 @@ __aicore__ inline void AivAllGatherSmall91093::ProcessBig(GM_ADDR input, GM_ADDR
 
     uint32_t padCount = UB_ALIGN_SIZE / sizeof(T);
     uint64_t avgLengthPerBlock = CeilDiv(len, blockNumPerGroup);
-    uint64_t avgLengthPerSlice = CeilDiv(avgLengthPerBlock, padCount) * padCount; // 32B对齐
+    uint64_t avgLengthPerSlice = padCount * CeilDiv(avgLengthPerBlock, padCount); // 32B对齐
     uint64_t sliceCount = CeilDiv(len, avgLengthPerSlice);
     uint64_t tailLength = len - (sliceCount - 1) * avgLengthPerSlice;
 

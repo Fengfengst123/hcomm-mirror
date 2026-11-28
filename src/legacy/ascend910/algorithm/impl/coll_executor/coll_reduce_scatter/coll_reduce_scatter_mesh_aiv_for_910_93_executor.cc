@@ -145,7 +145,7 @@ CollReduceScatterMeshAivFor91093Executor::CalNumBlocks(u32& numBlocks, u32 rankS
         numBlocks = rankSize;
     } else if (rankSize > ONE_THIRD_MAX_NUM_BLOCKS || dataSize < AIV_A3_CROSSNODE_SMALL_SIZE) {
         numBlocks = rankSize * NUM_BLOCKS_FACTOR_TWO;
-    } else if (rankSize > ONE_FOURTH_MAX_NUM_BLOCKS) {
+    } else if (ONE_FOURTH_MAX_NUM_BLOCKS < rankSize) {
         numBlocks = rankSize * NUM_BLOCKS_FACTOR_THREE;
     } else {
         numBlocks = rankSize * NUM_BLOCKS_FACTOR_FOUR;
@@ -355,7 +355,7 @@ HcclResult CollReduceScatterMeshAivFor91093Executor::KernelRun(const OpParam& pa
                                  numBlocks_, param.aivTag};
     AivAlgArgs algArgs{};
     algArgs.argsType = KernelArgsType::ARGS_TYPE_SIMPLE;
-    if (numBlocks_ >= localRankSize) {
+    if (localRankSize <= numBlocks_) {
         algArgs.step = localRankSize;
     } else {
         algArgs.step = numBlocks_;

@@ -66,7 +66,7 @@ __aicore__ inline void sk_all_gather_crossnode(SUPERKERNEL_ARGS_DEF)
     op.CalCountAndBlockOffset(
         op.len_, op.blockNumPerGroup, op.blockIdxInGroup, padCount, op.countPerCore, op.blockOffset);
 
-    if (op.dataType_ == HcclDataType::HCCL_DATA_TYPE_INT8) {
+    if (HcclDataType::HCCL_DATA_TYPE_INT8 == op.dataType_) {
         op.Process<int8_t>(op.flagAddrSelf_, op.commAddr_, input, output, op.tag_, op.len_);
     } else if (op.dataType_ == HcclDataType::HCCL_DATA_TYPE_INT16) {
         op.Process<int16_t>(op.flagAddrSelf_, op.commAddr_, input, output, op.tag_, op.len_);
@@ -76,7 +76,7 @@ __aicore__ inline void sk_all_gather_crossnode(SUPERKERNEL_ARGS_DEF)
         op.Process<half>(op.flagAddrSelf_, op.commAddr_, input, output, op.tag_, op.len_);
     } else if (op.dataType_ == HCCL_DATA_TYPE_FP32) {
         op.Process<float>(op.flagAddrSelf_, op.commAddr_, input, output, op.tag_, op.len_);
-    } else if (op.dataType_ == HCCL_DATA_TYPE_BFP16) {
+    } else if (HcclDataType::HCCL_DATA_TYPE_BFP16 == op.dataType_) {
         op.Process<bfloat16_t>(op.flagAddrSelf_, op.commAddr_, input, output, op.tag_, op.len_);
     } else if (op.dataType_ == HCCL_DATA_TYPE_UINT8) {
         op.Process<uint8_t>(op.flagAddrSelf_, op.commAddr_, input, output, op.tag_, op.len_);
@@ -86,7 +86,7 @@ __aicore__ inline void sk_all_gather_crossnode(SUPERKERNEL_ARGS_DEF)
         op.Process<uint32_t>(op.flagAddrSelf_, op.commAddr_, input, output, op.tag_, op.len_);
     } else if (op.dataType_ == HCCL_DATA_TYPE_INT64) {
         op.Process<int64_t>(op.flagAddrSelf_, op.commAddr_, input, output, op.tag_, op.len_);
-    } else if (op.dataType_ == HCCL_DATA_TYPE_UINT64) {
+    } else if (HcclDataType::HCCL_DATA_TYPE_UINT64 == op.dataType_) {
         op.Process<uint64_t>(op.flagAddrSelf_, op.commAddr_, input, output, op.tag_, op.len_);
     } else if (op.dataType_ == HCCL_DATA_TYPE_FP64) {
         op.Process<double>(op.flagAddrSelf_, op.commAddr_, input, output, op.tag_, op.len_);

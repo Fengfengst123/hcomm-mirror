@@ -41,18 +41,18 @@ __aicore__ inline void AivBroadcastCrossNode91093::InitSelf(
     bool useDoubleBuffer, uint32_t root, bool isOpBase)
 {
     flagAddrSelf_ = buffOut0;
-    rank_ = rank;
     tag_ = tag;
+    rank_ = rank;
     rankSize_ = rankSize;
     useDoubleBuffer_ = useDoubleBuffer;
-    usedBlockNum_ = numBlocks;
     numBlocks_ = numBlocks;
+    usedBlockNum_ = numBlocks;
     pingpongOffset = 0;
     blockGroup_ = numBlocks;
     commAddr_ = buffOut1;
 
     InitSetCheckClearArgsTensor();
-    if (rankSize_ - 1 >= numBlocks_) {
+    if ((rankSize_ - 1) >= numBlocks_) {
         blockNumPerGroup = 1;
     } else {
         blockNumPerGroup = numBlocks_ / (rankSize_ - 1);
@@ -70,15 +70,15 @@ __aicore__ inline void AivBroadcastCrossNode91093::InitSelf(
 
 __aicore__ inline void AivBroadcastCrossNode91093::CalcNumTargetsAndTargetRanksForBRC(uint32_t root)
 {
-    numTargets = (rankSize_ - 1) / usedBlockNum_;
     uint32_t tailRankSize = (rankSize_ - 1) % usedBlockNum_;
-    if (tailRankSize > 0 && blockIdx_ < tailRankSize) {
+    numTargets = (rankSize_ - 1) / usedBlockNum_;
+    if (blockIdx_ < tailRankSize && tailRankSize > 0) {
         numTargets += 1;
     }
 
     for (uint32_t i = 0; i < numTargets; i++) {
-        uint32_t targetRank = (blockIdx_ + i * usedBlockNum_) % rankSize_;
-        if (targetRank >= root) {
+        uint32_t targetRank = (blockIdx_ + (i * usedBlockNum_)) % rankSize_;
+        if (root <= targetRank) {
             targetRank += 1;
         }
         targetRanks[i] = targetRank;
@@ -90,9 +90,9 @@ __aicore__ inline void AivBroadcastCrossNode91093::InitDataCopyOffset(uint64_t l
     uint64_t countPerRank = maxCountPerLoop / (rankSize_ - 1);
 
     if (len < maxCountPerLoop) {
-        countMid = 0;
         countTail = len / (rankSize_ - 1);
-        countTailLast_ = len - (rankSize_ - BROADCAST_MID_NODE_COUNT) * countTail;
+        countMid = 0;
+        countTailLast_ = len - ((rankSize_ - BROADCAST_MID_NODE_COUNT) * countTail);
     } else if (len % maxCountPerLoop == 0) {
         countMid = countPerRank;
         countTail = countPerRank;
@@ -101,7 +101,7 @@ __aicore__ inline void AivBroadcastCrossNode91093::InitDataCopyOffset(uint64_t l
         countMid = countPerRank;
         uint64_t remainLen = len % maxCountPerLoop;
         countTail = remainLen / (rankSize_ - 1);
-        countTailLast_ = remainLen - (rankSize_ - BROADCAST_MID_NODE_COUNT) * countTail;
+        countTailLast_ = remainLen - ((rankSize_ - BROADCAST_MID_NODE_COUNT) * countTail);
     }
 }
 
@@ -110,13 +110,13 @@ AivBroadcastCrossNode91093::WaitRecordSync(int32_t tag, uint32_t root, GM_ADDR r
 {
     for (uint32_t i = 0; i < numTargets; ++i) {
         int32_t targetRank = targetRanks[i];
-        if (rank_ != root && targetRank == rank_) {
+        if (root != rank_ && rank_ == targetRank) {
             Wait1vN(
                 tag * (rankSize_ - BROADCAST_MID_NODE_COUNT), CommPattern::interRank, true,
                 AivNotifyType::DataSignal); // 等待n个对端拿走数据
             PipeBarrier<PIPE_ALL>();
             Record(tag, rootAddr, AivNotifyType::DataSignal);
-        } else if (rank_ != root) {
+        } else if (root != rank_) {
             RecordNv1(tag, buffersOut[i], false, AivNotifyType::DataSignal); // 告诉对端已经拿来数据了
             PipeBarrier<PIPE_ALL>();
         } else {
@@ -137,7 +137,7 @@ __aicore__ inline void AivBroadcastCrossNode91093::ProcessSmallData(
 
     GlobalTensor<uint64_t> bufferArgsGT;
     __gm__ uint64_t* buffersGmAddr = (__gm__ uint64_t*)(commInfoAddr);
-    bufferArgsGT.SetGlobalBuffer(buffersGmAddr, FLAG_SIZE * rankSize_ / sizeof(uint64_t));
+    bufferArgsGT.SetGlobalBuffer(buffersGmAddr, (FLAG_SIZE * rankSize_) / sizeof(uint64_t));
 
     DataCopy(bufferArgsTensor[numTargets * IDX_4], bufferArgsGT[2 * root], IDX_4);
     SyncFunc<HardEvent::MTE2_S>();
@@ -164,7 +164,7 @@ __aicore__ inline void AivBroadcastCrossNode91093::ProcessSmallData(
 
             uint32_t targetRank = targetRanks[i];
             uint64_t dataCopyOffset = targetRank * curCount;
-            if (targetRank > root) {
+            if (root < targetRank) {
                 dataCopyOffset = (targetRank - 1) * curCount;
             }
 
@@ -185,7 +185,7 @@ __aicore__ inline void AivBroadcastCrossNode91093::ProcessSmallData(
                 PipeBarrier<PIPE_ALL>();
                 CpGM2GM(outputGM + curOffset + dataCopyOffset, cclGMSelf + dataCopyOffset, curCount);
                 PipeBarrier<PIPE_ALL>();
-            } else if (rank_ != root) { // 对端cclbuffer -> 本端output
+            } else if (root != rank_) { // 对端cclbuffer -> 本端output
                 CountWaitGE(ctrlFlagGMOther, curTag, targetRank);
                 CpGM2GM(outputGM + curOffset + dataCopyOffset, cclGMOther + dataCopyOffset, curCount);
                 PipeBarrier<PIPE_ALL>();
@@ -200,8 +200,8 @@ __aicore__ inline void AivBroadcastCrossNode91093::ProcessSmallData(
         // 尾同步
         WaitRecordSync(curTag, root, ctrlFlagGMRoot, buffersOut);
 
-        curOffset += maxCountPerLoop;
         curTag += 1;
+        curOffset += maxCountPerLoop;
     }
 }
 
@@ -210,10 +210,10 @@ __aicore__ inline void aiv_broadcast_crossnode_91093(KERNEL_ARGS_DEF_A3)
 {
     AivBroadcastCrossNode91093 op;
 
-    uint64_t basicLoopCount = (rankSize - 1) * UB_MAX_DATA_SIZE / sizeof(T);
+    uint64_t basicLoopCount = ((rankSize - 1) * UB_MAX_DATA_SIZE) / sizeof(T);
     uint64_t bufferCount = (uint64_t)bufferSize / sizeof(T);
-    uint64_t maxCountPerLoop = bufferCount / basicLoopCount * basicLoopCount;
-    if (bufferCount < basicLoopCount) {
+    uint64_t maxCountPerLoop = (bufferCount / basicLoopCount) * basicLoopCount;
+    if (basicLoopCount > bufferCount) {
         maxCountPerLoop = basicLoopCount;
     }
 

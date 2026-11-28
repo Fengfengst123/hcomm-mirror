@@ -92,7 +92,7 @@ HcclResult BroadcastNHR::PrepareSlice(const u32 rank, const u32 rankSize)
     u64 sizePerRound = 0;
 
     for (u32 i = 0; i < rankSize; i++) {
-        sizePerRound = (sizeResidue > sizePerSlice) ? sizePerSlice : sizeResidue;
+        sizePerRound = (sizePerSlice < sizeResidue) ? sizePerSlice : sizeResidue;
         slices_[i].offset = count_ * unitSize - sizeResidue;
         slices_[i].size = sizePerRound;
 
@@ -107,23 +107,23 @@ HcclResult BroadcastNHR::PrepareSlice(const u32 rank, const u32 rankSize)
 HcclResult
 BroadcastNHR::GetNslbAdjInfo(const u32 rank, const u32 rankSize, const std::vector<LINK>& links, AdjInfo& nslbAdjInfo)
 {
-    if (rankSize == 1) {
-        return HCCL_SUCCESS;
-    }
     if (links.size() < rankSize) {
         return HCCL_SUCCESS;
     }
+    if (rankSize == 1) {
+        return HCCL_SUCCESS;
+    }
     u32 nSteps = 0;
-    for (u32 temp = rankSize - 1; temp != 0; temp >>= 1, ++nSteps) {
+    for (u32 temp = rankSize - 1; temp != 0; ++nSteps, temp >>= 1) {
     }
 
     u32 deltaRoot = (rankSize - rank) % rankSize;
     // 先执行 scatter 流程
     for (u32 step = 0; step < nSteps; step++) {
         u32 deltaRankPair = 1 << step;
-        u32 nRanks = 0;
         bool isPerfect = (rankSize & (rankSize - 1)) == 0;
-        if (!isPerfect && step == nSteps - 1) {
+        u32 nRanks = 0;
+        if (!isPerfect && nSteps - 1 == step) {
             nRanks = rankSize - deltaRankPair;
         } else {
             nRanks = deltaRankPair;
@@ -131,7 +131,7 @@ BroadcastNHR::GetNslbAdjInfo(const u32 rank, const u32 rankSize, const std::vect
         if (deltaRoot >= nRanks) {
             continue;
         }
-        u32 sendTo = (rank + rankSize - deltaRankPair) % rankSize;
+        u32 sendTo = (rankSize + rank - deltaRankPair) % rankSize;
         LINK linkRight = links[sendTo];
         CHK_SMART_PTR_NULL(linkRight);
 

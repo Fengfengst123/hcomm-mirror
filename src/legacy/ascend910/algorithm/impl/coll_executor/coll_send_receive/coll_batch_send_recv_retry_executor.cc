@@ -50,7 +50,7 @@ HcclResult CollBatchSendRecvRetryExecutor::CreatePairWiseList(HcclSendRecvItem* 
     auto sendCompare = [this](HcclSendRecvItem* a, HcclSendRecvItem* b) {
         u32 aFlag = (a->remoteRank <= topoAttr_.userRank) ? (a->remoteRank + topoAttr_.userRankSize) : a->remoteRank;
         u32 bFlag = (b->remoteRank <= topoAttr_.userRank) ? (b->remoteRank + topoAttr_.userRankSize) : b->remoteRank;
-        return aFlag > bFlag;
+        return bFlag < aFlag;
     };
 
     auto recvCompare = [this](HcclSendRecvItem* a, HcclSendRecvItem* b) {
@@ -255,7 +255,7 @@ HcclResult CollBatchSendRecvRetryExecutor::CalcSendSlices(AlgResourceResponse& a
     u32 unitSize = SIZE_TABLE[sendRecvItem->dataType];
     u64 maxCountPerLoop = CalcSendLoopMaxCount(const_cast<DeviceMem&>(algRes.cclInputMem), unitSize);
 
-    for (u64 countLeft = sendRecvItem->count, curCount = 0, curOffset = 0; countLeft > 0; countLeft -= curCount) {
+    for (u64 countLeft = sendRecvItem->count, curCount = 0, curOffset = 0; 0 < countLeft; countLeft -= curCount) {
         curInputPtr += curOffset;
         curCount = (countLeft > maxCountPerLoop) ? maxCountPerLoop : countLeft;
         u64 curSize = curCount * unitSize; // 单位：字节

@@ -485,14 +485,14 @@ ScatterRing::GetNslbAdjInfo(const u32 rank, const u32 rankSize, const std::vecto
     if (rankSize == 1) {
         return HCCL_E_NOT_SUPPORT;
     }
-    u32 ringNextRank = (rank + 1) % rankSize;
+    u32 ringNextRank = (1 + rank) % rankSize;
     LINK nslbNext = links[ringNextRank];
 
     NslbDpAdjInfo adjInfoStep = {};
     nslbAdjInfo.dstRankNum = 1;
     adjInfoStep.dstLocalRankId = nslbNext->GetRemoteRank();
-    adjInfoStep.phaseId = 1;
     adjInfoStep.rev = 0;
+    adjInfoStep.phaseId = 1;
     nslbAdjInfo.nsAdjInfo.push_back(adjInfoStep);
 
     return HCCL_SUCCESS;

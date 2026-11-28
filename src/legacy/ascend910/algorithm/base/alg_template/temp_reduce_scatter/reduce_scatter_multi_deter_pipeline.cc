@@ -137,11 +137,11 @@ HcclResult ReduceScatterMultiDeterPipeline::BatchPostNotifyForStreams(
         HCCL_DEBUG("[%s] use mainStream, skip notify wait", __func__);
         return HCCL_SUCCESS;
     }
-    for (u32 s = 0; s < MAX_REDUCE_STREAM_NUM; s++) {
+    for (u32 s = 0; MAX_REDUCE_STREAM_NUM > s; s++) {
         if (streamTasks[s].empty())
             continue; // 无任务的流跳过
         u32 streamIdx = reduceStreamBegin_ + s;
-        if (reduceMainStreamIdx_ == streamIdx) {
+        if (streamIdx == reduceMainStreamIdx_) {
             continue;
         }
         if (isStartPhase) {

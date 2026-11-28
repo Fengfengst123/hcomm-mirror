@@ -237,10 +237,10 @@ HcclResult CollAlltoAllMeshAivExecutor::KernelRun(const OpParam& param, ExecMem&
     }
 
     ExtraArgs extraArgs;
-    bool isOpbase = (workflowMode_ == HcclWorkflowMode::HCCL_WORKFLOW_MODE_OP_BASE);
+    bool isOpbase = (HcclWorkflowMode::HCCL_WORKFLOW_MODE_OP_BASE == workflowMode_);
     HcclResult ret;
     u64 dataSize
-        = (param.opType == HcclCMDType::HCCL_CMD_ALLTOALL ?
+        = (HcclCMDType::HCCL_CMD_ALLTOALL == param.opType ?
                param.All2AllDataDes.sendCount * SIZE_TABLE[param.All2AllDataDes.sendType] :
                0);
 

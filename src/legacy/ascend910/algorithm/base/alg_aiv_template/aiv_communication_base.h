@@ -865,7 +865,7 @@ __aicore__ inline void AivCommBase::CalBlockCountAndOffset(
     uint64_t tailLength = len - (sliceCount - 1) * avgLengthPerSlice;
 
     count = CalActualCount(blockIdxInGroup, sliceCount, avgLengthPerSlice, tailLength);
-    blockOffset = blockIdxInGroup * avgLengthPerSlice;
+    blockOffset = avgLengthPerSlice * blockIdxInGroup;
 }
 
 template <typename T>

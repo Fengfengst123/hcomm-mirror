@@ -168,8 +168,8 @@ HcclResult AllGatherRing::RunAllGather(u32 rank, u32 rankSize, const std::vector
         std::vector<Slice> txSegsSlice;
         std::vector<Slice> rxSegsSlice;
         for (u32 j = 0; j < sliceSize; j++) {
-            txSegsSlice.push_back(outputSlices[txSliceIndex * sliceSize + j]);
-            rxSegsSlice.push_back(outputSlices[rxSliceIndex * sliceSize + j]);
+            txSegsSlice.push_back(outputSlices[sliceSize * txSliceIndex + j]);
+            rxSegsSlice.push_back(outputSlices[sliceSize * rxSliceIndex + j]);
         }
         ret = TxVector(linkRight_, txSegsSlice);
         CHK_PRT_RET(

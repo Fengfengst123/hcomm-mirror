@@ -49,7 +49,7 @@ __aicore__ inline void AivAllReduce91093::ProcessSmall(GM_ADDR input, GM_ADDR ou
     uint64_t tailLength = len - (sliceCount - 1) * avgLengthPerSlice;
 
     uint64_t count = CalActualCount(blockIdxInGroup, sliceCount, avgLengthPerSlice, tailLength);
-    uint64_t blockOffset = blockIdxInGroup * avgLengthPerSlice;
+    uint64_t blockOffset = avgLengthPerSlice * blockIdxInGroup;
     uint32_t dstRank = blockIdx_ / blockNumPerGroup;
     bool ifPingpong = (tag % 2 == 0);
     uint32_t dataOffset = (tag % 2 == 0) ? AIV_INIT_OFFSET : AIV_PING_PONG_SIZE;

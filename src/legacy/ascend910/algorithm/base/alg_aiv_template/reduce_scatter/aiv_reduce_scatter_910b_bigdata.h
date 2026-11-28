@@ -73,8 +73,8 @@ __aicore__ inline void AivReduceScatterBig910B::ReduceWithFlagWrap(
         }
 
         uint64_t curSize = (preparedBatchCount - processedBatchCount) * UB_DB_DATA_BATCH_SIZE;
-        if (preparedBatchCount * UB_DB_DATA_BATCH_SIZE > avgSizePerSlice) {
-            curSize = avgSizePerSlice - processedBatchCount * UB_DB_DATA_BATCH_SIZE;
+        if (UB_DB_DATA_BATCH_SIZE * preparedBatchCount > avgSizePerSlice) {
+            curSize = avgSizePerSlice - (processedBatchCount * UB_DB_DATA_BATCH_SIZE);
         }
 
         set_flag(PIPE_S, PIPE_MTE2, EVENT_ID0);

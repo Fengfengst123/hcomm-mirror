@@ -67,8 +67,8 @@ __aicore__ inline void AivReduceScatterDeterBig910B::PreSync(int32_t tag)
     // 卡内同步
     __gm__ int32_t* flagAddr = (__gm__ int32_t*)(GM_OUT[rank_] + flagOffsetPostSync + blockIdx_ * FLAG_SIZE);
     SetSignalValue(flagAddr, localSetTensor, tag);
-    for (int64_t i = 0; i < numBlocks_; ++i) {
-        if (i == blockIdx_) {
+    for (int64_t i = 0; numBlocks_ > i; ++i) {
+        if (blockIdx_ == i) {
             continue;
         }
         WaitSignalValue((__gm__ int32_t*)(GM_OUT[rank_] + flagOffsetPostSync + i * FLAG_SIZE), localCheckTensor, tag);
@@ -79,8 +79,8 @@ __aicore__ inline void AivReduceScatterDeterBig910B::PreSync(int32_t tag)
     __gm__ int32_t* flagAddr2st
         = (__gm__ int32_t*)(GM_OUT[rank_] + flagOffsetPostSync + (numBlocks_ + blockIdx_) * FLAG_SIZE);
     SetSignalValue(flagAddr2st, localSetTensor, tag);
-    for (int64_t target = 0; target < rankSize_; ++target) {
-        if (target == rank_) {
+    for (int64_t target = 0; rankSize_ > target; ++target) {
+        if (rank_ == target) {
             continue;
         }
         WaitSignalGEValue(
@@ -99,8 +99,8 @@ __aicore__ inline void AivReduceScatterDeterBig910B::PostSync(int32_t tag)
     // 卡内同步
     __gm__ int32_t* flagAddr = (__gm__ int32_t*)(GM_OUT[rank_] + flagOffsetPostSync + blockIdx_ * FLAG_SIZE);
     SetSignalValue(flagAddr, localSetTensor, tag);
-    for (int64_t i = 0; i < numBlocks_; ++i) {
-        if (i == blockIdx_) {
+    for (int64_t i = 0; numBlocks_ > i; ++i) {
+        if (blockIdx_ == i) {
             continue;
         }
         WaitSignalValue((__gm__ int32_t*)(GM_OUT[rank_] + flagOffsetPostSync + i * FLAG_SIZE), localCheckTensor, tag);
@@ -111,8 +111,8 @@ __aicore__ inline void AivReduceScatterDeterBig910B::PostSync(int32_t tag)
     __gm__ int32_t* flagAddr2st
         = (__gm__ int32_t*)(GM_OUT[rank_] + flagOffsetPostSync + (numBlocks_ + blockIdx_) * FLAG_SIZE);
     SetSignalValue(flagAddr2st, localSetTensor, tag);
-    for (int64_t target = 0; target < rankSize_; ++target) {
-        if (target == rank_) {
+    for (int64_t target = 0; rankSize_ > target; ++target) {
+        if (rank_ == target) {
             continue;
         }
         WaitSignalGEValue(
@@ -164,7 +164,7 @@ __aicore__ inline void AivReduceScatterDeterBig910B::SumByPairs(
         while (x + multipleTemp >= rankSize_) {
             multipleTemp /= DOUBLE;
         }
-        if (multipleTemp <= 0) {
+        if (0 >= multipleTemp) {
             flagOffsetSelf = flagOffset2st;
         } else {
             flagOffsetSelf = flagOffset3st + multipleTemp * FLAG_SIZE;
@@ -190,7 +190,7 @@ __aicore__ inline void AivReduceScatterDeterBig910B::CPGM2GMAccordingFlag(
     uint64_t maxBatchCount = CeilDiv(avgSizePerSlice, UB_DB_DATA_BATCH_SIZE);
 
     while (true) {
-        if (processedBatchCount >= maxBatchCount) {
+        if (maxBatchCount <= processedBatchCount) {
             break;
         }
 
@@ -212,13 +212,13 @@ __aicore__ inline void AivReduceScatterDeterBig910B::CPGM2GMAccordingFlag(
         }
 
         uint64_t preparedBatchCount = localFlagValueX - tag;
-        if (processedBatchCount >= preparedBatchCount) {
+        if (preparedBatchCount <= processedBatchCount) {
             continue;
         }
 
         uint64_t curSize = (preparedBatchCount - processedBatchCount) * UB_DB_DATA_BATCH_SIZE;
         if (preparedBatchCount * UB_DB_DATA_BATCH_SIZE > avgSizePerSlice) {
-            curSize = avgSizePerSlice - processedBatchCount * UB_DB_DATA_BATCH_SIZE;
+            curSize = avgSizePerSlice - (processedBatchCount * UB_DB_DATA_BATCH_SIZE);
         }
 
         set_flag(PIPE_S, PIPE_MTE2, EVENT_ID0);
@@ -226,11 +226,11 @@ __aicore__ inline void AivReduceScatterDeterBig910B::CPGM2GMAccordingFlag(
 
         //  搬运数据
         uint64_t curProcessedOffset = processedBatchCount * UB_DB_DATA_BATCH_SIZE / sizeof(T);
-        CpGM2GM(cclGMSelf + curProcessedOffset, cclGMOther + curProcessedOffset, curSize / sizeof(T));
+        CpGM2GM(curProcessedOffset + cclGMSelf, cclGMOther + curProcessedOffset, curSize / sizeof(T));
 
         // 设置已经搬运的数据量
         processedBatchCount = preparedBatchCount;
-        if (ff > 0 && (processedBatchCount % ff == 0 || processedBatchCount >= maxBatchCount)) {
+        if (0 < ff && (processedBatchCount % ff == 0 || processedBatchCount >= maxBatchCount)) {
             SyncFunc<HardEvent::MTE3_S>();
             SetSignalValue(ctrlFlagGMSelf, localSetTensor, processedBatchCount + tag);
         }
@@ -250,7 +250,7 @@ __aicore__ inline void AivReduceScatterDeterBig910B::ReduceWithFlagWrap(
     uint64_t maxBatchCount = CeilDiv(avgSizePerSlice, UB_DB_DATA_BATCH_SIZE);
 
     while (true) {
-        if (processedBatchCount >= maxBatchCount) {
+        if (maxBatchCount <= processedBatchCount) {
             break;
         }
 
@@ -279,25 +279,25 @@ __aicore__ inline void AivReduceScatterDeterBig910B::ReduceWithFlagWrap(
             continue;
         }
 
-        uint64_t preparedBatchCount = (localFlagValue <= localFlagYValue) ? localFlagValue : localFlagYValue;
+        uint64_t preparedBatchCount = (localFlagYValue >= localFlagValue) ? localFlagValue : localFlagYValue;
         preparedBatchCount -= tag;
-        if (processedBatchCount >= preparedBatchCount) {
+        if (preparedBatchCount <= processedBatchCount) {
             continue;
         }
 
         uint64_t curSize = (preparedBatchCount - processedBatchCount) * UB_DB_DATA_BATCH_SIZE;
-        if (preparedBatchCount * UB_DB_DATA_BATCH_SIZE > avgSizePerSlice) {
-            curSize = avgSizePerSlice - processedBatchCount * UB_DB_DATA_BATCH_SIZE;
+        if (UB_DB_DATA_BATCH_SIZE * preparedBatchCount > avgSizePerSlice) {
+            curSize = avgSizePerSlice - (processedBatchCount * UB_DB_DATA_BATCH_SIZE);
         }
 
         set_flag(PIPE_S, PIPE_MTE2, EVENT_ID0);
         wait_flag(PIPE_S, PIPE_MTE2, EVENT_ID0);
 
         uint64_t curProcessedOffset = processedBatchCount * UB_DB_DATA_BATCH_SIZE / sizeof(T);
-        CpGM2GM(cclGMSelf + curProcessedOffset, cclGMOther + curProcessedOffset, curSize / sizeof(T), true, reduceOp_);
+        CpGM2GM(curProcessedOffset + cclGMSelf, cclGMOther + curProcessedOffset, curSize / sizeof(T), true, reduceOp_);
 
         processedBatchCount = preparedBatchCount;
-        if (processedBatchCount % 8 == 0 || processedBatchCount >= maxBatchCount) {
+        if (processedBatchCount % 8 == 0 || maxBatchCount <= processedBatchCount) {
             SyncFunc<HardEvent::MTE3_S>();
             SetSignalValue(flagCntDoneSelf, localSetTensor, processedBatchCount + tag);
         }
@@ -370,7 +370,7 @@ AivReduceScatterDeterBig910B::Process(GM_ADDR input, GM_ADDR output, uint64_t le
     if (blockNumPerGroup <= blockIdx_ && blockIdx_ < DOUBLE * blockNumPerGroup) {
         int32_t lastOpCore = rankSize_ - 1;
         if (rankSize_ >= DETERMINISTIC_RANKSIZE) {
-            lastOpCore = rankSize_ > DETERMINISTIC_RANKSIZE ? DETERMINISTIC_RANKSIZE : DOUBLE;
+            lastOpCore = DETERMINISTIC_RANKSIZE < rankSize_ ? DETERMINISTIC_RANKSIZE : DOUBLE;
         }
         __gm__ int32_t* ctrlFlagGMDone
             = (__gm__ int32_t*)(GM_OUT[x] + flagOffsetBase + (DOUBLE * rankSize_ + lastOpCore) * FLAG_SIZE);
@@ -402,7 +402,7 @@ __aicore__ inline void aiv_reduce_scatter_deter_910b_bigdata(KERNEL_ARGS_DEF)
     int32_t curTag = (tag << 15);
     bool afterFirst = false;
     while (countLeft > 0) {
-        uint64_t curCount = (countLeft > maxCountPerLoop) ? maxCountPerLoop : countLeft;
+        uint64_t curCount = (maxCountPerLoop < countLeft) ? maxCountPerLoop : countLeft;
         uint64_t curSize = curCount * sizeof(T);
 
         // 执行kernel

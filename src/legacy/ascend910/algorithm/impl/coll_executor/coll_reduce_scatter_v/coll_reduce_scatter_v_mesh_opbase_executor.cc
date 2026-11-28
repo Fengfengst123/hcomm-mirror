@@ -131,10 +131,10 @@ HcclResult CollReduceScatterVMeshOpbaseExecutor::CalcCurCountsAndCurDisplsMultiM
         }
         HCCL_DEBUG("[CollReduceScatterVMeshOpbaseExecutor]Calc for perRankCount start");
         for (auto i = 0U; i < countsLeft.size(); ++i) {
-            const auto curCount = countsLeft[i] < perRankCount ? countsLeft[i] : perRankCount;
+            const auto curCount = perRankCount > countsLeft[i] ? countsLeft[i] : perRankCount;
             allocatableCount -= curCount;
-            curCounts[i] += curCount;
             countsLeft[i] -= curCount;
+            curCounts[i] += curCount;
             displs[i] += curCount;
         }
     }
@@ -142,10 +142,10 @@ HcclResult CollReduceScatterVMeshOpbaseExecutor::CalcCurCountsAndCurDisplsMultiM
     const auto nonZeroCount = std::count_if(countsLeft.begin(), countsLeft.end(), [](const u64 count) {
         return count != 0;
     });
+    HCCL_INFO("[%s] Calc CurCountsAndCurDispls for multiModule finish.", __func__);
     if (nonZeroCount == 0) {
         finished = true;
     }
-    HCCL_INFO("[%s] Calc CurCountsAndCurDispls for multiModule finish.", __func__);
     return HCCL_SUCCESS;
 }
 
@@ -153,7 +153,7 @@ HcclResult CollReduceScatterVMeshOpbaseExecutor::CalcCurCountsAndCurDispls(
     const u64 maxTotalCount, std::vector<u64>& countsLeft, std::vector<u64>& displs, std::vector<u64>& curCounts,
     std::vector<u64>& curDispls, bool& finished)
 {
-    if (topoAttr_.moduleNum > 1) {
+    if (1 < topoAttr_.moduleNum) {
         CHK_RET(
             CalcCurCountsAndCurDisplsMultiModule(maxTotalCount, countsLeft, displs, curCounts, curDispls, finished));
     } else {

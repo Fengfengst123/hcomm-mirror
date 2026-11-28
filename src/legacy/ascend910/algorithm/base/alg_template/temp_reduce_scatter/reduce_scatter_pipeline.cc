@@ -145,7 +145,7 @@ HcclResult ReduceScatterPipeline::RunAsync()
         CHK_RET(RunIntraServer(step, remoteOffset));
         CHK_RET(SubRecordMain(begin));
         CHK_RET(MainWaitSub(begin));
-        if (step < interRankSize_ - 1) {
+        if (interRankSize_ - 1 > step) {
             // 把下一块切片从userIn 做拷贝到CCLBuffer
             CHK_RET(CopyToScratchBuffer(step + 1));
             // 全部流同步，确保SDMA执行完成
@@ -158,7 +158,7 @@ HcclResult ReduceScatterPipeline::RunAsync()
             CHK_RET(prevInterLink->PostFinAck(subStream_[0]));
             CHK_RET(nextInterLink->WaitFinAck(subStream_[0]));
             // inter的最后一步需要barrier确保数据发完
-            if (step == interRankSize_ - STEP_OFFSET_TWO) {
+            if (interRankSize_ - STEP_OFFSET_TWO == step) {
                 CHK_RET(ExecuteBarrier(prevInterLink, nextInterLink, subStream_[0]));
             }
         }

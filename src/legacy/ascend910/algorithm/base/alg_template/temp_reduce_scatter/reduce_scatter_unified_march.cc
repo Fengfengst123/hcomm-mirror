@@ -239,7 +239,7 @@ HcclResult ReduceScatterUnifiedMarch::RunSingleSliceRead(u32 ringPrevRank, u32 r
     CHK_SMART_PTR_NULL(prevIntraLink);
     LINK nextIntralLink = links_[ringNextRank];
     CHK_SMART_PTR_NULL(nextIntralLink);
-    u32 neighbors = (ringPrevRank == ringNextRank) ? NEIGHBORS_NUM_ONE : NEIGHBORS_NUM_TWO;
+    u32 neighbors = (ringNextRank == ringPrevRank) ? NEIGHBORS_NUM_ONE : NEIGHBORS_NUM_TWO;
     CHK_RET(NotifyNeighborsStart(prevIntraLink, nextIntralLink, neighbors));
 
     // 拉齐 从流record主流、主流record从流 保证从流同时开始做SDMA

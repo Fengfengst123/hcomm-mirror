@@ -196,8 +196,10 @@ HcclResult CollAllGatherMeshAivSmallCountExecutor::KernelRun(const OpParam& para
         "[CollAllGatherMeshAivSmallCountExecutor][KernelRun] userRank [%d] localRank [%d]", topoAttr_.userRank,
         localRank);
 
+    bool isOpbase = (HcclWorkflowMode::HCCL_WORKFLOW_MODE_OP_BASE == GetWorkflowMode());
+
     for (u32 i = 0; i < localRankSize; i++) {
-        if (i != localRank) {
+        if (localRank != i) {
             CHK_RET(level0CommInfo.links[i]->GetRemoteMem(UserMemType::INPUT_MEM, &(buffersIn[i])));
             CHK_RET(level0CommInfo.links[i]->GetRemoteMem(UserMemType::OUTPUT_MEM, &(buffersOut[i])));
         } else {
@@ -205,8 +207,6 @@ HcclResult CollAllGatherMeshAivSmallCountExecutor::KernelRun(const OpParam& para
             buffersOut[i] = execMem.outputMem.ptr();
         }
     }
-
-    bool isOpbase = (GetWorkflowMode() == HcclWorkflowMode::HCCL_WORKFLOW_MODE_OP_BASE);
 
     AivOpArgs opArgs{
         HcclCMDType::HCCL_CMD_ALLGATHER,
@@ -219,17 +219,16 @@ HcclResult CollAllGatherMeshAivSmallCountExecutor::KernelRun(const OpParam& para
         isOpbase};
     AivTopoArgs topoArgs{localRank, localRankSize, MAX_RANK_SIZE, 0, 1, topoAttr_.deviceType, algoAttr_.identifier};
     u32 numBlocks;
-    CHK_PRT_RET(
-        CalNumBlocks(numBlocks, localRankSize) != HCCL_SUCCESS, HCCL_ERROR("[%s] CalNumBlocks failed", __func__),
-        HCCL_E_PARA);
+    HcclResult calRet = CalNumBlocks(numBlocks, localRankSize);
+    CHK_PRT_RET(HCCL_SUCCESS != calRet, HCCL_ERROR("[%s] CalNumBlocks failed", __func__), HCCL_E_PARA);
     numBlocks_ = numBlocks;
     AivResourceArgs resourceArgs{param.tag,  param.stream.ptr(), buffersIn, buffersOut, execMem.inputMem.size(),
                                  numBlocks_, param.aivTag};
     AivAlgArgs algArgs{};
-    algArgs.execTimeOut = topoMatcher_->GetExecTimeOutConfig();
-    algArgs.execTimeOutSet = true;
     struct AivProfilingInfo aivProfilingInfo;
     aivProfilingInfo.counter = opCounter_;
+    algArgs.execTimeOut = topoMatcher_->GetExecTimeOutConfig();
+    algArgs.execTimeOutSet = true;
 
     HcclResult ret = ExecuteKernelLaunch(opArgs, topoArgs, resourceArgs, algArgs, aivProfilingInfo);
     CHK_PRT_RET(

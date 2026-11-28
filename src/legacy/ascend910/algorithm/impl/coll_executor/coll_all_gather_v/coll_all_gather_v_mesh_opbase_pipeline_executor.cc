@@ -123,7 +123,7 @@ HcclResult CollAllGatherVMeshOpbasePipelineExecutor::KernelRun(const OpParam& pa
     std::vector<Slice> outputSlices;
     const auto counts = static_cast<u64*>(param.VDataDes.counts);
     const auto displs = static_cast<u64*>(param.VDataDes.displs);
-    for (u32 rank = 0; rank < topoAttr_.userRankSize; ++rank) {
+    for (u32 rank = 0; topoAttr_.userRankSize > rank; ++rank) {
         Slice userslice;
         userslice.offset = displs[rank] * perDataSize;
         userslice.size = counts[rank] * perDataSize;

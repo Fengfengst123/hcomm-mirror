@@ -114,17 +114,17 @@ __aicore__ inline void AivReduceScatterSmall91093::ProcessBig(GM_ADDR input, GM_
     uint64_t tailLength = len - (sliceCount - 1) * avgLengthPerSlice;
 
     uint64_t count = CalActualCount(blockIdxInGroup, sliceCount, avgLengthPerSlice, tailLength);
-    uint64_t blockOffset = blockIdxInGroup * avgLengthPerSlice;
+    uint64_t blockOffset = avgLengthPerSlice * blockIdxInGroup;
     uint32_t dstRank = blockIdx_ / blockNumPerGroup;
 
     GlobalTensor<int32_t> globalSet;
     __gm__ int32_t* ctrlFlagsGML
         = (__gm__ int32_t*)(GM_OUT[rank_] + multiOffset
-                            + (2 * NUM_BLOCKS_FOUR_PER_RANK_A3 + blockIdxInGroup) * ATOMIC_FLAG_SIZE);
+                            + (blockIdxInGroup + 2 * NUM_BLOCKS_FOUR_PER_RANK_A3) * ATOMIC_FLAG_SIZE);
     globalSet.SetGlobalBuffer(ctrlFlagsGML, UB_FLAG_PAD_COUNT);
 
-    if (dstRank == rank_) {
-        CpGM2GM(outputGM + blockOffset, (__gm__ T*)(inputGM + rank_ * len + blockOffset), count);
+    if (rank_ == dstRank) {
+        CpGM2GM(outputGM + blockOffset, (__gm__ T*)(inputGM + (rank_ * len) + blockOffset), count);
         pipe_barrier(PIPE_MTE3);
         DataCopy(globalSet, localSetTensor, UB_FLAG_PAD_COUNT);
     } else {
@@ -140,14 +140,14 @@ __aicore__ inline void AivReduceScatterSmall91093::ProcessBig(GM_ADDR input, GM_
         PipeBarrier<PIPE_ALL>();
 
         CpGM2GM(
-            outputGM + blockOffset, (__gm__ T*)(GM_IN[dstRank]) + rank_ * len + blockOffset, count, true, reduceOp_);
+            outputGM + blockOffset, (__gm__ T*)(GM_IN[dstRank]) + (rank_ * len) + blockOffset, count, true, reduceOp_);
 
         ctrlFlagsGMX
             = (__gm__ int32_t*)(GM_OUT[dstRank]
-                                + (rankSize_ * FLAG_BUF_NUM * blockIdxInGroup + rank_ + rankSize_) * FLAG_SIZE);
+                                + (FLAG_BUF_NUM * rankSize_ * blockIdxInGroup + rank_ + rankSize_) * FLAG_SIZE);
         ctrlFlagsGM
             = (__gm__ int32_t*)(GM_OUT[rank_]
-                                + (rankSize_ * FLAG_BUF_NUM * blockIdxInGroup + dstRank + rankSize_) * FLAG_SIZE);
+                                + (FLAG_BUF_NUM * rankSize_ * blockIdxInGroup + dstRank + rankSize_) * FLAG_SIZE);
         pipe_barrier(PIPE_MTE3);
         globalSet.SetGlobalBuffer(ctrlFlagsGMX, UB_FLAG_PAD_COUNT);
         DataCopy(globalSet, localSetTensor, UB_FLAG_PAD_COUNT);

@@ -87,7 +87,7 @@ std::vector<Slice> CollAlignedAllGatherVDoubleRingFor91093Executor::PrepareSlice
     for (u32 j = 0; j < level1RankSize; j++) {
         for (u32 i = 0; i < level2RankSize; i++) {
             Slice level1Slice;
-            const u32 rank = i * level1RankSize * level0RankSize + j * level0RankSize + level0ServerIndex;
+            const u32 rank = i * level1RankSize * level0RankSize + (j * level0RankSize) + level0ServerIndex;
             level1Slice.size = counts[rank] * perDataSize;
             const u64 offset = std::accumulate(counts, counts + rank, 0ULL);
             level1Slice.offset = offset * perDataSize;

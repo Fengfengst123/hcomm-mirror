@@ -186,7 +186,7 @@ HcclResult CollAllReduceMeshAivFor91093Executor::CopyAivCommInfoToDevice(
     void* buffersInOut[MAX_RANK_SIZE_A3 * 2] = {};
     bool isOpbaseMode = GetWorkflowMode() == HcclWorkflowMode::HCCL_WORKFLOW_MODE_OP_BASE;
 
-    for (u32 i = 0; i < localRankSize; i++) {
+    for (u32 i = 0; i < localRankSize; ++i) {
         u32 idx = (i << 1);
         if (i != localRank) {
             CHK_RET(commInfo.links[i]->GetRemoteMem(UserMemType::INPUT_MEM, &(buffersInOut[idx])));

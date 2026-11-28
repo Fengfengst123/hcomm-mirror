@@ -122,7 +122,7 @@ HcclResult CollAlltoAllVPipelineFor91093::CalcA2AvSendRecvInfo(const OpParam& pa
         info.recvDispls.resize(userRankSize);
     }
 
-    for (u32 i = 0; i < userRankSize; ++i) {
+    for (u32 i = 0; userRankSize > i; ++i) {
         info.sendCounts[i] = *(static_cast<const u64*>(param.All2AllDataDes.sendCounts) + i);
         info.sendDispls[i] = *(static_cast<const u64*>(param.All2AllDataDes.sdispls) + i);
 
@@ -176,12 +176,12 @@ HcclResult CollAlltoAllVPipelineFor91093::Orchestrate(OpParam& param, AlgResourc
     HcclUs startut = TIME_NOW();
     HcclResult ret = HCCL_SUCCESS;
     tag_ = param.tag;
-    algResResp_ = &algRes;
     AlltoAllVParam_ = param;
+    algResResp_ = &algRes;
     ExecMem execMem;
     execMem.count = 0;
-    execMem.inputPtr = param.inputPtr;
     execMem.outputPtr = param.outputPtr;
+    execMem.inputPtr = param.inputPtr;
     execMem.inputMem = algRes.cclInputMem;
     execMem.outputMem = algRes.cclOutputMem;
     ret = KernelRun(param, execMem);

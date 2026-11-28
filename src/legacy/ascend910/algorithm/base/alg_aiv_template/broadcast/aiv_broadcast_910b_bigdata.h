@@ -32,7 +32,7 @@ __aicore__ inline void AivBroadcastBig910B::WaitRecordSync(int32_t tag, uint32_t
     bool ifPingpong = (nowTag % 2 == 0);
     if ((rank_ < root && blockIdx_ == rank_) || (rank_ > root && blockIdx_ == rank_ - 1)) {
         for (uint32_t remoteRank = 0; remoteRank < rankSize_; remoteRank += 1) {
-            if (remoteRank == root || remoteRank == rank_) {
+            if (root == remoteRank || rank_ == remoteRank) {
                 continue;
             } else {
                 Wait(tag, remoteRank, AivNotifyType::DataSignal, 0, ifPingpong);
@@ -40,12 +40,14 @@ __aicore__ inline void AivBroadcastBig910B::WaitRecordSync(int32_t tag, uint32_t
             }
         }
         PipeBarrier<PIPE_ALL>();
-        Record(tag, root, AivNotifyType::DataSignal, 0, ifPingpong); // 告诉root数据拿过来了，确保root卡最后推出
-    } else if (rank_ != root) {
+        Record(tag, root, AivNotifyType::DataSignal, 0,
+               ifPingpong); // 告诉root数据拿过来了，确保root卡最后推出
+    } else if (root != rank_) {
         Record(tag, targetRank, AivNotifyType::DataSignal, 0, ifPingpong);
         PipeBarrier<PIPE_ALL>();
     } else {
-        Wait(tag, targetRank, AivNotifyType::DataSignal, 0, ifPingpong); // 等待对应卡的数据拿走
+        Wait(tag, targetRank, AivNotifyType::DataSignal, 0,
+             ifPingpong); // 等待对应卡的数据拿走
         PipeBarrier<PIPE_ALL>();
     }
 }
@@ -89,7 +91,7 @@ AivBroadcastBig910B::Process(GM_ADDR input, GM_ADDR output, uint64_t len, int32_
             PipeBarrier<PIPE_ALL>();
             DataCopyUB2GM(outputGT[0], localOut, curCount);
             inOutQue.FreeTensor(localOut);
-        } else if (rank_ != root) {
+        } else if (root != rank_) {
             // 从对应卡的cclbuffer拉数据到自己的output
             __gm__ T* cclGMOther = (__gm__ T*)(GM_IN[targetRank]); // targetRank号卡的cclbuffer
             __gm__ int32_t* ctrlFlagGM = (__gm__ int32_t*)(GM_OUT[targetRank] + countOffset + blockIdx_ * FLAG_SIZE);
@@ -135,7 +137,7 @@ AivBroadcastBig910B::Process2Rank(GM_ADDR input, GM_ADDR output, uint64_t len, i
             CountRecord(tag, curIndex, blockIdx_);
             PipeBarrier<PIPE_ALL>();
         } else {
-            __gm__ int32_t* ctrlFlagGM = (__gm__ int32_t*)(GM_OUT[root] + countOffset + blockIdx_ * FLAG_SIZE);
+            __gm__ int32_t* ctrlFlagGM = (__gm__ int32_t*)(GM_OUT[root] + countOffset + (blockIdx_ * FLAG_SIZE));
             WaitSignalGEValue(ctrlFlagGM, localCheckGETensor, tag + curIndex);
             PipeBarrier<PIPE_ALL>();
             CpGM2GM(outputGM + dataOffset, cclGMRoot + dataOffset, curCount);
@@ -143,8 +145,8 @@ AivBroadcastBig910B::Process2Rank(GM_ADDR input, GM_ADDR output, uint64_t len, i
         }
     }
     int32_t nowTag = tag >> TAG_MOVE_LEFT_BITS;
-    bool ifPingpong = (nowTag % 2 == 0);
-    if (rank_ == root) {
+    bool ifPingpong = (0 == (nowTag % 2));
+    if (root == rank_) {
         int32_t anotherRank = (root == 0) ? 1 : 0;
         if (blockIdx_ == 0) {
             Wait(tag, anotherRank, AivNotifyType::Done, 0, ifPingpong);

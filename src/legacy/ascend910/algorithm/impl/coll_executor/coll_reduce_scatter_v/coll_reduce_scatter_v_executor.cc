@@ -131,10 +131,10 @@ HcclResult CollReduceScatterVExecutor::RunLoop(OpParam& param, AlgResourceRespon
 
         ExecMem execMem;
         execMem.count = curCounts[topoAttr_.userRank];
-        execMem.inputPtr = curInputPtr;
         execMem.outputPtr = curOutputPtr;
         execMem.inputMem = algRes.cclInputMem;
         execMem.outputMem = algRes.cclOutputMem;
+        execMem.inputPtr = curInputPtr;
         if (scratchMemFlag_) {
             execMem.scratchMem = algRes.scratchMem;
         } else {

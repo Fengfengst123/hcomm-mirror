@@ -74,7 +74,7 @@ __aicore__ inline void AivReduceScatterDeterSmall910B::SumByPairs(
             while (x + multipleTemp / DOUBLE >= rankSize_) {
                 multipleTemp /= DOUBLE;
             }
-            if (multipleTemp > 1) {
+            if (1 < multipleTemp) {
                 int64_t OffsetACKX = rankSize_ * (multipleTemp / DOUBLE) * FLAG_SIZE;
                 WaitSignalValue(
                     (__gm__ int32_t*)(GM_OUT[rank_] + flagOffset2st + OffsetACKX + (multipleTemp / DOUBLE) * FLAG_SIZE),

@@ -147,7 +147,7 @@ HcclResult CollAlltoAllMeshAivSmallCountExecutor::GetAivExecParam(
         localRank);
 
     for (u32 i = 0; i < localRankSize; i++) {
-        if (i != localRank) {
+        if (localRank != i) {
             CHK_RET(level0CommInfo.links[i]->GetRemoteMem(UserMemType::INPUT_MEM, &(args.buffersIn[i])));
             CHK_RET(level0CommInfo.links[i]->GetRemoteMem(UserMemType::OUTPUT_MEM, &(args.buffersOut[i])));
         } else {
@@ -155,10 +155,10 @@ HcclResult CollAlltoAllMeshAivSmallCountExecutor::GetAivExecParam(
             args.buffersOut[i] = execMem.outputMem.ptr();
         }
     }
-    args.rank = localRank;
     args.rankSize = localRankSize;
     args.len = execMem.count;
     args.dataType = param.All2AllDataDes.sendType;
+    args.rank = localRank;
     args.unitSize = SIZE_TABLE[param.All2AllDataDes.sendType];
     args.devType = static_cast<u32>(topoAttr_.deviceType);
     CHK_PRT_RET(
@@ -192,7 +192,7 @@ HcclResult CollAlltoAllMeshAivSmallCountExecutor::KernelRun(const OpParam& param
         localRank);
 
     for (u32 i = 0; i < localRankSize; i++) {
-        if (i != localRank) {
+        if (localRank != i) {
             CHK_RET(level0CommInfo.links[i]->GetRemoteMem(UserMemType::INPUT_MEM, &(buffersIn[i])));
             CHK_RET(level0CommInfo.links[i]->GetRemoteMem(UserMemType::OUTPUT_MEM, &(buffersOut[i])));
         } else {

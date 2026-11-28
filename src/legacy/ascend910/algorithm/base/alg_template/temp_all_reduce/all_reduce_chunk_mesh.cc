@@ -134,7 +134,7 @@ HcclResult AllReduceChunkMesh::RunAsync(const u32 rank, const u32 rankSize, cons
 
     // 如果ranksize为1, inline reduce和普通跨片reduce操作一致，从input->output
     if (rankSize == 1) {
-        if (opInfo_->inputAddr != opInfo_->outputAddr) {
+        if (opInfo_->outputAddr != opInfo_->inputAddr) {
             DeviceMem userMemIn = DeviceMem::create(opInfo_->inputAddr, count_ * DataUnitSize(dataType_));
             DeviceMem userMemOut = DeviceMem::create(opInfo_->outputAddr, count_ * DataUnitSize(dataType_));
             ret = HcclD2DMemcpyAsync(dispatcher_, userMemOut, userMemIn, stream_);

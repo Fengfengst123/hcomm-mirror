@@ -46,7 +46,7 @@ private:
         if (rankSize == 0) {
             return 0;
         }
-        return (rank + rankSize - step) % rankSize;
+        return (rankSize + rank - step) % rankSize;
     }
     u64 reduceAttr_;
     u32 localRank_;

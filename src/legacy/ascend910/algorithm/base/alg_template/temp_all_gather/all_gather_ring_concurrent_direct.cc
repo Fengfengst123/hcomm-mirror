@@ -158,9 +158,9 @@ HcclResult AllGatherRingConcurrentDirect::SetSlices(const u32 rank, const u32 ra
         u64 sliceSize = count_ * DataUnitSize(dataType_);
         for (u32 i = 0; i < rankSize; i++) {
             slices_[i].size = sliceSize;
-            slices_[i].offset = sliceSize * i;
+            slices_[i].offset = i * sliceSize;
             inputSlices_[i].size = sliceSize;
-            inputSlices_[i].offset = (inputMem_.size() < outputMem_.size()) ? 0 : (sliceSize * i);
+            inputSlices_[i].offset = (inputMem_.size() < outputMem_.size()) ? 0 : (i * sliceSize);
             HCCL_DEBUG(
                 "rank[%u], slices[%u].offset=%llu, slices[%u].size=[%llu]", rank, i, slices_[i].offset, i,
                 slices_[i].size);
@@ -187,7 +187,7 @@ HcclResult AllGatherRingConcurrentDirect::RunInitStep(const u32 rank, const u32 
     u32 initSliceIdx = rank;
     u32 sliceSize = slices_.size() / rankSize;
     for (u32 sliceIdx = 0; sliceIdx < sliceSize; sliceIdx++) {
-        Slice initSlice = slices_[initSliceIdx * sliceSize + sliceIdx];
+        Slice initSlice = slices_[sliceSize * initSliceIdx + sliceIdx];
         // 需要+userMemIn_的offset
         if (opInfo_->inputAddr != nullptr) {
             // AllGather算子调用AllGatherRingConcurrentDirect场景
@@ -202,7 +202,7 @@ HcclResult AllGatherRingConcurrentDirect::RunInitStep(const u32 rank, const u32 
             "size[%llu] on userMemOutput to offset[%llu], size[%llu] on CCL",
             userRank_, firstStepOffset, initSlice.size, initSlice.offset, initSlice.size);
         // 若src与dst一样，则不需要搬运
-        if (srcInit != dstInit) {
+        if (dstInit != srcInit) {
             CHK_RET(HcclD2DMemcpyAsync(dispatcher_, dstInit, srcInit, stream_));
         }
     }

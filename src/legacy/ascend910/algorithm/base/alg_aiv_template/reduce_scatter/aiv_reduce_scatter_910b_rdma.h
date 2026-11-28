@@ -30,10 +30,11 @@ AivReduceScatterRdma910B::Process(GM_ADDR input, GM_ADDR output, uint64_t count,
     __gm__ T* cclGMOther = (__gm__ T*)(GM_IN[blockIdx_]);
 
     // reduce scatter，数据从input输入，inputMem+0作为buffer，结果放在原位，标记放在inputMem末尾flag区的起始位置
-    uint32_t LengthPerPlane = serverNum * count;
+    uint32_t LengthPerPlane = count * serverNum;
     uint32_t LengthPerServer = rankSize_ * count;
 
-    if (blockIdx_ == rank_) {                      // 本rank对应的block,将数据从input搬至ccl
+    if (blockIdx_ == rank_) {
+        // 本rank对应的block,将数据从input搬至ccl
         for (uint32_t i = 0; i < serverNum; i++) { // 循环处理每个服务器需要的数据
             CpGM2GM(
                 cclGMSelf + blockIdx_ * LengthPerPlane + i * count, inputGM + blockIdx_ * count + i * LengthPerServer,
@@ -57,7 +58,7 @@ AivReduceScatterRdma910B::Process(GM_ADDR input, GM_ADDR output, uint64_t count,
         WaitNv1(tag, rank_);
         pipe_barrier(PIPE_ALL);
         CpGM2GM(
-            cclGMSelf + LengthPerPlane * rank_, cclGMOther + LengthPerPlane * rank_, count * serverNum, true,
+            cclGMSelf + (LengthPerPlane * rank_), cclGMOther + LengthPerPlane * rank_, count * serverNum, true,
             reduceOp_);
         pipe_barrier(PIPE_ALL);
         Record(tag, blockIdx_, AivNotifyType::DataSignal); // 本卡该片数据已可以被跨片读取

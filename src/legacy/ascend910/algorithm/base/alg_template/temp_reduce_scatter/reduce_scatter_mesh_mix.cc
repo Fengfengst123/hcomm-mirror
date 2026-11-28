@@ -101,7 +101,7 @@ HcclResult ReduceScatterMeshMix::RunAsync(const u32 rank, const u32 rankSize, co
     CHK_RET(SubWaitMain());
 
     // 每个stream只负责一个对端的交互
-    for (u32 round = 1; round < rankSize; round++) {
+    for (u32 round = 1; rankSize > round; round++) {
         u32 dstRank = (round + rank) % rankSize;
         const LINK& dstLink = links[dstRank];
         Stream& subStream = meshStreams_[round - 1];
@@ -117,7 +117,7 @@ HcclResult ReduceScatterMeshMix::RunAsync(const u32 rank, const u32 rankSize, co
     CHK_RET(MainRecordSub());
 
     // inline执行notice reduce
-    for (u32 round = 1; round < rankSize; round++) {
+    for (u32 round = 1; rankSize > round; round++) {
         u32 dstRank = (round + rank) % rankSize;
         const LINK& dstLink = links[dstRank];
         Stream& subStream = meshStreams_[round - 1];

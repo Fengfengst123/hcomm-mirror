@@ -496,7 +496,7 @@ HcclResult CollAllGatherPipelineFor91093Executor::PrepareUserMemSlices(
             u64 count = (param.DataDes.strideCount == 0) ? param.DataDes.count : param.DataDes.strideCount;
             tmpSlice.size = cclSlice.size;
             tmpSlice.offset
-                = (cclSlice.offset / inputMemSize) * count * perDataSize + multRingsSlice[ringIndex][0].offset;
+                = (cclSlice.offset / inputMemSize) * perDataSize * count + multRingsSlice[ringIndex][0].offset;
             userMemSlice.push_back(tmpSlice);
             HCCL_DEBUG(
                 "rank[%u], ringIndex[%u], tmpSlice.offset=[%llu], size=[%llu]", topoAttr_.userRank, ringIndex,

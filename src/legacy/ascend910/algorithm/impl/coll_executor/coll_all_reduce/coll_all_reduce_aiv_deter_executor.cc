@@ -125,7 +125,7 @@ HcclResult CollAllReduceAivDeterExecutor::KernelRun(const OpParam& param, ExecMe
         HCCL_ALG, "[CollAllReduceAivDeterExecutor][KernelRun] userRank [%u] localRank [%u]", topoAttr_.userRank,
         localRank);
 
-    for (u32 i = 0; i < localRankSize; i++) {
+    for (u32 i = 0; i < localRankSize; ++i) {
         if (i != localRank) {
             CHK_RET(level0CommInfo.links[i]->GetRemoteMem(UserMemType::INPUT_MEM, &(buffersIn[i])));
             CHK_RET(level0CommInfo.links[i]->GetRemoteMem(UserMemType::OUTPUT_MEM, &(buffersOut[i])));

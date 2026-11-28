@@ -33,7 +33,7 @@ protected:
     inline u32 BackwardRank(u32 rank, u32 rankSize, u32 step) const
     {
         if (rankSize == 0) {
-            return 0;
+            return 0U;
         }
         return (rank + rankSize - step) % rankSize;
     }

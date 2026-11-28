@@ -53,7 +53,7 @@ HcclResult CollReduceScatterOrderPreservedFor91093Executor::CalcStreamNum(u32& s
 
     // 单卡节点场景，L1(超节点内)不需要流，仅计算L2流数
     if (devNumInlocalPod == 1) {
-        u32 level2StreamNum = std::min(CalReduceStreamNum(topoAttr_.superPodNum) - 1, DEVICE_FOUR);
+        u32 level2StreamNum = std::min(DEVICE_FOUR, CalReduceStreamNum(topoAttr_.superPodNum) - 1);
         streamNum = level2StreamNum;
         HCCL_INFO(
             "[%s]tag[%s] single rank per module, level2StreamNum[%u], streamNum[%u]", __func__, tag_.c_str(),
@@ -133,7 +133,7 @@ HcclResult CollReduceScatterOrderPreservedFor91093Executor::RunReduceScatterLeve
     DeviceMem bufferMem = scratchMemFlag_ ? execMem.scratchMem : execMem.inputMem;
     DeviceMem dstMem;
     DeviceMem srcMem;
-    for (u32 i = 0; i < topoAttr_.userRankSize; i++) {
+    for (u32 i = 0; topoAttr_.userRankSize > i; i++) {
         // 拷贝input上每个slice的数据到中转内存，源端每个slice的size固定为output的size
         dstMem = bufferMem.range(curSize * i, curSize);
         srcMem = DeviceMem::create(static_cast<u8*>(execMem.inputPtr) + param.DataDes.count * unitSize * i, curSize);

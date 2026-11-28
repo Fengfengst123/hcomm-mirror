@@ -59,18 +59,18 @@ __aicore__ inline void AivAllReduceRdmaMid910B::ReduceScatter(
     uint64_t tailLength, int32_t tag)
 {
     // reduce scatter，数据从input输入，inputMem+0作为buffer，结果放在原位
-    if (blockIdx_ == rank_) {
+    if (rank_ == blockIdx_) {
         int64_t curCount = CalActualCount(blockIdx_, sliceCount, avgLengthPerSlice, tailLength);
 
         // 本地拷贝 & 卡间同步
-        CpGM2GM(cclGMSelf + avgLengthPerSlice * blockIdx_, inputGM + avgLengthPerSlice * blockIdx_, curCount);
+        CpGM2GM(cclGMSelf + (avgLengthPerSlice * blockIdx_), inputGM + avgLengthPerSlice * blockIdx_, curCount);
         pipe_barrier(PIPE_ALL);
         Record1vN(tag, CommPattern::intraRank);
     } else {
         int64_t curCount = CalActualCount(blockIdx_, sliceCount, avgLengthPerSlice, tailLength);
 
         // 本地拷贝 & 卡间同步
-        CpGM2GM(cclGMSelf + avgLengthPerSlice * blockIdx_, inputGM + avgLengthPerSlice * blockIdx_, curCount);
+        CpGM2GM(cclGMSelf + (avgLengthPerSlice * blockIdx_), inputGM + avgLengthPerSlice * blockIdx_, curCount);
         pipe_barrier(PIPE_ALL);
         Record(tag, blockIdx_, AivNotifyType::ACK); // 本卡该片数据已经可以被跨片读取
 

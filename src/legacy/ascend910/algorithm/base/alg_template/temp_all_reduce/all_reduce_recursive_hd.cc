@@ -210,8 +210,9 @@ AllReduceRecursiveHalvingDoubling::ReduceScatterInBlock(u32 rank, u32 rankSize, 
         return HCCL_SUCCESS;
     } else if (rank < part1Size_ && (rank % 2) == 0) { // 模2判断奇偶性，本rank 处于第一部分，并且为偶数rank
         rankInBlock = rank / 2;                        // 除2计算block内的rank值
-    } else {                                           // 本rank不属于第一部分
-        rankInBlock = rank - part1Size_ / 2;           // 除2计算block内的part1的范围
+    } else {
+        // 本rank不属于第一部分
+        rankInBlock = rank - part1Size_ / 2; // 除2计算block内的part1的范围
     }
     // 直接调用block的reducscatterhd算法
     std::unique_ptr<AlgTemplateBase> tempAlg

@@ -175,7 +175,7 @@ HcclResult ReduceScatterVPipeline::Prepare(
     interRankSize_ = level1CommInfo.localRankSize;
     intraRankId_ = level0CommInfo.localRank;
     interRankId_ = level1CommInfo.localRank;
-    rankId_ = intraRankId_ + interRankId_ * intraRankSize_;
+    rankId_ = intraRankId_ + (interRankId_ * intraRankSize_);
 
     streamNotifyMain_ = notifyMain;
     if (streamNotifyMain_.size() < intraRankSize_) {

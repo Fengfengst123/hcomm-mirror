@@ -55,13 +55,13 @@ __aicore__ inline void AivAll2All91093Single::ProcessBig(
     uint32_t padCount = UB_ALIGN_SIZE / sizeof(T);
 
     // 内存准备
-    __gm__ T* inputGM = (__gm__ T*)input;
     __gm__ T* outputGM = (__gm__ T*)output;
+    __gm__ T* inputGM = (__gm__ T*)input;
     __gm__ T* cclGMOther = (__gm__ T*)(GM_IN[dstRank]);
 
     // 使用96个flag
-    uint64_t blockRecvCount = 0;
     uint64_t blockRecvOffset = 0;
+    uint64_t blockRecvCount = 0;
     CalBlockCountAndOffset(
         remoteSendCount, blockNumPerGroup, blockIdxInGroup, padCount, blockRecvCount, blockRecvOffset);
 
@@ -71,7 +71,7 @@ __aicore__ inline void AivAll2All91093Single::ProcessBig(
     PipeBarrier<PIPE_ALL>();
 
     CpGM2GM(
-        outputGM + localRecvOffset + blockRecvOffset, cclGMOther + remoteSendOffset + blockRecvOffset, blockRecvCount);
+        localRecvOffset + outputGM + blockRecvOffset, cclGMOther + remoteSendOffset + blockRecvOffset, blockRecvCount);
     PipeBarrier<PIPE_ALL>();
 
     // 确认对端已经读完本端

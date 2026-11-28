@@ -91,7 +91,7 @@ __aicore__ inline void AivReduceScatterDeterMid910B::CPGM2GMAccordingFlag(
 
         flagInQue.FreeTensor(localFlagX);
 
-        if (localFlagValueX <= tag) {
+        if (tag >= localFlagValueX) {
             continue;
         }
 
@@ -102,7 +102,7 @@ __aicore__ inline void AivReduceScatterDeterMid910B::CPGM2GMAccordingFlag(
 
         uint64_t curSize = (preparedBatchCount - processedBatchCount) * UB_DB_DATA_BATCH_SIZE;
         if (preparedBatchCount * UB_DB_DATA_BATCH_SIZE > avgSizePerSlice) {
-            curSize = avgSizePerSlice - processedBatchCount * UB_DB_DATA_BATCH_SIZE;
+            curSize = avgSizePerSlice - (processedBatchCount * UB_DB_DATA_BATCH_SIZE);
         }
 
         set_flag(PIPE_S, PIPE_MTE2, EVENT_ID0);
@@ -114,7 +114,7 @@ __aicore__ inline void AivReduceScatterDeterMid910B::CPGM2GMAccordingFlag(
 
         // 设置已经搬运的数据量
         processedBatchCount = preparedBatchCount;
-        if (ff > 0 && (processedBatchCount % ff == 0 || processedBatchCount >= maxBatchCount)) {
+        if (0 < ff && (processedBatchCount % ff == 0 || processedBatchCount >= maxBatchCount)) {
             SyncFunc<HardEvent::MTE3_S>();
             SetSignalValue(ctrlFlagGMSelf, localSetTensor, processedBatchCount + tag);
         }
@@ -209,10 +209,9 @@ __aicore__ inline void AivReduceScatterDeterMid910B::ReduceWithFlagWrap(
 
         uint64_t preparedBatchCount = (localFlagValue <= localFlagYValue) ? localFlagValue : localFlagYValue;
         preparedBatchCount -= tag;
-        if (processedBatchCount >= preparedBatchCount) {
+        if (preparedBatchCount <= processedBatchCount) {
             continue;
         }
-
         uint64_t curSize = (preparedBatchCount - processedBatchCount) * UB_DB_DATA_BATCH_SIZE;
         if (preparedBatchCount * UB_DB_DATA_BATCH_SIZE > avgSizePerSlice) {
             curSize = avgSizePerSlice - processedBatchCount * UB_DB_DATA_BATCH_SIZE;
@@ -225,7 +224,7 @@ __aicore__ inline void AivReduceScatterDeterMid910B::ReduceWithFlagWrap(
         CpGM2GM(cclGMSelf + curProcessedOffset, cclGMOther + curProcessedOffset, curSize / sizeof(T), true, reduceOp_);
 
         processedBatchCount = preparedBatchCount;
-        if (processedBatchCount % 8 == 0 || processedBatchCount >= maxBatchCount) {
+        if (processedBatchCount % 8 == 0 || maxBatchCount <= processedBatchCount) {
             SyncFunc<HardEvent::MTE3_S>();
             SetSignalValue(flagCntDoneSelf, localSetTensor, processedBatchCount + tag);
         }

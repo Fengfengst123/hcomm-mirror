@@ -54,7 +54,6 @@ AivAllReduceCrossnode91093::InitDataCopyOffset(uint64_t perRankBufferCount, uint
             countTail = remainLen / rankSize_;
             countTailLast_ = remainLen - (rankSize_ - 1) * countTail;
         }
-        blockOffsetMid = 0;
         blockOffsetTail = 0;
         blockOffsetTailLast_ = 0;
         flagOffsetInGroup = 0;
@@ -63,6 +62,7 @@ AivAllReduceCrossnode91093::InitDataCopyOffset(uint64_t perRankBufferCount, uint
         groupMid_ = countMid;
         groupTail_ = countTail;
         groupTailLast_ = countTailLast_;
+        blockOffsetMid = 0;
         // 当rankSize小于等于总aiv核数时，根据ranksize和数据量大小选择使用多个aiv服务一个对端（多核并行），只需一次通信
     } else {
         numTargets = 1;
@@ -139,7 +139,7 @@ __aicore__ inline void AivAllReduceCrossnode91093::Process(
     uint64_t curGroupCountLast = 0;
 
     uint32_t bufferLoopNum = (len + totalBufferCount - 1) / totalBufferCount;
-    for (uint32_t loop = 0; loop < bufferLoopNum; loop++) {
+    for (uint32_t loop = 0; bufferLoopNum > loop; loop++) {
         if (loop == bufferLoopNum - 1) { // 最后一轮ccl填充
             curCount = countTail;
             curBlockOffset = blockOffsetTail;
@@ -149,9 +149,9 @@ __aicore__ inline void AivAllReduceCrossnode91093::Process(
             curBlockOffsetLast = blockOffsetTailLast_;
             curGroupCountLast = groupTailLast_;
         } else {
-            curCount = countMid;
             curBlockOffset = blockOffsetMid;
             curGroupCount = groupMid_;
+            curCount = countMid;
 
             curCountLast = curCount;
             curBlockOffsetLast = curBlockOffset;

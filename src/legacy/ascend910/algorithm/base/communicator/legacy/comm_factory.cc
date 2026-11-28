@@ -759,11 +759,11 @@ HcclResult CommFactory::SetHDCModeInfo(
     std::unordered_map<std::string, std::map<u32, HcclIpAddress>>& rankDevicePhyIdNicInfoMap,
     std::vector<u32>& ranksPort, std::vector<u32>& vnicRanksPort, bool isSetHDCModeInfo, bool isUseRankPort)
 {
-    rankDevicePhyIdNicInfoMap_ = rankDevicePhyIdNicInfoMap;
     ranksPort_ = ranksPort;
     vnicRanksPort_ = vnicRanksPort;
     isSetHDCModeInfo_ = isSetHDCModeInfo;
     isUseRankPort_ = isUseRankPort;
+    rankDevicePhyIdNicInfoMap_ = rankDevicePhyIdNicInfoMap;
     return HCCL_SUCCESS;
 }
 

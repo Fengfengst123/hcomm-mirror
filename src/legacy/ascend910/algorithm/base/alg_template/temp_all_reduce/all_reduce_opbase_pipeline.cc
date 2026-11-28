@@ -299,10 +299,10 @@ HcclResult AllReduceOpbasePipeline::Prepare(
     lastSliceCount_ = count - sliceCount_ * (level0CommInfo.localRankSize * level1CommInfo.localRankSize - 1);
     lastSliceSize_ = lastSliceCount_ * unitSize_;
 
-    usrInMem_ = opInfo->inputAddr;
     usrOutMem_ = opInfo->outputAddr;
     reductionOp_ = opInfo->reduceOp;
     dataType_ = opInfo->dataType;
+    usrInMem_ = opInfo->inputAddr;
 
     // needed resource
     // stream: 1 * mainStream + (n -1) * subStream

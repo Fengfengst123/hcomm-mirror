@@ -136,8 +136,9 @@ u32 BcastRecursiveHalvingDoubling::GetRankIndexReal(const u32 rankInBlock) const
     u32 res = 0;
     /* 如果根节点在第一部分的偶数位置或其他部分 */
     if ((root_ < part1Size_ && (root_ % 2) == 0) || root_ >= part1Size_) { // 模2判断奇偶性
-        if (rankInBlock < part1Size_ / 2) {                                // 除2计算block内part1的rank范围
-            res = rankInBlock * 2;                                         // 乘2计算block内part1的rank范围
+        if (rankInBlock < part1Size_ / 2) {
+            // 除2计算block内part1的rank范围
+            res = rankInBlock * 2; // 乘2计算block内part1的rank范围
             return res;
         } else {
             res = part1Size_ / 2 + rankInBlock; // 除2加rankInBlock计算真实的rank值
@@ -159,14 +160,16 @@ u32 BcastRecursiveHalvingDoubling::GetRankIndexInBlock(const u32 rank) const
     // root在第一部分，并且root是偶数rank，或者root在第二部分
     if ((root_ < part1Size_ && (root_ % 2) == 0) || root_ >= part1Size_) { // 模2判断奇偶性
         // rank在第一部分，并且本rank是偶数rank，除以2就为在block内的index
-        if (rank < part1Size_ && rank % 2 == 0) {        // 模2判断奇偶性
+        if (rank < part1Size_ && rank % 2 == 0) {
+            // 模2判断奇偶性
             return rank / 2;                             // 除2计算block内rank值
         } else if (rank < part1Size_ && rank % 2 == 1) { // 模2判断奇偶性，奇数的话不在block内
             return INVALID_VALUE_RANKID;
         } else {
             return rank - part1Size_ / 2; // 除2计算block内part1的rank范围
         }
-    } else {                                      // root在第一部分属于奇数rank
+    } else {
+        // root在第一部分属于奇数rank
         if (rank < part1Size_ && rank % 2 == 0) { // 模2判断奇偶性，偶数rank不在block内
             return INVALID_VALUE_RANKID;
         } else if (rank < part1Size_ && rank % 2 == 1) { // 模2判断奇偶性，为奇计算block内rank号

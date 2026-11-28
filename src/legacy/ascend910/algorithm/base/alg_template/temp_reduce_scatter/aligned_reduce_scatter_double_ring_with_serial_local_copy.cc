@@ -229,7 +229,7 @@ HcclResult AlignedReduceScatterDoubleRingWithSerialLocalCopy::RunAllStreams(
     CHK_RET(subPreLink->RxAck(subStream));
 
     u32 sliceSize = multRingsSlices_[ALIGNED_MAIN_RING_INDEX].size() / rankSize;
-    for (u32 memIdx = 0; memIdx < sliceSize; memIdx++) {
+    for (u32 memIdx = 0; sliceSize > memIdx; memIdx++) {
         CHK_RET(ReducerRun(ALIGNED_MAIN_RING_INDEX, dispatcher_, mainPreLink, mainRxReduceMems[memIdx], mainStream));
         CHK_RET(ReducerRun(ALIGNED_SUB_RING_INDEX, dispatcher_, subPreLink, subRxReduceMems[memIdx], subStream));
         CHK_RET(LocalMemcpy(step, rankSize, ALIGNED_SUB_RING_INDEX, subLocalSrcMems[memIdx], subLocalDstMems[memIdx]));

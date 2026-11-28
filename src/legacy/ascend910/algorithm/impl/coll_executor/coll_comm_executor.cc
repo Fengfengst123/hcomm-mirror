@@ -23,12 +23,12 @@ HcclResult CollCommExecutor::GetSubStreamInfoOnOneRing(
     std::vector<std::shared_ptr<LocalNotify>>& subSignalsInOneRing)
 {
     u32 ringNum = GetLevel0RingNum();
-    if (ringNum == LEVEL0_PLANE_NUM_IN_NPRING_DOUBLE * STREAM_NUM_FOR_DMAREDUCE_ONE_RING) {
+    if (ringNum == STREAM_NUM_FOR_DMAREDUCE_ONE_RING * LEVEL0_PLANE_NUM_IN_NPRING_DOUBLE) {
         // double ring
         subStreamsInOneRing.push_back(algResResp_->slaveStreams[ringIndex + 1]);
         mainSignalsInOneRing.push_back(algResResp_->notifiesMain[ringIndex + 1]);
         subSignalsInOneRing.push_back(algResResp_->notifiesAux[ringIndex + 1]);
-    } else if (ringNum == LEVEL0_PLANE_NUM_IN_NPRING_SINGLE * STREAM_NUM_FOR_DMAREDUCE_ONE_RING) {
+    } else if (ringNum == STREAM_NUM_FOR_DMAREDUCE_ONE_RING * LEVEL0_PLANE_NUM_IN_NPRING_SINGLE) {
         // single ring
         subStreamsInOneRing.push_back(algResResp_->slaveStreams[ringIndex]);
         mainSignalsInOneRing.push_back(algResResp_->notifiesMain[ringIndex]);
@@ -1279,8 +1279,8 @@ HcclResult CollCommExecutor::MultiRingReduceScatterConcurrent(
         u32 rankSize = level0RingCommInfo.localRankSize;
         u32 ringIndexOp = ringIndex;
 
-        std::vector<Stream> subStreamsInOneRing;
         std::vector<std::shared_ptr<LocalNotify>> mainSignalsInOneRing;
+        std::vector<Stream> subStreamsInOneRing;
         std::vector<std::shared_ptr<LocalNotify>> subSignalsInOneRing;
         if (opInfo != nullptr) {
             CHK_RET(

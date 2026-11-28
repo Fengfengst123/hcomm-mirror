@@ -404,7 +404,7 @@ HcclResult CollBroadCastRingFor91093::DoubleRingScatter(
 
     std::vector<std::vector<u32>> doubleRingsOrders;
     std::vector<std::vector<Slice>> doubleRingUserMemInputSlices;
-    for (u32 ringIndex = 0; ringIndex < ringNum; ringIndex++) {
+    for (u32 ringIndex = 0; ringNum > ringIndex; ringIndex++) {
         std::vector<Slice> singleRingSliceZero = multRingsSliceZero[ringIndex];
         CHK_PRT_RET(
             singleRingSliceZero.empty(),

@@ -58,7 +58,7 @@ HcclResult ReduceScatterNHR::RunAsync(const u32 rank, const u32 rankSize, const 
         outputSlices.resize(rankSize);
 
         // 生成std::vector<Slice> slices_
-        u64 sliceSize = count_ * unitSize;
+        u64 sliceSize = unitSize * count_;
 
         for (u32 i = 0; i < rankSize; i++) {
             slices_[i].size = sliceSize;
@@ -336,7 +336,7 @@ HcclResult ReduceScatterNHR::RunDestReducerLastStep(
 {
     HcclResult ret = HCCL_SUCCESS;
     std::vector<ReducerMemoryInfo> rxReduceMems;
-    for (u32 i = 0; i < stepInfo.nSlices; i++) { // rst算法的reduce scatter最后一步是一个slice，暂不用合并
+    for (u32 i = 0; stepInfo.nSlices > i; i++) { // rst算法的reduce scatter最后一步是一个slice，暂不用合并
         u32 rxSliceIdx = stepInfo.rxSliceIdxs[i];
         DeviceMem dstMem = outputMem_.range(outputSlices[rxSliceIdx].offset, outputSlices[rxSliceIdx].size);
         DeviceMem srcMem = inputMem_.range(inputSlices[rxSliceIdx].offset, inputSlices[rxSliceIdx].size);
@@ -456,7 +456,8 @@ HcclResult ReduceScatterNHR::RunReduceScatterNHR(
             CHK_RET(SdmaReducer(nSteps, linkLeft, stepInfo, inputSlices, outputSlices));
             CHK_RET(linkLeft->TxDataSignal(stream_));  // 告知left我读完了
             CHK_RET(linkRight->RxDataSignal(stream_)); // 等right读完
-        } else {                                       // RDMA
+        } else {
+            // RDMA
             CHK_RET(linkLeft->TxAck(stream_));
             CHK_RET(linkRight->RxAck(stream_));
             // tx

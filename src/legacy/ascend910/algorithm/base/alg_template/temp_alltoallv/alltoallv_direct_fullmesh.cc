@@ -87,7 +87,7 @@ HcclResult AlltoAllVDirectFullMesh::Prepare(PrepareData& param)
 
     podStartRank_ = userRank_ - rankIdxInPod_;
     podEndRank_ = podStartRank_ + devNumInlocalPod_ - 1;
-    sdmaConcurrentNum_ = (devNumInlocalPod_ > ALLTOALLV_DIRECT_FULLMESH_SDMA_CONCURRENT_SIZE) ?
+    sdmaConcurrentNum_ = (ALLTOALLV_DIRECT_FULLMESH_SDMA_CONCURRENT_SIZE < devNumInlocalPod_) ?
                              (ALLTOALLV_DIRECT_FULLMESH_SDMA_CONCURRENT_SIZE) :
                              (devNumInlocalPod_);
 
@@ -549,13 +549,13 @@ void AlltoAllVDirectFullMesh::UpdatePartialCommunicationRankSet(
     partialCommRankSet.clear();
     partialCommRankSet.resize(RANK_SET_COMPUTE_CONST + 1);
     u32 pairNumPerRound = sdmaConcurrentNum_ / RANK_SET_COMPUTE_CONST;
-    u32 pairSize = (groupRankSize < sdmaConcurrentNum_) ?
+    u32 pairSize = (sdmaConcurrentNum_ > groupRankSize) ?
                        (groupRankSize + RANK_SET_COMPUTE_CONST - 1) / RANK_SET_COMPUTE_CONST :
                        pairNumPerRound;
     for (u32 i = roundIdx * pairNumPerRound + 1; i < (roundIdx * pairNumPerRound + pairSize + 1); i++) {
         u32 leftRemoteRank = podStartRank_ + (rankIdxInPod_ + devNumInlocalPod_ - i) % devNumInlocalPod_;
         u32 rightRemoteRank = podStartRank_ + (rankIdxInPod_ + i) % devNumInlocalPod_;
-        if (leftRemoteRank == rightRemoteRank) {
+        if (rightRemoteRank == leftRemoteRank) {
             partialCommRankSet[2].push_back(std::make_pair(leftRemoteRank, leftRemoteRank));
         } else {
             partialCommRankSet[0].push_back(std::make_pair(leftRemoteRank, leftRemoteRank));
@@ -749,7 +749,7 @@ HcclResult AlltoAllVDirectFullMesh::SdmaMainStreamWait(u32 step, u32 roundIdx)
         for (auto& sendRecvPair : sendRecvSide) {
             u32 recvRank = sendRecvPair.first;
             u32 sendRank = sendRecvPair.second;
-            if (sendRank == userRank_) {
+            if (userRank_ == sendRank) {
                 continue;
             }
             const std::vector<ReadDataBlock>& readInfo = subStreamReadInfo_[recvRank];
@@ -808,7 +808,7 @@ HcclResult AlltoAllVDirectFullMesh::SdmaMainStreamPost(u32 step, u32 roundIdx)
         for (auto& sendRecvPair : sendRecvSide) {
             u32 recvRank = sendRecvPair.first;
             u32 sendRank = sendRecvPair.second;
-            if (sendRank == userRank_) {
+            if (userRank_ == sendRank) {
                 continue;
             }
             const std::vector<ReadDataBlock>& readInfo = subStreamReadInfo_[recvRank];
@@ -891,7 +891,7 @@ HcclResult AlltoAllVDirectFullMesh::SDMAwithRemoteRankAndNotifyEnd(u32 step, u32
         for (auto& sendRecvPair : sendRecvSide) {
             u32 recvRank = sendRecvPair.first;
             u32 sendRank = sendRecvPair.second;
-            if (sendRank == userRank_) {
+            if (userRank_ == sendRank) {
                 continue;
             }
             const std::vector<ReadDataBlock>& readInfo = subStreamReadInfo_[recvRank];
@@ -1296,7 +1296,7 @@ HcclResult AlltoAllVDirectFullMesh::SendRecvRdmaData(
         u64 recvSrcOffset = (userRank_ % rdmaConcurrentNum_) * rdmaDataBlockSize_;
         CHK_RET(
             recvTransport->RxAsync(UserMemType::OUTPUT_MEM, recvSrcOffset, dstPtr, recvInfo[curStep].recvLen, stream));
-        if ((round == lastRdmaRoundIdx_) && (index == lastRdmaDstRanksIdx_) && (curStep == lastRdmaStep_)
+        if ((lastRdmaRoundIdx_ == round) && (index == lastRdmaDstRanksIdx_) && (curStep == lastRdmaStep_)
             && (sdmaConcurrentNum_ > 1) && algOpContext_.opRetryHandler.retryEnable) {
             HCCL_DEBUG("[AlltoAllVDirectFullMesh][SendRecvRdmaData] post sync begins");
             CHK_RET(RdmaPostSync(stream));

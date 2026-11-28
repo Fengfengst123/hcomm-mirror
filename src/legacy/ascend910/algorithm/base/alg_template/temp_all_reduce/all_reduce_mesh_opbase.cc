@@ -21,7 +21,6 @@ HcclResult AllReduceMeshDirect::Prepare(
     std::vector<std::shared_ptr<LocalNotify>>& meshSignalAux, u32 interRank, u32 interRankSize, u32 userRank,
     HcomCollOpInfo* opInfo)
 {
-    reduceAttr_ = reduceAttrBitMap;
     localRank_ = interRank;
     localRankSize_ = interRankSize;
     userRank_ = userRank;
@@ -29,6 +28,7 @@ HcclResult AllReduceMeshDirect::Prepare(
     meshSignal_ = &meshSignal;
     meshSignalAux_ = &meshSignalAux;
     opInfo_ = opInfo;
+    reduceAttr_ = reduceAttrBitMap;
     return HCCL_SUCCESS;
 }
 
@@ -86,14 +86,14 @@ HcclResult AllReduceMeshDirect::PrepareSlice(u64 dataCount, u32 unitSize, u32 sl
         temp.size = sliceSize;
         temp.offset = totalSize - residueSize;
         i++;
-        if (sliceSize <= 0) {
+        if (0 >= sliceSize) {
             HCCL_ERROR("[Prepare][SliceData]data_slice_prepare sliceSize[%llu]", sliceSize);
             return HCCL_E_PARA;
         }
         residueSize -= sliceSize;
         dataSlice.push_back(temp);
     }
-    while (i < sliceNum) {
+    while (sliceNum > i) {
         temp.size = 0;
         temp.offset = totalSize;
         i++;

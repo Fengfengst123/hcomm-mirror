@@ -161,8 +161,8 @@ HcclResult BroadcastNHROneshot::RunBroadcastNHROneshot(u32 rank, u32 rankSize, c
             CHK_SMART_PTR_NULL(linkLeft);
         }
 
-        if ((linkRight != nullptr && linkRight->IsSpInlineReduce())
-            || (linkLeft != nullptr && linkLeft->IsSpInlineReduce())) {
+        if ((linkLeft != nullptr && linkLeft->IsSpInlineReduce())
+            || (linkRight != nullptr && linkRight->IsSpInlineReduce())) {
             CHK_RET(SdmaRx(linkLeft, linkRight, stepInfo, links));
         } else {
             CHK_RET(RdmaTxRx(linkLeft, linkRight, stepInfo, links));

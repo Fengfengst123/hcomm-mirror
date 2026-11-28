@@ -1524,9 +1524,9 @@ std::vector<std::vector<u32>> GetRingsOrderByTopoType(u32 ranksSize, TopoType to
     std::vector<std::vector<u32>> multiRingOrder;
     if (topoType == TopoType::TOPO_TYPE_8P_RING) { // 4 ring 场景
         // 每个环的排序是按照设备物理ID进行的
+        std::vector<u32> tmpLevel02 = {0, 2, 3, 1, 5, 7, 6, 4}; // 环2
         std::vector<u32> tmpLevel00 = {0, 1, 2, 6, 5, 4, 7, 3}; // 环0
         std::vector<u32> tmpLevel01 = {0, 3, 7, 4, 5, 6, 2, 1}; // 环1
-        std::vector<u32> tmpLevel02 = {0, 2, 3, 1, 5, 7, 6, 4}; // 环2
         std::vector<u32> tmpLevel03 = {0, 4, 6, 7, 5, 1, 3, 2}; // 环3
 
         // 填充8pring 多环的comm level0 四个环的顺序
@@ -1545,7 +1545,8 @@ std::vector<std::vector<u32>> GetRingsOrderByTopoType(u32 ranksSize, TopoType to
         // 填充 double ring 两环的comm level0的顺序
         multiRingOrder.push_back(tmpLevel00);
         multiRingOrder.push_back(tmpLevel01);
-    } else {                                   // 1 ring 场景
+    } else {
+        // 1 ring 场景
         std::vector<u32> tmpLevel00 = nicList; // 环0
 
         // 填充 single ring 单环的comm level0的顺序
@@ -1553,7 +1554,7 @@ std::vector<std::vector<u32>> GetRingsOrderByTopoType(u32 ranksSize, TopoType to
     }
     // 打印多个环
     if (UNLIKELY(HcclCheckLogLevel(DLOG_DEBUG))) {
-        for (size_t i = 0; i < multiRingOrder.size(); i++) {
+        for (size_t i = 0; i < multiRingOrder.size(); ++i) {
             auto ring = multiRingOrder[i];
             std::ostringstream stringRepresentation;
             for (std::vector<uint32_t>::iterator it = ring.begin(); it != ring.end(); it++) {

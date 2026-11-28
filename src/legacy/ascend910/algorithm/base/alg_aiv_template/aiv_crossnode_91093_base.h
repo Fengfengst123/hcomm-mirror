@@ -229,16 +229,16 @@ public:
     __aicore__ inline void InitOpCounter(
         GM_ADDR headCountMem, GM_ADDR tailCountMem, GM_ADDR addOneMem, uint32_t counterMemSize, bool isEnableCounter)
     {
-        headCountMem_ = headCountMem;
         tailCountMem_ = tailCountMem;
         addOneMem_ = addOneMem;
         counterMemSize_ = counterMemSize;
         isEnableCounter_ = isEnableCounter;
+        headCountMem_ = headCountMem;
     }
 
     __aicore__ inline void HeadCounter()
     {
-        if (blockIdx_ == 0 && isEnableCounter_) {
+        if (isEnableCounter_ && blockIdx_ == 0) {
             CpGM2GM(
                 (__gm__ int32_t*)headCountMem_, (__gm__ int32_t*)addOneMem_, counterMemSize_ / sizeof(int32_t), true,
                 HcclReduceOp::HCCL_REDUCE_SUM);
@@ -247,7 +247,7 @@ public:
 
     __aicore__ inline void TailCounter()
     {
-        if (blockIdx_ == 0 && isEnableCounter_) {
+        if (isEnableCounter_ && blockIdx_ == 0) {
             CpGM2GM(
                 (__gm__ int32_t*)tailCountMem_, (__gm__ int32_t*)addOneMem_, counterMemSize_ / sizeof(int32_t), true,
                 HcclReduceOp::HCCL_REDUCE_SUM);
@@ -588,9 +588,7 @@ __aicore__ inline void AivCrossNode91093Base::Init(
     GM_ADDR buffOut0, GM_ADDR buffOut1, uint32_t rank, uint32_t rankSize, uint64_t len, uint32_t reduceOp, int32_t tag,
     int32_t step, uint32_t numBlocks, bool useDoubleBuffer)
 {
-    flagAddrSelf_ = buffOut0;
     blockGroup_ = step;
-    rank_ = rank;
     tag_ = tag;
     rankSize_ = rankSize;
     reduceOp_ = reduceOp;
@@ -598,6 +596,8 @@ __aicore__ inline void AivCrossNode91093Base::Init(
     usedBlockNum_ = numBlocks;
     numBlocks_ = numBlocks;
     commAddr_ = buffOut1;
+    flagAddrSelf_ = buffOut0;
+    rank_ = rank;
 
     InitSetCheckClearArgsTensor();
     CalcNumTargetsAndTargetRanksGroup();
@@ -614,11 +614,11 @@ template <typename T>
 __aicore__ inline void AivCrossNode91093Base::SetAtomicOp(uint32_t atomicOp)
 {
     switch (atomicOp) {
-        case HcclReduceOp::HCCL_REDUCE_SUM:
-            SetAtomicAdd<T>();
-            break;
         case HcclReduceOp::HCCL_REDUCE_MAX:
             SetAtomicMax<T>();
+            break;
+        case HcclReduceOp::HCCL_REDUCE_SUM:
+            SetAtomicAdd<T>();
             break;
         case HcclReduceOp::HCCL_REDUCE_MIN:
             SetAtomicMin<T>();
@@ -660,10 +660,10 @@ __aicore__ inline void
 AivCrossNode91093Base::CpGM2GM(__gm__ T* outputGM, __gm__ T* inputGM, uint64_t count, bool atomic, uint32_t atomicOp)
 {
     AIV_INFO("[CpGM2GM]outputGM is [%p], inputGM is [%p], count is [%llu]\n", outputGM, inputGM, count);
-    GlobalTensor<T> inputGT;
-    inputGT.SetGlobalBuffer(inputGM, count);
     GlobalTensor<T> outputGT;
     outputGT.SetGlobalBuffer(outputGM, count);
+    GlobalTensor<T> inputGT;
+    inputGT.SetGlobalBuffer(inputGM, count);
 
     if (atomic) {
         SetAtomicOp<T>(atomicOp);
@@ -675,9 +675,8 @@ AivCrossNode91093Base::CpGM2GM(__gm__ T* outputGM, __gm__ T* inputGM, uint64_t c
     }
 
     uint64_t curOffset = 0;
-    while (count > 0) {
-        uint64_t curCount = count > maxCountPerLoop ? maxCountPerLoop : count;
-
+    while (0 < count) {
+        uint64_t curCount = maxCountPerLoop < count ? maxCountPerLoop : count;
         LocalTensor<T> localIn = inOutQue.AllocTensor<T>();
         DataCopyGM2UB(localIn, inputGT[curOffset], curCount);
         inOutQue.EnQue(localIn);
@@ -685,8 +684,8 @@ AivCrossNode91093Base::CpGM2GM(__gm__ T* outputGM, __gm__ T* inputGM, uint64_t c
         DataCopyUB2GM(outputGT[curOffset], localOut, curCount);
         inOutQue.FreeTensor(localOut);
 
-        count -= curCount;
         curOffset += curCount;
+        count -= curCount;
     }
 
     if (atomic) {

@@ -467,13 +467,13 @@ HcclResult CollAllReduceRingZerocopyExecutor::KernelRunIntraServerPost(const OpP
     HcomCollOpInfo allgatherOpInfo = {
         "", nullptr, execMem.outputMem.ptr(), execMem.count, param.DataDes.dataType, param.root, param.reduceType, 0};
 
-    if (topoType_ == TopoType::TOPO_TYPE_NP_SINGLE_RING) {
+    if (TopoType::TOPO_TYPE_NP_SINGLE_RING == topoType_) {
         CHK_RET(MultiRingAllGather(
             param.tag, execMem.inputMem, execMem.outputMem, execMem.count, param.DataDes.dataType,
             level0MultiRingDataSlices_, param.stream, PROF_STAGE_2, 0, &allgatherOpInfo, level0MultiRingDataSlices_));
     } else {
         CHK_PRT_RET(
-            topoType_ != TopoType::TOPO_TYPE_NP_DOUBLE_RING,
+            TopoType::TOPO_TYPE_NP_DOUBLE_RING != topoType_,
             HCCL_ERROR("[%s] unknown topoType: %u", __func__, topoType_), HCCL_E_NOT_SUPPORT);
         CHK_RET(DoubleRingAllGather(
             param.tag, execMem.inputMem, execMem.outputMem, execMem.count, param.DataDes.dataType,

@@ -115,7 +115,8 @@ __aicore__ inline void AivAll2AllV910B::ProcessAllToAllV910B(
 
         // 检查其他卡对本卡该aiv的依赖，清空计数
 
-    } else {                                                // 后rankSize个aiv负责cclother->usrout
+    } else {
+        // 后rankSize个aiv负责cclother->usrout
         uint64_t remoteSendOffset = avgBufferCount * rank_; // ccl读到usrout的偏移
 
         // 本端output接收远端ccl的数据偏移，远端卡号为GetBlockIdx()，可能为本rank

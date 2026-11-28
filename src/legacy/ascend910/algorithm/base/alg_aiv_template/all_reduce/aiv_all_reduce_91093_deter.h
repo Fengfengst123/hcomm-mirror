@@ -107,7 +107,7 @@ AivAllReduce91093Deter::InitDataCopyOffset(uint64_t perRankBufferCount, uint64_t
             CalCountAndBlockOffset(
                 groupTailLast_, blockNumPerGroup, blockIdxInGroup, padCount, countTailLast_, blockOffsetTailLast_);
         }
-        flagOffsetInGroup = blockIdxInGroup * FLAG_SIZE;
+        flagOffsetInGroup = FLAG_SIZE * blockIdxInGroup;
         CalCountAndBlockOffset(len, blockNumPerGroup, blockIdxInGroup, padCount, countPerCore, blockOffset);
     }
 }
@@ -193,18 +193,18 @@ __aicore__ inline void AivAllReduce91093Deter::Process(
 
         workLocal = syncQue.AllocTensor<int32_t>();
         // step1 本端 input -> 本端 ccl
-        for (uint32_t i = 0; i < numTargets; i++) {
+        for (uint32_t i = 0; i < numTargets; ++i) {
             uint64_t recvOffset = avgBufferCount * targetRanks[i];
             uint64_t sendOffset = curGroupCount * targetRanks[i];
 
             PipeBarrier<PIPE_ALL>();
             if (targetRanks[i] == rankSize_ - 1) {
                 CpGM2GM(
-                    cclGMSelf + recvOffset + curBlockOffsetLast, inputGM + curOffset + sendOffset + curBlockOffsetLast,
+                    recvOffset + cclGMSelf + curBlockOffsetLast, inputGM + curOffset + sendOffset + curBlockOffsetLast,
                     curCountLast);
             } else {
                 CpGM2GM(
-                    cclGMSelf + recvOffset + curBlockOffset, inputGM + curOffset + sendOffset + curBlockOffset,
+                    recvOffset + cclGMSelf + curBlockOffset, inputGM + curOffset + sendOffset + curBlockOffset,
                     curCount);
             }
         }

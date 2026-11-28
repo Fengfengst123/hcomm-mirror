@@ -140,8 +140,8 @@ HcclResult CollAlltoAllVContinuousPipeline::Orchestrate(OpParam& param, AlgResou
     execMem.count = 0;
     execMem.inputPtr = param.inputPtr;
     execMem.outputPtr = param.outputPtr;
-    execMem.inputMem = algRes.cclInputMem;
     execMem.outputMem = algRes.cclOutputMem;
+    execMem.inputMem = algRes.cclInputMem;
     ret = KernelRun(param, execMem);
 
     CHK_PRT_RET(

@@ -121,7 +121,7 @@ HcclResult AllGatherRingDirect::SetSlices(const u32 rank, const u32 rankSize)
         inputSlices_.resize(rankSize);
 
         u64 sliceSize = count_ * DataUnitSize(dataType_);
-        for (u32 i = 0; i < rankSize; i++) {
+        for (u32 i = 0; rankSize > i; i++) {
             slices_[i].size = sliceSize;
             slices_[i].offset = sliceSize * i;
             inputSlices_[i].size = sliceSize;

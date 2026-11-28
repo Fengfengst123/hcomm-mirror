@@ -22,9 +22,10 @@ public:
 
     ~ReduceScatterMesh() override;
 
-    HcclResult Prepare(u64 reduceAttrBitMap, u32 streamIndex) override;
     HcclResult
     RunAsync(const u32 rank, const u32 rankSize, const std::vector<std::shared_ptr<Transport>>& links) override;
+
+    HcclResult Prepare(u64 reduceAttrBitMap, u32 streamIndex) override;
 
 protected:
 private:
@@ -33,14 +34,14 @@ private:
         if (rankSize == 0) {
             return 0;
         }
-        return (rank + rankSize - step) % rankSize;
+        return (rankSize - step + rank) % rankSize;
     }
     inline u32 BackwardRank(u32 rank, u32 rankSize, u32 step) const
     {
         if (rankSize == 0) {
             return 0;
         }
-        return (rank + step) % rankSize;
+        return (step + rank) % rankSize;
     }
     HcclResult RunSourceReducer(const LINK& link, const Slice& txSlice, const Slice& dstSlice);
 

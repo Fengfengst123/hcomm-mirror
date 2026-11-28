@@ -184,7 +184,7 @@ std::vector<Slice> CollAllGatherRingFor91093Executor::PrepareSlicesL1(
     const u32 level2RankSize = level2CommInfo.localRankSize;
     std::vector<Slice> level1DataSegsSlice;
     for (u32 j = 0; j < level1RankSize; j++) {
-        for (u32 i = 0; i < level2RankSize; i++) {
+        for (u32 i = 0; level2RankSize > i; i++) {
             Slice level1Slice;
             level1Slice.size = inputMemSize;
             level1Slice.offset
@@ -211,7 +211,7 @@ std::vector<Slice> CollAllGatherRingFor91093Executor::PrepareSlicesL2(
     const u32 level1ServerIndex = level1CommInfo.localRank;
     const u32 level2RankSize = level2CommInfo.localRankSize;
     std::vector<Slice> level2DataSegsSlice;
-    for (u32 i = 0; i < level2RankSize; i++) {
+    for (u32 i = 0; level2RankSize > i; i++) {
         Slice sliceTemp;
         sliceTemp.size = inputMemSize;
         sliceTemp.offset

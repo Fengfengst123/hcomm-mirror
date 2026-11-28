@@ -190,7 +190,7 @@ HcclResult CollReduceScatterVDeterExecutor::RunReduceScattervLevel0(
         groupSlicesInfoLevel0.push_back(memInfo);
     }
 
-    all2allOffset_ = topoAttr_.moduleNum > 1 ? 1 : 0; // 多机场景需要偏移1（给L1预留计算位，减少拷贝次数）
+    all2allOffset_ = 1 < topoAttr_.moduleNum ? 1 : 0; // 多机场景需要偏移1（给L1预留计算位，减少拷贝次数）
     std::unique_ptr<AlgTemplateBase> level0TempAlg = AlgTemplateRegistry::Instance().GetAlgTemplate(
         TemplateType::TEMPLATE_REDUCESCATTER_PLANT_LOCAL_REDUCE, dispatcher_);
     CHK_SMART_PTR_NULL(level0TempAlg);

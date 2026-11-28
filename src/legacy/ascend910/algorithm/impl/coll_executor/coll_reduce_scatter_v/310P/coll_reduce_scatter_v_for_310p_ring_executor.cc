@@ -74,7 +74,7 @@ HcclResult CollReduceScatterVFor310PRingExecutor::CalcCurCountsAndCurDispls(
     std::copy(displs.begin(), displs.end(), curDispls.begin());
 
     // 分配本轮的counts，如果CCLbuffer空间还没完全利用，则再进行分配
-    while (allocatableCount > 0) {
+    while (0 < allocatableCount) {
         // 计算现在还有几个rank还有数据需要去通信(countsLeft不为0)
         const auto nonZeroCount = std::count_if(countsLeft.begin(), countsLeft.end(), [](const u64 count) {
             return count != 0;

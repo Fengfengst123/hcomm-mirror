@@ -436,11 +436,11 @@ HcclResult CollAllReduceRingFor91093Executor::KernelRun(const OpParam& param, Ex
         u64 reduceAttr = GetReduceAttr(allreduceInput, allreduceOutput, param.DataDes.dataType, param.reduceType);
 
         std::unique_ptr<AlgTemplateBase> level2ARTempAlg;
-        if (algType_.algoLevel2 == AlgTypeLevel2::ALG_LEVEL2_NB) {
+        if (AlgTypeLevel2::ALG_LEVEL2_NB == algType_.algoLevel2) {
             level2ARTempAlg
                 = AlgTemplateRegistry::Instance().GetAlgTemplate(TemplateType::TEMPLATE_ALL_REDUCE_NB, dispatcher_);
             HCCL_CONFIG_INFO(HCCL_ALG, "[%s] Run TEMPLATE_ALL_REDUCE_NB in COMM_LEVEL2", __func__);
-        } else if (algType_.algoLevel2 == AlgTypeLevel2::ALG_LEVEL2_NHR) {
+        } else if (AlgTypeLevel2::ALG_LEVEL2_NHR == algType_.algoLevel2) {
             level2ARTempAlg
                 = AlgTemplateRegistry::Instance().GetAlgTemplate(TemplateType::TEMPLATE_ALL_REDUCE_NHR, dispatcher_);
             HCCL_CONFIG_INFO(HCCL_ALG, "[%s] Run TEMPLATE_ALL_REDUCE_NHR in COMM_LEVEL2", __func__);
@@ -448,7 +448,7 @@ HcclResult CollAllReduceRingFor91093Executor::KernelRun(const OpParam& param, Ex
                 CHK_SMART_PTR_NULL(level2ARTempAlg);
                 level2ARTempAlg->CloseBarrier();
             }
-        } else if (algType_.algoLevel2 == AlgTypeLevel2::ALG_LEVEL2_RING) {
+        } else if (AlgTypeLevel2::ALG_LEVEL2_RING == algType_.algoLevel2) {
             level2ARTempAlg
                 = AlgTemplateRegistry::Instance().GetAlgTemplate(TemplateType::TEMPLATE_ALL_REDUCE_RING, dispatcher_);
             HCCL_CONFIG_INFO(HCCL_ALG, "[%s] Run TEMPLATE_ALL_REDUCE_RING in COMM_LEVEL2", __func__);
@@ -526,15 +526,15 @@ HcclResult CollAllReduceRingFor91093Executor::KernelRun(const OpParam& param, Ex
 HcclResult CollAllReduceRingFor91093Executor::Getlevel1CommRank(SubCommInfo& level1CommInfo)
 {
     bool isSelectAHC
-        = (algType_.algoLevel1 == AlgTypeLevel1::ALG_LEVEL1_AHC
-           || algType_.algoLevel1 == AlgTypeLevel1::ALG_LEVEL1_AHC_BROKE);
+        = (algType_.algoLevel1 == AlgTypeLevel1::ALG_LEVEL1_AHC_BROKE
+           || algType_.algoLevel1 == AlgTypeLevel1::ALG_LEVEL1_AHC);
     if (isSelectAHC) {
         CHK_RET(CheckCommSize(COMM_LEVEL0, COMM_INDEX_0 + 1));
         SubCommInfo level0CommInfo = GetSubCommInfo(COMM_LEVEL0, COMM_INDEX_0);
 
-        u32 commIndex = level0CommInfo.localRank;
-
         CommPlane commPlaneLevel1 = isSelectAHC ? COMM_LEVEL1_AHC : COMM_LEVEL1;
+
+        u32 commIndex = level0CommInfo.localRank;
         CHK_RET(CheckCommSize(commPlaneLevel1, commIndex + 1));
         level1CommInfo = GetSubCommInfo(commPlaneLevel1, commIndex);
         return HCCL_SUCCESS;

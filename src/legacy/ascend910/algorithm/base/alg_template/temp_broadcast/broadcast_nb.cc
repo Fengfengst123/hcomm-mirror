@@ -151,12 +151,12 @@ BroadcastNB::GetNslbAdjInfo(const u32 rank, const u32 rankSize, const std::vecto
     // 后续执行AllGather的NB流程
     for (u32 step = 0; step < nSteps; step++) {
         u32 deltaRank = 1 << (nSteps - 1 - step);
-        u32 sendTo = (rank + deltaRank) % rankSize;
+        u32 sendTo = (deltaRank + rank) % rankSize;
         LINK linkRight = links[sendTo];
         CHK_SMART_PTR_NULL(linkRight);
         NslbDpAdjInfo allGatherInfoStep = {};
         allGatherInfoStep.dstLocalRankId = linkRight->GetRemoteRank();
-        allGatherInfoStep.phaseId = step + begin + 1;
+        allGatherInfoStep.phaseId = begin + step + 1;
         allGatherInfoStep.rev = 0;
         nslbAdjInfo.nsAdjInfo.push_back(allGatherInfoStep);
     }

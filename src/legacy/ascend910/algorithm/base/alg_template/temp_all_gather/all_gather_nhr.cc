@@ -56,7 +56,7 @@ HcclResult AllGatherNHR::RunAsync(const u32 rank, const u32 rankSize, const std:
         slices_.resize(rankSize);
         inputSlices.resize(rankSize);
 
-        u64 sliceSize = count_ * unitSize;
+        u64 sliceSize = unitSize * count_;
         for (u32 i = 0; i < rankSize; i++) {
             slices_[i].size = sliceSize;
             slices_[i].offset = sliceSize * i;

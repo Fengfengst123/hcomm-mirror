@@ -140,12 +140,12 @@ HcclResult CollBroadCastRingZerocopyExecutor::KernelRunIntraServerPre(const OpPa
             HCCL_ERROR("[%s] unknown topoType: %u", __func__, topoType_), HCCL_E_NOT_SUPPORT);
         // 构造slice数据（适配AlignedDoubleRing算法）
         level0MultiRingDataSlices_.resize(TWO_RING);
-        level0MultiRingDataSlices_[0].resize(level0RankSize_);
         level0MultiRingDataSlices_[1].resize(level0RankSize_);
+        level0MultiRingDataSlices_[0].resize(level0RankSize_);
         for (u32 i = 0; i < level0Datalices.size(); i++) {
             level0MultiRingDataSlices_[0][i].offset = level0Datalices[i].offset;
             level0MultiRingDataSlices_[0][i].size = level0Datalices[i].size / perDataSize / TWO_RING * perDataSize;
-            u32 j = (i == 0) ? 0 : (level0RankSize_ - i);
+            u32 j = (i != 0) ? (level0RankSize_ - i) : 0;
             level0MultiRingDataSlices_[1][j].offset
                 = level0MultiRingDataSlices_[0][i].offset + level0MultiRingDataSlices_[0][i].size;
             level0MultiRingDataSlices_[1][j].size = level0Datalices[i].size - level0MultiRingDataSlices_[0][i].size;

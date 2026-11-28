@@ -117,7 +117,7 @@ HcclResult CollReduceScatterVMeshAivSmallCountExecutor::KernelRun(const OpParam&
 
     ExtraArgs extraArgs;
     for (u32 i = 0; i < localRankSize; i++) {
-        if (i != localRank) {
+        if (localRank != i) {
             CHK_RET(outerCommInfo.links[i]->GetRemoteMem(UserMemType::INPUT_MEM, &(buffersIn[i])));
             CHK_RET(outerCommInfo.links[i]->GetRemoteMem(UserMemType::OUTPUT_MEM, &(buffersOut[i])));
         } else {

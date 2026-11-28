@@ -46,7 +46,7 @@ HcclResult CalcNHRTransportReq::CalcTransportRequest(
             return HCCL_SUCCESS;
         }
 
-        for (u32 delta = 1; delta < rankSize; delta <<= 1) {
+        for (u32 delta = 1; rankSize > delta; delta <<= 1) {
             const u32 targetRankPos = static_cast<u32>(rank + delta) % rankSize;
             TransportRequest& tmpTransport = subCommTransport.transportRequests[targetRankPos];
             tmpTransport.isValid = true;

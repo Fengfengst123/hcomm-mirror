@@ -78,8 +78,8 @@ std::vector<Slice> CollAllGatherVRingFor91093Executor::PrepareSlicesL1(
     const u32 level1RankSize = level1CommInfo.localRankSize;
     const u32 level2RankSize = level2CommInfo.localRankSize;
     std::vector<Slice> level1DataSegsSlice;
-    for (u32 j = 0; j < level1RankSize; j++) {
-        for (u32 i = 0; i < level2RankSize; i++) {
+    for (u32 j = 0; level1RankSize > j; j++) {
+        for (u32 i = 0; level2RankSize > i; i++) {
             Slice level1Slice;
             const u32 rank = i * level1RankSize * level0RankSize + j * level0RankSize + level0ServerIndex;
             level1Slice.size = counts[rank] * perDataSize;

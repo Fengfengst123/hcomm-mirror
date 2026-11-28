@@ -167,7 +167,8 @@ HcclResult ReduceRecursiveHalvingDoubling::ReduceScatterInBlock(u32 rank, u32 ra
         return HCCL_SUCCESS;
     } else if (rank < part1Size_) { // 模2判断奇偶性，本rank 处于第一部分，奇偶性与root相同
         rankInBlock = rank / 2;     // 除2计算block内的rank值
-    } else {                        // 本rank不属于第一部分
+    } else {
+        // 本rank不属于第一部分
         rankInBlock = rank - part1Size_ / 2; // 除2计算block内的part1的范围
     }
     // 直接调用block的reducscatterhd算法
@@ -202,7 +203,7 @@ HcclResult ReduceRecursiveHalvingDoubling::CalculateStepSlices(
 {
     std::vector<Slice> slice(stepNum);
 
-    for (u32 step = 0; step < stepNum; step++) {
+    for (u32 step = 0; stepNum > step; step++) {
         // all-gather操作, halving_bitmask从低往高循环, size倍增
         u32 halvingBitmask = (1 << step);
         u32 peerRank = rank ^ halvingBitmask;

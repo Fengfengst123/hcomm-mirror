@@ -252,7 +252,7 @@ AllReduceNB::GetNslbAdjInfo(const u32 rank, const u32 rankSize, const std::vecto
         CHK_SMART_PTR_NULL(linkRight);
         NslbDpAdjInfo allGatherInfoStep = {};
         allGatherInfoStep.dstLocalRankId = linkRight->GetRemoteRank();
-        allGatherInfoStep.phaseId = step + begin + 1;
+        allGatherInfoStep.phaseId = begin + step + 1;
         allGatherInfoStep.rev = 0;
         nslbAdjInfo.nsAdjInfo.push_back(allGatherInfoStep);
     }

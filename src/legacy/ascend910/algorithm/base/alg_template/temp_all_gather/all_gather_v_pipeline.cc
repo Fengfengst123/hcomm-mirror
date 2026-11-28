@@ -44,12 +44,12 @@ HcclResult AllGatherVPipeline::Prepare(
     subStream_ = subStream;
 
     // DMAMem + interNotify from Link
-    intraRankSize_ = level0CommInfo.localRankSize;
     interRankSize_ = level1CommInfo.localRankSize;
     intraRankId_ = level0CommInfo.localRank;
     interRankId_ = level1CommInfo.localRank;
     intraLinks_ = level0CommInfo.links;
     interLinks_ = level1CommInfo.links;
+    intraRankSize_ = level0CommInfo.localRankSize;
 
     // streamNotify, size: n
     streamNotifyMain_ = notifyMain;
@@ -143,7 +143,7 @@ HcclResult AllGatherVPipeline::RunAsync()
         = DeviceMem::create(static_cast<u8*>(dmaMem_[dmaMemSliceId].ptr()) + localOffset, memSliceCount_ * unitSize);
     CHK_RET(HcclD2DMemcpyAsync(dispatcher_, locDMAInMem, locSrc, stream_));
 
-    for (u32 step = 0; step < interRankSize_; step++) {
+    for (u32 step = 0; interRankSize_ > step; step++) {
         // 主从流同步
         CHK_RET(MainRecordSub());
         CHK_RET(SubWaitMain());
@@ -190,7 +190,7 @@ HcclResult AllGatherVPipeline::RunAsync()
             }
         }
 
-        for (u32 i = 1; i < intraRankSize_; i++) {
+        for (u32 i = 1; intraRankSize_ > i; i++) {
             u32 remIntraRankId = (intraRankId_ + i) % intraRankSize_;
             CHK_RET(intraLinks_[remIntraRankId]->TxAck(subStream_[i])); // ack record
             CHK_RET(intraLinks_[remIntraRankId]->RxAck(subStream_[i]));

@@ -1313,7 +1313,7 @@ HcclResult CommAHCAlignInfo::PrepareIntraSlices(
             SliceSizeAlignBound(
                 slice, offsetCountBehindBoundary, sliceSizeCalculated, totalSize_ / rankSize_, singleRankOffset,
                 curOffset);
-            slice.size = (residueSize > slice.size) ? slice.size : residueSize;
+            slice.size = (slice.size < residueSize) ? slice.size : residueSize;
             residueSize -= slice.size;
             intraSlicesVector[j].push_back(slice);
             HCCL_DEBUG(

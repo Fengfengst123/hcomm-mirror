@@ -22,7 +22,6 @@ HcclResult AllReduceLocalReduce::Prepare(
     std::vector<std::shared_ptr<LocalNotify>>& meshSignalAux, u32 interRank, u32 interRankSize, u32 userRank,
     HcomCollOpInfo* opInfo)
 {
-    reduceAttr_ = reduceAttrBitMap;
     localRank_ = interRank;
     localRankSize_ = interRankSize;
     userRank_ = userRank;
@@ -30,6 +29,7 @@ HcclResult AllReduceLocalReduce::Prepare(
     meshSignal_ = &meshSignal;
     meshSignalAux_ = &meshSignalAux;
     opInfo_ = opInfo;
+    reduceAttr_ = reduceAttrBitMap;
     return HCCL_SUCCESS;
 }
 HcclResult AllReduceLocalReduce::MainRecordSub()

@@ -27,7 +27,7 @@ HcclResult CalcNBTransportReq::CalcTransportRequest(
     u32 ringSize = subCommPlaneVector_.size();
     commTransport.resize(ringSize);
 
-    for (u32 ringIndex = 0; ringIndex < ringSize; ringIndex++) {
+    for (u32 ringIndex = 0; ringIndex < ringSize; ++ringIndex) {
         if (commParaInfo.commPlane == COMM_LEVEL1 && !isBridgeVector_[ringIndex]) {
             continue; // 跳出本次循环
         }
@@ -59,7 +59,7 @@ HcclResult CalcNBTransportReq::CalcTransportRequest(
                 "remoteRank[%u], inputMemType[%d], outputMemType[%d]",
                 tag.c_str(), ringIndex, userRank_, tmpTransport.remoteUserRank, inputMemType, outputMemType);
 
-            const u32 targetRankNeg = static_cast<u32>(rank + rankSize - delta) % rankSize;
+            const u32 targetRankNeg = static_cast<u32>(rankSize + rank - delta) % rankSize;
             TransportRequest& tmpTransportNeg = subCommTransport.transportRequests[targetRankNeg];
             tmpTransportNeg.isValid = true;
             tmpTransportNeg.localUserRank = userRank_;

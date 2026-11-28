@@ -128,7 +128,7 @@ HcclResult ScatterRingDirect::SetSlices(const u32 rank, const u32 rankSize)
         u64 sliceSize = count_ * SIZE_TABLE[dataType_];
         ;
 
-        for (u32 i = 0; i < rankSize; i++) {
+        for (u32 i = 0; rankSize > i; i++) {
             slices_[i].size = sliceSize;
             // 用于DMA消减过程中，消除src与dst不对位的风险
             slices_[i].offset = RoundUpWithDivisor(i * sliceSize, HCCL_MIN_SLICE_ALIGN);

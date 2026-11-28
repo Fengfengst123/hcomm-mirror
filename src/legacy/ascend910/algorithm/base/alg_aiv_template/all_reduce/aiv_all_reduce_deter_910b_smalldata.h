@@ -58,7 +58,7 @@ __aicore__ inline void AivAllReduceDeterSmall910B::SumByPairs(
 
         if (x & 1) {
             WaitSignalValue(
-                (__gm__ int32_t*)(GM_OUT[rank_] + flagOffset2st - multiple * FLAG_SIZE), localCheckTensor, tag);
+                (__gm__ int32_t*)(GM_OUT[rank_] + flagOffset2st - (multiple * FLAG_SIZE)), localCheckTensor, tag);
             CpGM2GM<T>(cclGMSelf + target * count, cclGMSelf + x * count, count, true, reduceOp_);
             PipeBarrier<PIPE_ALL>();
             SetSignalValue(
@@ -82,7 +82,7 @@ __aicore__ inline void AivAllReduceDeterSmall910B::SumByPairs(
                     localCheckTensor, tag);
             }
 
-            CpGM2GM<T>(cclGMSelf + target * count, cclGMSelf + x * count, count, true, reduceOp_);
+            CpGM2GM<T>(cclGMSelf + (target * count), cclGMSelf + x * count, count, true, reduceOp_);
             PipeBarrier<PIPE_ALL>();
             SetSignalValue(
                 (__gm__ int32_t*)(GM_OUT[rank_] + flagOffset2st + rankSize_ * multiple * FLAG_SIZE), localSetTensor,
@@ -105,7 +105,7 @@ __aicore__ inline void AivAllReduceDeterSmall910B::GatherReduce(
         } else {
             // 等待前一个核reduce完成
             WaitSignalValue((__gm__ int32_t*)(GM_OUT[rank_] + flagOffset2st - FLAG_SIZE), localCheckTensor, tag);
-            CpGM2GM(cclGMSelf, cclGMSelf + x * count, count, true, reduceOp_);
+            CpGM2GM(cclGMSelf, cclGMSelf + (x * count), count, true, reduceOp_);
             PipeBarrier<PIPE_ALL>();
 
             // 告诉下一个核我reduce完成

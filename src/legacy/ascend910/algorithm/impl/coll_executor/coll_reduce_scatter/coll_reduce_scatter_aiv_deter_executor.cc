@@ -175,16 +175,16 @@ HcclResult CollReduceScatterAivDeterExecutor::KernelRun(const OpParam& param, Ex
         "[CollReduceScatterAivDeterExecutor][KernelRun] userRank [%u] localRank [%u]", topoAttr_.userRank, localRank);
 
     for (u32 i = 0; i < localRankSize; i++) {
-        if (i != localRank) {
+        if (localRank != i) {
             CHK_RET(level0CommInfo.links[i]->GetRemoteMem(UserMemType::INPUT_MEM, &(buffersIn[i])));
             CHK_RET(level0CommInfo.links[i]->GetRemoteMem(UserMemType::OUTPUT_MEM, &(buffersOut[i])));
         } else {
-            buffersIn[i] = execMem.inputMem.ptr();
             buffersOut[i] = execMem.outputMem.ptr();
+            buffersIn[i] = execMem.inputMem.ptr();
         }
     }
 
-    bool isOpbase = (workflowMode_ == HcclWorkflowMode::HCCL_WORKFLOW_MODE_OP_BASE);
+    bool isOpbase = (HcclWorkflowMode::HCCL_WORKFLOW_MODE_OP_BASE == workflowMode_);
     AivOpArgs opArgs{
         HcclCMDType::HCCL_CMD_REDUCE_SCATTER,
         execMem.inputPtr,
